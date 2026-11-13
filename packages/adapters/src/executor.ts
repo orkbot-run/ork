@@ -585,6 +585,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           userId: run.userId,
           workspaceId: run.centralWorkspaceId,
           membershipVersion: run.workspaceMembershipVersion,
+          ...(run.personalDeviceId !== undefined ? { personalDeviceId: run.personalDeviceId } : {}),
         });
         if (
           workPermission === null ||

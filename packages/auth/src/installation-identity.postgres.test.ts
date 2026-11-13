@@ -1,9 +1,22 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { createHash, createPublicKey, generateKeyPairSync, randomUUID, verify } from "node:crypto";
+import {
+  createHash,
+  createPublicKey,
+  generateKeyPairSync,
+  randomUUID,
+  sign,
+  verify,
+} from "node:crypto";
 import type { WorkspaceProjection } from "@orkbot/contracts";
-import { identityAudience, installationRequestMessage } from "@orkbot/contracts";
+import {
+  identityAudience,
+  installationRequestMessage,
+  personalActivationMessage,
+  personalOfflineMessage,
+  personalServerMessage,
+} from "@orkbot/contracts";
 import { createDb, createSpaceForMember, runAsSystem, runAsTenant } from "@orkbot/db";
 import { createLocalJWKSet, SignJWT } from "jose";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -52,6 +65,10 @@ function broker() {
     { userId: "central-participant", role: "member" as const, accessVersion: admission },
   ];
   let permissionVersion = 1;
+  const personalDevices = new Set<string>();
+  let personalDeviceVersion = 0;
+  let synchronizeStatus = 200;
+  let calls = 0;
   let state: "provisioning" | "ready" = "provisioning";
   let mapping: { localOrganizationId: string | null; localWorkspaceId: string | null } = {
     localOrganizationId: null,
@@ -64,6 +81,7 @@ function broker() {
       .setProtectedHeader({ alg: "RS256", kid: "identity-test" })
       .sign(signer.privateKey);
   const request: typeof fetch = async (url, init) => {
+    calls++;
     expect(init?.credentials).toBe("omit");
     expect(init?.redirect).toBe("error");
     const path = new URL(String(url)).pathname;
@@ -159,6 +177,8 @@ function broker() {
       );
     }
     if (path.endsWith("/servers/synchronize")) {
+      if (synchronizeStatus !== 200)
+        return Response.json({ error: "fixture refusal" }, { status: synchronizeStatus });
       const projection: WorkspaceProjection = {
         serverId,
         organizationId,
@@ -174,6 +194,8 @@ function broker() {
             state,
             ...mapping,
             permissionVersion,
+            personalDeviceVersion,
+            personalDevices: [...personalDevices],
             members,
           },
         ],
@@ -203,6 +225,15 @@ function broker() {
       overrides: Record<string, unknown> = {},
     ) => {
       const now = Math.floor(Date.now() / 1000);
+      const personal = overrides.personal_device as { id?: string } | undefined;
+      if (
+        overrides.organization_type === "personal" &&
+        personal?.id &&
+        !personalDevices.has(personal.id)
+      ) {
+        personalDevices.add(personal.id);
+        personalDeviceVersion++;
+      }
       return sign({
         iss: issuer,
         aud: identityAudience(serverId),
@@ -225,6 +256,14 @@ function broker() {
         name: "Participant",
         ...overrides,
       });
+    },
+    calls: () => calls,
+    refuseSynchronization: (status: number) => {
+      synchronizeStatus = status;
+    },
+    revokeDevice: (id: string) => {
+      personalDevices.delete(id);
+      personalDeviceVersion++;
     },
     approve: () => {
       approved = true;
@@ -253,10 +292,18 @@ describe.skipIf(!enabled)(
   "installation identity and workspace admission on restricted PostgreSQL",
   () => {
     let server: ReturnType<typeof broker>;
+    let revokedDevices = new Set<string>();
+    const revocations = {
+      revoked: async (id: string) => revokedDevices.has(id),
+      revoke: async (ids: string[]) => {
+        for (const id of ids) revokedDevices.add(id);
+      },
+    };
     let installation: InstallationClient;
     let authority: WorkspaceAuthority | undefined;
     beforeEach(async () => {
       authority?.dispose();
+      revokedDevices = new Set();
       await system(async () => {
         await prisma!.centralSessionBinding.deleteMany();
         await prisma!.centralWorkspaceAccess.deleteMany();
@@ -284,7 +331,7 @@ describe.skipIf(!enabled)(
     };
     it("provisions a clean installation once and resumes an acknowledgement lost after commit", async () => {
       await enroll();
-      authority = new WorkspaceAuthority(prisma!, installation, issuer);
+      authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);
       await authority.synchronize();
       server.failWorkspaceAck(true);
       let createdOrganization: string | undefined;
@@ -301,7 +348,7 @@ describe.skipIf(!enabled)(
           ),
         ).toBe(1);
         authority.dispose();
-        authority = new WorkspaceAuthority(prisma!, installation, issuer);
+        authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);
         await authority.synchronize();
         server.failWorkspaceAck(false);
         await Promise.all([
@@ -349,7 +396,7 @@ describe.skipIf(!enabled)(
           })),
         }),
       );
-      authority = new WorkspaceAuthority(prisma!, installation, issuer);
+      authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);
       await authority.synchronize();
       await expect(authority.provisionWorkspace(workspaceId)).rejects.toThrow(
         "Explicit local organization mapping required",
@@ -397,7 +444,7 @@ describe.skipIf(!enabled)(
           },
         });
       });
-      authority = new WorkspaceAuthority(prisma!, installation, issuer);
+      authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);
       await authority.synchronize();
       await authority.mapWorkspace(workspaceId, "identity-test-org", "identity-test-space");
       expect(await authority.work("identity-test-space", "identity-test-user")).toBeNull();
@@ -544,7 +591,7 @@ describe.skipIf(!enabled)(
     it("rejects an otherwise valid projection with a different request nonce", async () => {
       await enroll();
       server.wrongNonce();
-      authority = new WorkspaceAuthority(prisma!, installation, issuer);
+      authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);
       await expect(authority.synchronize()).rejects.toThrow("unavailable");
       expect(authority.window.workspace(workspaceId)).toBeNull();
     });
@@ -688,6 +735,330 @@ describe.skipIf(!enabled)(
       expect(nextWork).not.toBeNull();
       nextWork!.dispose();
     });
+    const personalClient = async () => {
+      await provision();
+      const auth = createAuth(prisma!, {
+        secret: "fixture-auth-material".repeat(3),
+        baseURL: "https://installation.example.test",
+        webOrigin: "https://installation.example.test",
+        nativeAccounts: { issuer },
+        passwordAuth: false,
+        signupsEnabled: "false",
+        signupAllowlist: "",
+        workspaceAuthority: authority!,
+      });
+      const call = (path: string, body: object, token?: string) =>
+        system(() =>
+          auth.handler(
+            new Request(`https://installation.example.test/api/auth/${path}`, {
+              method: "POST",
+              headers: {
+                origin: "https://installation.example.test",
+                "content-type": "application/json",
+                ...(token ? { authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify(body),
+            }),
+          ),
+        );
+      const deviceKey = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+      const device = {
+        id: randomUUID(),
+        publicKey: deviceKey.publicKey
+          .export({ type: "spki", format: "der" })
+          .toString("base64url"),
+      };
+      const configuration = (await installation.configuration())!;
+      const target = { ...configuration, workspaceId, deviceId: device.id };
+      const signature = (message: string) =>
+        sign("sha256", Buffer.from(message), deviceKey.privateKey).toString("base64url");
+      const { challenge } = (await (await call("native/workspace/challenge", {})).json()) as {
+        challenge: string;
+      };
+      const grant = await server.loginGrant(challenge, undefined, {
+        organization_type: "personal",
+        personal_device: { id: device.id, public_key: device.publicKey, registry_version: 1 },
+      });
+      const deviceSignature = signature(
+        personalActivationMessage(
+          target,
+          challenge,
+          createHash("sha256").update(grant).digest("hex"),
+        ),
+      );
+      expect((await call("native/workspace/complete", { challenge, grant })).status).toBe(403);
+      const response = await call("native/workspace/complete", {
+        challenge,
+        grant,
+        deviceSignature,
+      });
+      expect(response.status).toBe(200);
+      const result = (await response.json()) as { token: string; personalDevice: { id: string } };
+      expect(result.personalDevice.id).toBe(device.id);
+      const session = await system(() =>
+        prisma!.session.findUniqueOrThrow({ where: { token: result.token.split(".")[0]! } }),
+      );
+      return { auth, call, device, target, signature, session, token: result.token };
+    };
+
+    it("renews only an activated personal device offline across process restart and fences its queued work", async () => {
+      const client = await personalClient();
+      try {
+        const bot = await system(() =>
+          prisma!.bot.create({
+            data: {
+              userId: "identity-test-user",
+              spaceId: "identity-test-space",
+              name: "Offline",
+              color: "blue",
+            },
+          }),
+        );
+        const thread = await system(() =>
+          prisma!.thread.create({
+            data: { userId: "identity-test-user", spaceId: "identity-test-space", botId: bot.id },
+          }),
+        );
+        await system(() =>
+          prisma!.centralWorkspaceBinding.update({
+            where: { id: workspaceId },
+            data: { validUntil: new Date(0) },
+          }),
+        );
+        authority!.dispose();
+        authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);
+        // Recompose authentication with the restarted authority.
+        client.auth.disposeOidcDiscovery();
+        const auth = createAuth(prisma!, {
+          secret: "fixture-auth-material".repeat(3),
+          baseURL: "https://installation.example.test",
+          webOrigin: "https://installation.example.test",
+          passwordAuth: false,
+          signupsEnabled: "false",
+          signupAllowlist: "",
+          nativeAccounts: { issuer },
+          workspaceAuthority: authority,
+        });
+        const call = (path: string, body: object) =>
+          system(() =>
+            auth.handler(
+              new Request(
+                `https://installation.example.test/api/auth/native/workspace/personal/${path}`,
+                {
+                  method: "POST",
+                  headers: {
+                    origin: "https://installation.example.test",
+                    "content-type": "application/json",
+                  },
+                  body: JSON.stringify(body),
+                },
+              ),
+            ),
+          );
+        try {
+          expect(await authority.session("identity-test-session", "identity-test-user")).toBeNull();
+          expect(await authority.session(client.session.id, "identity-test-user")).toMatchObject({
+            workspaceId,
+            personalDeviceId: client.device.id,
+          });
+          expect(
+            await runAsTenant(
+              { userId: "identity-test-user", spaceId: "identity-test-space" },
+              () => prisma!.thread.findUnique({ where: { id: thread.id } }),
+            ),
+          ).not.toBeNull();
+          const centralCalls = server.calls();
+          const challengeResponse = await call("challenge", { deviceId: client.device.id });
+          expect(challengeResponse.status).toBe(200);
+          const challenge = (await challengeResponse.json()) as {
+            challenge: string;
+            publicKey: string;
+            signature: string;
+          };
+          expect(
+            verify(
+              "sha256",
+              Buffer.from(personalServerMessage(client.target, challenge.challenge)),
+              { key: Buffer.from(challenge.publicKey, "base64url"), type: "spki", format: "der" },
+              Buffer.from(challenge.signature, "base64url"),
+            ),
+          ).toBe(true);
+          expect(
+            (
+              await call("complete", {
+                deviceId: client.device.id,
+                challenge: challenge.challenge,
+                signature: "a".repeat(90),
+              })
+            ).status,
+          ).toBe(403);
+          const proof = {
+            deviceId: client.device.id,
+            challenge: challenge.challenge,
+            signature: client.signature(personalOfflineMessage(client.target, challenge.challenge)),
+          };
+          expect((await call("complete", proof)).status).toBe(200);
+          expect((await call("complete", proof)).status).toBe(403);
+          expect(server.calls()).toBe(centralCalls);
+          const task = await system(() =>
+            prisma!.task.create({
+              data: {
+                userId: bot.userId,
+                spaceId: bot.spaceId,
+                botId: bot.id,
+                threadId: thread.id,
+                prompt: "Fixture",
+                status: "queued",
+              },
+            }),
+          );
+          const queued = await runAsTenant(
+            { userId: bot.userId, spaceId: bot.spaceId, personalDeviceId: client.device.id },
+            () =>
+              prisma!.run.create({
+                data: {
+                  userId: bot.userId,
+                  spaceId: bot.spaceId,
+                  botId: bot.id,
+                  threadId: thread.id,
+                  taskId: task.id,
+                  trigger: "user",
+                  status: "queued",
+                },
+              }),
+          );
+          expect(queued).toMatchObject({
+            personalDeviceId: client.device.id,
+            requiredReaderVersion: 5,
+          });
+          const running = await authority.execution({
+            userId: bot.userId,
+            spaceId: bot.spaceId,
+            workspaceId,
+            membershipVersion: admission,
+            personalDeviceId: client.device.id,
+          });
+          expect(running?.signal.aborted).toBe(false);
+          const oldReader = await system(() =>
+            prisma!.$transaction(async (tx) => {
+              await tx.$queryRaw`SELECT set_config('app.run_reader_version', '4', true)`;
+              return tx.run.updateMany({
+                where: { id: queued.id },
+                data: { status: "leased", leaseOwner: "old" },
+              });
+            }),
+          );
+          expect(oldReader.count).toBe(0);
+          await expect(
+            system(() =>
+              prisma!.run.update({
+                where: { id: queued.id },
+                data: { personalDeviceId: randomUUID() },
+              }),
+            ),
+          ).rejects.toThrow("immutable");
+          server.revoke();
+          await authority.synchronize();
+          expect(running?.signal.aborted).toBe(true);
+          running?.dispose();
+          expect(await authority.session(client.session.id, bot.userId)).toBeNull();
+          expect(
+            await authority.execution({
+              userId: bot.userId,
+              spaceId: bot.spaceId,
+              workspaceId,
+              membershipVersion: admission,
+              personalDeviceId: client.device.id,
+            }),
+          ).toBeNull();
+          expect((await call("challenge", { deviceId: client.device.id })).status).toBe(403);
+          expect(
+            await runAsTenant({ userId: bot.userId, spaceId: bot.spaceId }, () =>
+              prisma!.thread.findUnique({ where: { id: thread.id } }),
+            ),
+          ).toBeNull();
+          server.readd();
+          await authority.synchronize();
+          expect(await authority.personal.device(client.device.id)).toBeNull();
+        } finally {
+          auth.disposeOidcDiscovery();
+        }
+      } finally {
+        client.auth.disposeOidcDiscovery();
+      }
+    });
+
+    it("distinguishes an older device-registry snapshot from an explicit revocation", async () => {
+      const client = await personalClient();
+      try {
+        const projection = await authority!.synchronize();
+        await authority!.personal.restrict({
+          ...projection,
+          workspaces: projection.workspaces.map((workspace) => ({
+            ...workspace,
+            personalDeviceVersion: 0,
+            personalDevices: [],
+          })),
+        });
+        expect(await authority!.personal.device(client.device.id)).not.toBeNull();
+        const device = (await authority!.personal.device(client.device.id))!;
+        const running = await authority!.personal.watch(device);
+        server.revokeDevice(client.device.id);
+        await authority!.synchronize();
+        expect(running.signal.aborted).toBe(true);
+        running.dispose();
+        expect(await authority!.personal.device(client.device.id)).toBeNull();
+        // A stale database projection cannot undo the already received revocation.
+        await system(() =>
+          prisma!.personalWorkspaceDevice.update({
+            where: { id: client.device.id },
+            data: { revokedAt: null },
+          }),
+        );
+        authority!.dispose();
+        authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);
+        expect(await authority.personal.device(client.device.id)).toBeNull();
+      } finally {
+        client.auth.disposeOidcDiscovery();
+      }
+    });
+
+    it.each([400, 401, 426])(
+      "persists personal revocation after a known central refusal (%s)",
+      async (status) => {
+        const client = await personalClient();
+        try {
+          server.refuseSynchronization(status);
+          await expect(authority!.synchronize()).rejects.toThrow();
+          expect(await authority!.personal.device(client.device.id)).toBeNull();
+          const saved = await system(() =>
+            prisma!.personalWorkspaceDevice.findUniqueOrThrow({ where: { id: client.device.id } }),
+          );
+          expect(saved.revokedAt).not.toBeNull();
+        } finally {
+          client.auth.disposeOidcDiscovery();
+        }
+      },
+    );
+
+    it("removes the personal credential on explicit logout without turning session expiry into revocation", async () => {
+      const client = await personalClient();
+      try {
+        expect((await client.call("sign-out", {}, client.token)).status).toBe(200);
+        expect(await authority!.personal.device(client.device.id)).toBeNull();
+        const saved = await system(() =>
+          prisma!.personalWorkspaceDevice.findUniqueOrThrow({ where: { id: client.device.id } }),
+        );
+        expect(saved.revokedAt).not.toBeNull();
+        expect(
+          (await client.call("native/workspace/personal/challenge", { deviceId: client.device.id }))
+            .status,
+        ).toBe(403);
+      } finally {
+        client.auth.disposeOidcDiscovery();
+      }
+    });
+
     it("logs in through Better Auth with an exact workspace, rejects replay and does not provision another personal space", async () => {
       await provision();
       const auth = createAuth(prisma!, {
@@ -924,7 +1295,7 @@ describe.skipIf(!enabled)(
     it("requires fresh central verification after restart despite a valid database projection", async () => {
       await provision();
       authority!.dispose();
-      authority = new WorkspaceAuthority(prisma!, installation, issuer);
+      authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);
       expect(await authority.session("identity-test-session", "identity-test-user")).toBeNull();
       expect(await authority.work("identity-test-space", "identity-test-user")).toBeNull();
       await authority.synchronize();

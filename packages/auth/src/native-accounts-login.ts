@@ -3,6 +3,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type { ActivatedPersonalDevice } from "@orkbot/contracts";
 import { normalizeServerPairingCode, SERVER_PAIRING_PURPOSE } from "@orkbot/contracts";
 import { isPersonalOrkId, readBoundedJsonResponse } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
@@ -28,6 +29,7 @@ export interface NativeLoginIdentity {
   allowProvision?: boolean;
   workspaceId?: string;
   workspaceMembership?: string;
+  personalDevice?: ActivatedPersonalDevice;
   centralWorkspace?: {
     id: string;
     spaceId: string;

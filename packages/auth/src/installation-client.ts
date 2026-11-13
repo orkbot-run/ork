@@ -11,6 +11,7 @@ import {
   randomUUID,
   sign,
 } from "node:crypto";
+import type { PersonalDeviceTarget } from "@orkbot/contracts";
 import {
   IDENTITY_ACCESS_PURPOSE,
   IDENTITY_ACCESS_SECONDS,
@@ -21,6 +22,7 @@ import {
   identityAudience,
   installationRequestMessage,
   installationRoutesInputSchema,
+  personalServerMessage,
 } from "@orkbot/contracts";
 import { readBoundedJsonResponse } from "@orkbot/core";
 import type { InstallationIdentity, PrismaClient } from "@orkbot/db";
@@ -414,6 +416,28 @@ export class InstallationClient {
     )
       throw failure("Invalid enrollment audience");
     return payload;
+  }
+
+  async provePersonalDeviceChallenge(target: PersonalDeviceTarget, challenge: string) {
+    const row = await this.load();
+    if (
+      row.state !== "ready" ||
+      !NONCE.test(challenge) ||
+      row.serverId !== target.serverId ||
+      row.bindingVersion !== target.bindingVersion ||
+      row.keyFingerprint !== target.keyFingerprint ||
+      !UUID.test(target.deviceId) ||
+      !UUID.test(target.workspaceId)
+    )
+      throw failure("Invalid personal device challenge");
+    return {
+      publicKey: row.publicKey,
+      signature: sign(
+        "sha256",
+        Buffer.from(personalServerMessage(target, challenge)),
+        await this.privateKey(row),
+      ).toString("base64url"),
+    };
   }
 
   async publishRoutes(routes: unknown, expected?: InstallationConfiguration): Promise<void> {

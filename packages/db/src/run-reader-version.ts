@@ -13,7 +13,9 @@ export const EXPLICIT_REPLY_READER_VERSION = 2;
 export const BACKGROUND_HELPER_READER_VERSION = 3;
 /** Version 4 enforces immutable central workspace admission and installation AI accounts. */
 export const WORKSPACE_AUTHORITY_READER_VERSION = 4;
-export const SUPPORTED_RUN_READER_VERSION = WORKSPACE_AUTHORITY_READER_VERSION;
+/** Version 5 preserves the exact personal device admission of queued offline work. */
+export const PERSONAL_DEVICE_READER_VERSION = 5;
+export const SUPPORTED_RUN_READER_VERSION = PERSONAL_DEVICE_READER_VERSION;
 
 /** Claim-local only: never let a pooled connection advertise a reader after the transaction. */
 export async function declareRunReaderVersion(tx: Pick<Prisma.TransactionClient, "$queryRaw">) {

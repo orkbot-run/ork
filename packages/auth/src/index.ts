@@ -46,6 +46,7 @@ import type { EmailLocaleOf } from "./email.js";
 import { emailLocale, passwordResetEmail, signInCodeEmail, verificationEmail } from "./email.js";
 import { hasRecentIdentityConfirmation, identityConfirmation } from "./identity-confirmation.js";
 import { nativeAccountsLogin, nativeLoginProof } from "./native-accounts-login.js";
+import { nativePersonalLogin } from "./native-personal-login.js";
 import {
   nativeSessionIdentityKey,
   workspaceSessionMembershipKey,
@@ -81,6 +82,7 @@ export {
 export type { OidcConfig } from "./oidc.js";
 export { oidcAccountSubject } from "./oidc.js";
 export { passkeyRelyingParty } from "./passkey.js";
+export { FilePersonalRevocations } from "./personal-revocations.js";
 export {
   integrationClaimConfirmEmail,
   pluginSubmissionAdminEmail,
@@ -545,7 +547,12 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
       },
     },
     plugins: [
-      ...(env.workspaceAuthority ? [nativeWorkspaceLogin(prisma, env.workspaceAuthority)] : []),
+      ...(env.workspaceAuthority
+        ? [
+            nativeWorkspaceLogin(prisma, env.workspaceAuthority),
+            nativePersonalLogin(prisma, env.workspaceAuthority),
+          ]
+        : []),
       signedBearer,
       expo(),
       accountSecurity(
@@ -940,6 +947,10 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
           },
         },
         delete: {
+          before: async (session, ctx) => {
+            if (ctx?.path === "/sign-out" || (ctx?.path && REVOCATION_PATHS.has(ctx.path)))
+              await env.workspaceAuthority?.personal.logout(session.id);
+          },
           after: async (session, ctx) => {
             if (ctx?.path === "/sign-out") {
               await recordSecurityEvent({ type: "auth.sign_out", userId: session.userId });
@@ -1048,7 +1059,7 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
         return null;
       return {
         ...scope,
-        ...env.workspaceAuthority!.window.watch(scope.workspaceId, current.subject, scope.revision),
+        ...(await env.workspaceAuthority!.watchSession(current)),
       };
     },
     disposeOidcDiscovery: () => discovery?.dispose(),

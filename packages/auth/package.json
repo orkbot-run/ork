@@ -4,6 +4,7 @@
   "license": "Apache-2.0 AND PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "exports": {
+    "./personal-revocations": "./src/personal-revocations.ts",
     "./installation-client": "./src/installation-client.ts",
     "./workspace-authority": "./src/workspace-authority.ts",
     "./workspace-authority-service": "./src/workspace-authority-service.ts",

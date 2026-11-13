@@ -47,7 +47,7 @@ export function startWorkspaceAuthority(
                   event.ids.some((id) => typeof id !== "string" || !/^[a-f0-9-]{36}$/.test(id))
                 )
                   return;
-                for (const id of event.ids) authority.window.invalidate(id);
+                for (const id of event.ids) authority.invalidate(id);
                 if (refreshing) again = true;
                 else active = tick();
               } catch {

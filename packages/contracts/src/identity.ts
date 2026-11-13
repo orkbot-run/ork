@@ -35,6 +35,13 @@ export const workspaceProjectionSchema = z
             localOrganizationId: z.string().min(1).max(200).nullable(),
             localWorkspaceId: z.string().min(1).max(200).nullable(),
             permissionVersion: positive,
+            personalDeviceVersion: z
+              .number()
+              .int()
+              .nonnegative()
+              .max(Number.MAX_SAFE_INTEGER)
+              .optional(),
+            personalDevices: z.array(id).max(100_000).optional(),
             members: z
               .array(
                 z

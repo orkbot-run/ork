@@ -27,6 +27,7 @@ model AiDataConsent {
 
 model User {
   centralWorkspaceAccess CentralWorkspaceAccess[]
+  personalWorkspaceDevices PersonalWorkspaceDevice[]
   threadSnoozes ThreadSnooze[]
   serverUpdateConsents ServerUpdateControl[]
   aiDataConsents AiDataConsent[]
@@ -1068,6 +1069,7 @@ model Run {
   /// Minimum execution reader protocol; monotonic so older workers cannot replay newer effects.
   replyMode            String            @default("chat")
   requiredReaderVersion Int              @default(0)
+  personalDeviceId String?
   centralWorkspaceId   String?
   workspaceMembershipVersion String?
   leaseExpiresAt       DateTime?
@@ -2562,6 +2564,7 @@ model CentralWorkspaceBinding {
   validUntil DateTime
   sessions CentralSessionBinding[]
   accessEntries CentralWorkspaceAccess[]
+  personalDevices PersonalWorkspaceDevice[]
 
   @@unique([spaceId, localOrganizationId])
   @@map("central_workspace_bindings")
@@ -2575,6 +2578,8 @@ model CentralSessionBinding {
   workspace CentralWorkspaceBinding @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   centralSubject String
   membershipVersion String
+  personalDeviceId String?
+  personalDevice PersonalWorkspaceDevice? @relation(fields: [personalDeviceId], references: [id], onDelete: SetNull, onUpdate: NoAction)
   createdAt DateTime @default(now())
 
   @@index([workspaceId, centralSubject])
@@ -2683,4 +2688,26 @@ model AIUsageReservation {
   @@index([spaceId, period])
   @@index([connectionId, completedAt, leaseUntil])
   @@map("ai_usage_reservations")
+}
+
+/// A centrally activated personal credential requires the device key on every offline login.
+model PersonalWorkspaceDevice {
+  id String @id
+  workspaceId String
+  workspace CentralWorkspaceBinding @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  centralSubject String
+  membershipVersion String
+  registryVersion Int
+  permissionVersion Int
+  bindingVersion Int
+  keyFingerprint String
+  publicKey String
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  sessions CentralSessionBinding[]
+
+  @@index([workspaceId, userId])
+  @@map("personal_workspace_devices")
 }

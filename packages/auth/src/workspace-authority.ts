@@ -1,12 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { RealtimeFanout } from "@orkbot/adapter-kit";
 import type { WorkspaceProjection } from "@orkbot/contracts";
 import {
   IDENTITY_LOGIN_PURPOSE,
   IDENTITY_PROJECTION_PURPOSE,
+  personalActivationMessage,
+  personalDeviceSchema,
   workspaceProjectionSchema,
 } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
@@ -15,6 +17,9 @@ import type { InstallationClient } from "./installation-client.js";
 import { InstallationRequestError } from "./installation-client.js";
 import type { NativeLoginGrant, NativeLoginIdentity } from "./native-accounts-login.js";
 import { oidcAccountSubject } from "./oidc.js";
+import { personalDeviceKey, personalDeviceSignature } from "./personal-device-key.js";
+import type { PersonalRevocations } from "./personal-revocations.js";
+import { PersonalWorkspaceAccess } from "./personal-workspace-access.js";
 import { WorkspaceAuthorityWindow } from "./workspace-authority-window.js";
 
 const refused = () => new Error("Workspace authority unavailable");
@@ -22,13 +27,17 @@ const refused = () => new Error("Workspace authority unavailable");
 /** Central projections control admission; local IDs, settings and data remain on this installation. */
 export class WorkspaceAuthority {
   readonly window = new WorkspaceAuthorityWindow();
+  readonly personal: PersonalWorkspaceAccess;
   readonly processId = randomUUID();
   constructor(
     private readonly prisma: PrismaClient,
     private readonly installation: InstallationClient,
     private readonly issuer: string,
     private readonly realtime?: RealtimeFanout,
-  ) {}
+    personalRevocations?: PersonalRevocations,
+  ) {
+    this.personal = new PersonalWorkspaceAccess(prisma, installation, personalRevocations);
+  }
 
   active(): Promise<boolean> {
     return this.installation.registered();
@@ -38,13 +47,15 @@ export class WorkspaceAuthority {
     const configuration = await this.installation.configuration();
     if (!configuration) throw refused();
     const { response, nonce, startedAt } = await this.installation
-      .signedRequest("/servers/synchronize", {})
-      .catch((error) => {
+      .signedRequest("/servers/synchronize", { personalDeviceProtocol: 1 })
+      .catch(async (error) => {
         if (
           error instanceof InstallationRequestError &&
-          [401, 403, 409, 410, 426].includes(error.status)
-        )
+          [400, 401, 403, 409, 410, 426].includes(error.status)
+        ) {
           this.window.dispose();
+          await this.personal.refuseInstallation();
+        }
         throw error;
       });
     const claims = await this.installation.verify(
@@ -75,6 +86,8 @@ export class WorkspaceAuthority {
     this.window.validate(projection, startedAt);
     // A received revocation takes effect even if persisting its projection subsequently fails.
     const changed = new Set(this.window.restrict(projection, startedAt));
+    for (const id of changed) this.personal.invalidate(id);
+    await this.personal.restrict(projection);
     try {
       await runAsSystem("persist a freshly verified workspace projection", () =>
         this.prisma.$transaction(async (tx) => {
@@ -215,6 +228,7 @@ export class WorkspaceAuthority {
       }
     }
     this.window.apply(projection, startedAt);
+    this.personal.confirmed(projection.workspaces.map((workspace) => workspace.id));
     return projection;
   }
 
@@ -379,7 +393,11 @@ export class WorkspaceAuthority {
     // A server acknowledgement cannot itself issue workspace access. Synchronization supplies it.
   }
 
-  async login(grant: string, challenge: string): Promise<NativeLoginGrant> {
+  async login(
+    grant: string,
+    challenge: string,
+    deviceSignature?: unknown,
+  ): Promise<NativeLoginGrant> {
     const configuration = await this.installation.configuration();
     if (!configuration || grant.length > 16 * 1024) throw refused();
     const claims = await this.installation.verify(grant, IDENTITY_LOGIN_PURPOSE, configuration);
@@ -402,6 +420,33 @@ export class WorkspaceAuthority {
       claims.name.length > 200
     )
       throw refused();
+    let personalDevice: NativeLoginIdentity["personalDevice"];
+    if (claims.personal_device !== undefined) {
+      const raw = claims.personal_device as {
+        id?: unknown;
+        public_key?: unknown;
+        registry_version?: unknown;
+      } | null;
+      const parsed = personalDeviceSchema.safeParse({ id: raw?.id, publicKey: raw?.public_key });
+      if (
+        claims.organization_type !== "personal" ||
+        !parsed.success ||
+        !Number.isSafeInteger(raw?.registry_version) ||
+        Number(raw?.registry_version) <= 0 ||
+        !personalDeviceKey(parsed.data.publicKey) ||
+        !personalDeviceSignature(
+          parsed.data.publicKey,
+          personalActivationMessage(
+            { ...configuration, workspaceId: claims.workspace_id, deviceId: parsed.data.id },
+            challenge,
+            createHash("sha256").update(grant).digest("hex"),
+          ),
+          deviceSignature,
+        )
+      )
+        throw refused();
+      personalDevice = { ...parsed.data, registryVersion: raw!.registry_version as number };
+    }
     const workspace = this.window.workspace(claims.workspace_id);
     const member = workspace?.members.find(
       (value) => value.userId === claims.sub && value.accessVersion === claims.membership_version,
@@ -429,6 +474,7 @@ export class WorkspaceAuthority {
     return {
       issuer: this.issuer,
       subject: claims.sub,
+      ...(personalDevice ? { personalDevice } : {}),
       allowProvision: true,
       email: claims.email,
       name: claims.name,
@@ -446,12 +492,24 @@ export class WorkspaceAuthority {
 
   async provisionMember(userId: string, identity: NativeLoginIdentity): Promise<void> {
     const workspace = identity.centralWorkspace;
-    if (
-      !workspace ||
-      identity.issuer !== this.issuer ||
-      !this.window.permits(workspace.id, identity.subject, workspace.revision)
-    )
-      throw refused();
+    if (!workspace || identity.issuer !== this.issuer) throw refused();
+    if (!this.window.permits(workspace.id, identity.subject, workspace.revision)) {
+      const device =
+        identity.personalDevice &&
+        (await this.personal.find(
+          workspace.id,
+          userId,
+          workspace.revision,
+          identity.personalDevice.id,
+        ));
+      if (
+        !device ||
+        device.centralSubject !== identity.subject ||
+        device.publicKey !== identity.personalDevice?.publicKey
+      )
+        throw refused();
+      return;
+    }
     await runAsSystem("provision only the workspace named by a verified login", () =>
       this.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM central_workspace_bindings WHERE id = ${workspace.id} FOR UPDATE`;
@@ -531,9 +589,21 @@ export class WorkspaceAuthority {
         select: { id: true },
       });
       if (!session) throw refused();
+      const device = identity.personalDevice
+        ? await this.personal.device(identity.personalDevice.id)
+        : null;
+      if (
+        device &&
+        (device.userId !== userId ||
+          device.centralSubject !== identity.subject ||
+          device.workspaceId !== identity.centralWorkspace!.id ||
+          device.publicKey !== identity.personalDevice?.publicKey)
+      )
+        throw refused();
       await this.prisma.centralSessionBinding.create({
         data: {
           sessionId,
+          personalDeviceId: device?.id ?? null,
           workspaceId: identity.centralWorkspace!.id,
           centralSubject: identity.subject,
           membershipVersion: identity.centralWorkspace!.revision,
@@ -542,11 +612,69 @@ export class WorkspaceAuthority {
     });
   }
 
+  async personalChallenge(deviceId: string, challenge: string) {
+    const device = await this.personal.device(deviceId);
+    if (!device) throw refused();
+    const target = await this.personal.target(device);
+    return { target, ...(await this.installation.provePersonalDeviceChallenge(target, challenge)) };
+  }
+
+  async personalIdentity(
+    deviceId: string,
+  ): Promise<{ userId: string; identity: NativeLoginIdentity } | null> {
+    const device = await this.personal.device(deviceId);
+    if (!device) return null;
+    return runAsSystem(
+      "resolve the exact personal identity already activated on this device",
+      async () => {
+        const binding = await this.prisma.centralWorkspaceBinding.findUnique({
+          where: { id: device.workspaceId },
+        });
+        const account = await this.prisma.account.findFirst({
+          where: {
+            userId: device.userId,
+            providerId: "oidc",
+            accountId: oidcAccountSubject(this.issuer, device.centralSubject),
+          },
+        });
+        const access = await this.prisma.centralWorkspaceAccess.findUnique({
+          where: { workspaceId_userId: { workspaceId: device.workspaceId, userId: device.userId } },
+        });
+        if (!binding || !account || !access?.active) return null;
+        return {
+          userId: device.userId,
+          identity: {
+            issuer: this.issuer,
+            subject: device.centralSubject,
+            personalDevice: {
+              id: device.id,
+              publicKey: device.publicKey,
+              registryVersion: device.registryVersion,
+            },
+            centralWorkspace: {
+              id: binding.id,
+              spaceId: binding.spaceId,
+              organizationId: binding.localOrganizationId,
+              revision: device.membershipVersion,
+              role: access.role as "admin" | "member",
+            },
+          },
+        };
+      },
+    );
+  }
+
   async session(
     sessionId: string,
     userId: string,
     requestedSpaceId?: string | null,
-  ): Promise<{ spaceId: string; subject: string; revision: string; workspaceId: string } | null> {
+  ): Promise<{
+    spaceId: string;
+    subject: string;
+    revision: string;
+    workspaceId: string;
+    personalDeviceId: string | null;
+  } | null> {
     return runAsSystem("verify the exact workspace of a native session", async () => {
       const session = await this.prisma.centralSessionBinding.findUnique({
         where: { sessionId },
@@ -555,8 +683,7 @@ export class WorkspaceAuthority {
       if (
         !session ||
         session.session.userId !== userId ||
-        (requestedSpaceId && requestedSpaceId !== session.workspace.spaceId) ||
-        !this.window.permits(session.workspaceId, session.centralSubject, session.membershipVersion)
+        (requestedSpaceId && requestedSpaceId !== session.workspace.spaceId)
       )
         return null;
       const access = await this.prisma.centralWorkspaceAccess.findUnique({
@@ -566,7 +693,23 @@ export class WorkspaceAuthority {
         !access?.active ||
         access.centralSubject !== session.centralSubject ||
         access.membershipVersion !== session.membershipVersion ||
-        session.workspace.state !== "ready" ||
+        session.workspace.state !== "ready"
+      )
+        return null;
+      if (session.personalDeviceId) {
+        const device = await this.personal.find(
+          session.workspaceId,
+          userId,
+          session.membershipVersion,
+          session.personalDeviceId,
+        );
+        if (!device || device.centralSubject !== session.centralSubject) return null;
+      } else if (
+        !this.window.permits(
+          session.workspaceId,
+          session.centralSubject,
+          session.membershipVersion,
+        ) ||
         session.workspace.validUntil.getTime() <= Date.now()
       )
         return null;
@@ -575,8 +718,34 @@ export class WorkspaceAuthority {
         subject: session.centralSubject,
         revision: session.membershipVersion,
         workspaceId: session.workspaceId,
+        personalDeviceId: session.personalDeviceId,
       };
     });
+  }
+
+  async watchSession(scope: {
+    workspaceId: string;
+    subject: string;
+    revision: string;
+    personalDeviceId?: string | null;
+  }): Promise<{ signal: AbortSignal; dispose(): void }> {
+    if (scope.personalDeviceId) {
+      const device = await this.personal.device(scope.personalDeviceId);
+      if (
+        device &&
+        device.workspaceId === scope.workspaceId &&
+        device.centralSubject === scope.subject &&
+        device.membershipVersion === scope.revision
+      )
+        return this.personal.watch(device);
+      return { signal: AbortSignal.abort(refused()), dispose() {} };
+    }
+    return this.window.watch(scope.workspaceId, scope.subject, scope.revision);
+  }
+
+  invalidate(workspaceId: string): void {
+    this.window.invalidate(workspaceId);
+    this.personal.invalidate(workspaceId);
   }
 
   async work(
@@ -584,6 +753,7 @@ export class WorkspaceAuthority {
     userId: string,
     expectedRevision?: string,
     expectedWorkspaceId?: string,
+    personalDeviceId?: string | null,
   ): Promise<{ signal: AbortSignal; dispose: () => void } | null> {
     const access = await runAsSystem(
       "check central admission immediately before workspace execution",
@@ -592,7 +762,7 @@ export class WorkspaceAuthority {
           where: {
             userId,
             active: true,
-            workspace: { spaceId, state: "ready", validUntil: { gt: new Date() } },
+            workspace: { spaceId, state: "ready" },
           },
         }),
     );
@@ -600,10 +770,26 @@ export class WorkspaceAuthority {
       !access ||
       !expectedRevision ||
       access.membershipVersion !== expectedRevision ||
-      (expectedWorkspaceId && access.workspaceId !== expectedWorkspaceId) ||
-      !this.window.permits(access.workspaceId, access.centralSubject, access.membershipVersion)
+      (expectedWorkspaceId && access.workspaceId !== expectedWorkspaceId)
     )
       return null;
+    const device =
+      personalDeviceId === null
+        ? null
+        : await this.personal.find(
+            access.workspaceId,
+            userId,
+            access.membershipVersion,
+            personalDeviceId,
+          );
+    if (personalDeviceId && !device) return null;
+    if (device) return this.personal.watch(device);
+    if (!this.window.permits(access.workspaceId, access.centralSubject, access.membershipVersion))
+      return null;
+    const binding = await runAsSystem("check workspace expiry before execution", () =>
+      this.prisma.centralWorkspaceBinding.findUnique({ where: { id: access.workspaceId } }),
+    );
+    if (!binding || binding.validUntil.getTime() <= Date.now()) return null;
     return this.window.watch(access.workspaceId, access.centralSubject, access.membershipVersion);
   }
 
@@ -612,13 +798,21 @@ export class WorkspaceAuthority {
     userId: string;
     workspaceId?: string | null;
     membershipVersion?: string | null;
+    personalDeviceId?: string | null;
   }): Promise<{ signal: AbortSignal; dispose(): void } | null | undefined> {
     if (!(await this.installation.registered())) return undefined;
     if (!scope.workspaceId || !scope.membershipVersion) return null;
-    return this.work(scope.spaceId, scope.userId, scope.membershipVersion, scope.workspaceId);
+    return this.work(
+      scope.spaceId,
+      scope.userId,
+      scope.membershipVersion,
+      scope.workspaceId,
+      scope.personalDeviceId ?? null,
+    );
   }
 
   dispose(): void {
     this.window.dispose();
+    this.personal.dispose();
   }
 }

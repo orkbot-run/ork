@@ -5,6 +5,7 @@
 // Ork adds optional durable messaging progress admission.
 
 import { hostname } from "node:os";
+import { join } from "node:path";
 import type {
   AgentContextStrategy,
   AgentRuntime,
@@ -109,6 +110,7 @@ import {
 import {
   authorizeWorkspaceSession,
   createAuth,
+  FilePersonalRevocations,
   InstallationClient,
   isBlockedAuthPath,
   loopbackTwinOrigins,
@@ -381,7 +383,13 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ? async () => !(await installation.registered())
     : undefined;
   const workspaceAuthority = installation
-    ? new WorkspaceAuthority(prisma, installation, accountsIssuer, realtime)
+    ? new WorkspaceAuthority(
+        prisma,
+        installation,
+        accountsIssuer,
+        realtime,
+        new FilePersonalRevocations(join(env.dataDir, "identity", "personal-revocations")),
+      )
     : undefined;
   const serverAI = workspaceAuthority
     ? new ServerAICatalog({
@@ -1207,17 +1215,22 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
         session.session.id,
       ),
     );
-    return actor && { actor, sessionId: session.session.id, central };
+    return (
+      actor && {
+        actor: {
+          ...actor,
+          ...(central?.personalDeviceId ? { personalDeviceId: central.personalDeviceId } : {}),
+        },
+        sessionId: session.session.id,
+        central,
+      }
+    );
   };
   const sessionActor = async (request: Request) => (await requestSession(request))?.actor ?? null;
   app.use("/api/*", async (c, next) => {
     const session = await requestSession(c.req.raw);
     if (!session?.central) return next();
-    const permission = workspaceAuthority!.window.watch(
-      session.central.workspaceId,
-      session.central.subject,
-      session.central.revision,
-    );
+    const permission = await workspaceAuthority!.watchSession(session.central);
     if (permission.signal.aborted) {
       permission.dispose();
       return c.json({ error: "Forbidden" }, 403);
@@ -1272,11 +1285,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       enrichLogContext({ "user.id": actor.userId, "space.id": actor.spaceId });
     }
     const permission = session?.central
-      ? workspaceAuthority!.window.watch(
-          session.central.workspaceId,
-          session.central.subject,
-          session.central.revision,
-        )
+      ? await workspaceAuthority!.watchSession(session.central)
       : undefined;
     let ownsResponse = false;
     if (permission?.signal.aborted) {

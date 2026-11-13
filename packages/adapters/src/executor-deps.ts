@@ -37,6 +37,7 @@ export interface ExecutorDeps {
     userId: string;
     workspaceId?: string | null;
     membershipVersion?: string | null;
+    personalDeviceId?: string | null;
   }) => Promise<{ signal: AbortSignal; dispose(): void } | null | undefined>;
   /** The present moment the agent is told; evals move it to a follow-up's due time. */
   now?: () => Date;

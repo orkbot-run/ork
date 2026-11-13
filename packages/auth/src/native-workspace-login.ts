@@ -48,7 +48,9 @@ export function nativeWorkspaceLogin(
         { method: "POST" },
         async (ctx) => {
           ctx.setHeader("Cache-Control", "no-store");
-          const body = ctx.body as { challenge?: unknown; grant?: unknown } | undefined;
+          const body = ctx.body as
+            | { challenge?: unknown; grant?: unknown; deviceSignature?: unknown }
+            | undefined;
           if (
             !body ||
             typeof body.challenge !== "string" ||
@@ -58,7 +60,11 @@ export function nativeWorkspaceLogin(
           )
             throw denied();
           try {
-            const identity = await authority.login(body.grant, body.challenge);
+            const identity = await authority.login(
+              body.grant,
+              body.challenge,
+              body.deviceSignature,
+            );
             await runAsSystem("consume a workspace login challenge and prevent grant replay", () =>
               prisma.$transaction(async (tx) => {
                 const consumed = await tx.verification.deleteMany({
@@ -87,6 +93,13 @@ export function nativeWorkspaceLogin(
               if (!session) throw denied();
               try {
                 await authority.bindSession(session.id, user.id, identity);
+                if (identity.personalDevice)
+                  await authority.personal.activate(
+                    session.id,
+                    user.id,
+                    identity,
+                    identity.personalDevice,
+                  );
               } catch (error) {
                 await ctx.context.internalAdapter.deleteSession(session.token);
                 throw error;
@@ -97,6 +110,16 @@ export function nativeWorkspaceLogin(
                 user: { id: user.id },
                 workspaceId: identity.centralWorkspace!.id,
                 spaceId: identity.centralWorkspace!.spaceId,
+                ...(identity.personalDevice
+                  ? {
+                      personalDevice: {
+                        id: identity.personalDevice.id,
+                        target: await authority.personal.target(
+                          (await authority.personal.device(identity.personalDevice.id))!,
+                        ),
+                      },
+                    }
+                  : {}),
               });
             });
           } catch {

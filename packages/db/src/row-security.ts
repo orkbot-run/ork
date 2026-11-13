@@ -21,7 +21,7 @@ import { withTransactionRetry } from "./transaction-retry.js";
  * Without a context, protected tables return no rows and reject writes.
  */
 export type DbContext =
-  | { kind: "tenant"; spaceId: string; userId: string }
+  | { kind: "tenant"; spaceId: string; userId: string; personalDeviceId?: string | null }
   | { kind: "system"; reason: string };
 
 const storage = new AsyncLocalStorage<DbContext>();
@@ -31,10 +31,18 @@ export function currentDbContext(): DbContext | undefined {
 }
 
 export function runAsTenant<T>(
-  tenant: { spaceId: string; userId: string },
+  tenant: { spaceId: string; userId: string; personalDeviceId?: string | null },
   fn: () => T | PromiseLike<T>,
 ): Promise<T> {
-  return within({ kind: "tenant", spaceId: tenant.spaceId, userId: tenant.userId }, fn);
+  return within(
+    {
+      kind: "tenant",
+      spaceId: tenant.spaceId,
+      userId: tenant.userId,
+      personalDeviceId: tenant.personalDeviceId,
+    },
+    fn,
+  );
 }
 
 /**
@@ -77,14 +85,22 @@ export async function runAsSystemInTransaction<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   const [previous] = await tx.$queryRaw<
-    Array<{ bypass: string | null; key: string | null; login: string }>
+    Array<{
+      bypass: string | null;
+      key: string | null;
+      login: string;
+      personalDeviceId: string | null;
+    }>
   >`SELECT current_setting('app.rls_bypass', true) AS bypass,
-      current_setting('app.rls_bypass_key', true) AS key, session_user AS login`;
+      current_setting('app.rls_bypass_key', true) AS key, session_user AS login,
+      current_setting('app.personal_device_id', true) AS "personalDeviceId"`;
   const restore = () =>
     tx.$queryRaw`SELECT set_config('app.rls_bypass', ${previous?.bypass ?? "off"}, true),
-      set_config('app.rls_bypass_key', ${previous?.key ?? ""}, true)`;
+      set_config('app.rls_bypass_key', ${previous?.key ?? ""}, true),
+      set_config('app.personal_device_id', ${previous?.personalDeviceId ?? ""}, true)`;
   await tx.$queryRaw`SELECT set_config('app.rls_bypass', 'on', true),
-    set_config('app.rls_bypass_key', ${bypassKeys.get(previous?.login ?? "") ?? ""}, true)`;
+    set_config('app.rls_bypass_key', ${bypassKeys.get(previous?.login ?? "") ?? ""}, true),
+    set_config('app.personal_device_id', '', true)`;
   let result: T;
   try {
     result = await within({ kind: "system", reason }, fn);
@@ -113,6 +129,7 @@ export const ROW_SECURITY_MODELS: ReadonlySet<string> = new Set([
   "CentralWorkspaceBinding",
   "CentralSessionBinding",
   "CentralWorkspaceAccess",
+  "PersonalWorkspaceDevice",
   "WorkspaceModelPolicy",
   "BillingAuditEvent",
   "PushToken",
@@ -213,17 +230,24 @@ function credentials(connectionString: string | undefined): { user: string; pass
 // By login, for runAsSystemInTransaction, which only has the transaction's connection.
 const bypassKeys = new Map<string, string>();
 
-type Settings = [spaceId: string, userId: string, bypass: "on" | "off", bypassKey: string];
+type Settings = [
+  spaceId: string,
+  userId: string,
+  bypass: "on" | "off",
+  bypassKey: string,
+  personalDeviceId: string,
+];
 
 function settingsFor(context: DbContext | undefined, bypassKey: string): Settings {
-  if (context?.kind === "tenant") return [context.spaceId, context.userId, "off", ""];
-  if (context?.kind === "system") return ["", "", "on", bypassKey];
-  return ["", "", "off", ""];
+  if (context?.kind === "tenant")
+    return [context.spaceId, context.userId, "off", "", context.personalDeviceId ?? ""];
+  if (context?.kind === "system") return ["", "", "on", bypassKey, ""];
+  return ["", "", "off", "", ""];
 }
 
 // Prisma sends and reads timestamps in UTC, so each database session must use UTC.
 const SET_SESSION =
-  "SELECT set_config('app.space_id', $1, false), set_config('app.user_id', $2, false), set_config('app.rls_bypass', $3, false), set_config('app.rls_bypass_key', $4, false), set_config('TimeZone', 'UTC', false)";
+  "SELECT set_config('app.space_id', $1, false), set_config('app.user_id', $2, false), set_config('app.rls_bypass', $3, false), set_config('app.rls_bypass_key', $4, false), set_config('TimeZone', 'UTC', false), set_config('app.personal_device_id', $5, false)";
 const applied = new WeakMap<PoolClient, string>();
 
 async function applySettings(client: PoolClient, settings: Settings): Promise<void> {
@@ -288,7 +312,7 @@ export function installDbContext(pool: Pool): void {
 }
 
 const LOCAL_SETTINGS = (settings: Settings) =>
-  Prisma.sql`SELECT set_config('app.space_id', ${settings[0]}, true), set_config('app.user_id', ${settings[1]}, true), set_config('app.rls_bypass', ${settings[2]}, true), set_config('app.rls_bypass_key', ${settings[3]}, true)`;
+  Prisma.sql`SELECT set_config('app.space_id', ${settings[0]}, true), set_config('app.user_id', ${settings[1]}, true), set_config('app.rls_bypass', ${settings[2]}, true), set_config('app.rls_bypass_key', ${settings[3]}, true), set_config('app.personal_device_id', ${settings[4]}, true)`;
 
 // A wrapped read keeps the pool's checkout timeout and no run limit it did not
 // have before, instead of Prisma's 2s/5s transaction defaults.

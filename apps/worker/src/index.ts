@@ -6,6 +6,7 @@
 // Ork adds optional durable messaging progress admission.
 
 import { hostname } from "node:os";
+import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { JobPublisher, JobWorkerHost } from "@orkbot/adapter-kit";
 import {
@@ -14,6 +15,7 @@ import {
   unwrapEnvFromKeyManager,
 } from "@orkbot/adapters";
 import { InstallationClient } from "@orkbot/auth/installation-client";
+import { FilePersonalRevocations } from "@orkbot/auth/personal-revocations";
 import { WorkspaceAuthority } from "@orkbot/auth/workspace-authority";
 import { startWorkspaceAuthority } from "@orkbot/auth/workspace-authority-service";
 import { phoneCallSettings } from "@orkbot/core";
@@ -157,7 +159,15 @@ async function main() {
         })
       : undefined;
   const workspaceAuthority = installation
-    ? new WorkspaceAuthority(prisma, installation, accountsIssuer, realtime)
+    ? new WorkspaceAuthority(
+        prisma,
+        installation,
+        accountsIssuer,
+        realtime,
+        new FilePersonalRevocations(
+          join(process.env.DATA_DIR ?? "./data", "identity", "personal-revocations"),
+        ),
+      )
     : undefined;
   const hostAccessAllowed = installation
     ? async () => !(await installation.registered())
