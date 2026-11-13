@@ -22,6 +22,7 @@ import type {
 import { Agent } from "undici";
 import { withChatCompletionsCompatibility } from "./chat-completions-compat.js";
 import type { ContextBudget } from "./context-selection.js";
+import { googleQuotaResponse } from "./google-quota-response.js";
 import { withGoogleToolHistory } from "./google-tool-history.js";
 import { estimateModelContextTokens } from "./model-context.js";
 import { openRouterInferenceFetch } from "./openrouter-usage.js";
@@ -514,6 +515,13 @@ export function observedPiStream(
               message,
             );
             if (observer && reservation !== undefined) {
+              if (
+                event.type === "error" &&
+                ["google-generative-ai", "google-vertex"].includes(model.api)
+              ) {
+                const quota = googleQuotaResponse(message.errorMessage);
+                if (quota) await observer.onResponse?.(reservation, quota);
+              }
               await observer.afterCall(reservation, {
                 ...normalized,
                 operationKind,

@@ -309,6 +309,67 @@ describe("Pi usage accounting", () => {
       await once(server, "close");
     }
   }, 30000);
+  it("coordinates a real SDK quota rejection without overriding its fetch", async () => {
+    let requests = 0;
+    const server = createServer((_request, response) => {
+      requests++;
+      response.writeHead(429, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          error: {
+            code: 429,
+            status: "RESOURCE_EXHAUSTED",
+            message: "fixture quota",
+            details: [
+              { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "120.25s" },
+            ],
+          },
+        }),
+      );
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("missing listener");
+      const quota = vi.fn();
+      const order: string[] = [];
+      const stream = observedPiStream(
+        builtinModels(),
+        {
+          ...model,
+          provider: "google",
+          api: "google-generative-ai",
+          baseUrl: `http://127.0.0.1:${address.port}`,
+        },
+        { messages: [{ role: "user", content: "fixture", timestamp: 1 }] },
+        { apiKey: "fixture" },
+        () => {},
+        {
+          beforeCall: async () => "exact-account",
+          onResponse: async (id, response) => {
+            order.push("quota");
+            quota(id, response);
+          },
+          afterCall: async () => {
+            order.push("settle");
+          },
+        },
+      );
+      for await (const event of stream) if (event.type === "error") order.push("error");
+      expect(quota).toHaveBeenCalledExactlyOnceWith("exact-account", {
+        status: 429,
+        retryAfter: "121",
+      });
+      expect(order).toEqual(["quota", "settle", "error"]);
+      expect(requests).toBe(1);
+    } finally {
+      server.close();
+      server.closeAllConnections();
+      await once(server, "close");
+    }
+  });
+
   it("reports only quota metadata before exposing a provider rejection", async () => {
     const onResponse = vi.fn();
     const wrapped = usageReportingFetch(
