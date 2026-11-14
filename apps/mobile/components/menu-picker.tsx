@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache menus are preserved; native parent lifetime changes follow LICENSE.md.
+
 import { MenuView } from "@expo/ui/community/menu";
 import type { ReactElement } from "react";
 import { cloneElement, useState } from "react";
@@ -35,6 +39,8 @@ export function MenuPickerMenu({
   const [width, setWidth] = useState<number>();
   return (
     <View
+      // Keep the Compose host in the same native parent when disabled during session cleanup.
+      collapsable={false}
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
       style={menuStyles.fullWidth}
       pointerEvents={disabled ? "none" : "auto"}

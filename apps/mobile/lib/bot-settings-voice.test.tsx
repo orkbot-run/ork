@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 behavior is preserved. Ork-only avatar changes follow LICENSE.md.
 // Modified by Ork contributors for call speaker ownership; see LICENSE.md.
+// Modified by Ork contributors to cover stable native menu ownership.
 
 // @vitest-environment jsdom
 
@@ -11,9 +12,10 @@ import type { ComponentProps, ReactNode } from "react";
 import { act, createElement, useEffect } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
+import { View } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import BotSettingsScreen from "../app/bot-settings";
-import { MenuPicker } from "../components/menu-picker";
+import { MenuPicker, MenuPickerMenu } from "../components/menu-picker";
 import { afterChatNotifyChange } from "./live-notifications";
 
 const mocks = vi.hoisted(() => ({
@@ -189,6 +191,8 @@ vi.mock("react-native", () => {
     accessibilityRole,
     accessibilityValue,
     onLayout,
+    collapsable,
+    pointerEvents,
   }: {
     children?: ReactNode;
     style?: unknown;
@@ -196,11 +200,15 @@ vi.mock("react-native", () => {
     accessibilityRole?: string;
     accessibilityValue?: { text: string };
     onLayout?: (event: { nativeEvent: { layout: { width: number } } }) => void;
+    collapsable?: boolean;
+    pointerEvents?: string;
   }) =>
     createElement(
       "div",
       {
         "data-style": JSON.stringify(style),
+        "data-collapsable": collapsable,
+        "data-pointer-events": pointerEvents,
         "aria-label": accessibilityLabel,
         role: accessibilityRole,
         "aria-valuetext": accessibilityValue?.text,
@@ -1466,6 +1474,41 @@ describe("bot settings device voice menu", () => {
     await act(async () => actions[0]!.click());
     expect(onChange).toHaveBeenCalledWith("");
     expect(container.querySelector("i")!.dataset.ios).toBe("chevron.up.chevron.down");
+  });
+
+  it("keeps the native menu parent concrete while disabling and retiring settings", async () => {
+    const onChange = vi.fn();
+    const renderMenu = (disabled: boolean) => (
+      <MenuPickerMenu
+        label="Approvals"
+        choices={[
+          { key: "ask", label: "Ask" },
+          { key: "never", label: "Never ask" },
+        ]}
+        value="ask"
+        onChange={onChange}
+        disabled={disabled}
+      >
+        <View>Approvals row</View>
+      </MenuPickerMenu>
+    );
+    await act(async () => root.render(renderMenu(false)));
+    const menu = container.querySelector<HTMLElement>('[data-menu="Approvals"]')!;
+    const parent = menu.parentElement!;
+    // Fabric must not reparent the Compose host when pointer events change during logout.
+    expect(parent.dataset.collapsable).toBe("false");
+    expect(parent.dataset.pointerEvents).toBe("auto");
+    await act(async () => menu.querySelectorAll("button")[1]!.click());
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("never");
+    onChange.mockClear();
+    await act(async () => root.render(renderMenu(true)));
+    expect(menu.parentElement).toBe(parent);
+    expect(parent.dataset.collapsable).toBe("false");
+    expect(parent.dataset.pointerEvents).toBe("none");
+    await act(async () => menu.querySelectorAll("button")[1]!.click());
+    expect(onChange).not.toHaveBeenCalled();
+    await act(async () => root.render(null));
+    expect(container.children).toHaveLength(0);
   });
 
   it.each([false, true])(
