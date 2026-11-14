@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+appId: run.orkbot.app
+name: Native Accounts PKCE and Personal workspace
+tags:
+  - ios
+  - native-accounts
+---
+# Start signed out in a native build configured for an isolated Accounts fixture.
+# Supply a verified fixture user through ORKBOT_E2E_EMAIL and ORKBOT_E2E_PASSWORD.
+# A matching browser session may skip password entry; consent must name the expected user.
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Get started"
+    timeout: 30000
+- tapOn: "Get started"
+- tapOn: "Continue with Accounts"
+- runFlow:
+    when:
+      visible: "Dalej|Continue"
+    commands:
+      - tapOn: "Dalej|Continue"
+- extendedWaitUntil:
+    visible: "Email|Continue to Ork"
+    timeout: 20000
+- runFlow:
+    when:
+      visible: "Email"
+    commands:
+      - tapOn: "Email"
+      - inputText: ${ORKBOT_E2E_EMAIL}
+      - tapOn: "Dalej|Next"
+      - inputText: ${ORKBOT_E2E_PASSWORD}
+      - tapOn: "Gotowe|Done"
+      - tapOn:
+          text: "Sign in"
+          below: "Password"
+- runFlow:
+    when:
+      visible: "Nie teraz|Not Now"
+    commands:
+      - tapOn: "Nie teraz|Not Now"
+- extendedWaitUntil:
+    visible: "Authorize"
+    timeout: 20000
+- assertVisible: ${ORKBOT_E2E_EMAIL}
+- tapOn: "Authorize"
+- extendedWaitUntil:
+    visible: "Choose organization"
+    timeout: 20000
+- tapOn: "Choose organization"
+- tapOn: "Personal"
+- extendedWaitUntil:
+    visible: "Continue with Ork Accounts"
+    timeout: 20000
+- tapOn: "Continue with Ork Accounts"
+- extendedWaitUntil:
+    visible: "Create"
+    timeout: 30000
+- assertVisible: "Personal"
+- assertNotVisible: "Get started"
+- takeScreenshot: native-accounts-personal-inbox
