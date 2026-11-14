@@ -147,16 +147,28 @@ export function receiveIncomingShare(isShare: boolean, initial: boolean) {
   if (initial) sweepIosShareContainer(share.files);
 }
 
-/** Claim synchronously: a second chat/effect cannot take the same share. */
-export function takeIncomingShare(destination?: string): IncomingShare | null {
-  if (!supported()) return null;
-  if (pending?.destination && pending.destination !== destination) return null;
+/** The picker assigns a native share to one immutable, verified conversation scope. */
+export function selectIncomingShare(destination: string, expectedGeneration: number): boolean {
+  if (!supported() || typeof destination !== "string" || !destination || !pending) return false;
+  if (pending.generation !== expectedGeneration) return false;
+  if (!isIncomingShareCurrent(pending)) {
+    cancelIncomingShare();
+    return false;
+  }
+  if (pending.destination) return pending.destination === destination;
+  publish({ ...pending, destination });
+  return true;
+}
+
+/** Only the selected conversation may claim the payload, including interrupted retries. */
+export function takeIncomingShare(destination: string): IncomingShare | null {
+  if (!supported() || typeof destination !== "string" || !destination) return null;
+  if (!pending || pending.destination !== destination) return null;
   const share = pending;
   clearSharedPayloads();
   publish(null);
   if (!share) return null;
-  if (Date.now() - share.arrivedAt < MAX_AGE_MS)
-    return destination ? { ...share, destination } : share;
+  if (Date.now() - share.arrivedAt < MAX_AGE_MS) return share;
   releaseIncomingShareFiles(share.files);
   return null;
 }

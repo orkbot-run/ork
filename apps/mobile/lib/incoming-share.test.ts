@@ -72,6 +72,8 @@ const {
   takeIncomingShare,
   cancelIncomingShare,
   hasIncomingShare,
+  getIncomingShare,
+  selectIncomingShare,
   readIncomingShareFile,
   releaseIncomingShareFiles,
   retryIncomingShare,
@@ -95,38 +97,43 @@ function receive() {
   state.payloads = [{ value: " https://example.com/a ", shareType: "url" }];
   receiveIncomingShare(true, false);
 }
+function takeSelectedShare(destination = "server/account/login/chat-fixture") {
+  const waiting = getIncomingShare();
+  if (waiting && !waiting.destination) selectIncomingShare(destination, waiting.generation);
+  return takeIncomingShare(destination);
+}
 describe("incoming share", () => {
   it("takes text once without copying files", () => {
     receive();
-    expect(takeIncomingShare()?.text).toBe("https://example.com/a");
-    expect(takeIncomingShare()).toBeNull();
+    expect(takeSelectedShare()?.text).toBe("https://example.com/a");
+    expect(takeSelectedShare()).toBeNull();
     expect(state.copy).not.toHaveBeenCalled();
   });
   it("cancel clears and prevents a failed in-flight import reviving it", () => {
     receive();
-    const share = takeIncomingShare()!;
+    const share = takeSelectedShare()!;
     cancelIncomingShare();
     retryIncomingShare(share);
     expect(isIncomingShareCurrent(share)).toBe(false);
     expect(hasIncomingShare()).toBe(false);
-    expect(takeIncomingShare()).toBeNull();
+    expect(takeSelectedShare()).toBeNull();
     expect(state.payloads).toEqual([]);
   });
   it("expires after five minutes", () => {
     receive();
     vi.advanceTimersByTime(5 * 60 * 1000);
     expect(hasIncomingShare()).toBe(false);
-    expect(takeIncomingShare()).toBeNull();
+    expect(takeSelectedShare()).toBeNull();
   });
   it("checks age on take even if the expiry timer was suspended", () => {
     receive();
     vi.setSystemTime(Date.now() + 5 * 60 * 1000);
-    expect(takeIncomingShare()).toBeNull();
+    expect(takeSelectedShare()).toBeNull();
   });
   it("cold starting without a share clears old native state", () => {
     receive();
     receiveIncomingShare(false, true);
-    expect(takeIncomingShare()).toBeNull();
+    expect(takeSelectedShare()).toBeNull();
     expect(state.payloads).toEqual([]);
   });
   it("keeps a share on ordinary navigation", () => {
@@ -137,17 +144,17 @@ describe("incoming share", () => {
   it("does nothing on iOS builds without the share extension", () => {
     state.os = "ios";
     receive();
-    expect(takeIncomingShare()).toBeNull();
+    expect(takeSelectedShare()).toBeNull();
     expect(state.clear).not.toHaveBeenCalled();
   });
   it("retries failures without replacing a newer share", () => {
     receive();
-    const share = takeIncomingShare()!;
+    const share = takeSelectedShare()!;
     retryIncomingShare(share);
-    expect(takeIncomingShare()).toBe(share);
+    expect(takeSelectedShare()).toBe(share);
     receive();
     retryIncomingShare(share);
-    expect(takeIncomingShare()).not.toBe(share);
+    expect(takeSelectedShare()).not.toBe(share);
   });
   it("deletes only its cache copy after consumption", async () => {
     await readIncomingShareFile("content://media/1", 1024, async (file) => {
@@ -199,8 +206,8 @@ describe("incoming share on iOS", () => {
   });
   it("receives files the extension copied and hands them off once", () => {
     receiveIos(["a.png", "b.pdf"]);
-    expect(takeIncomingShare()?.files.map((file) => file.name)).toEqual(["a.png", "b.pdf"]);
-    expect(takeIncomingShare()).toBeNull();
+    expect(takeSelectedShare()?.files.map((file) => file.name)).toEqual(["a.png", "b.pdf"]);
+    expect(takeSelectedShare()).toBeNull();
     expect(state.clear).toHaveBeenCalled();
   });
   it("deletes the extension's copies when the share is cancelled or expires", () => {
@@ -215,12 +222,12 @@ describe("incoming share on iOS", () => {
   it("deletes an expired share's copies when it is taken late", () => {
     receiveIos(["a.png"]);
     vi.setSystemTime(Date.now() + 5 * 60 * 1000);
-    expect(takeIncomingShare()).toBeNull();
+    expect(takeSelectedShare()).toBeNull();
     expect(state.remove).toHaveBeenCalledWith(`${GROUP}a.png`);
   });
   it("keeps files put back for retry and those a newer share reuses", () => {
     receiveIos(["a.png", "b.png"]);
-    const share = takeIncomingShare()!;
+    const share = takeSelectedShare()!;
     retryIncomingShare({ ...share, files: share.files.slice(1) });
     releaseIncomingShareFiles(share.files);
     expect(state.remove.mock.calls).toEqual([[`${GROUP}a.png`]]);
@@ -259,6 +266,9 @@ describe("incoming share on iOS", () => {
 
 it("keeps an interrupted share bound to its original immutable destination", () => {
   receive();
+  expect(selectIncomingShare("server/account/login/chat-a", getIncomingShare()!.generation)).toBe(
+    true,
+  );
   const original = takeIncomingShare("server/account/login/chat-a")!;
   retryIncomingShare(original);
   expect(takeIncomingShare("server/account/login/chat-b")).toBeNull();
@@ -270,10 +280,10 @@ it("releases a reused iOS URI only after every in-flight reader and pending owne
   state.os = "ios";
   state.container = { uri: GROUP, files: [] };
   receiveIos(["shared.png"]);
-  const old = takeIncomingShare()!;
+  const old = takeSelectedShare()!;
   const releaseOld = retainIncomingShareFiles(old.files);
   receiveIos(["shared.png"]);
-  const newer = takeIncomingShare()!;
+  const newer = takeSelectedShare()!;
   const releaseNew = retainIncomingShareFiles(newer.files);
   releaseIncomingShareFiles(old.files);
   releaseOld();
@@ -284,4 +294,31 @@ it("releases a reused iOS URI only after every in-flight reader and pending owne
   expect(state.remove).not.toHaveBeenCalled();
   cancelIncomingShare();
   expect(state.remove.mock.calls).toEqual([[`${GROUP}shared.png`]]);
+});
+
+it("does not let an already mounted chat take a share before the user selects a destination", () => {
+  receive();
+  const waiting = getIncomingShare();
+  expect(takeIncomingShare("server/account/login/already-open-chat")).toBeNull();
+  expect(getIncomingShare()).toBe(waiting);
+  expect(hasIncomingShare()).toBe(true);
+});
+
+it("requires explicit selection and refuses another conversation's scope", () => {
+  receive();
+  const generation = getIncomingShare()!.generation;
+  expect(selectIncomingShare("server/account/login/chat-a", generation)).toBe(true);
+  expect(selectIncomingShare("server/account/login/chat-b", generation)).toBe(false);
+  expect(takeIncomingShare("server/account/login/chat-b")).toBeNull();
+  expect(takeIncomingShare("server/account/login/chat-a")?.text).toBe("https://example.com/a");
+});
+
+it("does not assign a newer incoming share using an older picker operation", () => {
+  receive();
+  const previous = getIncomingShare()!.generation;
+  receive();
+  const newer = getIncomingShare();
+  expect(selectIncomingShare("server/account/login/chat-a", previous)).toBe(false);
+  expect(getIncomingShare()).toBe(newer);
+  expect(takeIncomingShare("server/account/login/chat-a")).toBeNull();
 });

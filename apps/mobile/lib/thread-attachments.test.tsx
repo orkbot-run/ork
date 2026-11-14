@@ -70,8 +70,7 @@ vi.mock("./incoming-share", () => ({
     for (const notify of state.listeners) notify();
   },
   takeIncomingShare: (destination: string) => {
-    if (!state.pending || (state.pending.destination && state.pending.destination !== destination))
-      return null;
+    if (!state.pending || state.pending.destination !== destination) return null;
     const share = { ...state.pending, destination };
     state.pending = null;
     return share;
@@ -231,7 +230,13 @@ it("keeps immutable source bytes while a captured send waits for durable ownersh
 
 it("requeues an interrupted warm-transition share for its original chat", async () => {
   const result = later<{ attachments: PickedAttachment[]; skipped: []; failedFiles: [] }>();
-  state.pending = { text: "shared-a", files: [], arrivedAt: Date.now(), generation: 1 };
+  state.pending = {
+    destination: JSON.stringify(scopeFor("bot-a")),
+    text: "shared-a",
+    files: [],
+    arrivedAt: Date.now(),
+    generation: 1,
+  };
   vi.mocked(readSharedFiles)
     .mockReturnValueOnce(result.promise)
     .mockResolvedValueOnce({ attachments: [picked("shared-a")], skipped: [], failedFiles: [] });
@@ -262,7 +267,13 @@ it("settles shared files against capacity consumed by a picker that finished dur
     ]),
   );
   act(() => attachments.attachFrom("file"));
-  state.pending = { text: "shared", files: [], arrivedAt: Date.now(), generation: 8 };
+  state.pending = {
+    destination: JSON.stringify(scopeFor("bot-a")),
+    text: "shared",
+    files: [],
+    arrivedAt: Date.now(),
+    generation: 8,
+  };
   act(() => root.render(<Probe botId="bot-a" share />));
   await act(async () =>
     picker.resolve({ attachments: [picked("three"), picked("four")], skipped: [] }),
@@ -286,7 +297,13 @@ it("settles shared files against capacity consumed by a picker that finished dur
 
 it("keeps an unreadable-storage share queued without an immediate retry loop", async () => {
   state.failWrite = true;
-  state.pending = { text: "not consumed", files: [], arrivedAt: Date.now(), generation: 10 };
+  state.pending = {
+    destination: JSON.stringify(scopeFor("bot-a")),
+    text: "not consumed",
+    files: [],
+    arrivedAt: Date.now(),
+    generation: 10,
+  };
   vi.mocked(readSharedFiles).mockResolvedValueOnce({
     attachments: [picked("retained")],
     skipped: [],
@@ -302,7 +319,13 @@ it("keeps an unreadable-storage share queued without an immediate retry loop", a
 
 it("does not requeue or insert a share that completed after explicit logout", async () => {
   const shared = later<{ attachments: PickedAttachment[]; skipped: []; failedFiles: [] }>();
-  state.pending = { text: "private old source", files: [], arrivedAt: Date.now(), generation: 11 };
+  state.pending = {
+    destination: JSON.stringify(scopeFor("bot-a")),
+    text: "private old source",
+    files: [],
+    arrivedAt: Date.now(),
+    generation: 11,
+  };
   vi.mocked(readSharedFiles).mockReturnValueOnce(shared.promise);
   act(() => root.render(<Probe botId="bot-a" share />));
   state.namespace = "new-login";
@@ -314,4 +337,15 @@ it("does not requeue or insert a share that completed after explicit logout", as
   expect(state.retry).not.toHaveBeenCalled();
   expect(state.insert).not.toHaveBeenCalled();
   expect([...state.records.values()].flat()).toEqual([]);
+});
+
+it("keeps an unselected native share in the picker while an existing chat is mounted", async () => {
+  await act(async () => root.render(<Probe botId="bot-a" share />));
+  state.pending = { text: "choose a recipient", files: [], arrivedAt: Date.now(), generation: 12 };
+  await act(async () => {
+    for (const notify of state.listeners) notify();
+  });
+  expect(state.pending?.text).toBe("choose a recipient");
+  expect(readSharedFiles).not.toHaveBeenCalled();
+  expect(state.insert).not.toHaveBeenCalled();
 });
