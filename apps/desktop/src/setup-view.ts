@@ -638,8 +638,14 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     const version = generation;
     const activeScreen = screen;
     directoryPolling = true;
+    let timeout: number | undefined;
     try {
-      const entries = await transport.invoke<Server[]>("list_servers");
+      const entries = await Promise.race([
+        transport.invoke<Server[]>("list_servers"),
+        new Promise<never>((_, reject) => {
+          timeout = win?.setTimeout(() => reject(new Error("Server directory timed out")), 4000);
+        }),
+      ]);
       if (
         !current(version) ||
         account !== owner ||
@@ -672,12 +678,20 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     } catch {
       // A directory outage does not interrupt the current setup screen.
     } finally {
+      win?.clearTimeout(timeout);
       directoryPolling = false;
     }
   }
 
   const directoryTimer = win.setInterval(() => void refreshWaitingServers(), 15_000);
-  cleanups.push(() => win.clearInterval(directoryTimer));
+  const refreshOnReturn = () => void refreshWaitingServers();
+  win.addEventListener("focus", refreshOnReturn);
+  doc.addEventListener("visibilitychange", refreshOnReturn);
+  cleanups.push(() => {
+    win.clearInterval(directoryTimer);
+    win.removeEventListener("focus", refreshOnReturn);
+    doc.removeEventListener("visibilitychange", refreshOnReturn);
+  });
 
   async function openServer(
     version: number,

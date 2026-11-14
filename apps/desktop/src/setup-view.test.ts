@@ -1213,6 +1213,67 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
   });
 
+  it.each(["focus", "visibilitychange"])(
+    "refreshes the workspace catalog on %s and opens the server list",
+    async (event) => {
+      vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+      const newWorkspace = {
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "New workspace",
+        url: "https://new.example.com",
+      };
+      const catalog = catalogFixture([newWorkspace]);
+      let currentCatalog: typeof catalog = {
+        ...catalog,
+        organizations: catalog.organizations.map((organization) => ({
+          ...organization,
+          servers: [],
+        })),
+      };
+      const { invoke, dispose } = await continueSetup({
+        invoke: async (name) => {
+          if (name === "setup_accounts_session") return account;
+          if (name === "list_servers") return saved;
+          if (name === "workspace_catalog") return currentCatalog;
+          return undefined;
+        },
+      });
+      node("selfhost").click();
+      expect(screen()).toBe("selfhost");
+      currentCatalog = catalog;
+      (event === "focus" ? window : document).dispatchEvent(new Event(event));
+      await flush();
+      expect(screen()).toBe("servers");
+      expect(node("workspaces").textContent).toContain("New workspace");
+      const calls = invoke.mock.calls.length;
+      dispose();
+      (event === "focus" ? window : document).dispatchEvent(new Event(event));
+      await flush();
+      expect(invoke).toHaveBeenCalledTimes(calls);
+    },
+  );
+
+  it("retries the directory after a stalled saved-server request", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    let serverCalls = 0;
+    const pending = deferred<typeof saved>();
+    const { invoke } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return ++serverCalls === 2 ? pending.promise : saved;
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    window.dispatchEvent(new Event("focus"));
+    await flush();
+    await vi.advanceTimersByTimeAsync(4_000);
+    window.dispatchEvent(new Event("focus"));
+    await flush();
+    expect(invoke.mock.calls.filter(([name]) => name === "list_servers")).toHaveLength(3);
+  });
+
   it("ignores a directory refresh completed after logout", async () => {
     vi.useFakeTimers();
     vi.spyOn(document, "hidden", "get").mockReturnValue(false);
