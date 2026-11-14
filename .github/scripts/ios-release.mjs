@@ -341,7 +341,7 @@ export async function verifyExportedApp(app, expected, run, certificateDirectory
     if (!binary.includes(Buffer.from(name)))
       throw new Error(`Native release binary does not contain ${name}`);
   const prefix = path.join(certificateDirectory, "export-signature-");
-  await run("/usr/bin/codesign", ["-d", "--extract-certificates", prefix, app]);
+  await run("/usr/bin/codesign", ["-d", `--extract-certificates=${prefix}`, app]);
   const certificate = new X509Certificate(readFileSync(`${prefix}0`));
   if (certificate.fingerprint.replaceAll(":", "") !== expected.distribution)
     throw new Error("Export did not use the dedicated iOS distribution certificate");
@@ -359,8 +359,7 @@ export async function verifyExportedApp(app, expected, run, certificateDirectory
     const extensionPrefix = path.join(certificateDirectory, `extension-signature-${index}-`);
     await run("/usr/bin/codesign", [
       "-d",
-      "--extract-certificates",
-      extensionPrefix,
+      `--extract-certificates=${extensionPrefix}`,
       path.join(app, extension),
     ]);
     const extensionCertificate = new X509Certificate(readFileSync(`${extensionPrefix}0`));

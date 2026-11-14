@@ -196,11 +196,13 @@ function iosFixture() {
       writeFileSync(path.join(app, "main.jsbundle"), "embedded production bundle");
       writeFileSync(path.join(app, "Ork"), "OrkIdentityModule\0OrkTransportModule");
     }
-    if (command.endsWith("/codesign") && args.includes("--extract-certificates"))
-      writeFileSync(
-        `${args[args.indexOf("--extract-certificates") + 1]}0`,
-        readFileSync(certificate),
-      );
+    if (command.endsWith("/codesign") && args.includes("-d")) {
+      const prefix = args
+        .find((arg) => arg.startsWith("--extract-certificates="))
+        ?.slice("--extract-certificates=".length);
+      if (!prefix || args.length !== 3) throw new Error("Invalid codesign extraction arguments");
+      writeFileSync(`${prefix}0`, readFileSync(certificate));
+    }
     return "";
   };
   return {
