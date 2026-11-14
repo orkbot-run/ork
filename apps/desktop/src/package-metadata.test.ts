@@ -12,6 +12,7 @@ const root = path.resolve(import.meta.dirname, "..");
 const bundle = JSON.parse(readFileSync(path.join(root, "src-tauri/tauri.conf.json"), "utf8")) as {
   productName: string;
   identifier: string;
+  build: { devUrl?: string };
   bundle: {
     resources: Record<string, string>;
   };
@@ -19,6 +20,14 @@ const bundle = JSON.parse(readFileSync(path.join(root, "src-tauri/tauri.conf.jso
 const info = readFileSync(path.join(root, "src-tauri/Info.plist"), "utf8");
 
 describe("desktop bundle metadata", () => {
+  it("loads the trusted bundled setup document during development", () => {
+    const manifest = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    expect(bundle.build.devUrl).toBeUndefined();
+    expect(manifest.scripts["tauri:dev"]).toContain("--no-dev-server");
+  });
+
   it("uses the Ork name and preserves the installed Tauri application identifier", () => {
     expect(bundle.productName).toBe("Ork");
     expect(bundle.identifier).toBe("run.orkbot.desktop.preview");

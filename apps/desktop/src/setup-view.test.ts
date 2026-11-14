@@ -299,11 +299,52 @@ describe("bundled desktop setup", () => {
     expect(node("workspaces").textContent).toContain("Organization");
     expect(node("local").hidden).toBe(false);
     expect(node("selfhost").hidden).toBe(false);
-    node("workspaces").querySelector<HTMLButtonElement>("button")!.click();
+    node("workspaces").querySelector<HTMLButtonElement>(".workspace-choice")!.click();
     await flush();
     expect(invoke).toHaveBeenCalledWith("connect_workspace", {
       id: "11111111-1111-4111-8111-111111111111",
     });
+  });
+
+  it("shows wizard stages and detects a server added during self-hosted setup", async () => {
+    vi.useFakeTimers();
+    let entries = [
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "Studio",
+        url: "https://studio.example.com",
+      },
+    ];
+    await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [];
+        if (name === "workspace_catalog") return entries;
+        return undefined;
+      },
+    });
+    expect(document.querySelector<HTMLElement>(".shell")?.dataset.directoryStage).toBe(
+      "organization",
+    );
+    node("organization-next").click();
+    expect(document.querySelector<HTMLElement>(".shell")?.dataset.directoryStage).toBe("servers");
+    node("add-server").click();
+    expect(document.querySelector<HTMLElement>(".shell")?.dataset.directoryStage).toBe("location");
+    node("selfhost").click();
+    expect(screen()).toBe("selfhost");
+    entries = [
+      ...entries,
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        name: "New workspace",
+        url: "https://new.example.com",
+      },
+    ];
+    await vi.advanceTimersByTimeAsync(15_000);
+    await flush();
+    expect(screen()).toBe("servers");
+    expect(document.querySelector<HTMLElement>(".shell")?.dataset.directoryStage).toBe("servers");
+    expect(node("workspaces").textContent).toContain("New workspace");
   });
 
   it("discards a personal server link and presents the available workspaces", async () => {
@@ -340,7 +381,7 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
   });
 
-  it("keeps saved server addresses out of the workspace picker but accessible under self-hosted", async () => {
+  it("shows saved servers in the server selection step", async () => {
     const { invoke } = await setup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
@@ -356,17 +397,17 @@ describe("bundled desktop setup", () => {
         return undefined;
       },
     });
-    const picker = document.querySelector<HTMLElement>('[data-step="servers"]')!;
-    expect(picker.textContent).not.toContain(saved[0]!.url);
-    node("selfhost").click();
-    expect(screen()).toBe("selfhost");
+    expect(node("organization-next").hidden).toBe(false);
+    node("organization-next").click();
+    expect(node("saved-servers").hidden).toBe(false);
     expect(node("servers").textContent).toContain(saved[0]!.url);
     node("servers").querySelector<HTMLButtonElement>(".server-open")!.click();
     await flush();
     expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[0]!.id });
   });
 
-  it("keeps an unreachable workspace visible and lets the user refresh its status", async () => {
+  it("refreshes an unreachable workspace status automatically", async () => {
+    vi.useFakeTimers();
     let online = false;
     const { invoke } = await setup({
       invoke: async (name) => {
@@ -388,7 +429,7 @@ describe("bundled desktop setup", () => {
     expect(node("workspaces").textContent).toContain("Offline");
     expect(node("workspaces").textContent).toContain("Studio");
     online = true;
-    node("refresh").click();
+    await vi.advanceTimersByTimeAsync(15_000);
     await flush();
     expect(node("workspaces").textContent).toContain("Online");
     expect(invoke).toHaveBeenCalledWith("check_workspace", {
@@ -695,8 +736,6 @@ describe("bundled desktop setup", () => {
     expect(node("status").textContent).toBe("Server unavailable");
     expect(node("retry-server").hidden).toBe(false);
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
-    node("refresh").click();
-    await flush();
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
     node("retry-server").click();
     await flush();
@@ -823,6 +862,34 @@ describe("bundled desktop setup", () => {
     emit("ready", ["stale"]);
     expect(screen()).toBe("servers");
     expect(node("output").textContent).toBe("");
+  });
+
+  it("marks the Docker check as failed and keeps retry in the navigation footer", async () => {
+    const start = deferred<unknown>();
+    const { emit } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [];
+        if (name === "connect_local_server") return start.promise;
+        return undefined;
+      },
+    });
+    node("local").click();
+    emit("checking-docker");
+    emit("docker-missing");
+    expect(
+      document.querySelector('[data-phase="checking-docker"]')?.getAttribute("data-state"),
+    ).toBe("error");
+    expect(
+      document.querySelector('[data-phase="checking-docker"]')?.hasAttribute("aria-current"),
+    ).toBe(false);
+    start.reject(
+      "Docker Compose is missing. Install Docker Desktop or the docker-compose-plugin, then retry.",
+    );
+    await flush();
+    expect(node("retry-local").hidden).toBe(false);
+    expect(node("retry-local").closest("footer")).not.toBeNull();
+    expect(node("status").dataset.error).toBe("true");
   });
   it("passes the selected organization to the native installer and its retry", async () => {
     const catalog = catalogFixture([

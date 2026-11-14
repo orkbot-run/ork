@@ -550,7 +550,7 @@ impl LocalStack {
         let version = self
             .docker(
                 &binary,
-                strings(&["compose", "version", "--short"]),
+                strings(&["compose", "version"]),
                 Duration::from_secs(15),
                 None,
                 cancel.clone(),
@@ -1515,6 +1515,8 @@ fn failure_kind(result: &DockerResult) -> DockerFailure {
             &[
                 "'compose' is not a docker command",
                 "unknown command: docker compose",
+                "unknown command: 'docker compose'",
+                "unknown command: \"docker compose\"",
             ][..],
         ),
         (
@@ -2548,9 +2550,19 @@ mod tests {
 
     #[tokio::test]
     async fn compose_missing_does_not_attempt_to_start_or_install_anything() {
-        let (_root, stack, runner) = fixture(vec![error("'compose' is not a docker command")]);
-        assert_eq!(stack.start().await.phase, LocalStackPhase::DockerMissing);
-        assert_eq!(runner.requests.lock().unwrap().len(), 1);
+        for message in [
+            "'compose' is not a docker command",
+            "docker: unknown command: docker compose",
+            "docker: unknown command: 'docker compose'",
+            "docker: unknown command: \"docker compose\"",
+        ] {
+            let (_root, stack, runner) = fixture(vec![error(message)]);
+            assert_eq!(stack.start().await.phase, LocalStackPhase::DockerMissing);
+            let requests = runner.requests.lock().unwrap();
+            assert_eq!(requests.len(), 1);
+            // Avoid Compose-only flags: a Docker CLI without the plugin parses them itself.
+            assert_eq!(requests[0].args, strings(&["compose", "version"]));
+        }
     }
 
     #[tokio::test]

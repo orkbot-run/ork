@@ -93,6 +93,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   let pairingPoll: number | undefined;
   let pairingExpiry: number | undefined;
   let screen: Screen = "checking";
+  let directoryStage: "organization" | "servers" | "location" = "organization";
+  let waitingServerIds: Set<string> | null = null;
   let operation: Operation | null = null;
   let browserSignIn = false;
   let generation = 0;
@@ -106,6 +108,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   let organizationCount: number | null = null;
   let workspaceSnapshot = "";
   let workspaceCatalog: IdentityCatalog | null = null;
+  let workspaceEntries: Workspace[] = [];
   let selectedOrganizationId: string | null | undefined;
   let workspaceProbeGeneration = 0;
   let directoryOwner: Account | null = null;
@@ -160,7 +163,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     for (const button of doc.querySelectorAll<HTMLButtonElement>("button")) {
       button.disabled = operation !== null || button.dataset.unavailable === "true";
     }
-    element<HTMLButtonElement>("quit").disabled = false;
     element<HTMLButtonElement>("sign-out").disabled = operation === "logout";
     element<HTMLButtonElement>("cancel-sign-in").disabled = operation === "logout";
     element<HTMLButtonElement>("back").disabled =
@@ -170,16 +172,48 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
           operation !== "directory" &&
           operation !== "pair" &&
           operation !== "approve"));
+    element("account-menu").hidden = !account;
     element("sign-out").hidden = !account;
-    element("back").hidden = !["accounts", "selfhost", "local"].includes(screen);
+    element("back").hidden =
+      !["accounts", "selfhost", "local"].includes(screen) &&
+      !(
+        screen === "servers" &&
+        (directoryStage === "location" || (directoryStage === "servers" && !!organizationCount))
+      );
+    element("organization-next").hidden =
+      screen !== "servers" || directoryStage !== "organization" || !organizationCount;
+    element<HTMLButtonElement>("organization-next").disabled =
+      operation !== null || !selectedOrganizationId;
+    element("add-server").hidden = directoryStage !== "servers";
+    element("saved-servers").hidden = directoryStage !== "servers";
+    element("server-choices").hidden = directoryStage !== "location";
+    element("workspaces-section").hidden = !organizationCount || directoryStage === "location";
+    element("workspaces-error").hidden =
+      organizationCount !== null || directoryStage === "location";
+    for (const node of workspaces.querySelectorAll<HTMLElement>("[data-directory-group]"))
+      node.hidden = node.dataset.directoryGroup !== directoryStage;
+    element("directory-title").textContent = t(
+      directoryStage === "organization"
+        ? "Choose organization"
+        : directoryStage === "servers"
+          ? "Choose server"
+          : "Where will Ork live?",
+    );
+    element("directory-description").textContent = t(
+      directoryStage === "organization"
+        ? "Choose an organization to continue."
+        : directoryStage === "servers"
+          ? "Choose a server or add a new one."
+          : "Choose where to run Ork.",
+    );
+    shell!.dataset.directoryStage = directoryStage;
     element("browser-hint").hidden = !browserSignIn;
     element("cancel-sign-in").hidden = operation !== "signin";
     element("sign-in").hidden = operation === "signin";
     element("retry-local").hidden =
       screen !== "local" || operation !== null || startup.phase === "opening";
-    element("retry-server").hidden = screen !== "servers" || !failedServer;
-    for (const select of doc.querySelectorAll<HTMLSelectElement>("[data-directory-control]"))
-      select.disabled = operation !== null;
+    element("retry-server").hidden =
+      screen !== "servers" || directoryStage !== "servers" || !failedServer;
     input.disabled = operation !== null;
     element("setup").hidden = !pendingInitialization;
     element("installation").hidden = pendingInitialization || !!pairingRequest;
@@ -217,6 +251,13 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       typeof error === "string" ? error : "Could not complete that request. Try again.",
     );
     status.dataset.error = "true";
+    if (screen === "local") {
+      const failedPhase = phases.find((phase) => phase.dataset.state === "current") ?? phases[0];
+      if (failedPhase) {
+        failedPhase.dataset.state = "error";
+        failedPhase.removeAttribute("aria-current");
+      }
+    }
   }
 
   async function run(
@@ -397,11 +438,12 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       if (selectedOrganizationId === undefined)
         selectedOrganizationId = initialCatalogOrganization(catalog)?.id ?? null;
       organizationCount = catalog.organizations.length;
+      if (organizationCount === 0 && directoryStage === "organization") directoryStage = "servers";
       element("workspaces-error").hidden = true;
       element("workspaces-section").hidden = catalog.organizations.length === 0;
       const snapshot = JSON.stringify([catalog, selectedOrganizationId]);
       if (snapshot === workspaceSnapshot) {
-        if (refreshStatus) renderWorkspaces(version, owner);
+        if (refreshStatus) checkWorkspaces(workspaceEntries, version, owner, snapshot);
         return;
       }
       workspaceSnapshot = snapshot;
@@ -414,6 +456,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       workspaces.replaceChildren();
       element("workspaces-section").hidden = true;
       element("workspaces-error").hidden = false;
+      if (directoryStage === "organization") directoryStage = "servers";
+      controls();
     } finally {
       win?.clearTimeout(timeout);
     }
@@ -456,6 +500,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         if (active()) void connect("connect_workspace", { id });
       },
     });
+    workspaceEntries = valid;
     controls();
     checkWorkspaces(valid, version, owner, workspaceSnapshot);
   }
@@ -572,8 +617,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       row.append(open, preferred, remove);
       servers.append(row);
     }
-    element("account").textContent =
-      account?.userinfo.name ?? account?.userinfo.email ?? "Accounts";
+    const name = account?.userinfo.name ?? account?.userinfo.email ?? "Account";
+    element("account").textContent = name.trim().charAt(0).toUpperCase() || "A";
   }
 
   async function refreshWaitingServers() {
@@ -607,7 +652,23 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         return;
       if (directoryOwner !== owner || JSON.stringify(entries) !== directorySnapshot)
         renderServers(entries);
-      void loadWorkspaces(version, owner);
+      await loadWorkspaces(version, owner, true);
+      if (
+        activeScreen === "selfhost" &&
+        waitingServerIds &&
+        workspaceCatalog &&
+        current(version) &&
+        screen === "selfhost"
+      ) {
+        const newServer = workspaceCatalog.organizations
+          .find((organization) => organization.id === selectedOrganizationId)
+          ?.servers.some((server) => !waitingServerIds!.has(server.id));
+        if (newServer) {
+          waitingServerIds = null;
+          directoryStage = "servers";
+          show("servers");
+        }
+      }
     } catch {
       // A directory outage does not interrupt the current setup screen.
     } finally {
@@ -947,6 +1008,12 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       );
   }
   on("back", "click", () => {
+    if (screen === "servers" && directoryStage !== "organization") {
+      directoryStage = directoryStage === "location" ? "servers" : "organization";
+      if (directoryStage === "organization" && !organizationCount) directoryStage = "servers";
+      controls();
+      return;
+    }
     if (screen === "local") {
       chooseServer();
       return;
@@ -965,6 +1032,11 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   });
   on("selfhost", "click", () => {
     if (account && !operation) {
+      waitingServerIds = new Set(
+        workspaceCatalog?.organizations
+          .find((organization) => organization.id === selectedOrganizationId)
+          ?.servers.map((server) => server.id) ?? [],
+      );
       show("selfhost");
     }
   });
@@ -992,7 +1064,16 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     if (failedServer)
       void connect(failedServer.command, { id: failedServer.id }, failedServer.local);
   });
-  on("refresh", "click", () => void run("directory", loadServers, "servers"));
+  on("organization-next", "click", () => {
+    if (!selectedOrganizationId || operation) return;
+    directoryStage = "servers";
+    controls();
+  });
+  on("add-server", "click", () => {
+    if (operation) return;
+    directoryStage = "location";
+    controls();
+  });
   on("setup", "submit", (event) => {
     event.preventDefault();
     if (!pendingInitialization || !input.reportValidity() || input.value !== pendingServer) {
@@ -1017,11 +1098,15 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     browserSignIn = false;
     input.value = "";
     element("account").textContent = "";
+    element<HTMLDetailsElement>("account-menu").open = false;
     servers.replaceChildren();
     workspaces.replaceChildren();
     organizationCount = null;
     workspaceCatalog = null;
+    workspaceEntries = [];
     selectedOrganizationId = undefined;
+    directoryStage = "organization";
+    waitingServerIds = null;
     workspaceSnapshot = "";
     workspaceProbeGeneration++;
     element("workspaces-section").hidden = true;
@@ -1038,10 +1123,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   }
   on("sign-out", "click", () => void logout());
   on("cancel-sign-in", "click", () => void logout());
-  on("quit", "click", () => {
-    clearPairing();
-    void transport.invoke("quit_setup").catch(errorMessage);
-  });
   on("copy-pairing", "click", () => {
     const value = pairing;
     const version = pairingVersion;
@@ -1101,16 +1182,27 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
             (operation !== "local" && startup.phase !== "opening")
           )
             return;
+          const dockerBlocked =
+            payload.phase === "docker-missing" || payload.phase === "docker-not-running";
           const index =
             payload.phase === "ready"
               ? phases.length
-              : phases.findIndex((phase) => phase.dataset.phase === payload.phase);
+              : dockerBlocked
+                ? 0
+                : phases.findIndex((phase) => phase.dataset.phase === payload.phase);
           if (index >= 0)
             for (let i = 0; i < phases.length; i++) {
               const phase = phases[i];
               if (phase) {
-                phase.dataset.state = i < index ? "done" : i === index ? "current" : "pending";
-                if (i === index) phase.setAttribute("aria-current", "step");
+                phase.dataset.state =
+                  i < index
+                    ? "done"
+                    : i === index
+                      ? dockerBlocked
+                        ? "error"
+                        : "current"
+                      : "pending";
+                if (i === index && !dockerBlocked) phase.setAttribute("aria-current", "step");
                 else phase.removeAttribute("aria-current");
               }
             }

@@ -73,16 +73,16 @@ it("opens the local route retained by native device filtering", () => {
 
 it("keeps organizations without servers in the chooser and waits for a choice", () => {
   const { container, entries, chooseOrganization, open } = render(catalog(), null);
-  const select = container.querySelector("select")!;
-  expect([...select.options].map((row) => row.textContent)).toEqual([
-    "Choose organization",
+  const trigger = container.querySelector<HTMLButtonElement>(".organization-trigger")!;
+  expect(trigger.textContent).toBe("Choose organization");
+  expect([...container.querySelectorAll('[role="option"]')].map((row) => row.textContent)).toEqual([
     "Personal",
     "Company",
   ]);
   expect(entries).toEqual([]);
   expect(open).not.toHaveBeenCalled();
-  select.value = id(1);
-  select.dispatchEvent(new Event("change"));
+  trigger.click();
+  container.querySelector<HTMLButtonElement>('[role="option"]')!.click();
   expect(chooseOrganization).toHaveBeenCalledWith(id(1));
   const personal = render(catalog(), id(1));
   expect(personal.container.textContent).toContain("No servers connected");
@@ -108,7 +108,9 @@ it("does not turn organization administration into workspace access", () => {
 
 it("retains an unavailable explicit organization and never selects a different one", () => {
   const { container, entries, open } = render(catalog(), id(99));
-  expect(container.querySelector("select")!.value).toBe(id(99));
+  expect(container.querySelector(".organization-trigger")!.textContent).toBe(
+    "Organization unavailable",
+  );
   expect(container.textContent).toContain("Organization unavailable");
   expect(container.textContent).not.toContain("Research server");
   expect(entries).toEqual([]);
@@ -124,4 +126,30 @@ it("keeps an authorized workspace unavailable until the app supports its route",
   for (const button of container.querySelectorAll<HTMLButtonElement>(".workspace-choice"))
     button.click();
   expect(open).not.toHaveBeenCalled();
+});
+
+it("supports keyboard navigation and restores focus when dismissed", () => {
+  const { container } = render(catalog(), id(1));
+  const trigger = container.querySelector<HTMLButtonElement>(".organization-trigger")!;
+  const list = container.querySelector<HTMLElement>('[role="listbox"]')!;
+  const choices = [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')];
+  trigger.focus();
+  trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+  expect(list.hidden).toBe(false);
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  expect(document.activeElement).toBe(choices[0]);
+  choices[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+  expect(document.activeElement).toBe(choices[1]);
+  choices[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  expect(list.hidden).toBe(true);
+  expect(document.activeElement).toBe(trigger);
+});
+
+it("closes the dropdown when focus leaves the field", () => {
+  const { container } = render(catalog(), id(1));
+  container.querySelector<HTMLButtonElement>(".organization-trigger")!.click();
+  const outside = document.createElement("button");
+  document.body.append(outside);
+  outside.focus();
+  expect(container.querySelector<HTMLElement>('[role="listbox"]')!.hidden).toBe(true);
 });

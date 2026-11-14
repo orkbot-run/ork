@@ -12,12 +12,10 @@
   <body>
     <main class="shell" data-screen="checking" aria-busy="true">
       <header class="topbar">
-        <button id="back" class="link" type="button" hidden data-copy="Back">Back</button>
-        <span class="wordmark">Ork</span>
-        <button id="sign-out" class="link" type="button" hidden data-copy="Sign out">Sign out</button>
+        <span class="wordmark"><span id="hero" class="welcome-ork" aria-hidden="true"></span>Ork</span>
+        <details id="account-menu" class="account-menu" hidden><summary id="account" aria-label="Account menu">A</summary><button id="sign-out" class="link" type="button" data-copy="Sign out">Sign out</button></details>
       </header>
       <div class="content">
-        <div id="hero" class="welcome-ork" aria-hidden="true"></div>
         <section data-step="checking"><h1 data-copy="Getting ready...">Getting ready...</h1></section>
         <section data-step="welcome" hidden>
           <h1 data-copy="Welcome to Ork">Welcome to Ork</h1>
@@ -30,23 +28,26 @@
           <button id="cancel-sign-in" class="link" type="button" hidden data-copy="Cancel">Cancel</button>
         </section>
         <section data-step="servers" hidden>
-          <h1 data-copy="Where will Ork live?">Where will Ork live?</h1>
-          <p id="account" class="subheading"></p>
+          <div class="wizard-progress" aria-hidden="true"><span></span><span></span><span></span></div>
+          <h1 id="directory-title" data-copy="Choose organization">Choose organization</h1>
+          <p id="directory-description" class="hint"></p>
           <section id="workspaces-section" class="workspaces-section" aria-label="Your workspaces" hidden>
             <h2 data-copy="Your workspaces">Your workspaces</h2>
             <div id="workspaces" class="workspace-list"></div>
           </section>
           <p id="workspaces-error" class="hint" role="status" hidden data-copy="Couldn't load workspaces. Try refreshing.">Couldn't load workspaces. Try refreshing.</p>
-          <div class="choices">
+          <section id="saved-servers" aria-label="Your servers"><div id="servers" class="server-list"></div></section>
+          <button id="add-server" class="choice add-server" type="button"><span class="choice-icon" aria-hidden="true">+</span><span><strong data-copy="Add server">Add server</strong><small data-copy="This computer or your own server">This computer or your own server</small></span><span aria-hidden="true">→</span></button>
+          <div id="server-choices" class="choices">
             <button id="local" class="choice" type="button"><span class="choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></span><span><strong data-copy="This computer">This computer</strong><small data-copy="Run Ork here with Docker.">Run Ork here with Docker.</small></span><span aria-hidden="true">→</span></button>
             <button id="selfhost" class="choice choice-secondary" type="button"><span class="choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="8" rx="2"/><rect x="4" y="13" width="16" height="8" rx="2"/><path d="M8 7h.01M8 17h.01"/></svg></span><span><strong data-copy="Self-hosted">Self-hosted</strong><small data-copy="Connect or install on your own server.">Connect or install on your own server.</small></span><span aria-hidden="true">→</span></button>
           </div>
           <button id="retry-server" class="button button-secondary" type="button" hidden data-copy="Try again">Try again</button>
-          <button id="refresh" class="link" type="button" data-copy="Refresh servers">Refresh servers</button>
+
         </section>
         <section data-step="selfhost" hidden>
           <h1 data-copy="Connect your server">Connect your server</h1>
-          <section id="servers" class="server-list" aria-label="Your servers"></section>
+
           <!-- Personal server pairing is disabled while workspace connections are in use. -->
           <form id="setup" hidden>
             <div id="legacy-target" hidden>
@@ -70,7 +71,8 @@
             <p class="hint" data-copy="Install Ork on your server, then connect it in your workspace dashboard.">Install Ork on your server, then connect it in your workspace dashboard.</p>
             <label class="sr-only" for="install-command" data-copy="Install command">Install command</label>
             <textarea id="install-command" class="command" rows="2" readonly spellcheck="false"></textarea>
-            <div class="command-actions"><button id="copy" class="link" type="button" data-copy="Copy command">Copy command</button></div>
+            <div class="command-actions"><button id="copy" class="button button-secondary" type="button" data-copy="Copy command">Copy command</button></div>
+            <p class="waiting-server" role="status"><span class="spinner" aria-hidden="true"></span><span data-copy="Waiting for a server in your organization">Waiting for a server in your organization</span></p>
           </section>
         </section>
         <section data-step="local" hidden>
@@ -82,13 +84,12 @@
             <li data-phase="starting" data-copy="Start services">Start services</li>
             <li data-phase="waiting-healthy" data-copy="Wait for server">Wait for server</li>
           </ol>
-          <button id="retry-local" class="button button-primary" type="button" hidden data-copy="Try again">Try again</button>
         </section>
         <section data-step="opening" hidden><h1 data-copy="Opening Ork...">Opening Ork...</h1></section>
         <p id="status" class="status" role="status" aria-live="polite"></p>
         <details id="details" class="disclosure" hidden><summary data-copy="Technical details">Technical details</summary><pre id="output" class="stack-output"></pre></details>
       </div>
-      <footer><button id="quit" class="link" type="button" data-copy="Quit">Quit</button></footer>
+      <footer class="wizard-footer"><button id="back" class="button button-secondary" type="button" hidden data-copy="Back">Back</button><button id="organization-next" class="button button-primary" type="button" hidden data-copy="Continue">Continue</button><button id="retry-local" class="button button-primary" type="button" hidden data-copy="Try again">Try again</button></footer>
     </main>
     <script src="setup.js"></script>
   </body>

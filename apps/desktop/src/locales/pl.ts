@@ -10,6 +10,14 @@ export const PL_MESSAGES: Record<string, string> = {
     "Serwer niedostępny. Spróbuj ponownie lub wybierz workspace.",
   "This workspace link is no longer active.": "Ten link do workspace'u nie jest już aktywny.",
   Organization: "Organizacja",
+  "Account menu": "Menu konta",
+  "Choose server": "Wybierz serwer",
+  "Choose an organization to continue.": "Wybierz organizację, aby kontynuować.",
+  "Choose a server or add a new one.": "Wybierz dostępny serwer lub dodaj nowy.",
+  "Choose where to run Ork.": "Wybierz komputer lub własny serwer.",
+  "Add server": "Dodaj serwer",
+  "This computer or your own server": "Ten komputer lub własny serwer",
+  "Waiting for a server in your organization": "Czekamy na serwer w organizacji",
   "Choose organization": "Wybierz organizację",
   "Organization unavailable": "Organizacja niedostępna",
   "No servers connected": "Brak podłączonych serwerów",
@@ -270,6 +278,12 @@ export const PL_MESSAGES: Record<string, string> = {
     "Docker jest zainstalowany, ale brakuje Docker Compose. Zainstaluj Docker Desktop lub docker-compose-plugin.",
   "Could not check Docker Compose. Check the output below, then retry.":
     "Nie udało się sprawdzić Docker Compose. Sprawdź poniższe komunikaty i spróbuj ponownie.",
+  "Could not check Docker Compose. Check the Docker installation, then retry.":
+    "Nie udało się sprawdzić Docker Compose. Sprawdź instalację Dockera i spróbuj ponownie.",
+  "Docker is installed but not running. Start Docker, then retry.":
+    "Docker jest zainstalowany, ale nie działa. Uruchom go i spróbuj ponownie.",
+  "This user cannot access Docker. Check Docker socket permissions, then retry.":
+    "Brak dostępu do Dockera. Sprawdź uprawnienia i spróbuj ponownie.",
   "Docker is installed but not running. Start Docker, then check again.":
     "Docker jest zainstalowany, ale nie działa. Uruchom Docker i sprawdź ponownie.",
   "This user cannot access Docker. Add it to the docker group (sudo usermod -aG docker $USER), sign out and back in, then check again.":
