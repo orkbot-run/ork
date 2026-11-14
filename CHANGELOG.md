@@ -9,6 +9,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-14
+
+### Changed
+
+- Model setup no longer asks for a budget. New AI accounts have no limit, and limits can be changed later in model settings.
+
+### Fixed
+
+- Model setup refreshes account management permissions when you return to the app.
+- Model setup protects existing budgets and defaults when another administrator makes a concurrent change.
+
+### Self-host upgrade notes
+
+- AI account management requires an explicit server administrator delegation. See [AI model administration](apps/api/src/modules/models/README.md).
+
 ## [1.5.0] - 2026-11-14
 
 ### Added
