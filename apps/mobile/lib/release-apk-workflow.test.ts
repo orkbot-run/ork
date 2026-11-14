@@ -208,14 +208,23 @@ exit "$TEST_FALLBACK_FAIL"
     { fault: "renamed-binding", succeeds: false },
     { fault: "corrupt-archive", succeeds: false },
     { fault: "missing-dex", succeeds: false },
+    { fault: "mismatched-jni-name", succeeds: false },
+    { fault: "mismatched-jni-signature", succeeds: false },
+    { fault: "static-jni-method", succeeds: false },
+    { fault: "missing-jni-export", succeeds: false },
+    { fault: "missing-jni-tool", succeeds: false },
+    { fault: "foreign-jni-method", succeeds: false },
   ])("qualifies the APK and rejects broken native packaging: $fault", ({ fault, succeeds }) => {
     const root = mkdtempSync(path.join(tmpdir(), "ork-apk-verification-"));
     try {
       const payload = path.join(root, "payload");
       const libraries = path.join(payload, "lib/arm64-v8a");
       const tools = path.join(root, "sdk/build-tools/36.0.0");
+      const ndk = path.join(root, "sdk/ndk/27.1");
+      const nativeTools = path.join(ndk, "toolchains/llvm/prebuilt/fixture/bin");
       mkdirSync(libraries, { recursive: true });
       mkdirSync(tools, { recursive: true });
+      mkdirSync(nativeTools, { recursive: true });
       if (fault !== "missing-dex") {
         writeFileSync(path.join(payload, "classes.dex"), "synthetic dex fixture");
       }
@@ -239,12 +248,24 @@ Class descriptor  : 'Lcom/sun/jna/${fault === "renamed-binding" ? "Renamed" : "N
 Class descriptor  : 'Luniffi/ork_installation_transport/UniffiLib;'
 Class descriptor  : 'Lorg/rustls/platformverifier/CertificateVerifier;'
 Class descriptor  : 'Lcom/orkbot/transport/OrkTransportModule;'
+${fault === "foreign-jni-method" ? "Class descriptor  : 'Lexample/Other;'" : ""}
+      name          : '${fault === "mismatched-jni-name" ? "init_platform_verifier" : "initPlatformVerifier"}'
+      type          : '${fault === "mismatched-jni-signature" ? "()V" : "(Landroid/content/Context;)V"}'
+      access        : 0x0112 (PRIVATE FINAL ${fault === "static-jni-method" ? "STATIC " : ""}NATIVE)
 DEX`,
       };
       for (const [name, body] of Object.entries(commands)) {
         const file = path.join(tools, name);
         writeFileSync(file, `#!/usr/bin/env bash\nset -euo pipefail\n${body}\n`);
         chmodSync(file, 0o755);
+      }
+      if (fault !== "missing-jni-tool") {
+        const nm = path.join(nativeTools, "llvm-nm");
+        writeFileSync(
+          nm,
+          `#!/usr/bin/env bash\nset -euo pipefail\n[[ "$1" == -D && "$2" == --defined-only && "\${3##*/}" == libork_installation_transport.so ]]\nprintf '%s\\n' '00000000 T ${fault === "missing-jni-export" ? "unrelated_symbol" : "Java_com_orkbot_transport_OrkTransportModule_initPlatformVerifier"}'\n`,
+        );
+        chmodSync(nm, 0o755);
       }
       const result = spawnSync(
         "bash",
@@ -254,6 +275,7 @@ DEX`,
           env: {
             ...process.env,
             ANDROID_HOME: path.join(root, "sdk"),
+            ANDROID_NDK_HOME: ndk,
             ...(fault === "modified-utf8" ? { LC_ALL: "en_US.UTF-8" } : {}),
           },
         },

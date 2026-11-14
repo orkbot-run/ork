@@ -10,11 +10,11 @@ import expo.modules.kotlin.modules.ModuleDefinition
 
 class OrkTransportModule : Module() {
   private val contexts = InstallationContexts()
-  private external fun init_platform_verifier(context: Context)
+  private external fun initPlatformVerifier(context: Context)
 
   private fun initialize() {
     System.loadLibrary("ork_installation_transport")
-    init_platform_verifier(requireNotNull(appContext.reactContext).applicationContext)
+    initPlatformVerifier(requireNotNull(appContext.reactContext).applicationContext)
   }
 
   override fun definition() = ModuleDefinition {
