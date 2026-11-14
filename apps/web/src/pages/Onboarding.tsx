@@ -29,7 +29,6 @@ import {
 import {
   Button,
   Input,
-  ModelThinkingOptions,
   NativeSelect,
   NativeSelectOption,
   Select,
@@ -40,7 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@orkbot/ui-web";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, LoaderCircle } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AccountMenu } from "../components/AccountMenu";
@@ -49,9 +48,7 @@ import {
   ModelPreflightFeedback,
   modelPreflightTestingLabel,
 } from "../components/ModelConnectionPreflightNotice";
-import { ModelHeadersEditor } from "../components/ModelHeadersEditor";
 import { PageLoading } from "../components/PageLoading";
-import { SignupSurvey } from "../components/SignupSurvey";
 import { useCopyText } from "../lib/copy-text";
 import type { ModelCatalogEntry } from "../lib/model-auth";
 import type { ModelPreflightFailure } from "../lib/model-connection-preflight";
@@ -86,24 +83,14 @@ export function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const oauthForm = useRef<ReturnType<typeof formState.capture> | null>(null);
   const fieldId = useId();
-  // The URL holds the survey and model steps, so /onboarding/survey and /onboarding/model open directly.
+  // Legacy survey links resolve to the current onboarding step.
   const { step: routeStep } = useParams();
-  const linkedStep = routeStep === "survey" || routeStep === "model" ? routeStep : undefined;
+  const linkedStep = routeStep === "model" ? routeStep : undefined;
   const [creatingBot, setCreatingBot] = useState(false);
-  const [surveyDone, setSurveyDone] = useState(false);
   const [managed, setManaged] = useState<boolean | null>(null);
   const [loadRevision, setLoadRevision] = useState(0);
-  const step =
-    managed === null
-      ? "loading"
-      : creatingBot
-        ? "bot"
-        : surveyDone
-          ? "loading"
-          : (linkedStep ?? "loading");
+  const step = managed === null ? "loading" : creatingBot ? "bot" : (linkedStep ?? "loading");
   const [billingEnabled, setBillingEnabled] = useState(false);
-  // The step after the survey; null until me loads.
-  const [afterSurvey, setAfterSurvey] = useState<"model" | "bot" | null>(null);
   const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
   const [provider, setProvider] = useState("");
   const [providerAuth, setProviderAuth] = useState<ProviderAuth | undefined>();
@@ -174,8 +161,7 @@ export function OnboardingPage() {
         setBillingEnabled(me.billingEnabled);
         setCatalog(models);
         const next = me.needsModel ? "model" : "bot";
-        setAfterSurvey(next);
-        if (!linkedStep) goTo(me.needsSignupSurvey ? "survey" : next);
+        if (!linkedStep) goTo(next);
       })
       .catch((err: unknown) => {
         if (active && form.isSelected()) setError(errorText(err, t`Could not load model settings`));
@@ -187,13 +173,7 @@ export function OnboardingPage() {
     };
   }, [loadRevision]);
 
-  useEffect(() => {
-    if (!surveyDone || !afterSurvey) return;
-    setSurveyDone(false);
-    goTo(afterSurvey);
-  }, [surveyDone, afterSurvey]);
-
-  function goTo(next: "survey" | "model" | "bot") {
+  function goTo(next: "model" | "bot") {
     if (!mounted.current || !owner.isCurrent()) return;
     if (next === "bot") setCreatingBot(true);
     navigate(next === "bot" ? "/onboarding" : `/onboarding/${next}`, { replace: true });
@@ -422,7 +402,7 @@ export function OnboardingPage() {
       setError(t`Enable a default model for this workspace to continue.`);
       return;
     }
-    goTo(me.needsSignupSurvey ? "survey" : me.needsModel ? "model" : "bot");
+    goTo(me.needsModel ? "model" : "bot");
   }
 
   async function continueManagedModel() {
@@ -544,7 +524,6 @@ export function OnboardingPage() {
             </Button>
           </div>
         ) : null}
-        {step === "survey" ? <SignupSurvey onDone={() => setSurveyDone(true)} /> : null}
         {step === "model" && managed ? (
           <ManagedModelSetup
             saving={saving}
@@ -553,8 +532,8 @@ export function OnboardingPage() {
           />
         ) : null}
         {step === "model" && !managed ? (
-          <div>
-            <h1 className="text-[32px] font-medium text-foreground">
+          <div className="rounded-2xl border border-border bg-card p-6 sm:p-8">
+            <h1 className="text-2xl font-medium tracking-tight text-foreground">
               <Trans>Connect a model</Trans>
             </h1>
             <div className="mt-8 block text-sm font-medium text-foreground">
@@ -718,74 +697,15 @@ export function OnboardingPage() {
                         </NativeSelectOption>
                       </NativeSelect>
                     </label>
-                    <ModelThinkingOptions
-                      reasoning={reasoning}
-                      onReasoningChange={(value) => {
-                        invalidatePreflight();
-                        setReasoning(value);
-                        if (!value) setThinkingLevel(null);
-                      }}
-                      advancedLabel={t`Advanced`}
-                      thinkingLabel={t`Supports thinking`}
-                      thinkingLevel={thinkingLevel}
-                      onThinkingLevelChange={(value) => {
-                        invalidatePreflight();
-                        setThinkingLevel(value as ThinkingLevel | null);
-                      }}
-                      thinkingLevelOptions={[
-                        { value: "minimal", label: t`Minimal` },
-                        { value: "low", label: t`Low` },
-                        { value: "medium", label: t`Medium` },
-                        { value: "high", label: t`High` },
-                        { value: "xhigh", label: t`Extra high` },
-                        { value: "max", label: t`Max` },
-                      ].filter((option) =>
-                        compatibleThinkingLevels(apiProtocol).some(
-                          (level) => level === option.value,
-                        ),
-                      )}
-                      thinkingLevelLabel={t`Reasoning effort`}
-                      thinkingLevelDefaultLabel={t`Default`}
-                      maxTokens={maxTokens}
-                      onMaxTokensChange={(value) => {
-                        invalidatePreflight();
-                        setMaxTokens(value);
-                      }}
-                      maxTokensLabel={t`Maximum output tokens`}
-                      contextWindow={contextWindow}
-                      onContextWindowChange={(value) => {
-                        invalidatePreflight();
-                        setContextWindow(value);
-                      }}
-                      contextWindowLabel={t`Context limit`}
-                      supportsImages={supportsImages}
-                      onSupportsImagesChange={(value) => {
-                        invalidatePreflight();
-                        setSupportsImages(value);
-                      }}
-                      imagesLabel={t`Supports images`}
-                      maxImagesPerPrompt={maxImagesPerPrompt}
-                      onMaxImagesPerPromptChange={(value) => {
-                        invalidatePreflight();
-                        setMaxImagesPerPrompt(value);
-                      }}
-                      maxImagesLabel={t`Maximum images per request`}
-                    >
-                      <ModelHeadersEditor
-                        rows={headerRows}
-                        onChange={(rows) => {
-                          setHeaderRows(rows);
-                          resetOpenAiCompatibleProbe();
-                          invalidatePreflight();
-                        }}
-                      />
-                    </ModelThinkingOptions>
                   </div>
                 ) : null}
                 {subscriptionSignIn ? (
                   <div className="mt-4">
                     {oauth ? (
-                      <div className="rounded-lg border border-border px-3.5 py-3">
+                      <div
+                        className="rounded-lg border border-border bg-card p-4"
+                        aria-live="polite"
+                      >
                         {oauth.mode === "auth-url" ? (
                           <>
                             <p className="text-sm text-muted-foreground">
@@ -856,8 +776,8 @@ export function OnboardingPage() {
                                 </Trans>
                               )}
                             </p>
-                            <div className="mt-2 flex items-center gap-3">
-                              <p className="font-mono text-[22px] tracking-[0.2em] text-foreground">
+                            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md bg-muted p-4">
+                              <p className="flex-1 font-mono text-2xl font-medium tracking-[0.2em] text-foreground">
                                 {oauth.userCode}
                               </p>
                               <Button
@@ -873,7 +793,14 @@ export function OnboardingPage() {
                                 {codeCopied ? <Trans>Copied</Trans> : <Trans>Copy</Trans>}
                               </Button>
                             </div>
-                            <p className="mt-2 text-sm text-muted-foreground">
+                            <p
+                              className="mt-4 flex items-center gap-2 text-sm text-muted-foreground"
+                              role="status"
+                            >
+                              <LoaderCircle
+                                className="size-4 animate-spin motion-reduce:animate-none"
+                                aria-hidden="true"
+                              />
                               <Plural
                                 value={Math.ceil(oauth.expiresInSeconds / 60)}
                                 one="Waiting for sign-in — the code expires in about # minute."

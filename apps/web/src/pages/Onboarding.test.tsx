@@ -316,7 +316,7 @@ it("uses the selected standard protocol for discovery and save, then rechecks au
   expect(host.querySelector('[data-testid="ready-app"]')).not.toBeNull();
 });
 
-it("offers only protocol-supported effort and clamps the selected effort when protocols change", async () => {
+it("uses defaults without exposing advanced settings during setup", async () => {
   await act(async () =>
     root.render(
       <MemoryRouter initialEntries={["/onboarding/model"]}>
@@ -337,49 +337,26 @@ it("offers only protocol-supported effort and clamps the selected effort when pr
     option.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
     option.click();
   });
-  await act(async () =>
-    [...document.querySelectorAll("button")]
-      .find((button) => button.textContent === "Advanced")!
-      .click(),
-  );
-  await act(async () => document.querySelector<HTMLElement>('[role="checkbox"]')!.click());
-  await act(async () =>
-    document.querySelector<HTMLElement>('[aria-label="Reasoning effort"]')!.click(),
-  );
-  await act(async () => {
-    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (item) => item.textContent === "Extra high",
-    )!;
-    option.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
-    option.click();
-  });
-  expect(document.querySelector('[aria-label="Reasoning effort"]')?.textContent).toBe("Extra high");
-  await act(async () =>
-    document.querySelector<HTMLElement>('[aria-label="Reasoning effort"]')!.click(),
-  );
+  expect(document.querySelector("select")).not.toBeNull();
   expect(
-    [...document.querySelectorAll('[role="option"]')].some(
-      (option) => option.textContent === "Extra high",
-    ),
-  ).toBe(true);
-  const protocol = document.querySelector<HTMLSelectElement>("select")!;
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(
-      protocol,
-      "anthropic-messages",
-    );
-    protocol.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  expect(document.querySelector('[aria-label="Reasoning effort"]')?.textContent).toBe("High");
+    [...document.querySelectorAll("button")].some((button) => button.textContent === "Advanced"),
+  ).toBe(false);
+});
+
+it("opens model setup from a legacy survey link", async () => {
   await act(async () =>
-    document.querySelector<HTMLElement>('[aria-label="Reasoning effort"]')!.click(),
+    root.render(
+      <MemoryRouter initialEntries={["/onboarding/survey"]}>
+        <Routes>
+          <Route path="/onboarding/:step?" element={<OnboardingPage />} />
+        </Routes>
+      </MemoryRouter>,
+    ),
   );
-  const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')].map(
-    (option) => option.textContent,
+  await act(async () =>
+    account.load({ needsModel: true, needsSignupSurvey: true, billingEnabled: false }),
   );
-  expect(options).toContain("High");
-  expect(options).not.toContain("Extra high");
-  expect(options).not.toContain("Max");
+  expect(document.querySelector('[aria-label="Provider"]')).not.toBeNull();
 });
 
 it("uses the shared API-key readiness check instead of enabling an incomplete save", async () => {

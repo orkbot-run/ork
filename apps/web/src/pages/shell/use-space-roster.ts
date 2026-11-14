@@ -393,7 +393,7 @@ export function useSpaceBootstrap({
           bootstrap.archivedGroups.length === 0 &&
           !bootstrap.spaces.some((space) => space.hasContent)
         ) {
-          if (bootstrap.me.needsModel || bootstrap.me.needsSignupSurvey) {
+          if (bootstrap.me.needsModel) {
             navigate("/onboarding", { replace: true });
             return;
           }

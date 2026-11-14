@@ -1029,7 +1029,7 @@ export function mcpRoutes(ctx: RouterContext) {
           deps.prisma,
           ctx.repos,
           context.actor,
-          !me.needsModel && !me.needsSignupSurvey,
+          !me.needsModel,
         );
         if (bot) {
           await enqueueBotIntroRun(deps, context.actor, bot).catch((error) => {

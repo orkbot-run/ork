@@ -723,11 +723,11 @@ describe("billing", () => {
     });
   });
 
-  it("asks hosted users the signup survey until they answer or skip it", async () => {
+  it("does not require a signup survey", async () => {
     const billing = { status: vi.fn() } as unknown as RouterDeps["billing"];
     await expect(billingDeps(false).me()).resolves.toMatchObject({ needsSignupSurvey: false });
     await expect(billingDeps(false, billing).me()).resolves.toMatchObject({
-      needsSignupSurvey: true,
+      needsSignupSurvey: false,
     });
     await expect(billingDeps(false, billing, { userId: "user-1" }).me()).resolves.toMatchObject({
       needsSignupSurvey: false,
