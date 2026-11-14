@@ -9,6 +9,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-14
+
+### Added
+
+- The desktop app discovers workspace servers and connects using an available direct or relay route.
+- New self-hosted installations can publish their server address automatically after the owner approves the connection.
+
+### Changed
+
+- Desktop setup refreshes the server list after returning from the browser and resumes an approved server connection.
+- Onboarding uses a shorter setup flow.
+
+### Fixed
+
+- The server installer can resume a pending enrollment and complete an approved connection.
+- Mobile keeps its navigation during account refresh, and shared content opens the selected conversation.
+- Android verifies the installation's TLS identity when connecting to a workspace server.
+
+### Self-host upgrade notes
+
+- Deploy the matching Accounts service before using automatic server address publication. Existing installations can opt in with `ORKBOT_AUTO_DIRECT_ROUTE=true`. See [Accounts and server setup](docs/self-host-accounts.md).
+- Back up the database, configuration and bot data before upgrading. Restoring an older image does not reverse database migrations.
+
 ## [1.4.1] - 2026-11-13
 
 ### Security
