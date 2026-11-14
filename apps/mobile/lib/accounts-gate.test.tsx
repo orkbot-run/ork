@@ -1694,6 +1694,181 @@ function managedDirectory(defaultOrganizationId: string | null = personalId) {
   vi.mocked(accountsIdentity).mockResolvedValue(identity);
   return workspace;
 }
+
+it.each(["new-group", "account"])(
+  "retains a warm %s navigation and its draft when Android resumes the active workspace",
+  async (destination) => {
+    const workspace = managedDirectory(companyId);
+    const owner = JSON.stringify([identity.issuer, identity.subject]);
+    state.storage.set("orkbot.accounts.product-owner", owner);
+    await saveSelectedWorkspace(owner, remote.url, workspace);
+    const mounted = vi.fn();
+    const retired = vi.fn();
+    let navigate = (_route: string) => {};
+    function Navigator() {
+      const [route, setRoute] = useState("thread");
+      const [draft] = useState("Unsent thread draft");
+      navigate = setRoute;
+      useEffect(() => {
+        mounted();
+        return retired;
+      }, []);
+      return <section data-route={route}>{draft}</section>;
+    }
+    await act(async () =>
+      root.render(
+        <AccountsGate>
+          <Navigator />
+        </AccountsGate>,
+      ),
+    );
+    expect(mounted).toHaveBeenCalledOnce();
+    await act(async () => {
+      for (const listener of state.appListeners) listener("background");
+    });
+    await act(async () => {
+      // Android delivers a VIEW intent as the singleTask Activity resumes.
+      for (const listener of state.appListeners) listener("active");
+      navigate(destination);
+    });
+    expect(host.querySelector("section")?.getAttribute("data-route")).toBe(destination);
+    expect(host.textContent).toContain("Unsent thread draft");
+    expect(mounted).toHaveBeenCalledOnce();
+    expect(retired).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["account", "session", "server", "binding", "workspace-revoked"])(
+  "retires the foreground navigator immediately when %s changes during verification",
+  async (change) => {
+    const workspace = managedDirectory(companyId);
+    const owner = JSON.stringify([identity.issuer, identity.subject]);
+    state.storage.set("orkbot.accounts.product-owner", owner);
+    await saveSelectedWorkspace(owner, remote.url, workspace);
+    await render();
+    let finish: ((entries: Awaited<ReturnType<typeof accountServers>>) => void) | undefined;
+    vi.mocked(accountServers).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await act(async () => {
+      for (const listener of state.appListeners) listener("active");
+    });
+    expect(host.textContent).toContain("Product screen");
+    expect(finish).toBeTypeOf("function");
+    vi.mocked(saveApiBase).mockClear();
+    await act(async () => {
+      if (change === "account") {
+        state.version++;
+        vi.mocked(accountsIdentity).mockResolvedValue(null);
+        for (const listener of state.listeners) listener();
+      }
+      if (change === "session") {
+        vi.mocked(currentSessionGeneration).mockReturnValue(2);
+        for (const listener of state.sessionListeners) listener();
+      }
+      if (change === "server")
+        vi.mocked(currentApiBase).mockReturnValue("https://other.example.test");
+      if (change === "binding")
+        state.transportScope = { account: owner, target: { ...workspace, bindingVersion: 3 } };
+      if (change === "workspace-revoked") {
+        state.catalog!.organizations.find((row) => row.id === companyId)!.servers[0]!.workspaces =
+          [];
+        finish!([]);
+      }
+      // A native background notification also renders endpoint/binding changes.
+      for (const listener of state.appListeners) listener("background");
+    });
+    expect(host.textContent).not.toContain("Product screen");
+    if (change !== "workspace-revoked") await act(async () => finish!([{ ...remote, workspace }]));
+    expect(host.textContent).not.toContain("Product screen");
+    expect(saveApiBase).not.toHaveBeenCalled();
+  },
+);
+
+it("retires a resumed workspace as soon as central verification reports no identity", async () => {
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  let finish: ((identity: null) => void) | undefined;
+  vi.mocked(accountsIdentity).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+  });
+  expect(host.textContent).toContain("Product screen");
+  await act(async () => finish!(null));
+  expect(host.textContent).not.toContain("Product screen");
+  expect(host.textContent).toContain("Get started");
+  expect(clearProductAccountSession).toHaveBeenCalledOnce();
+});
+
+it("keeps the same navigator across repeated resume events while verification is pending", async () => {
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  const mounted = vi.fn();
+  function Navigator() {
+    useEffect(() => {
+      mounted();
+    }, []);
+    return <span>Product screen</span>;
+  }
+  await act(async () =>
+    root.render(
+      <AccountsGate>
+        <Navigator />
+      </AccountsGate>,
+    ),
+  );
+  let finish: ((entries: Awaited<ReturnType<typeof accountServers>>) => void) | undefined;
+  vi.mocked(accountServers).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  for (let resume = 0; resume < 2; resume++) {
+    await act(async () => {
+      for (const listener of state.appListeners) listener("background");
+    });
+    await act(async () => {
+      for (const listener of state.appListeners) listener("active");
+    });
+    expect(host.textContent).toContain("Product screen");
+    expect(mounted).toHaveBeenCalledOnce();
+  }
+  await act(async () => finish!([{ ...remote, workspace }]));
+  expect(host.textContent).toContain("Product screen");
+});
+
+it("retires the old navigator without selecting a changed binding learned from the fresh catalog", async () => {
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  vi.mocked(selectInstallationTransport).mockClear();
+  const server = state.catalog!.organizations.find((row) => row.id === companyId)!.servers[0]!;
+  server.bindingVersion = 3;
+  vi.mocked(accountServers).mockResolvedValue([
+    { ...remote, workspace: { ...workspace, bindingVersion: 3 } },
+  ]);
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+  });
+  expect(host.textContent).not.toContain("Product screen");
+  expect(selectInstallationTransport).not.toHaveBeenCalled();
+});
 async function chooseOrganization(id: string) {
   await act(async () => {
     const picker = host.querySelector('select[aria-label="Organization"]') as HTMLSelectElement;

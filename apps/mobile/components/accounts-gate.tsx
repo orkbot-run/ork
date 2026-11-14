@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { IdentityCatalog } from "@orkbot/contracts";
+import type { IdentityCatalog, WorkspaceTarget } from "@orkbot/contracts";
 import {
+  catalogWorkspace,
   initialCatalogOrganization,
   initialCatalogWorkspace,
   SERVER_INSTALL_COMMAND,
@@ -124,6 +125,16 @@ type PickerOwner = {
   retired: boolean;
   presentation: "root" | "screen";
 };
+
+type ForegroundOwner = Pick<
+  PickerOwner,
+  | "account"
+  | "accountVersion"
+  | "sessionGeneration"
+  | "server"
+  | "workspaceScope"
+  | "linkGeneration"
+> & { target: WorkspaceTarget };
 
 function serializeOwnership<T>(operation: () => Promise<T>): Promise<T> {
   const result = ownershipChanges.then(operation);
@@ -251,6 +262,7 @@ export function AccountsGate({
   const [phase, setPhase] = useState<"loading" | "signed-out" | "servers" | "recovery" | "ready">(
     "loading",
   );
+  const [foregroundOwner, setForegroundOwner] = useState<ForegroundOwner | null>(null);
   const [orkAvatar, setOrkAvatar] = useState(welcomeOrk);
   const [servers, setServers] = useState<AccountServer[]>([]);
   const [directory, setDirectory] = useState<IdentityCatalog | null>(null);
@@ -293,6 +305,18 @@ export function AccountsGate({
         previous.linkGeneration === linkGeneration.current &&
         previous.workspaceScope ===
           JSON.stringify(installationRevocationScope(currentApiBase()) ?? null),
+    );
+  }
+
+  function ownsForeground(previous: ForegroundOwner): boolean {
+    return (
+      previous.account === owner.current &&
+      previous.accountVersion === accountsVersion() &&
+      previous.sessionGeneration === currentSessionGeneration() &&
+      previous.server === currentApiBase() &&
+      previous.workspaceScope ===
+        JSON.stringify(installationRevocationScope(currentApiBase()) ?? null) &&
+      previous.linkGeneration === linkGeneration.current
     );
   }
 
@@ -388,6 +412,7 @@ export function AccountsGate({
       const identity = await accountsIdentity();
       if (generation.current !== current) return;
       if (!identity) {
+        setForegroundOwner(null);
         await retirePicker();
         if (generation.current !== current) return;
         if (await restorePersonal()) return;
@@ -408,6 +433,7 @@ export function AccountsGate({
       }
       setOrkAvatar(isPersonalOrkId(identity.orkAvatar) ? identity.orkAvatar : welcomeOrk);
       const account = JSON.stringify([identity.issuer, identity.subject]);
+      if (foregroundOwner?.account !== account) setForegroundOwner(null);
       if (pickerOwner.current && pickerOwner.current.account !== account) {
         await retirePicker();
         if (generation.current !== current) return;
@@ -421,6 +447,26 @@ export function AccountsGate({
       const loaded = await accountDirectory(account);
       const { entries, catalog } = loaded;
       if (generation.current !== current) return;
+      if (foregroundOwner && !ownsForeground(foregroundOwner)) {
+        setForegroundOwner(null);
+        setReadyAt({ version, attempt });
+        setPhase("servers");
+        return;
+      }
+      if (foregroundOwner) {
+        const admitted = catalogWorkspace(catalog, foregroundOwner.target);
+        if (
+          !admitted ||
+          Object.entries(foregroundOwner.target).some(
+            ([key, value]) => admitted.target[key as keyof WorkspaceTarget] !== value,
+          )
+        ) {
+          setForegroundOwner(null);
+          setReadyAt({ version, attempt });
+          setPhase("servers");
+          return;
+        }
+      }
       const organization =
         chosenOrganization.current.account === account && chosenOrganization.current.id !== null
           ? catalog.organizations.find((row) => row.id === chosenOrganization.current.id)
@@ -527,12 +573,20 @@ export function AccountsGate({
           const selected = await selectServer(
             previous,
             account,
-            () => generation.current === current,
+            () =>
+              generation.current === current &&
+              (!foregroundOwner || ownsForeground(foregroundOwner)),
+            foregroundOwner?.sessionGeneration,
+            foregroundOwner?.server,
           );
           if (selected) {
             setServerRescue(selected === "older");
             setReadyAt({ version, attempt });
             setPhase("ready");
+          } else if (foregroundOwner && generation.current === current) {
+            setForegroundOwner(null);
+            setReadyAt({ version, attempt });
+            setPhase("servers");
           }
           return;
         }
@@ -578,11 +632,56 @@ export function AccountsGate({
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       setPairingForeground(state === "active");
-      if (state === "active" && !operationPending.current && !pairingRef.current)
+      if (state === "active" && !operationPending.current && !pairingRef.current) {
+        if (
+          foregroundOwner &&
+          ownsForeground(foregroundOwner) &&
+          (phase === "loading" || readyAt.attempt !== attempt)
+        )
+          return;
+        const scope = installationRevocationScope(currentApiBase());
+        // Keep a mounted navigator through same-session verification, including a VIEW intent
+        // delivered during resume. The existing identity and directory checks still run below.
+        setForegroundOwner(
+          productGate &&
+            phase === "ready" &&
+            readyAt.version === version &&
+            readyAt.attempt === attempt &&
+            !linkedServer &&
+            !linkedWorkspace &&
+            !serverRescue &&
+            scope?.account === owner.current
+            ? {
+                account: owner.current,
+                accountVersion: version,
+                sessionGeneration: currentSessionGeneration(),
+                server: currentApiBase(),
+                workspaceScope: JSON.stringify(scope),
+                target: scope.target,
+                linkGeneration: linkGeneration.current,
+              }
+            : null,
+        );
         setAttempt((value) => value + 1);
+      }
     });
     return () => subscription.remove();
-  }, []);
+  }, [
+    attempt,
+    foregroundOwner,
+    linkedServer,
+    linkedWorkspace,
+    phase,
+    productGate,
+    readyAt,
+    serverRescue,
+    version,
+  ]);
+
+  useEffect(() => {
+    if (phase === "ready" && readyAt.version === version && readyAt.attempt === attempt)
+      setForegroundOwner(null);
+  }, [attempt, phase, readyAt, version]);
 
   useEffect(() => {
     if (
@@ -1034,6 +1133,15 @@ export function AccountsGate({
       !linkedServer &&
       !linkedWorkspace,
   );
+  const preserveForeground = Boolean(
+    children &&
+      foregroundOwner &&
+      (phase === "ready" || phase === "loading") &&
+      !serverRescue &&
+      !linkedServer &&
+      !linkedWorkspace &&
+      ownsForeground(foregroundOwner),
+  );
   const surface = (gate: ReactNode) => {
     const activePicker = preservePicker ? pickerOwner.current : null;
     const inScreen = activePicker?.presentation === "screen";
@@ -1050,7 +1158,7 @@ export function AccountsGate({
         }}
       >
         <View style={{ flex: 1 }}>
-          {(ready && !serverRescue) || preservePicker ? (
+          {(ready && !serverRescue) || preservePicker || preserveForeground ? (
             <View
               key="product"
               testID="workspace-product"
@@ -1062,7 +1170,7 @@ export function AccountsGate({
               {children}
             </View>
           ) : null}
-          {inScreen ? null : gate}
+          {inScreen || preserveForeground ? null : gate}
         </View>
       </WorkspacePickerContext>
     );
