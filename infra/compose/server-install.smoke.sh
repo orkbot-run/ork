@@ -104,10 +104,19 @@ case " $* " in
     exit 0 ;;
   *' pull '*) echo pull >> "$STUB_EVENTS"; exit "${STUB_PULL_FAIL:-0}" ;;
   *' run --rm --no-deps --pull never -T updates-init '*) echo updates-init >> "$STUB_EVENTS"; exit 0 ;;
-  *' exec -T api node dist/cli/server-claim.js '*)
-    echo claim >> "$STUB_EVENTS"
+  *' exec -T api node dist/cli/installation.js enroll '*)
+    echo enroll >> "$STUB_EVENTS"
     [[ "${STUB_CLAIM_FAIL:-0}" == 0 ]] || exit 1
-    printf 'Enter this code in your workspace dashboard under Server:\n23456789AB\n\nThe code expires in 10 minutes.\n'
+    printf '{"code":"23456789AB","keyFingerprint":"fixture-fingerprint"}\n'
+    exit 0 ;;
+  *' exec -T api node dist/cli/installation.js confirm '*)
+    echo confirm >> "$STUB_EVENTS"
+    printf 'dotenv loaded\n'
+    if [[ "${STUB_CONFIRM_PENDING:-0}" == 1 ]]; then
+      printf '{"ready":false}\n'
+    else
+      printf '{"ready":true}\n'
+    fi
     exit 0 ;;
   *' up '*)
     echo up >> "$STUB_EVENTS"
@@ -204,9 +213,9 @@ run_case fresh || { cat "$tmp/fresh/output"; exit 1; }
 [[ "$(cksum "$tmp/fresh/.env")" == "$checksum" ]]
 STUB_NATIVE_ACCOUNTS=1 run_case native || { cat "$tmp/native/output"; exit 1; }
 grep -q '^Ork is ready at https://server.example.com$' "$tmp/native/output"
-grep -q '^Enter this code in your workspace dashboard under Server:$' "$tmp/native/output"
-grep -q '^23456789AB$' "$tmp/native/output"
-grep -q '^claim$' "$tmp/native/events"
+grep -q '/workspace/ORGANIZATION_ID/server' "$tmp/native/output"
+grep -q 'rerun the installer with --organization ORGANIZATION_ID' "$tmp/native/output"
+! grep -q '^enroll$' "$tmp/native/events"
 grep -q '^updates-init$' "$tmp/native/events"
 grep -q '^ORKBOT_UPDATER_TOKEN=' "$tmp/native/.env"
 grep -q '^ORKBOT_COMPOSE_FILE=.*docker-compose.updates.yml' "$tmp/native/.env"
@@ -236,13 +245,26 @@ grep -q "^ORKBOT_IMAGE_TAG='sha-0123456789abcdef0123456789abcdef01234567'" "$tmp
 grep -q '^updates-init$' "$tmp/native/events"
 native_before=$(cksum "$tmp/native/.env")
 STUB_NATIVE_ACCOUNTS=1 STUB_ALREADY_INITIALIZED=1 run_case native || { cat "$tmp/native/output"; exit 1; }
-! grep -q '^claim$' "$tmp/native/events"
+! grep -q '^enroll$' "$tmp/native/events"
 ! grep -q '^redeem$' "$tmp/native/events"
 [[ "$(cksum "$tmp/native/.env")" == "$native_before" ]]
 STUB_NATIVE_ACCOUNTS=1 STUB_ALREADY_CLAIMED=1 run_case native || { cat "$tmp/native/output"; exit 1; }
-! grep -q '^claim$' "$tmp/native/events"
-if STUB_NATIVE_ACCOUNTS=1 STUB_CLAIM_FAIL=1 run_case claim-fails; then echo 'claim failure accepted' >&2; exit 1; fi
-grep -q 'could not generate server authorization' "$tmp/claim-fails/output"
+! grep -q '^enroll$' "$tmp/native/events"
+organization=12345678-1234-4123-8123-123456789abc
+STUB_NATIVE_ACCOUNTS=1 run_case enroll --organization "$organization" || { cat "$tmp/enroll/output"; exit 1; }
+grep -q '^enroll$' "$tmp/enroll/events"
+grep -q '23456789AB' "$tmp/enroll/output"
+grep -q 'compare the fingerprint' "$tmp/enroll/output"
+grep -q 'node dist/cli/installation.js confirm' "$tmp/enroll/output"
+STUB_NATIVE_ACCOUNTS=1 run_case enroll --confirm-server || { cat "$tmp/enroll/output"; exit 1; }
+grep -q '^confirm$' "$tmp/enroll/events"
+grep -q '^Server enrollment confirmed.$' "$tmp/enroll/output"
+if STUB_NATIVE_ACCOUNTS=1 STUB_CONFIRM_PENDING=1 run_case enroll --confirm-server; then echo 'pending enrollment accepted as confirmed' >&2; exit 1; fi
+grep -q 'server approval is still pending' "$tmp/enroll/output"
+if STUB_NATIVE_ACCOUNTS=1 STUB_CLAIM_FAIL=1 run_case claim-fails --organization "$organization"; then echo 'enrollment failure accepted' >&2; exit 1; fi
+grep -q 'could not start server enrollment' "$tmp/claim-fails/output"
+if STUB_NATIVE_ACCOUNTS=1 run_case invalid-organization --organization invalid; then echo 'invalid organization accepted' >&2; exit 1; fi
+if STUB_NATIVE_ACCOUNTS=1 run_case conflicting-arguments --organization "$organization" --confirm-server; then echo 'conflicting enrollment arguments accepted' >&2; exit 1; fi
 if STUB_PULL_FAIL=1 run_case pull-fails --code "$code"; then echo 'pull failure accepted' >&2; exit 1; fi
 grep -q '^redeem$' "$tmp/pull-fails/events"
 grep -q '^progress-failed$' "$tmp/pull-fails/events"

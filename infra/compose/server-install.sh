@@ -110,6 +110,7 @@ server_main() {
   set +x
   server_secure_directory
   local server_url='' external_proxy=auto read_code=false server_arch
+  local organization_id='' confirm_server=false
   local code="${server_install_code:-}"
   export -n code
   unset server_install_code ORKBOT_INSTALL_CODE
@@ -125,13 +126,17 @@ server_main() {
       --url) (($# >= 2)) || fail "--url requires an HTTPS origin."; server_url="$2"; shift 2 ;;
       --code) (($# >= 2)) || fail "--code requires an installation code."; code="$2"; shift 2 ;;
       --code-stdin) read_code=true; shift ;;
+      --organization) (($# >= 2)) || fail "--organization requires an organization ID."; organization_id="$2"; shift 2 ;;
+      --confirm-server) confirm_server=true; shift ;;
       --external-proxy) external_proxy=true; shift ;;
       --local) skip_existing=true; shift ;;
       --pull-never) pull_never=true; shift ;;
-      *) fail "Usage: bash install-images.sh --server [--url https://server.example.com] [--code CODE | --code-stdin] [--external-proxy] [--pull-never]" ;;
+      *) fail "Usage: bash install-images.sh --server [--url https://server.example.com] [--code CODE | --code-stdin] [--organization ID | --confirm-server] [--external-proxy] [--pull-never]" ;;
     esac
   done
   [[ -z "$server_url" || "$server_url" =~ ^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || fail "--url must be an exact HTTPS origin, without a port, path or trailing slash."
+  [[ -z "$organization_id" || "$organization_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || fail "--organization must be an organization UUID."
+  [[ -z "$organization_id" || "$confirm_server" != true ]] || fail "use --organization and --confirm-server separately."
   [[ "$(uname -s)" == Linux ]] || fail "--server requires Linux."
   case "$(uname -m)" in x86_64|amd64) server_arch=amd64 ;; aarch64|arm64) server_arch=arm64 ;; *) fail "--server supports amd64 and arm64." ;; esac
   if [[ "$read_code" == true ]]; then
@@ -274,8 +279,27 @@ server_main() {
   echo "Ork is ready at ${server_url}"
   local initialization
   initialization=$(timeout --foreground 60 python3 "$helper" initialization-required "$server_url") || fail "could not determine the server initialization status."
-  if [[ "$auth_mode" == native && "$initialization" == true ]]; then
-    timeout --foreground 60 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" exec -T api node dist/cli/server-claim.js || fail "could not generate server authorization; rerun this installer to try again."
-    echo 'If the code expires, rerun the installer to get a new one.'
+  if [[ "$auth_mode" == native ]]; then
+    if [[ "$confirm_server" == true ]]; then
+      local confirmation
+      confirmation=$(timeout --foreground 60 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" exec -T api node dist/cli/installation.js confirm) || fail "could not confirm server enrollment."
+      confirmation="${confirmation##*$'\n'}"
+      case "$confirmation" in
+        '{"ready":true}') echo 'Server enrollment confirmed.' ;;
+        '{"ready":false}') fail "server approval is still pending; approve it in the dashboard and retry --confirm-server." ;;
+        *) fail "the server returned an invalid enrollment confirmation." ;;
+      esac
+    elif [[ -n "$organization_id" ]]; then
+      timeout --foreground 60 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" exec -T api node dist/cli/installation.js enroll --name 'Ork server' --organization "$organization_id" || fail "could not start server enrollment."
+      echo 'Enter the code in the organization dashboard, compare the fingerprint, and approve the server.'
+      echo 'Then run this command from the installation directory:'
+      printf '%q ' "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" exec -T api node dist/cli/installation.js confirm
+      printf '\n'
+    elif [[ "$initialization" == true ]]; then
+      echo 'In the organization dashboard, open Servers and copy the ID from /workspace/ORGANIZATION_ID/server in the address bar.'
+      echo 'To connect this server, rerun the installer with --organization ORGANIZATION_ID.'
+    fi
+  elif [[ -n "$organization_id" || "$confirm_server" == true ]]; then
+    fail "server enrollment requires native Accounts configuration."
   fi
 }
