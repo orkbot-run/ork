@@ -25,6 +25,7 @@ const required = (name: string) => {
   if (!value || value.startsWith("--")) throw new Error(`Supply ${name}`);
   return value;
 };
+const optional = (name: string) => (process.argv.includes(name) ? required(name) : undefined);
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
 const issuer = process.env.ACCOUNTS_ISSUER ?? "https://api.ork.run";
 if (process.env.NODE_ENV === "production" && issuer !== "https://api.ork.run")
@@ -49,11 +50,24 @@ const authority = new WorkspaceAuthority(
 );
 try {
   switch (process.argv[2]) {
-    case "enroll":
-      process.stdout.write(
-        `${JSON.stringify(await installation.beginEnrollment(required("--name"), required("--organization")))}\n`,
-      );
+    case "enroll": {
+      const name = required("--name");
+      const organization = optional("--organization");
+      await installation.resetExpiredEnrollment(organization);
+      const configuration = organization
+        ? await installation.configuration()
+        : await installation.resumePendingEnrollment();
+      if (configuration) {
+        if (organization && configuration.organizationId !== organization)
+          throw new Error("Installation organization selection changed");
+        process.stdout.write(`${JSON.stringify({ ready: true })}\n`);
+      } else {
+        process.stdout.write(
+          `${JSON.stringify(await installation.beginEnrollment(name, organization))}\n`,
+        );
+      }
       break;
+    }
     case "reconnect": {
       let refused: InstallationConfiguration | undefined;
       try {

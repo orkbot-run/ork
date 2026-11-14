@@ -110,13 +110,14 @@ server_main() {
   set +x
   server_secure_directory
   local server_url='' external_proxy=auto read_code=false server_arch
-  local organization_id='' confirm_server=false
+  local organization_id='' confirm_server=false enable_auto_route=false
   local code="${server_install_code:-}"
   export -n code
   unset server_install_code ORKBOT_INSTALL_CODE
   # This mode stores credentials in .env; ambient development settings cannot override them.
   unset OIDC_ISSUER OIDC_CLIENT_ID OIDC_CLIENT_SECRET OIDC_REDIRECT_URI AUTH_PASSWORD_ENABLED
   unset AUTH_ACCOUNTS_ENABLED ORKBOT_BOOTSTRAP_SECRET SIGNUPS_ENABLED
+  unset ORKBOT_AUTO_DIRECT_ROUTE
   unset BETTER_AUTH_URL WEB_ORIGIN API_URL ORKBOT_HOST CADDYFILE_PATH SANDBOX_COMPUTER_EGRESS
   unset POSTGRES_PASSWORD POSTGRES_APP_PASSWORD BETTER_AUTH_SECRET ENCRYPTION_KEY SCREEN_PROXY_SECRET SANDBOX_SUPERVISOR_TOKEN
   unset ORKBOT_UPDATER_TOKEN ORKBOT_DEPLOY_DIR ORKBOT_DOCKER_SOCKET ORKBOT_COMPOSE_FILE ORKBOT_UPDATER_IMAGE_TAG COMPOSE_PROJECT_NAME
@@ -127,11 +128,12 @@ server_main() {
       --code) (($# >= 2)) || fail "--code requires an installation code."; code="$2"; shift 2 ;;
       --code-stdin) read_code=true; shift ;;
       --organization) (($# >= 2)) || fail "--organization requires an organization ID."; organization_id="$2"; shift 2 ;;
+      --auto-direct-route) enable_auto_route=true; shift ;;
       --confirm-server) confirm_server=true; shift ;;
       --external-proxy) external_proxy=true; shift ;;
       --local) skip_existing=true; shift ;;
       --pull-never) pull_never=true; shift ;;
-      *) fail "Usage: bash install-images.sh --server [--url https://server.example.com] [--code CODE | --code-stdin] [--organization ID | --confirm-server] [--external-proxy] [--pull-never]" ;;
+      *) fail "Usage: bash install-images.sh --server [--url https://server.example.com] [--code CODE | --code-stdin] [--organization ID | --confirm-server] [--auto-direct-route] [--external-proxy] [--pull-never]" ;;
     esac
   done
   [[ -z "$server_url" || "$server_url" =~ ^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || fail "--url must be an exact HTTPS origin, without a port, path or trailing slash."
@@ -248,12 +250,15 @@ server_main() {
     server_privileged bash "./$EGRESS_SCRIPT" || fail "could not install restricted computer egress; services were not started."
   fi
   # The only process that receives the code performs one bounded HTTPS request.
-  ORKBOT_INSTALL_CODE="$code" timeout --foreground 60 python3 "$helper" configure "$server_url" || fail "could not configure Accounts; existing credentials were kept."
+  ORKBOT_INSTALL_CODE="$code" timeout --foreground 60 python3 "$helper" configure "$server_url" "$enable_auto_route" || fail "could not configure Accounts; existing credentials were kept."
   unset code
   server_progress preparing
   local auth_mode
   auth_mode=$(timeout --foreground 60 python3 "$helper" auth-mode "$server_url") || fail "could not validate Accounts configuration."
-  if [[ "$auth_mode" == oidc ]]; then validate_accounts_config; fi
+  if [[ "$auth_mode" == oidc ]]; then
+    [[ -z "$organization_id" && "$confirm_server" != true && "$enable_auto_route" != true ]] || fail "server enrollment requires native Accounts configuration."
+    validate_accounts_config
+  fi
   if [[ "$auth_mode" == native ]]; then
     download docker-compose.updates.yml
     compose_files+=(-f docker-compose.updates.yml)
@@ -289,15 +294,40 @@ server_main() {
         '{"ready":false}') fail "server approval is still pending; approve it in the dashboard and retry --confirm-server." ;;
         *) fail "the server returned an invalid enrollment confirmation." ;;
       esac
-    elif [[ -n "$organization_id" ]]; then
-      timeout --foreground 60 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" exec -T api node dist/cli/installation.js enroll --name 'Ork server' --organization "$organization_id" || fail "could not start server enrollment."
-      echo 'Enter the code in the organization dashboard, compare the fingerprint, and approve the server.'
-      echo 'Then run this command from the installation directory:'
-      printf '%q ' "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" exec -T api node dist/cli/installation.js confirm
-      printf '\n'
-    elif [[ "$initialization" == true ]]; then
-      echo 'In the organization dashboard, open Servers and copy the ID from /workspace/ORGANIZATION_ID/server in the address bar.'
-      echo 'To connect this server, rerun the installer with --organization ORGANIZATION_ID.'
+    elif [[ -n "$organization_id" || "$initialization" == true ]]; then
+      local enrollment
+      local -a organization_args=()
+      [[ -z "$organization_id" ]] || organization_args=(--organization "$organization_id")
+      enrollment=$(timeout --foreground 60 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" exec -T api node dist/cli/installation.js enroll --name 'Ork server' "${organization_args[@]}") || fail "could not start server enrollment."
+      if [[ "${enrollment##*$'\n'}" == '{"ready":true}' ]]; then
+        echo 'Server enrollment confirmed.'
+      else
+        printf '%s\n' "${enrollment##*$'\n'}" | python3 -c '
+import json, re, sys
+try:
+    value = json.load(sys.stdin)
+    code, fingerprint, expires = value["code"], value["keyFingerprint"], value["expiresAt"]
+    if not isinstance(code, str) or not re.fullmatch(r"[A-HJ-NP-Z2-9]{10}", code): raise ValueError()
+    if not isinstance(fingerprint, str) or not re.fullmatch(r"[a-f0-9]{64}", fingerprint): raise ValueError()
+    if not isinstance(expires, int) or isinstance(expires, bool) or expires <= 0: raise ValueError()
+except (ValueError, KeyError, TypeError):
+    sys.exit("The server returned invalid enrollment details.")
+print("Setup code:", code)
+print("Fingerprint:", fingerprint)
+print("Connect:", "https://app.ork.run/account/connect-server#code=" + code)
+' || fail "could not read server enrollment details."
+        echo 'Open https://app.ork.run, select your organization, and enter the code on Servers.'
+        echo 'Compare the fingerprint and confirm the server. Registration will finish automatically.'
+        echo 'The code is valid for up to 15 minutes. If it expires, rerun this installer for a new code.'
+        local auto_route
+        auto_route=$(timeout --foreground 60 python3 "$helper" auto-route "$server_url") || fail "could not read automatic address publication settings."
+        case "$auto_route" in
+          unset) echo 'To publish the server address automatically, rerun with --auto-direct-route.' ;;
+          disabled) echo 'Automatic address publication is disabled in your configuration.' ;;
+          enabled) ;;
+          *) fail "could not read automatic address publication settings." ;;
+        esac
+      fi
     fi
   elif [[ -n "$organization_id" || "$confirm_server" == true ]]; then
     fail "server enrollment requires native Accounts configuration."

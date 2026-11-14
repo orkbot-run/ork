@@ -11,6 +11,8 @@ export function startWorkspaceAuthority(
   authority: WorkspaceAuthority,
   onError: (error: unknown) => void,
   realtime?: RealtimeFanout,
+  publicOrigin?: string,
+  resumeEnrollment = false,
 ): () => Promise<void> {
   let stopped = false;
   let active: Promise<void> | undefined;
@@ -19,6 +21,7 @@ export function startWorkspaceAuthority(
   let subscribedServer: string | undefined;
   let refreshing = false;
   let again = false;
+  let publishedRoute: string | undefined;
   const tick = async () => {
     if (stopped) return;
     if (refreshing) {
@@ -28,8 +31,24 @@ export function startWorkspaceAuthority(
     refreshing = true;
     clearTimeout(timer);
     try {
-      const configuration = await installation.configuration();
+      const configuration = resumeEnrollment
+        ? await installation.resumePendingEnrollment()
+        : await installation.configuration();
       if (configuration) {
+        const routeKey = JSON.stringify([configuration, publicOrigin]);
+        if (publicOrigin && publishedRoute !== routeKey) {
+          try {
+            await installation.addDirectRoute(publicOrigin, configuration);
+            publishedRoute = routeKey;
+          } catch (error) {
+            if (!stopped)
+              onError(
+                new Error("Could not publish the server address; check Accounts compatibility.", {
+                  cause: error,
+                }),
+              );
+          }
+        }
         if (realtime && subscribedServer !== configuration.serverId) {
           await unsubscribe?.();
           unsubscribe = await realtime.subscribe(
@@ -118,7 +137,7 @@ export function startWorkspaceAuthority(
           }
         }
         if (provisioned) await authority.synchronize();
-      }
+      } else publishedRoute = undefined;
     } catch (error) {
       if (!stopped) onError(error);
     } finally {

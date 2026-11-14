@@ -71,6 +71,7 @@ type AuthorityPurpose =
 type InstallationPath =
   | "/servers/synchronize"
   | "/servers/routes"
+  | "/servers/routes/add"
   | "/servers/transport-lease"
   | "/servers/transport-release"
   | "/workspaces/acknowledge"
@@ -603,6 +604,24 @@ export class InstallationClient {
     if (response.ok !== true) throw failure("Installation routes were not published");
   }
 
+  async addDirectRoute(address: string, expected: InstallationConfiguration): Promise<void> {
+    const route = installationRouteInputSchema.parse({ kind: "direct", address, deviceId: null });
+    const intentId = sha256(
+      JSON.stringify([
+        "ork-direct-route-intent-v1",
+        expected.serverId,
+        expected.bindingVersion,
+        route.address,
+      ]),
+    );
+    const { response } = await this.signedRequest(
+      "/servers/routes/add",
+      { route, intentId },
+      expected,
+    );
+    if (response.ok !== true) throw failure("Installation route was not published");
+  }
+
   async transportLease(
     ownerId: string,
     configuration: InstallationConfiguration,
@@ -806,5 +825,53 @@ export class InstallationClient {
       }),
     );
     return this.configuration();
+  }
+
+  /** Resume only a locally started enrollment; do not create or reconnect one implicitly. */
+  async resumePendingEnrollment(): Promise<InstallationConfiguration | null> {
+    const row = await this.read();
+    if (!row || !["enrolling", "binding", "ready"].includes(row.state)) return null;
+    return this.pollEnrollment();
+  }
+
+  /** Reset only an unapproved enrollment that Accounts has explicitly confirmed expired. */
+  async resetExpiredEnrollment(expectedOrganizationId?: string): Promise<boolean> {
+    const row = await this.read();
+    if (row?.state !== "enrolling" || row.serverId || !row.enrollmentId) return false;
+    if (row.issuer !== this.options.issuer) throw failure("Installation issuer changed");
+    if (
+      expectedOrganizationId &&
+      (!UUID.test(expectedOrganizationId) ||
+        (row.requestedOrganizationId && row.requestedOrganizationId !== expectedOrganizationId))
+    )
+      throw failure("Installation organization selection changed");
+    const response = await this.post("/enrollments/poll", {
+      enrollmentId: row.enrollmentId,
+      receipt: await this.receipt(row),
+    });
+    if (response.state !== "expired") return false;
+    const reset = await runAsSystem("reset confirmed expired installation enrollment", () =>
+      this.prisma.installationIdentity.updateMany({
+        where: {
+          id: "local",
+          issuer: row.issuer,
+          state: "enrolling",
+          serverId: null,
+          operationId: row.operationId,
+          enrollmentId: row.enrollmentId,
+          receiptCipher: row.receiptCipher,
+          requestedOrganizationId: row.requestedOrganizationId,
+        },
+        data: {
+          state: "unregistered",
+          operationId: randomUUID(),
+          challenge: randomBytes(32).toString("base64url"),
+          enrollmentId: null,
+          receiptCipher: null,
+        },
+      }),
+    );
+    if (reset.count !== 1) throw failure("Installation enrollment changed");
+    return true;
   }
 }

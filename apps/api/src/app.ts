@@ -1773,6 +1773,10 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
           workspaceAuthority,
           (error) => logger.error("Workspace authority synchronization failed", error),
           realtime,
+          env.autoDirectRoute && !env.desktopAccountKey && env.webOrigin.startsWith("https://")
+            ? env.webOrigin
+            : undefined,
+          !env.desktopAccountKey,
         )
       : undefined;
   const installationTransport = installation

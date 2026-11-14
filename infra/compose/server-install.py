@@ -329,7 +329,7 @@ def safe_credential(value):
     return isinstance(value, str) and 1 <= len(value) <= 4096 and all(33 <= ord(char) <= 126 and char not in "'\\" for char in value)
 
 
-def configure(url):
+def configure(url, enable_auto_route=False):
     code = os.environ.pop("ORKBOT_INSTALL_CODE", "")
     env = environment()
     hostname = origin(url)
@@ -365,6 +365,12 @@ def configure(url):
         ):
             raise SetupError("Existing configuration cannot be initialized automatically; keep the original credentials.")
         values.update(AUTH_ACCOUNTS_ENABLED="true", SIGNUPS_ENABLED="false", OIDC_REDIRECT_URI="")
+        values["ORKBOT_AUTO_DIRECT_ROUTE"] = env.get("ORKBOT_AUTO_DIRECT_ROUTE", "true")
+    elif enable_auto_route and env.get("AUTH_ACCOUNTS_ENABLED") == "true" and not env.get("OIDC_CLIENT_ID"):
+        if "ORKBOT_AUTO_DIRECT_ROUTE" not in env:
+            values["ORKBOT_AUTO_DIRECT_ROUTE"] = "true"
+        elif env["ORKBOT_AUTO_DIRECT_ROUTE"] != "true":
+            print("Automatic address publication remains disabled in your configuration.")
     values.update({
         "BETTER_AUTH_URL": url, "WEB_ORIGIN": url, "API_URL": url, "ORKBOT_HOST": hostname,
         "AUTH_PASSWORD_ENABLED": "false",
@@ -587,10 +593,13 @@ def main():
         if not configured(url, env):
             raise SetupError("Accounts configuration is incomplete.")
         print("native" if env.get("AUTH_ACCOUNTS_ENABLED") == "true" and not env.get("OIDC_CLIENT_ID") else "oidc")
+    elif operation == "auto-route":
+        route = environment().get("ORKBOT_AUTO_DIRECT_ROUTE")
+        print("enabled" if route == "true" else "unset" if route is None else "disabled")
     elif operation == "provider":
         print(environment().get("SANDBOX_PROVIDER", "docker") or "docker")
     elif operation == "configure":
-        configure(url)
+        configure(url, len(sys.argv) > 3 and sys.argv[3] == "true")
     elif operation == "ready":
         ready(url)
     elif operation == "initialization-required":

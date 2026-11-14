@@ -3,7 +3,7 @@
 
 import type { RealtimeFanout } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { InstallationClient } from "./installation-client.js";
 import { WorkspaceAuthority } from "./workspace-authority.js";
 import { startWorkspaceAuthority } from "./workspace-authority-service.js";
@@ -15,6 +15,66 @@ const configuration = {
   bindingVersion: 2,
   keyFingerprint: "f".repeat(64),
 };
+
+afterEach(() => vi.useRealTimers());
+
+it("resumes self-host enrollment without publishing routes unless enabled", async () => {
+  vi.useFakeTimers();
+  const installation = {
+    resumePendingEnrollment: vi.fn(async () => configuration),
+    configuration: vi.fn(async () => configuration),
+    addDirectRoute: vi.fn(),
+  } as unknown as InstallationClient;
+  const authority = {
+    synchronize: vi.fn(async () => ({ workspaces: [] })),
+    dispose: vi.fn(),
+  } as unknown as WorkspaceAuthority;
+  let stop = startWorkspaceAuthority(installation, authority, vi.fn(), undefined, undefined, true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(installation.resumePendingEnrollment).toHaveBeenCalledOnce();
+  expect(installation.addDirectRoute).not.toHaveBeenCalled();
+  await stop();
+  vi.mocked(installation.resumePendingEnrollment).mockClear();
+  stop = startWorkspaceAuthority(installation, authority, vi.fn());
+  await vi.advanceTimersByTimeAsync(0);
+  expect(installation.configuration).toHaveBeenCalledOnce();
+  expect(installation.resumePendingEnrollment).not.toHaveBeenCalled();
+  await stop();
+});
+
+it("resumes pending enrollment and retries additive route publication after a restart or outage", async () => {
+  vi.useFakeTimers();
+  const installation = {
+    resumePendingEnrollment: vi.fn().mockResolvedValueOnce(null).mockResolvedValue(configuration),
+    addDirectRoute: vi
+      .fn()
+      .mockRejectedValueOnce(new Error("unavailable"))
+      .mockResolvedValue(undefined),
+  } as unknown as InstallationClient;
+  const authority = {
+    synchronize: vi.fn(async () => ({ workspaces: [] })),
+    dispose: vi.fn(),
+  } as unknown as WorkspaceAuthority;
+  const onError = vi.fn();
+  const origin = "https://server.example.test";
+  let stop = startWorkspaceAuthority(installation, authority, onError, undefined, origin, true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(installation.addDirectRoute).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(installation.addDirectRoute).toHaveBeenCalledTimes(1);
+  expect(onError).toHaveBeenCalledOnce();
+  expect(authority.synchronize).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(installation.addDirectRoute).toHaveBeenCalledTimes(2);
+  expect(installation.addDirectRoute).toHaveBeenLastCalledWith(origin, configuration);
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(installation.addDirectRoute).toHaveBeenCalledTimes(2);
+  await stop();
+  stop = startWorkspaceAuthority(installation, authority, onError, undefined, origin, true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(installation.addDirectRoute).toHaveBeenCalledTimes(3);
+  await stop();
+});
 
 it("broadcasts a known refusal even when persisting device revocations fails", async () => {
   const publish = vi.fn(async () => {});

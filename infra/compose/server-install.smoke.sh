@@ -107,7 +107,13 @@ case " $* " in
   *' exec -T api node dist/cli/installation.js enroll '*)
     echo enroll >> "$STUB_EVENTS"
     [[ "${STUB_CLAIM_FAIL:-0}" == 0 ]] || exit 1
-    printf '{"code":"23456789AB","keyFingerprint":"fixture-fingerprint"}\n'
+    if [[ "${STUB_BAD_ENROLLMENT:-0}" == 1 ]]; then
+      printf '{"code":"bad","keyFingerprint":"bad"}\n'
+    elif [[ "${STUB_ENROLL_READY:-0}" == 1 ]]; then
+      printf '{"ready":true}\n'
+    else
+      printf '{"code":"23456789AB","keyFingerprint":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","expiresAt":2000000000}\n'
+    fi
     exit 0 ;;
   *' exec -T api node dist/cli/installation.js confirm '*)
     echo confirm >> "$STUB_EVENTS"
@@ -130,6 +136,7 @@ exit 1
 STUB
 cat > "$tmp/bin/python3" <<'STUB'
 #!/usr/bin/env bash
+if [[ "$1" == -c ]]; then exec "$STUB_PYTHON" "$@"; fi
 exec "$STUB_PYTHON" - "$@" <<'PY'
 import importlib.util, json, os, sys
 spec=importlib.util.spec_from_file_location('installer',sys.argv[1])
@@ -211,11 +218,17 @@ checksum=$(cksum "$tmp/fresh/.env")
 run_case fresh || { cat "$tmp/fresh/output"; exit 1; }
 ! grep -q '^redeem$' "$tmp/fresh/events"
 [[ "$(cksum "$tmp/fresh/.env")" == "$checksum" ]]
+if run_case fresh --auto-direct-route; then echo 'legacy Accounts accepted automatic route publication' >&2; exit 1; fi
+grep -q 'server enrollment requires native Accounts configuration' "$tmp/fresh/output"
 STUB_NATIVE_ACCOUNTS=1 run_case native || { cat "$tmp/native/output"; exit 1; }
 grep -q '^Ork is ready at https://server.example.com$' "$tmp/native/output"
-grep -q '/workspace/ORGANIZATION_ID/server' "$tmp/native/output"
-grep -q 'rerun the installer with --organization ORGANIZATION_ID' "$tmp/native/output"
-! grep -q '^enroll$' "$tmp/native/events"
+grep -q '23456789AB' "$tmp/native/output"
+grep -qx 'Connect: https://app.ork.run/account/connect-server#code=23456789AB' "$tmp/native/output"
+! grep -q 'connect-server?code=' "$tmp/native/output"
+grep -q '^enroll$' "$tmp/native/events"
+grep -q 'Registration will finish automatically' "$tmp/native/output"
+grep -q 'valid for up to 15 minutes' "$tmp/native/output"
+grep -q 'rerun this installer for a new code' "$tmp/native/output"
 grep -q '^updates-init$' "$tmp/native/events"
 grep -q '^ORKBOT_UPDATER_TOKEN=' "$tmp/native/.env"
 grep -q '^ORKBOT_COMPOSE_FILE=.*docker-compose.updates.yml' "$tmp/native/.env"
@@ -248,14 +261,40 @@ STUB_NATIVE_ACCOUNTS=1 STUB_ALREADY_INITIALIZED=1 run_case native || { cat "$tmp
 ! grep -q '^enroll$' "$tmp/native/events"
 ! grep -q '^redeem$' "$tmp/native/events"
 [[ "$(cksum "$tmp/native/.env")" == "$native_before" ]]
-STUB_NATIVE_ACCOUNTS=1 STUB_ALREADY_CLAIMED=1 run_case native || { cat "$tmp/native/output"; exit 1; }
-! grep -q '^enroll$' "$tmp/native/events"
+STUB_NATIVE_ACCOUNTS=1 STUB_ENROLL_READY=1 run_case native || { cat "$tmp/native/output"; exit 1; }
+grep -q '^Server enrollment confirmed.$' "$tmp/native/output"
+! grep -q 'Registration will finish automatically' "$tmp/native/output"
 organization=12345678-1234-4123-8123-123456789abc
 STUB_NATIVE_ACCOUNTS=1 run_case enroll --organization "$organization" || { cat "$tmp/enroll/output"; exit 1; }
 grep -q '^enroll$' "$tmp/enroll/events"
 grep -q '23456789AB' "$tmp/enroll/output"
-grep -q 'compare the fingerprint' "$tmp/enroll/output"
-grep -q 'node dist/cli/installation.js confirm' "$tmp/enroll/output"
+grep -qi 'compare the fingerprint' "$tmp/enroll/output"
+grep -q 'Registration will finish automatically' "$tmp/enroll/output"
+STUB_NATIVE_ACCOUNTS=1 run_case legacy-route || { cat "$tmp/legacy-route/output"; exit 1; }
+"$real_python" - "$tmp/legacy-route/.env" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+path.write_text(''.join(line for line in path.read_text().splitlines(keepends=True)
+                        if not line.startswith('ORKBOT_AUTO_DIRECT_ROUTE=')))
+PY
+STUB_NATIVE_ACCOUNTS=1 run_case legacy-route || { cat "$tmp/legacy-route/output"; exit 1; }
+! grep -q '^ORKBOT_AUTO_DIRECT_ROUTE=' "$tmp/legacy-route/.env"
+grep -q 'rerun with --auto-direct-route' "$tmp/legacy-route/output"
+STUB_NATIVE_ACCOUNTS=1 run_case legacy-route --organization "$organization" || { cat "$tmp/legacy-route/output"; exit 1; }
+! grep -q '^ORKBOT_AUTO_DIRECT_ROUTE=' "$tmp/legacy-route/.env"
+grep -q 'rerun with --auto-direct-route' "$tmp/legacy-route/output"
+STUB_NATIVE_ACCOUNTS=1 run_case legacy-route --organization "$organization" --auto-direct-route || { cat "$tmp/legacy-route/output"; exit 1; }
+grep -q "^ORKBOT_AUTO_DIRECT_ROUTE='true'$" "$tmp/legacy-route/.env"
+"$real_python" - "$tmp/legacy-route/.env" <<'PY'
+from pathlib import Path
+import sys
+path = Path(sys.argv[1])
+path.write_text(path.read_text().replace("ORKBOT_AUTO_DIRECT_ROUTE='true'", "ORKBOT_AUTO_DIRECT_ROUTE='false'"))
+PY
+STUB_NATIVE_ACCOUNTS=1 run_case legacy-route --auto-direct-route || { cat "$tmp/legacy-route/output"; exit 1; }
+grep -q "^ORKBOT_AUTO_DIRECT_ROUTE='false'$" "$tmp/legacy-route/.env"
+grep -q 'remains disabled' "$tmp/legacy-route/output"
 STUB_NATIVE_ACCOUNTS=1 run_case enroll --confirm-server || { cat "$tmp/enroll/output"; exit 1; }
 grep -q '^confirm$' "$tmp/enroll/events"
 grep -q '^Server enrollment confirmed.$' "$tmp/enroll/output"
@@ -263,6 +302,8 @@ if STUB_NATIVE_ACCOUNTS=1 STUB_CONFIRM_PENDING=1 run_case enroll --confirm-serve
 grep -q 'server approval is still pending' "$tmp/enroll/output"
 if STUB_NATIVE_ACCOUNTS=1 STUB_CLAIM_FAIL=1 run_case claim-fails --organization "$organization"; then echo 'enrollment failure accepted' >&2; exit 1; fi
 grep -q 'could not start server enrollment' "$tmp/claim-fails/output"
+if STUB_NATIVE_ACCOUNTS=1 STUB_BAD_ENROLLMENT=1 run_case bad-enrollment; then echo 'invalid enrollment details accepted' >&2; exit 1; fi
+grep -q 'could not read server enrollment details' "$tmp/bad-enrollment/output"
 if STUB_NATIVE_ACCOUNTS=1 run_case invalid-organization --organization invalid; then echo 'invalid organization accepted' >&2; exit 1; fi
 if STUB_NATIVE_ACCOUNTS=1 run_case conflicting-arguments --organization "$organization" --confirm-server; then echo 'conflicting enrollment arguments accepted' >&2; exit 1; fi
 if STUB_PULL_FAIL=1 run_case pull-fails --code "$code"; then echo 'pull failure accepted' >&2; exit 1; fi

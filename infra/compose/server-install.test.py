@@ -243,6 +243,7 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("ORKBOT_BOOTSTRAP_SECRET=" + bootstrap, content)
         self.assertIn("AUTH_ACCOUNTS_ENABLED='true'", content)
         self.assertIn("SIGNUPS_ENABLED='false'", content)
+        self.assertIn("ORKBOT_AUTO_DIRECT_ROUTE='true'", content)
         self.assertIn("OIDC_REDIRECT_URI=''", content)
         self.assertEqual(json.loads(installer.STATE.read_text()), {"url": URL, "externalProxy": False})
         self.env.update(BETTER_AUTH_URL=URL, WEB_ORIGIN=URL, API_URL=URL, OIDC_REDIRECT_URI="", SIGNUPS_ENABLED="false")
@@ -255,6 +256,30 @@ class InstallerTests(unittest.TestCase):
         request.assert_not_called()
         self.assertIn("OIDC_REDIRECT_URI=''", installer.ENV.read_text())
         self.assertNotIn("OIDC_CLIENT_ID='new-id'", installer.ENV.read_text())
+
+    def test_existing_native_installation_does_not_enable_route_automatically(self):
+        self.env.update(AUTH_ACCOUNTS_ENABLED="true", ORKBOT_BOOTSTRAP_SECRET="z" * 43,
+                        BETTER_AUTH_URL=URL, WEB_ORIGIN=URL, API_URL=URL,
+                        OIDC_REDIRECT_URI="", SIGNUPS_ENABLED="false")
+        self.write_env()
+        with patch.object(installer, "environment", return_value=self.env):
+            installer.configure(URL)
+        self.assertNotIn("ORKBOT_AUTO_DIRECT_ROUTE", installer.ENV.read_text())
+
+    def test_existing_native_can_opt_in_without_overriding_an_explicit_choice(self):
+        self.env.update(AUTH_ACCOUNTS_ENABLED="true", ORKBOT_BOOTSTRAP_SECRET="z" * 43,
+                        BETTER_AUTH_URL=URL, WEB_ORIGIN=URL, API_URL=URL,
+                        OIDC_REDIRECT_URI="", SIGNUPS_ENABLED="false")
+        self.write_env()
+        with patch.object(installer, "environment", return_value=self.env):
+            installer.configure(URL, enable_auto_route=True)
+        self.assertIn("ORKBOT_AUTO_DIRECT_ROUTE='true'", installer.ENV.read_text())
+        for choice in ("false", "true"):
+            self.env["ORKBOT_AUTO_DIRECT_ROUTE"] = choice
+            self.write_env()
+            with self.subTest(choice=choice), patch.object(installer, "environment", return_value=self.env):
+                installer.configure(URL, enable_auto_route=True)
+            self.assertIn("ORKBOT_AUTO_DIRECT_ROUTE=" + choice, installer.ENV.read_text())
 
     def test_native_server_refuses_missing_bootstrap_and_wrong_origin(self):
         for changes in ({"AUTH_ACCOUNTS_ENABLED": "true"}, {"AUTH_ACCOUNTS_ENABLED": "true", "ORKBOT_BOOTSTRAP_SECRET": "short"}):

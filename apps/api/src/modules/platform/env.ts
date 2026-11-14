@@ -49,6 +49,7 @@ export interface AppEnv {
   nodeEnv: string;
   desktopStackToken?: string;
   desktopAccountKey?: string;
+  autoDirectRoute?: boolean;
   accountsEnabled?: boolean;
   accountsIssuer?: string;
   bootstrapSecret?: string;
@@ -319,6 +320,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     realtimeDatabaseUrl: source.REALTIME_DATABASE_URL ?? required(source, "DATABASE_URL"),
     desktopStackToken,
     desktopAccountKey,
+    autoDirectRoute: source.ORKBOT_AUTO_DIRECT_ROUTE === "true",
     accountsEnabled,
     accountsIssuer,
     bootstrapSecret,

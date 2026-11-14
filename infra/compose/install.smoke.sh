@@ -55,6 +55,10 @@ base=https://raw.githubusercontent.com/orkbot-run/ork/a008fbde71f5fec493040fdd6c
 grep -Fqx "$base/install-images.sh" "$tmp/curl-args"
 [ -z "$(ls -A "$TMPDIR")" ]
 
+organization=12345678-1234-4123-8123-123456789abc
+cat "$root/install.sh" | sh -s -- --organization "$organization" --auto-direct-route
+[ "$(cat "$tmp/installer-args")" = "$(printf '%s\n' --server --organization "$organization" --auto-direct-route)" ]
+
 revision=0123456789abcdef0123456789abcdef01234567
 rm "$tmp/curl-args"
 cat "$root/install.sh" | sh -s -- --url https://server.example.test --revision "$revision" --code "$code"

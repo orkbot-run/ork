@@ -82,6 +82,12 @@ describe("loadEnv", () => {
     );
   });
 
+  it("only enables automatic direct route publication when explicitly configured", () => {
+    expect(loadEnv(base).autoDirectRoute).toBe(false);
+    expect(loadEnv({ ...base, ORKBOT_AUTO_DIRECT_ROUTE: "true" }).autoDirectRoute).toBe(true);
+    expect(loadEnv({ ...base, ORKBOT_AUTO_DIRECT_ROUTE: "false" }).autoDirectRoute).toBe(false);
+  });
+
   it("defaults the attachment count to four and accepts configured bounds", () => {
     expect(loadEnv(base).maxAttachmentsPerMessage).toBe(4);
     expect(loadEnv({ ...base, MAX_ATTACHMENTS_PER_MESSAGE: " " }).maxAttachmentsPerMessage).toBe(4);
