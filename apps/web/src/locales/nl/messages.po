@@ -670,7 +670,6 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -1877,7 +1876,6 @@ msgid "Contains code to run"
 msgstr "Bevat code om uit te voeren"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Context limit"
 msgstr "Contextlimiet"
 
@@ -2717,7 +2715,6 @@ msgstr "Weigeren"
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
-#: src/pages/Onboarding.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Default"
 msgstr "Standaard"
@@ -3268,7 +3265,6 @@ msgid "External conversation"
 msgstr "Extern gesprek"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Extra high"
 msgstr "Extra hoog"
 
@@ -3567,7 +3563,6 @@ msgstr "Transcript verbergen"
 
 #: src/lib/ticket-priority.ts
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "High"
 msgstr "Hoog"
 
@@ -4001,7 +3996,6 @@ msgstr "Lijkt een sleutel te bevatten"
 
 #: src/lib/ticket-priority.ts
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Low"
 msgstr "Laag"
 
@@ -4080,7 +4074,6 @@ msgid "Marketing"
 msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Max"
 msgstr "Max"
 
@@ -4094,13 +4087,11 @@ msgid "Maximize"
 msgstr "Maximaliseren"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Maximum images per request"
 msgstr "Maximum aantal afbeeldingen per verzoek"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
 msgid "Maximum output tokens"
 msgstr "Maximaal aantal uitvoertokens"
 
@@ -4118,7 +4109,6 @@ msgid "MCP servers"
 msgstr "MCP-servers"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Medium"
 msgstr "Gemiddeld"
 
@@ -4233,7 +4223,6 @@ msgid "Microphone failed"
 msgstr "Microfoon mislukt"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Minimal"
 msgstr "Minimaal"
 
@@ -5267,7 +5256,6 @@ msgid "Reason"
 msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Reasoning effort"
 msgstr "Redeneerinspanning"
 
@@ -6551,12 +6539,10 @@ msgid "Sunday"
 msgstr "zondag"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Supports images"
 msgstr "Ondersteunt afbeeldingen"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Supports thinking"
 msgstr "Ondersteunt denken"
 

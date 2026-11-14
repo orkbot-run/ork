@@ -670,7 +670,6 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -1877,7 +1876,6 @@ msgid "Contains code to run"
 msgstr "Contiene código ejecutable"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Context limit"
 msgstr "Límite de contexto"
 
@@ -2717,7 +2715,6 @@ msgstr "Rechazar"
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
-#: src/pages/Onboarding.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Default"
 msgstr "Predeterminado"
@@ -3268,7 +3265,6 @@ msgid "External conversation"
 msgstr "Conversación externa"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Extra high"
 msgstr "Extra alto"
 
@@ -3567,7 +3563,6 @@ msgstr "Ocultar la transcripción"
 
 #: src/lib/ticket-priority.ts
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "High"
 msgstr "Alto"
 
@@ -4001,7 +3996,6 @@ msgstr "Parece contener una clave"
 
 #: src/lib/ticket-priority.ts
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Low"
 msgstr "Bajo"
 
@@ -4080,7 +4074,6 @@ msgid "Marketing"
 msgstr "Marketing"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Max"
 msgstr "Máx."
 
@@ -4094,13 +4087,11 @@ msgid "Maximize"
 msgstr "Maximizar"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Maximum images per request"
 msgstr "Máximo de imágenes por solicitud"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
 msgid "Maximum output tokens"
 msgstr "Máximo de tokens de salida"
 
@@ -4118,7 +4109,6 @@ msgid "MCP servers"
 msgstr "Servidores MCP"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Medium"
 msgstr "Medio"
 
@@ -4233,7 +4223,6 @@ msgid "Microphone failed"
 msgstr "Falló el micrófono"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Minimal"
 msgstr "Mínimo"
 
@@ -5267,7 +5256,6 @@ msgid "Reason"
 msgstr "Motivo"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Reasoning effort"
 msgstr "Esfuerzo de razonamiento"
 
@@ -6551,12 +6539,10 @@ msgid "Sunday"
 msgstr "domingo"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Supports images"
 msgstr "Admite imágenes"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-#: src/pages/Onboarding.tsx
 msgid "Supports thinking"
 msgstr "Admite razonamiento"
 
