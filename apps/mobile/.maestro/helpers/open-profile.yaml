@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+appId: run.orkbot.app
+---
+- runFlow: open-researcher.yaml
+- tapOn: "Profile"
+- extendedWaitUntil:
+    visible: "Bot actions"
+    timeout: 10000

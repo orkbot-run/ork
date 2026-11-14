@@ -1,26 +1,87 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited screenshot helper; Accounts authentication additions follow LICENSE.md.
+
 appId: run.orkbot.app
 ---
-# A cold API 34 emulator can show a launcher ANR over the healthy app, and a relaunch
-# after clearState can take Maestro about half a minute to bring the app back.
+# Each screenshot flow starts signed out in a build configured for its isolated Accounts.
 - extendedWaitUntil:
-    visible: "Sign up for Ork|Pixel Launcher isn't responding"
+    visible: "Get started|Continue with Accounts|Pixel Launcher isn't responding"
     timeout: 60000
 - runFlow:
     when:
       visible: "Pixel Launcher isn't responding"
     commands:
       - tapOn: "Close app"
+- runFlow:
+    when:
+      visible: "Get started"
+    commands:
+      - tapOn: "Get started"
 - extendedWaitUntil:
-    visible: "Sign up for Ork"
+    visible: "Continue with Accounts"
     timeout: 30000
-- tapOn: "Sign in"
-- runFlow: server.yaml
-- tapOn: "Email"
-- inputText: ${ORKBOT_SCREENSHOT_EMAIL}
-- tapOn: "Password"
-- inputText: ${ORKBOT_SCREENSHOT_PASSWORD}
-- hideKeyboard
-- tapOn: "Sign in"
+- tapOn: "Continue with Accounts"
 - extendedWaitUntil:
-    visible: "Researcher"
+    visible: "Welcome to Chrome|Chrome notifications|Email|Continue to Ork"
     timeout: 30000
+- runFlow:
+    when:
+      visible: "Welcome to Chrome"
+    commands:
+      - tapOn: "Use without an account"
+- extendedWaitUntil:
+    visible: "Chrome notifications|Email|Continue to Ork"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Chrome notifications"
+    commands:
+      - tapOn: "No thanks"
+- extendedWaitUntil:
+    visible: "Email|Continue to Ork"
+    timeout: 30000
+- runFlow:
+    when:
+      visible:
+        id: "email"
+    commands:
+      - tapOn:
+          id: "email"
+      - inputText: ${ORKBOT_SCREENSHOT_EMAIL}
+      - hideKeyboard
+      - tapOn:
+          id: "password"
+      - inputText: ${ORKBOT_SCREENSHOT_PASSWORD}
+      - hideKeyboard
+      - tapOn:
+          text: "^Sign in$"
+          below: "Password"
+- extendedWaitUntil:
+    visible: "Authorize"
+    timeout: 30000
+# A cached browser session must belong to the intended fixture account.
+- assertVisible: ${ORKBOT_SCREENSHOT_EMAIL}
+- tapOn: "Authorize"
+- extendedWaitUntil:
+    visible: "Choose organization|Continue with Ork Accounts|Create"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Choose organization"
+    commands:
+      - tapOn: "Choose organization"
+      - tapOn: ${ORKBOT_SCREENSHOT_ORGANIZATION}
+# A saved default can restore the fixture's single-workspace Personal organization.
+- extendedWaitUntil:
+    visible: "Continue with Ork Accounts|Create"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Continue with Ork Accounts"
+    commands:
+      - tapOn: "Continue with Ork Accounts"
+- extendedWaitUntil:
+    visible: "Create"
+    timeout: 30000
+- assertVisible: ${ORKBOT_SCREENSHOT_WORKSPACE}

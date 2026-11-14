@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited native screenshot flows; Accounts updates follow LICENSE.md.
+
 appId: run.orkbot.app
 name: Ork split view on a wide window
 tags:
@@ -8,28 +12,7 @@ tags:
     clearState: true
     permissions:
       notifications: deny
-- extendedWaitUntil:
-    visible: "Sign up for Ork|Pixel Launcher isn't responding"
-    timeout: 60000
-- runFlow:
-    when:
-      visible: "Pixel Launcher isn't responding"
-    commands:
-      - tapOn: "Close app"
-- extendedWaitUntil:
-    visible: "Sign up for Ork"
-    timeout: 30000
-- tapOn: "Sign in"
-- runFlow: helpers/server.yaml
-- tapOn: "Email"
-- inputText: ${ORKBOT_SCREENSHOT_EMAIL}
-- tapOn: "Password"
-- inputText: ${ORKBOT_SCREENSHOT_PASSWORD}
-- hideKeyboard
-- tapOn: "Sign in"
-- tapOn:
-    text: "Don’t allow"
-    optional: true
+- runFlow: helpers/sign-in.yaml
 - extendedWaitUntil:
     visible: "Researcher"
     timeout: 30000

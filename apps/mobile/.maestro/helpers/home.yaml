@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+appId: run.orkbot.app
+---
+- repeat:
+    times: 10
+    while:
+      notVisible:
+        id: "home-search-button"
+    commands:
+      - back
+- assertVisible:
+    id: "home-search-button"

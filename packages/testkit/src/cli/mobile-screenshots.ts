@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 fixtures; scoped native capture additions are PolyForm-covered.
+
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
@@ -16,14 +20,17 @@ import {
 import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { callRequestClientNonce } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
-import { createThreadMessage } from "@orkbot/db";
+import { createThreadMessage, runAsTenant } from "@orkbot/db";
 import { sessionCookieHeader } from "../index.js";
+import type { ScreenshotApp, ScreenshotSession } from "./mobile-screenshots-session.js";
+import { scopedScreenshotApp } from "./mobile-screenshots-session.js";
 import { disposableDatabaseEnv } from "./postgres.js";
 import { runProcess } from "./process.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const REPORT_DIR = path.join(ROOT, "test-report", "mobile-screenshots");
 const DATA_DIR = path.join(ROOT, ".tmp", "mobile-screenshots-data");
+const ASSET_DIR = path.join(ROOT, ".tmp", "mobile-screenshots-assets");
 const FLOW_DIR = path.join(ROOT, "apps", "mobile", ".maestro");
 const EMAIL = "mobile-screenshots@example.test";
 const PASSWORD = "test-password-123";
@@ -44,14 +51,100 @@ const FLOWS: { name: string; window?: { size: string; density: string } }[] = [
   { name: "keyboard-lifecycle" },
   // An unfolded foldable, about 750dp wide, where the chat list sits beside the open chat.
   { name: "split-view", window: { size: "1968x2184", density: "420" } },
-  // It creates and deletes a second organization in the shared fixture account.
+  // The central catalog keeps the second organization's content separate.
   { name: "organizations" },
   // Native modules and system UI that release-build code shrinking could break. Last,
   // because the messages, attachments, and calls it adds change what earlier flows match.
   { name: "native-features" },
 ];
 
-type App = { request: (input: string, init?: RequestInit) => Response | Promise<Response> };
+type App = ScreenshotApp;
+
+type CaptureAccount = {
+  email: string;
+  password: string;
+  apiUrl: string;
+  organization: string;
+  workspace: string;
+  otherOrganization: string;
+  otherWorkspace: string;
+};
+
+/** The existing offline connectors, shared by local and private integration capture. */
+export function mobileScreenshotIntegrations(encryptionKey: string) {
+  const thirdParties = new ThirdPartyConnectorEmulator();
+  return {
+    composio: new ComposioConnector({ client: new FakeComposioClient() }),
+    pipedream: new PipedreamConnector(
+      {
+        clientId: "fake-client-id",
+        clientSecret: "fake-client-secret",
+        projectId: "fake-project-id",
+        environment: "development",
+        identitySecret: encryptionKey,
+      },
+      { fetch: thirdParties.fetch, resolveHostname: thirdParties.resolveHostname },
+    ),
+    email: new EmailEmulator(),
+    remoteConnectors: {
+      fetch: thirdParties.fetch,
+      resolveHostname: thirdParties.resolveHostname,
+    },
+  };
+}
+
+/** Reuse the catalog against a running, genuinely admitted Accounts workspace. */
+export async function prepareMobileScreenshotCapture(input: {
+  app: App;
+  prisma: PrismaClient;
+  session?: ScreenshotSession;
+}) {
+  await rm(REPORT_DIR, { recursive: true, force: true });
+  await rm(ASSET_DIR, { recursive: true, force: true });
+  await mkdir(REPORT_DIR, { recursive: true });
+  await mkdir(ASSET_DIR, { recursive: true });
+  const app = input.session ? scopedScreenshotApp(input.app, input.session) : input.app;
+  const fixture = await seedFixture(app, input.prisma, input.session ? "" : undefined);
+  return {
+    fixture,
+    async capture(account: CaptureAccount) {
+      const deviceControl = startDeviceControlServer(app, input.prisma, fixture);
+      try {
+        await pushPickerFiles();
+        for (const { name: flow, window } of FLOWS) {
+          let flowFailed = false;
+          let flowError: unknown;
+          try {
+            await settleApp();
+            if (window) resizeEmulator(window.size, window.density);
+            await runFlow(flow, fixture, account);
+          } catch (error) {
+            flowFailed = true;
+            flowError = error;
+          }
+          if (window) {
+            try {
+              resizeEmulator("reset", "reset");
+            } catch (resetError) {
+              if (!flowFailed) throw resetError;
+              console.error("Could not reset the emulator window", resetError);
+            }
+          }
+          if (flowFailed) throw flowError;
+        }
+        await writeFile(
+          path.join(REPORT_DIR, "summary.json"),
+          `${JSON.stringify({ ok: true, authentication: input.session ? "native-workspace" : "local-password", flows: FLOWS.map((flow) => flow.name) }, null, 2)}\n`,
+        );
+      } finally {
+        await new Promise<void>((resolve, reject) => {
+          deviceControl.close((error) => (error ? reject(error) : resolve()));
+        }).catch(() => undefined);
+        await rm(ASSET_DIR, { recursive: true, force: true });
+      }
+    },
+  };
+}
 
 /** Capture app screenshots and the notification demo against an isolated, disposable backend. */
 async function main() {
@@ -67,79 +160,40 @@ async function main() {
     env: process.env,
     stdio: "inherit",
   });
-  const thirdParties = new ThirdPartyConnectorEmulator();
-  const pipedream = new PipedreamConnector(
-    {
-      clientId: "fake-client-id",
-      clientSecret: "fake-client-secret",
-      projectId: "fake-project-id",
-      environment: "development",
-      identitySecret: process.env.ENCRYPTION_KEY!,
-    },
-    { fetch: thirdParties.fetch, resolveHostname: thirdParties.resolveHostname },
-  );
   const { createApp } = await import("@orkbot/api/app");
   const handles = await createApp({
     databaseUrl: process.env.DATABASE_URL!,
     dataDir: DATA_DIR,
     apiHost: "0.0.0.0",
     apiUrl: HOST_API_URL,
-    composio: new ComposioConnector({ client: new FakeComposioClient() }),
-    pipedream,
-    email: new EmailEmulator(),
-    remoteConnectors: {
-      fetch: thirdParties.fetch,
-      resolveHostname: thirdParties.resolveHostname,
-    },
+    ...mobileScreenshotIntegrations(process.env.ENCRYPTION_KEY!),
   });
 
-  const fixture = await seedFixture(handles.app, handles.prisma);
+  const prepared = await prepareMobileScreenshotCapture({
+    app: handles.app,
+    prisma: handles.prisma,
+  });
   const server = serve({
     fetch: handles.app.fetch,
     hostname: "0.0.0.0",
     port: API_PORT,
   }) as Server;
-  const deviceControl = startDeviceControlServer(handles.app, handles.prisma, fixture);
-
   try {
     await waitForHealth(`${HOST_API_URL}/health`, 15_000);
-    await pushPickerFiles();
-    for (const { name: flow, window } of process.env.MOBILE_KEYBOARD_ONLY === "true"
-      ? [{ name: "keyboard-lifecycle", window: undefined }]
-      : FLOWS) {
-      // A failed reset is reported without hiding why the flow failed.
-      let flowFailed = false;
-      let flowError: unknown;
-      try {
-        await settleApp();
-        if (window) resizeEmulator(window.size, window.density);
-        await runFlow(flow, fixture);
-      } catch (error) {
-        flowFailed = true;
-        flowError = error;
-      }
-      if (window) {
-        try {
-          resizeEmulator("reset", "reset");
-        } catch (resetError) {
-          if (!flowFailed) throw resetError;
-          console.error("Could not reset the emulator window", resetError);
-        }
-      }
-      if (flowFailed) throw flowError;
-    }
-    await writeFile(
-      path.join(REPORT_DIR, "summary.json"),
-      `${JSON.stringify({ ok: true }, null, 2)}\n`,
-    );
+    await prepared.capture({
+      email: EMAIL,
+      password: PASSWORD,
+      apiUrl: `http://10.0.2.2:${API_PORT}`,
+      organization: "Personal",
+      workspace: "Personal",
+      otherOrganization: "Acceptance company",
+      otherWorkspace: "Workspace A",
+    });
   } finally {
     await new Promise<void>((resolve) => {
       server.close(() => resolve());
       server.closeAllConnections();
     });
-    await new Promise<void>((resolve, reject) => {
-      deviceControl.close((error) => (error ? reject(error) : resolve()));
-    }).catch(() => undefined);
     await handles.stop().catch(() => undefined);
     await rm(DATA_DIR, { recursive: true, force: true });
   }
@@ -150,19 +204,26 @@ async function main() {
  * that clears app data during that teardown has its fresh launch killed with the old task.
  */
 async function settleApp() {
-  execFileSync("adb", ["shell", "am", "force-stop", "run.orkbot.app"], { stdio: "inherit" });
+  execFileSync("adb", adbArguments(["shell", "am", "force-stop", "run.orkbot.app"]), {
+    stdio: "inherit",
+  });
   await new Promise((resolve) => setTimeout(resolve, 10_000));
 }
 
 function resizeEmulator(size: string, density: string) {
-  execFileSync("adb", ["shell", "wm", "size", size], { stdio: "inherit" });
-  execFileSync("adb", ["shell", "wm", "density", density], { stdio: "inherit" });
+  execFileSync("adb", adbArguments(["shell", "wm", "size", size]), { stdio: "inherit" });
+  execFileSync("adb", adbArguments(["shell", "wm", "density", density]), { stdio: "inherit" });
 }
 
-async function runFlow(flow: string, fixture: Awaited<ReturnType<typeof seedFixture>>) {
+export async function runFlow(
+  flow: string,
+  fixture: Awaited<ReturnType<typeof seedFixture>>,
+  account: CaptureAccount,
+) {
   await runProcess(
     "maestro",
     [
+      ...(process.env.ANDROID_SERIAL ? ["--device", process.env.ANDROID_SERIAL] : []),
       "test",
       "--no-ansi",
       "--flatten-debug-output",
@@ -175,11 +236,19 @@ async function runFlow(flow: string, fixture: Awaited<ReturnType<typeof seedFixt
       "--output",
       path.join(REPORT_DIR, `${flow}.html`),
       "-e",
-      `ORKBOT_MOBILE_API_URL=http://10.0.2.2:${API_PORT}`,
+      `ORKBOT_MOBILE_API_URL=${account.apiUrl}`,
       "-e",
-      `ORKBOT_SCREENSHOT_EMAIL=${EMAIL}`,
+      `ORKBOT_SCREENSHOT_EMAIL=${account.email}`,
       "-e",
-      `ORKBOT_SCREENSHOT_PASSWORD=${PASSWORD}`,
+      `ORKBOT_SCREENSHOT_PASSWORD=${account.password}`,
+      "-e",
+      `ORKBOT_SCREENSHOT_ORGANIZATION=${account.organization}`,
+      "-e",
+      `ORKBOT_SCREENSHOT_WORKSPACE=${account.workspace}`,
+      "-e",
+      `ORKBOT_SCREENSHOT_OTHER_ORGANIZATION=${account.otherOrganization}`,
+      "-e",
+      `ORKBOT_SCREENSHOT_OTHER_WORKSPACE=${account.otherWorkspace}`,
       "-e",
       `ORKBOT_SCREENSHOT_BOT_ID=${fixture.botId}`,
       "-e",
@@ -203,58 +272,69 @@ async function runFlow(flow: string, fixture: Awaited<ReturnType<typeof seedFixt
  * Android shade without flaky status-bar swipes, share text in from another app, ring
  * the user from the Researcher, and connect the scripted voice provider.
  */
-function startDeviceControlServer(
+export function startDeviceControlServer(
   app: App,
   prisma: PrismaClient,
   fixture: Awaited<ReturnType<typeof seedFixture>>,
 ): Server {
   const server = createServer((req, res) => {
-    let work: Promise<unknown>;
-    switch (req.method === "GET" ? req.url : undefined) {
-      case "/expand-notifications":
-        work = adb(["shell", "cmd", "statusbar", "expand-notifications"]);
-        break;
-      case "/share-text":
-        work = adb([
-          "shell",
-          "am start -a android.intent.action.SEND -t text/plain",
-          "--es android.intent.extra.TEXT 'Shared from another app'",
-          "-n run.orkbot.app/.MainActivity",
-        ]);
-        break;
-      case "/ring":
-        work = ringFromResearcher(prisma, fixture);
-        break;
-      case "/connect-voice":
-        work = rpc(app, fixture.cookie, "voice/connect", {
-          provider: "scripted",
-          apiKey: "fixture-voice-key",
-        });
-        break;
-      default:
-        res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-        res.end("not found");
-        return;
-    }
-    work.then(
-      () => {
-        res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-        res.end("ok");
-      },
-      (error: unknown) => {
-        console.error("Device control request failed", error);
-        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-        res.end("failed");
-      },
-    );
+    void runAsTenant(fixture.actor, async () => {
+      let work: Promise<unknown>;
+      switch (req.method === "GET" ? req.url : undefined) {
+        case "/expand-notifications":
+          work = adb(["shell", "cmd", "statusbar", "expand-notifications"]);
+          break;
+        case "/share-text":
+          work = adb([
+            "shell",
+            "am start -a android.intent.action.SEND -t text/plain",
+            "--es android.intent.extra.TEXT 'Shared from another app'",
+            "-n run.orkbot.app/.MainActivity",
+          ]);
+          break;
+        case "/ring":
+          work = ringFromResearcher(prisma, fixture);
+          break;
+        case "/connect-voice":
+          work = rpc(app, fixture.cookie, "voice/connect", {
+            provider: "scripted",
+            apiKey: "fixture-voice-key",
+          });
+          break;
+        default:
+          res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+          res.end("not found");
+          return;
+      }
+      await work.then(
+        () => {
+          res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+          res.end("ok");
+        },
+        (error: unknown) => {
+          console.error("Device control request failed", error);
+          res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+          res.end("failed");
+        },
+      );
+    }).catch(() => {
+      if (!res.headersSent) res.writeHead(500);
+      res.end("failed");
+    });
   });
   server.listen(DEVICE_CONTROL_PORT, "127.0.0.1");
   return server;
 }
 
+function adbArguments(args: string[]) {
+  return process.env.ANDROID_SERIAL ? ["-s", process.env.ANDROID_SERIAL, ...args] : args;
+}
+
 function adb(args: string[]) {
   return new Promise<void>((resolve, reject) => {
-    execFile("adb", args, { timeout: 15_000 }, (error) => (error ? reject(error) : resolve()));
+    execFile("adb", adbArguments(args), { timeout: 15_000 }, (error) =>
+      error ? reject(error) : resolve(),
+    );
   });
 }
 
@@ -284,7 +364,7 @@ async function ringFromResearcher(
 
 /** Put a small image and PDF where the system photo and document pickers list them. */
 async function pushPickerFiles() {
-  const dir = path.join(DATA_DIR, "picker");
+  const dir = path.join(ASSET_DIR, "picker");
   await mkdir(dir, { recursive: true });
   // A 1x1 PNG and a one-page PDF, generated so the repo carries no binary fixtures.
   const png = Buffer.from(
@@ -298,13 +378,15 @@ async function pushPickerFiles() {
     [PICKER_FILES.pdf, "/sdcard/Download"],
   ] as const;
   for (const [name, folder] of targets) {
-    execFileSync("adb", ["push", path.join(dir, name), `${folder}/${name}`], { stdio: "inherit" });
+    execFileSync("adb", adbArguments(["push", path.join(dir, name), `${folder}/${name}`]), {
+      stdio: "inherit",
+    });
     execFileSync(
       "adb",
-      [
+      adbArguments([
         "shell",
         `am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://${folder}/${name}`,
-      ],
+      ]),
       { stdio: "inherit" },
     );
   }
@@ -361,8 +443,20 @@ export function configureEnvironment() {
   });
 }
 
-async function seedFixture(app: App, prisma: PrismaClient) {
-  const cookie = await signup(app);
+async function seedFixture(app: App, prisma: PrismaClient, existingCookie?: string) {
+  const cookie = existingCookie ?? (await signup(app));
+  const actor = await rpc<{ userId: string; spaceId: string }>(app, cookie, "me");
+  if (!actor.userId || !actor.spaceId)
+    throw new Error("Mobile fixture needs an authenticated scope");
+  return runAsTenant(actor, () => seedScopedFixture(app, prisma, cookie, actor));
+}
+
+async function seedScopedFixture(
+  app: App,
+  prisma: PrismaClient,
+  cookie: string,
+  actor: { userId: string; spaceId: string },
+) {
   const researcher = await rpc<{ id: string }>(app, cookie, "bots/create", {
     name: "Researcher",
     title: "Product research",
@@ -520,6 +614,7 @@ async function seedFixture(app: App, prisma: PrismaClient) {
     routineId: routine.id,
     threadId: botThread.id,
     cookie,
+    actor,
   };
 }
 

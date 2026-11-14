@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited native screenshot flows; Accounts updates follow LICENSE.md.
+
 appId: run.orkbot.app
 name: Android live working status demonstration
 ---
@@ -5,38 +9,19 @@ name: Android live working status demonstration
     clearState: true
     permissions:
       notifications: allow
-# A cold API 34 emulator can show a launcher ANR over the healthy app.
-- extendedWaitUntil:
-    visible: "Sign up for Ork|Pixel Launcher isn't responding"
-    timeout: 60000
-- runFlow:
-    when:
-      visible: "Pixel Launcher isn't responding"
-    commands:
-      - tapOn: "Close app"
-- extendedWaitUntil:
-    visible: "Sign up for Ork"
-    timeout: 30000
-- tapOn: "Sign in"
-- runFlow: helpers/server.yaml
-- tapOn: "Email"
-- inputText: ${ORKBOT_SCREENSHOT_EMAIL}
-- tapOn: "Password"
-- inputText: ${ORKBOT_SCREENSHOT_PASSWORD}
-- hideKeyboard
-- tapOn: "Sign in"
+- runFlow: helpers/sign-in.yaml
 - extendedWaitUntil:
     visible: "Researcher"
     timeout: 30000
 
 # Only the public demo is recorded; sign-in uses disposable fixture credentials.
 - startRecording: ${ORKBOT_NOTIFICATION_VIDEO}
-- openLink: "orkbot:///account"
+- runFlow: helpers/open-account.yaml
 - scrollUntilVisible:
     element: "Live working status"
     direction: DOWN
 - tapOn: "Live working status"
-- openLink: "orkbot:///thread?botId=${ORKBOT_SCREENSHOT_BOT_ID}&name=Researcher"
+- runFlow: helpers/open-researcher.yaml
 - extendedWaitUntil:
     visible: "Message Researcher"
     timeout: 10000
@@ -70,7 +55,7 @@ name: Android live working status demonstration
 - extendedWaitUntil:
     notVisible: "Stop"
     timeout: 30000
-- openLink: "orkbot:///account"
+- runFlow: helpers/open-account.yaml
 - scrollUntilVisible:
     element: "Live working status"
     direction: DOWN

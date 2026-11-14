@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+appId: run.orkbot.app
+---
+- runFlow: home.yaml
+- tapOn:
+    text: "Researcher"
+    index: 0
+- extendedWaitUntil:
+    visible: "Message Researcher"
+    timeout: 15000

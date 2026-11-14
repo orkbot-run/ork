@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited native screenshot flows; Accounts updates follow LICENSE.md.
+
 appId: run.orkbot.app
 name: Keyboard lifecycle regression
 tags:
@@ -8,46 +12,13 @@ tags:
     permissions:
       notifications: deny
 
-# A cold API 34 emulator can show a launcher ANR over the healthy app.
-- extendedWaitUntil:
-    visible: "Sign up for Ork|Pixel Launcher isn't responding"
-    timeout: 60000
-- runFlow:
-    when:
-      visible: "Pixel Launcher isn't responding"
-    commands:
-      - tapOn: "Close app"
-- extendedWaitUntil:
-    visible: "Sign up for Ork"
-    timeout: 30000
-- takeScreenshot: "02-sign-up"
-- tapOn: "Sign in"
-- runFlow:
-    when:
-      notVisible:
-        id: "server-address"
-    commands:
-      - assertVisible: "Sign in to Ork"
-      - takeScreenshot: "01-sign-in"
-      - tapOn: "Use a custom server"
-- assertVisible: "Server"
-- takeScreenshot: "03-server"
-- runFlow: helpers/server.yaml
-
-- tapOn: "Email"
-- inputText: ${ORKBOT_SCREENSHOT_EMAIL}
-- tapOn: "Password"
-- inputText: ${ORKBOT_SCREENSHOT_PASSWORD}
-- hideKeyboard
-- tapOn: "Sign in"
-- tapOn:
-    text: "Don’t allow"
-    optional: true
-
+- runFlow: helpers/sign-in.yaml
 - extendedWaitUntil:
     visible: "Researcher"
     timeout: 30000
-- openLink: "orkbot:///thread?botId=${ORKBOT_SCREENSHOT_BOT_ID}&name=Researcher"
+# Make cold-start restoration explicit when the account belongs to several organizations.
+- runFlow: helpers/set-default-organization.yaml
+- runFlow: helpers/open-researcher.yaml
 - extendedWaitUntil:
     visible: "Message Researcher"
     timeout: 15000
@@ -80,29 +51,21 @@ tags:
 - assertVisible: "Send"
 - takeScreenshot: "keyboard-restarted"
 - hideKeyboard
-- openLink: "orkbot:///account"
+- runFlow: helpers/open-account.yaml
 - scrollUntilVisible:
     element: "Sign out"
     direction: DOWN
 - tapOn: "Sign out"
-- extendedWaitUntil:
-    visible: "Sign in to Ork"
-    timeout: 15000
-- tapOn: "Email"
-- inputText: ${ORKBOT_SCREENSHOT_EMAIL}
-- tapOn: "Password"
-- inputText: ${ORKBOT_SCREENSHOT_PASSWORD}
-- hideKeyboard
-- tapOn: "Sign in"
+- runFlow: helpers/sign-in.yaml
 - extendedWaitUntil:
     visible: "Researcher"
     timeout: 15000
-- openLink: "orkbot:///thread?botId=${ORKBOT_SCREENSHOT_BOT_ID}&name=Researcher"
+- runFlow: helpers/open-researcher.yaml
 - extendedWaitUntil:
     visible: "Message Researcher"
     timeout: 15000
+- assertNotVisible: 'Keyboard lifecycle check\nSecond line'
 - tapOn: "Message Researcher"
-- eraseText: 100
 - inputText: "Keyboard lifecycle check"
 - pressKey: Enter
 - inputText: "Second line"

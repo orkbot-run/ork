@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+appId: run.orkbot.app
+---
+- runFlow: open-account.yaml
+- tapOn: "Workspace,.*"
+- runFlow:
+    when:
+      visible: "Set as default organization"
+    commands:
+      - tapOn: "Set as default organization"
+- extendedWaitUntil:
+    visible: "Default organization"
+    timeout: 15000
+- tapOn: "Cancel"
+- runFlow: home.yaml

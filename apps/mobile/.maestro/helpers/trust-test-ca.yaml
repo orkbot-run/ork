@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+appId: com.android.settings
+name: Trust the isolated Accounts test CA
+tags:
+  - android
+---
+# Bootstrap pushes and media-scans the public certificate in Downloads, then
+# restarts Settings at android.settings.SECURITY_SETTINGS before this standard flow.
+- scrollUntilVisible:
+    element: "More security & privacy"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "More security & privacy"
+- scrollUntilVisible:
+    element: "Encryption & credentials"
+    direction: DOWN
+    timeout: 15000
+- tapOn: "Encryption & credentials"
+- tapOn: "Install a certificate"
+- tapOn: "CA certificate"
+- tapOn: "INSTALL ANYWAY"
+- runFlow:
+    when:
+      visible: "Show roots"
+    commands:
+      - tapOn: "Show roots"
+- tapOn: "Downloads"
+- extendedWaitUntil:
+    visible: "ork-accounts-test-ca.crt"
+    timeout: 15000
+- tapOn: "ork-accounts-test-ca.crt"
+- extendedWaitUntil:
+    visible: ".*Certificate authority installed"
+    timeout: 15000
