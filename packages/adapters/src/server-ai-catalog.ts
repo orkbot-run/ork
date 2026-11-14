@@ -462,6 +462,9 @@ export class ServerAICatalog {
       fallback?: boolean;
       priority: number;
       monthlyBudgetMicros: number | null;
+      preserveBudget?: boolean;
+      expectedRevision?: number;
+      preserveDefault?: boolean;
     },
   ) {
     const data = z
@@ -473,6 +476,9 @@ export class ServerAICatalog {
         fallback: z.boolean().default(false),
         priority: z.number().int().min(0).max(1000),
         monthlyBudgetMicros: microsSchema,
+        preserveBudget: z.boolean().optional(),
+        expectedRevision: z.number().int().positive().optional(),
+        preserveDefault: z.boolean().optional(),
       })
       .strict()
       .parse(input);
@@ -496,13 +502,30 @@ export class ServerAICatalog {
           account.localOrganizationId !== workspace.organizationId
         )
           return deny("forbidden");
+        if (data.expectedRevision !== undefined && data.expectedRevision !== assignment.revision)
+          return deny("conflict");
         const models = modelsSchema.parse(account.models);
         if (
           !data.allowedModels.includes(data.defaultModelId) ||
           data.allowedModels.some((model) => !models.includes(model))
         )
           return deny("invalid");
-        if (data.enabled && data.isDefault)
+        const isDefault = data.preserveDefault ? assignment.isDefault : data.isDefault;
+        if (data.enabled && isDefault && data.preserveDefault) {
+          const otherDefault = await tx.workspaceAIConnection.findFirst({
+            where: {
+              spaceId: actor.spaceId,
+              bindingVersion: workspace.version,
+              available: true,
+              enabled: true,
+              isDefault: true,
+              connectionId: { not: connectionId },
+            },
+            select: { connectionId: true },
+          });
+          if (otherDefault) return deny("conflict");
+        }
+        if (data.enabled && isDefault && !data.preserveDefault)
           await tx.workspaceAIConnection.updateMany({
             where: {
               spaceId: actor.spaceId,
@@ -512,12 +535,22 @@ export class ServerAICatalog {
             },
             data: { isDefault: false, revision: { increment: 1 } },
           });
+        const {
+          preserveBudget,
+          preserveDefault: _preserveDefault,
+          expectedRevision: _expectedRevision,
+          ...configuration
+        } = data;
         await tx.workspaceAIConnection.update({
           where: { spaceId_connectionId: { spaceId: actor.spaceId, connectionId } },
           data: {
-            ...data,
-            monthlyBudgetMicros:
-              data.monthlyBudgetMicros === null ? null : BigInt(data.monthlyBudgetMicros),
+            ...configuration,
+            isDefault,
+            monthlyBudgetMicros: preserveBudget
+              ? assignment.monthlyBudgetMicros
+              : data.monthlyBudgetMicros === null
+                ? null
+                : BigInt(data.monthlyBudgetMicros),
             bindingVersion: workspace.version,
             revision: { increment: 1 },
           },

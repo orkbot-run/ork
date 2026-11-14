@@ -18,6 +18,7 @@ function defaultModel(catalog: ModelCatalogEntry[], provider: string) {
 
 export function ServerAIAccountForm({
   account,
+  hideBudget,
   catalog,
   client,
   isCurrent,
@@ -25,6 +26,7 @@ export function ServerAIAccountForm({
   onCancel,
 }: {
   account?: RpcOutput<"serverAI/status">["accounts"][number];
+  hideBudget?: boolean;
   catalog: ModelCatalogEntry[];
   client: RpcClient;
   isCurrent(): boolean;
@@ -116,7 +118,9 @@ export function ServerAIAccountForm({
           ),
         ],
         concurrencyLimit: limit,
-        monthlyBudgetMicros: parseAIBudget(budget),
+        monthlyBudgetMicros: hideBudget
+          ? (account?.monthlyBudgetMicros ?? null)
+          : parseAIBudget(budget),
       });
     } catch {
       setError(t`Could not save`);
@@ -146,7 +150,9 @@ export function ServerAIAccountForm({
         label: label.trim(),
         models: allowed,
         concurrencyLimit: limit,
-        monthlyBudgetMicros: parseAIBudget(budget),
+        monthlyBudgetMicros: hideBudget
+          ? (account?.monthlyBudgetMicros ?? null)
+          : parseAIBudget(budget),
       };
       const connection = {
         provider,
@@ -321,19 +327,21 @@ export function ServerAIAccountForm({
           disabled={locked}
         />
       </div>
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-budget`}>
-          <Trans>Monthly budget (USD)</Trans>
-        </Label>
-        <Input
-          id={`${id}-budget`}
-          value={budget}
-          onChange={(event) => setBudget(event.target.value)}
-          disabled={locked}
-          inputMode="decimal"
-          placeholder={t`Unlimited`}
-        />
-      </div>
+      {!hideBudget ? (
+        <div className="grid gap-2">
+          <Label htmlFor={`${id}-budget`}>
+            <Trans>Monthly budget (USD)</Trans>
+          </Label>
+          <Input
+            id={`${id}-budget`}
+            value={budget}
+            onChange={(event) => setBudget(event.target.value)}
+            disabled={locked}
+            inputMode="decimal"
+            placeholder={t`Unlimited`}
+          />
+        </div>
+      ) : null}
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}

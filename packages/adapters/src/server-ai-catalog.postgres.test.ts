@@ -231,6 +231,102 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
   const settle = (claim: AIExecutionClaim, cost: number | null) =>
     claimOwners.get(claim)!.settle(claim, cost);
 
+  it("preserves the latest budget when setup submits a stale budget value", async () => {
+    const account = await catalog.create(admin, input());
+    await assign(account.id, admin, 0, 500);
+    await catalog.configure(admin, account.id, {
+      enabled: true,
+      allowedModels: ["model-a"],
+      defaultModelId: "model-a",
+      isDefault: true,
+      fallback: false,
+      priority: 0,
+      monthlyBudgetMicros: null,
+      preserveBudget: true,
+    });
+    expect((await catalog.list(admin))[0]!.monthlyBudgetMicros).toBe(500);
+    await catalog.configure(admin, account.id, {
+      enabled: true,
+      allowedModels: ["model-a"],
+      defaultModelId: "model-a",
+      isDefault: true,
+      fallback: false,
+      priority: 0,
+      monthlyBudgetMicros: null,
+    });
+    expect((await catalog.list(admin))[0]!.monthlyBudgetMicros).toBeNull();
+  });
+
+  it("rejects a stale assignment revision before changing defaults or budget", async () => {
+    const account = await catalog.create(admin, input());
+    await assign(account.id, admin, 0, 500);
+    const original = (await catalog.list(admin))[0]!;
+    await catalog.configure(admin, account.id, {
+      enabled: true,
+      allowedModels: ["model-b"],
+      defaultModelId: "model-b",
+      isDefault: true,
+      fallback: false,
+      priority: 0,
+      monthlyBudgetMicros: 800,
+    });
+    await expect(
+      catalog.configure(admin, account.id, {
+        enabled: true,
+        allowedModels: ["model-a"],
+        defaultModelId: "model-a",
+        isDefault: true,
+        fallback: false,
+        priority: 0,
+        monthlyBudgetMicros: null,
+        preserveBudget: true,
+        expectedRevision: original.assignmentRevision,
+      }),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect((await catalog.list(admin))[0]).toMatchObject({
+      defaultModelId: "model-b",
+      monthlyBudgetMicros: 800,
+    });
+  });
+
+  it("does not displace a newer default when enabling an old disabled default", async () => {
+    const old = await catalog.create(admin, input("Old"));
+    const added = await catalog.create(admin, input("Added"));
+    await assign(old.id);
+    await catalog.configure(admin, old.id, {
+      enabled: false,
+      allowedModels: ["model-a"],
+      defaultModelId: "model-a",
+      isDefault: true,
+      fallback: false,
+      priority: 0,
+      monthlyBudgetMicros: null,
+    });
+    const oldRow = (await catalog.list(admin)).find((row) => row.id === old.id)!;
+    await catalog.offer(admin, admin.spaceId, added.id, true);
+    await system(() =>
+      prisma!.workspaceAIConnection.update({
+        where: { spaceId_connectionId: { spaceId: admin.spaceId, connectionId: added.id } },
+        data: { enabled: true, isDefault: true, defaultModelId: "model-a" },
+      }),
+    );
+    await expect(
+      catalog.configure(admin, old.id, {
+        enabled: true,
+        allowedModels: oldRow.allowedModels,
+        defaultModelId: oldRow.defaultModelId!,
+        isDefault: oldRow.isDefault,
+        fallback: oldRow.fallback,
+        priority: oldRow.priority,
+        monthlyBudgetMicros: oldRow.monthlyBudgetMicros,
+        expectedRevision: oldRow.assignmentRevision,
+        preserveBudget: true,
+        preserveDefault: true,
+      }),
+    ).rejects.toMatchObject({ code: "conflict" });
+    expect(await catalog.choices(member)).toEqual([{ connectionId: added.id, modelId: "model-a" }]);
+  });
+
   it("stores multiple accounts of one provider without leaking credentials or unrelated offers", async () => {
     const first = await catalog.create(admin, input("First"));
     const second = await catalog.create(admin, input("Second"));

@@ -67,7 +67,15 @@ export function AISettingsFrame({
 }
 
 type Assignment = RpcOutput<"serverAI/status">["connections"][number];
-export function ServerAISettings({ embedded, onClose }: { embedded?: boolean; onClose(): void }) {
+export function ServerAISettings({
+  embedded,
+  onboarding,
+  onClose,
+}: {
+  embedded?: boolean;
+  onboarding?: boolean;
+  onClose(): void;
+}) {
   const { t } = useLingui();
   const queries = useSpaceQueries();
   const queryClient = useQueryClient();
@@ -80,6 +88,7 @@ export function ServerAISettings({ embedded, onClose }: { embedded?: boolean; on
   const status = useQuery({
     ...queries.serverAI.status.queryOptions(),
     queryFn: () => owner.client.serverAI.status(),
+    refetchOnWindowFocus: "always",
   });
   const catalog = useQuery({
     ...queries.serverAI.catalog.queryOptions(),
@@ -108,7 +117,7 @@ export function ServerAISettings({ embedded, onClose }: { embedded?: boolean; on
     if (owner.isCurrent())
       await queryClient.invalidateQueries({ queryKey: queries.me.queryOptions().queryKey });
   };
-  async function action(work: (signal: AbortSignal) => Promise<unknown>) {
+  async function action(work: (signal: AbortSignal) => Promise<unknown>, refreshOnError = false) {
     if (operation.current || !owner.isCurrent()) return false;
     const controller = new AbortController();
     operation.current = controller;
@@ -119,7 +128,10 @@ export function ServerAISettings({ embedded, onClose }: { embedded?: boolean; on
       if (owner.isCurrent() && !controller.signal.aborted) await refresh();
       return !controller.signal.aborted && owner.isCurrent();
     } catch {
-      if (owner.isCurrent() && !controller.signal.aborted) setError(t`Could not save`);
+      if (owner.isCurrent() && !controller.signal.aborted) {
+        setError(t`Could not save`);
+        if (refreshOnError) await status.refetch().catch(() => undefined);
+      }
       return false;
     } finally {
       if (operation.current === controller) operation.current = null;
@@ -128,8 +140,20 @@ export function ServerAISettings({ embedded, onClose }: { embedded?: boolean; on
   }
   const configure = (row: Assignment, patch: Partial<RpcInput<"serverAI/configure">>) =>
     action(async (signal) => {
-      await owner.client.serverAI.configure(workspaceAIUpdate(row, patch), { signal });
-    });
+      await owner.client.serverAI.configure(
+        {
+          ...workspaceAIUpdate(row, patch),
+          ...(onboarding
+            ? {
+                preserveBudget: true,
+                expectedRevision: row.assignmentRevision,
+                ...(!Object.hasOwn(patch, "isDefault") ? { preserveDefault: true } : {}),
+              }
+            : {}),
+        },
+        { signal },
+      );
+    }, onboarding);
   const value = status.data;
   return (
     <AISettingsFrame embedded={embedded} onClose={onClose}>
@@ -145,7 +169,7 @@ export function ServerAISettings({ embedded, onClose }: { embedded?: boolean; on
             <Trans>Retry</Trans>
           </Button>
         ) : null}
-        {value?.canManageWorkspace ? (
+        {value?.canManageWorkspace && !onboarding ? (
           <WorkspaceAIBudgetForm
             key={`${value.spaceId}:${value.workspaceMonthlyBudgetMicros}`}
             budget={value.workspaceMonthlyBudgetMicros}
@@ -211,6 +235,7 @@ export function ServerAISettings({ embedded, onClose }: { embedded?: boolean; on
               <WorkspaceAIAccountForm
                 key={`${row.id}:${row.assignmentRevision}`}
                 row={row}
+                hideBudget={onboarding}
                 busy={busy}
                 onSave={(patch) => configure(row, patch)}
                 onCancel={() => setEditingAssignment(null)}
@@ -233,17 +258,19 @@ export function ServerAISettings({ embedded, onClose }: { embedded?: boolean; on
                 <div className="grid gap-2 border-b border-border pb-3" key={row.id}>
                   <span className="text-sm font-medium">{row.label}</span>
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy || !catalog.data}
-                      onClick={() => {
-                        setAdding(false);
-                        setEditingAccount(editingAccount === row.id ? null : row.id);
-                      }}
-                    >
-                      <Trans>Edit AI account</Trans>
-                    </Button>
+                    {!onboarding ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy || !catalog.data}
+                        onClick={() => {
+                          setAdding(false);
+                          setEditingAccount(editingAccount === row.id ? null : row.id);
+                        }}
+                      >
+                        <Trans>Edit AI account</Trans>
+                      </Button>
+                    ) : null}
                     {value.connections.some((assigned) => assigned.id === row.id) ? (
                       <Button
                         variant="ghost"
@@ -295,10 +322,11 @@ export function ServerAISettings({ embedded, onClose }: { embedded?: boolean; on
                 </div>
               ))}
             </section>
-            {editingAccount && catalog.data ? (
+            {!onboarding && editingAccount && catalog.data ? (
               <ServerAIAccountForm
                 key={editingAccount}
                 account={value.accounts.find((row) => row.id === editingAccount)}
+                hideBudget={onboarding}
                 catalog={catalog.data}
                 client={owner.client}
                 isCurrent={owner.isCurrent}
@@ -312,6 +340,7 @@ export function ServerAISettings({ embedded, onClose }: { embedded?: boolean; on
             {adding && catalog.data ? (
               <ServerAIAccountForm
                 catalog={catalog.data}
+                hideBudget={onboarding}
                 client={owner.client}
                 isCurrent={owner.isCurrent}
                 onSaved={async () => {

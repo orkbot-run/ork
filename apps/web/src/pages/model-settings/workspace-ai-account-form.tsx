@@ -11,11 +11,13 @@ type Assignment = RpcOutput<"serverAI/status">["connections"][number];
 export function WorkspaceAIAccountForm({
   row,
   busy,
+  hideBudget,
   onSave,
   onCancel,
 }: {
   row: Assignment;
   busy: boolean;
+  hideBudget?: boolean;
   onSave(patch: Partial<RpcInput<"serverAI/configure">>): Promise<boolean>;
   onCancel(): void;
 }) {
@@ -33,7 +35,7 @@ export function WorkspaceAIAccountForm({
   async function save() {
     setInvalid(false);
     try {
-      const monthlyBudgetMicros = parseAIBudget(budget);
+      const monthlyBudgetMicros = hideBudget ? row.monthlyBudgetMicros : parseAIBudget(budget);
       if (!/^\d+$/.test(priority) || Number(priority) > 1000 || !allowed.includes(model)) {
         setInvalid(true);
         return;
@@ -92,16 +94,20 @@ export function WorkspaceAIAccountForm({
             </NativeSelectOption>
           ))}
         </NativeSelect>
-        <Label htmlFor={`${id}-budget`}>
-          <Trans>Monthly budget (USD)</Trans>
-        </Label>
-        <Input
-          id={`${id}-budget`}
-          inputMode="decimal"
-          placeholder={t`Unlimited`}
-          value={budget}
-          onChange={(event) => setBudget(event.target.value)}
-        />
+        {!hideBudget ? (
+          <>
+            <Label htmlFor={`${id}-budget`}>
+              <Trans>Monthly budget (USD)</Trans>
+            </Label>
+            <Input
+              id={`${id}-budget`}
+              inputMode="decimal"
+              placeholder={t`Unlimited`}
+              value={budget}
+              onChange={(event) => setBudget(event.target.value)}
+            />
+          </>
+        ) : null}
         <Label htmlFor={`${id}-priority`}>
           <Trans>Fallback priority</Trans>
         </Label>

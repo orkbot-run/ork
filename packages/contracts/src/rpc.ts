@@ -537,7 +537,14 @@ export const appContract = {
       .input(z.object({ spaceId: Id, connectionId: Id, available: z.boolean() }))
       .output(z.object({ ok: z.literal(true) })),
     configure: oc
-      .input(WorkspaceAIConfigurationSchema.extend({ connectionId: Id }))
+      .input(
+        WorkspaceAIConfigurationSchema.extend({
+          connectionId: Id,
+          preserveBudget: z.boolean().optional(),
+          expectedRevision: z.number().int().positive().optional(),
+          preserveDefault: z.boolean().optional(),
+        }),
+      )
       .output(z.object({ ok: z.literal(true) })),
     workspaceBudget: oc
       .input(z.object({ monthlyBudgetMicros: AIBudgetSchema }))

@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 
 import type { RpcOutput } from "@orkbot/contracts";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -18,6 +18,12 @@ const api = vi.hoisted(() => ({
     status: vi.fn(),
     catalog: vi.fn(),
     create: vi.fn(),
+    beginOAuth: vi.fn(),
+    completeOAuth: vi.fn(),
+    finishOAuth: vi.fn(),
+    submitOAuthCode: vi.fn(),
+    cancelOAuth: vi.fn(),
+    update: vi.fn(),
     configure: vi.fn(),
     offer: vi.fn(),
     workspaceBudget: vi.fn(),
@@ -46,6 +52,7 @@ vi.mock("@lingui/react/macro", () => ({
 }));
 
 import { OnboardingPage } from "./Onboarding";
+import { ServerAISettings } from "./ServerAISettings";
 
 const connection = {
   id: "account-a",
@@ -97,17 +104,21 @@ beforeEach(() => {
     },
   ]);
   api.serverAI.create.mockResolvedValue(connection);
+  api.serverAI.update.mockResolvedValue({ ok: true });
   api.serverAI.configure.mockResolvedValue({ ok: true });
   api.serverAI.offer.mockResolvedValue({ ok: true });
   api.onboarding.ensureFirstBot.mockResolvedValue(null);
   host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
-  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+  });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 });
 afterEach(async () => {
   await act(async () => root.unmount());
   queryClient.clear();
+  focusManager.setFocused(undefined);
   document.body.innerHTML = "";
   vi.unstubAllGlobals();
 });
@@ -165,17 +176,46 @@ it("keeps a managed participant out of provider secrets and explains the require
   expect(host.querySelector('[role="alert"]')).not.toBeNull();
 });
 
-it("lets a delegated server administrator create and offer an account without silently assigning workspace access", async () => {
+it("creates an unlimited account and offers it to the workspace during onboarding", async () => {
   let created = false;
+  let offered = false;
+  let enabled = false;
+  let revision = 1;
   api.serverAI.status.mockImplementation(async () =>
-    status({ canManageServer: true, accounts: created ? [connection] : [] }),
+    status({
+      canManageServer: true,
+      canManageWorkspace: true,
+      accounts: created ? [connection] : [],
+      connections: offered
+        ? [
+            {
+              ...assignment,
+              enabled,
+              isDefault: false,
+              defaultModelId: enabled ? "model-a" : null,
+              assignmentRevision: revision,
+            },
+          ]
+        : [],
+    }),
   );
   api.serverAI.create.mockImplementation(async () => {
     created = true;
     return connection;
   });
+  api.serverAI.offer.mockImplementation(async () => {
+    offered = true;
+    return { ok: true };
+  });
+  api.serverAI.configure.mockImplementation(async (input) => {
+    enabled = input.enabled;
+    revision += 1;
+    return { ok: true };
+  });
   await render();
+  expect(host.textContent).not.toContain("budget");
   await click("Add AI account");
+  expect(host.textContent).not.toContain("budget");
   await field("Name", "Fixture server account");
   await field("Models (one per line)", "model-a");
   await field("API key", "fake-non-secret-key");
@@ -183,21 +223,217 @@ it("lets a delegated server administrator create and offer an account without si
   expect(api.serverAI.create).toHaveBeenCalledWith(
     expect.objectContaining({
       label: "Fixture server account",
+      monthlyBudgetMicros: null,
       connection: expect.objectContaining({ apiKey: "fake-non-secret-key" }),
     }),
     { signal: expect.any(AbortSignal) },
   );
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
+  await vi.waitFor(() => expect(host.textContent).toContain("Make available"));
   await click("Make available");
-  expect(api.serverAI.offer).toHaveBeenCalledWith(
+  expect(api.serverAI.offer).toHaveBeenCalledExactlyOnceWith(
     { spaceId: "workspace-a", connectionId: "account-a", available: true },
     { signal: expect.any(AbortSignal) },
   );
-  expect(api.serverAI.configure).not.toHaveBeenCalled();
-  expect(host.textContent).toContain("Ask a workspace administrator");
+  await vi.waitFor(() => expect(host.querySelector('[role="switch"]')).not.toBeNull());
+  let switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
+  await act(async () => switches[0]!.click());
+  expect(api.serverAI.configure).toHaveBeenCalledWith(
+    expect.objectContaining({
+      connectionId: "account-a",
+      enabled: true,
+      preserveBudget: true,
+      preserveDefault: true,
+      expectedRevision: assignment.assignmentRevision,
+    }),
+    { signal: expect.any(AbortSignal) },
+  );
+  await vi.waitFor(() => {
+    switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
+    expect(switches[0]?.getAttribute("aria-checked")).toBe("true");
+  });
+  await act(async () => switches[1]!.click());
+  expect(api.serverAI.configure).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      connectionId: "account-a",
+      enabled: true,
+      isDefault: true,
+      preserveBudget: true,
+      expectedRevision: 2,
+    }),
+    { signal: expect.any(AbortSignal) },
+  );
   noLegacyCredentials();
+});
+
+it("hides account editing and preserves assignment limits during onboarding", async () => {
+  const limited = { ...connection, monthlyBudgetMicros: 1_234_567 };
+  const limitedAssignment = { ...assignment, monthlyBudgetMicros: 7_654_321 };
+  api.serverAI.status.mockResolvedValue(
+    status({
+      canManageServer: true,
+      canManageWorkspace: true,
+      accounts: [limited],
+      connections: [limitedAssignment],
+      workspaceMonthlyBudgetMicros: 9_876_543,
+    }),
+  );
+  await render();
+  expect(host.textContent).not.toContain("budget");
+  expect(host.textContent).not.toContain("Edit AI account");
+  expect(api.serverAI.update).not.toHaveBeenCalled();
+  await click("Models and limits");
+  expect(host.textContent).not.toContain("budget");
+  await click("Save");
+  expect(api.serverAI.configure).toHaveBeenCalledWith(
+    expect.objectContaining({
+      connectionId: limited.id,
+      monthlyBudgetMicros: 7_654_321,
+      preserveBudget: true,
+      expectedRevision: limitedAssignment.assignmentRevision,
+    }),
+    { signal: expect.any(AbortSignal) },
+  );
+  expect(api.serverAI.workspaceBudget).not.toHaveBeenCalled();
+});
+
+it("adds an unlimited subscription and explicitly enables it as the default model", async () => {
+  let signedIn = false;
+  let offered = false;
+  let enabled = false;
+  let revision = 1;
+  const subscription = { ...connection, id: "subscription-account" };
+  api.serverAI.status.mockImplementation(async () =>
+    status({
+      canManageServer: true,
+      canManageWorkspace: true,
+      accounts: signedIn ? [subscription] : [],
+      connections: offered
+        ? [
+            {
+              ...assignment,
+              ...subscription,
+              enabled,
+              isDefault: false,
+              assignmentRevision: revision,
+            },
+          ]
+        : [],
+    }),
+  );
+  api.serverAI.catalog.mockResolvedValue([
+    {
+      provider: "fixture-provider",
+      providerName: "Fixture provider",
+      id: "model-a",
+      label: "Model A",
+      auth: "oauth",
+    },
+  ]);
+  api.serverAI.beginOAuth.mockResolvedValue({
+    loginId: "fixture-login",
+    provider: "fixture-provider",
+    mode: "auth-url",
+    verificationUri: "https://example.test/authorize",
+    expiresInSeconds: 600,
+  });
+  api.serverAI.submitOAuthCode.mockResolvedValue({ ok: true });
+  api.serverAI.completeOAuth.mockResolvedValue({ status: "ready" });
+  api.serverAI.finishOAuth.mockImplementation(async () => {
+    signedIn = true;
+    return { id: subscription.id };
+  });
+  api.serverAI.offer.mockImplementation(async () => {
+    offered = true;
+    return { ok: true };
+  });
+  api.serverAI.configure.mockImplementation(async (input) => {
+    enabled = input.enabled;
+    revision += 1;
+    return { ok: true };
+  });
+  vi.stubGlobal("open", vi.fn());
+  await render();
+  await vi.waitFor(() => {
+    expect(
+      [...host.querySelectorAll("button")].find((node) => node.textContent === "Add AI account")
+        ?.disabled,
+    ).toBe(false);
+  });
+  await click("Add AI account");
+  expect(host.textContent).not.toContain("budget");
+  await click("Sign in");
+  expect(api.serverAI.beginOAuth).toHaveBeenCalledWith(
+    expect.objectContaining({ monthlyBudgetMicros: null, codePage: true }),
+    { signal: expect.any(AbortSignal) },
+  );
+  await field("Verification code", "fixture-code");
+  await click("Complete sign-in");
+  await vi.waitFor(() => expect(host.textContent).toContain("Make available"));
+  await click("Make available");
+  expect(api.serverAI.offer).toHaveBeenCalledWith(
+    { spaceId: "workspace-a", connectionId: subscription.id, available: true },
+    { signal: expect.any(AbortSignal) },
+  );
+  await vi.waitFor(() => expect(host.querySelector('[role="switch"]')).not.toBeNull());
+  let switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
+  await act(async () => switches[0]!.click());
+  expect(api.serverAI.configure).toHaveBeenCalledWith(
+    expect.objectContaining({
+      connectionId: subscription.id,
+      enabled: true,
+      preserveBudget: true,
+      preserveDefault: true,
+      expectedRevision: 1,
+    }),
+    { signal: expect.any(AbortSignal) },
+  );
+  await vi.waitFor(() => {
+    switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
+    expect(switches.length, host.textContent ?? "").toBeGreaterThan(1);
+    expect(switches[0]?.getAttribute("aria-checked")).toBe("true");
+  });
+  await act(async () => switches[1]!.click());
+  expect(api.serverAI.configure).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      connectionId: subscription.id,
+      enabled: true,
+      isDefault: true,
+      preserveBudget: true,
+      expectedRevision: 2,
+    }),
+    { signal: expect.any(AbortSignal) },
+  );
+});
+
+it("keeps budget controls available in embedded settings", async () => {
+  api.serverAI.status.mockResolvedValue(
+    status({
+      canManageWorkspace: true,
+      canManageServer: true,
+      accounts: [connection],
+      connections: [assignment],
+    }),
+  );
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <ServerAISettings embedded onClose={() => undefined} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    ),
+  );
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(host.textContent).toContain("Workspace monthly budget (USD)");
+  expect(host.textContent).toContain("Edit AI account");
+  const enabled = host.querySelector<HTMLButtonElement>('[role="switch"]')!;
+  await act(async () => enabled.click());
+  expect(api.serverAI.configure).toHaveBeenCalledOnce();
+  expect(api.serverAI.configure.mock.calls[0]![0]).not.toHaveProperty("preserveBudget");
+  expect(api.serverAI.configure.mock.calls[0]![0]).not.toHaveProperty("expectedRevision");
+  expect(api.serverAI.configure.mock.calls[0]![0]).not.toHaveProperty("preserveDefault");
 });
 
 it("lets a workspace administrator enable an offered model and continues only after fresh server readiness", async () => {
@@ -214,6 +450,9 @@ it("lets a workspace administrator enable an offered model and continues only af
       connectionId: "account-a",
       enabled: true,
       defaultModelId: "model-a",
+      preserveBudget: true,
+      expectedRevision: assignment.assignmentRevision,
+      preserveDefault: true,
     }),
     { signal: expect.any(AbortSignal) },
   );
@@ -222,6 +461,64 @@ it("lets a workspace administrator enable an offered model and continues only af
   await click("Continue");
   expect(host.querySelector('[data-testid="ready-app"]')).not.toBeNull();
   noLegacyCredentials();
+});
+
+it("keeps the default on fallback changes but allows an explicit default change", async () => {
+  api.serverAI.status.mockResolvedValue(
+    status({ canManageWorkspace: true, connections: [{ ...assignment, enabled: true }] }),
+  );
+  await render();
+  let switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
+  await act(async () => switches[2]!.click());
+  expect(api.serverAI.configure.mock.calls[0]![0]).toEqual(
+    expect.objectContaining({ preserveDefault: true, expectedRevision: 1, fallback: true }),
+  );
+  switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
+  await act(async () => switches[1]!.click());
+  expect(api.serverAI.configure.mock.calls[1]![0]).toEqual(
+    expect.objectContaining({ expectedRevision: 1, isDefault: false }),
+  );
+  expect(api.serverAI.configure.mock.calls[1]![0]).not.toHaveProperty("preserveDefault");
+});
+
+it("reports an assignment conflict without overwriting a newer change", async () => {
+  let revision = assignment.assignmentRevision;
+  api.serverAI.status.mockImplementation(async () =>
+    status({
+      canManageWorkspace: true,
+      connections: [{ ...assignment, assignmentRevision: revision }],
+    }),
+  );
+  api.serverAI.configure.mockImplementationOnce(async () => {
+    revision += 1;
+    throw new Error("Assignment changed");
+  });
+  await render();
+  const statusCalls = api.serverAI.status.mock.calls.length;
+  const enabled = host.querySelector<HTMLButtonElement>('[role="switch"]')!;
+  await act(async () => enabled.click());
+  expect(api.serverAI.configure).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      connectionId: assignment.id,
+      expectedRevision: assignment.assignmentRevision,
+      preserveBudget: true,
+    }),
+    { signal: expect.any(AbortSignal) },
+  );
+  expect(api.serverAI.status.mock.calls.length).toBeGreaterThan(statusCalls);
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Could not save");
+  expect(api.serverAI.configure).toHaveBeenCalledOnce();
+  const currentEnabled = host.querySelector<HTMLButtonElement>('[role="switch"]')!;
+  await act(async () => currentEnabled.click());
+  expect(api.serverAI.configure).toHaveBeenCalledTimes(2);
+  expect(api.serverAI.configure).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      connectionId: assignment.id,
+      expectedRevision: revision,
+      preserveBudget: true,
+    }),
+    { signal: expect.any(AbortSignal) },
+  );
 });
 
 it("fails closed on policy discovery errors and retries without exposing the unmanaged form", async () => {
@@ -276,6 +573,43 @@ it("tells a workspace administrator how to obtain an account without exposing se
   expect(host.textContent).not.toContain("Add AI account");
   expect(api.serverAI.catalog).not.toHaveBeenCalled();
   noLegacyCredentials();
+});
+
+it("refreshes model permissions after returning to the app", async () => {
+  api.serverAI.status.mockResolvedValue(status({ canManageWorkspace: true }));
+  await render();
+  expect(host.textContent).not.toContain("Add AI account");
+  await act(async () => focusManager.setFocused(false));
+  api.serverAI.status.mockResolvedValue(
+    status({ canManageWorkspace: true, canManageServer: true }),
+  );
+  await act(async () => focusManager.setFocused(true));
+  await vi.waitFor(() => expect(host.textContent).toContain("Add AI account"));
+});
+
+it("preserves the account form while permissions refresh on focus", async () => {
+  api.serverAI.status.mockResolvedValue(
+    status({ canManageWorkspace: true, canManageServer: true }),
+  );
+  await render();
+  await vi.waitFor(() => {
+    expect(
+      [...host.querySelectorAll("button")].find((node) => node.textContent === "Add AI account")
+        ?.disabled,
+    ).toBe(false);
+  });
+  await click("Add AI account");
+  await field("Name", "Unfinished account");
+  const callsBeforeFocus = api.serverAI.status.mock.calls.length;
+  await act(async () => focusManager.setFocused(false));
+  await act(async () => focusManager.setFocused(true));
+  await vi.waitFor(() =>
+    expect(api.serverAI.status.mock.calls.length).toBeGreaterThan(callsBeforeFocus),
+  );
+  const id = [...host.querySelectorAll("label")].find(
+    (node) => node.textContent === "Name",
+  )?.htmlFor;
+  expect((document.getElementById(id!) as HTMLInputElement).value).toBe("Unfinished account");
 });
 
 it("keeps server status failures retryable and prevents a readiness bypass", async () => {

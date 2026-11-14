@@ -23,6 +23,7 @@ export function ManagedModelSetup({
   const status = useQuery({
     ...queries.serverAI.status.queryOptions(),
     queryFn: () => owner.client.serverAI.status(),
+    refetchOnWindowFocus: "always",
   });
   const permissions = status.data;
   return (
@@ -41,7 +42,7 @@ export function ManagedModelSetup({
           </Trans>
         </p>
       ) : null}
-      <ServerAISettings embedded onClose={() => undefined} />
+      <ServerAISettings embedded onboarding onClose={() => undefined} />
       {permissions?.available === false ? (
         <div className="grid gap-3">
           <p role="alert" className="text-sm text-destructive">
