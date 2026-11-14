@@ -12,7 +12,8 @@ export function desktopWorkspaceRoute(
 ) {
   return (
     routes.find((row) => row.kind === "local" && row.deviceId !== null) ??
-    routes.find((row) => row.kind === "direct" && row.deviceId === null)
+    routes.find((row) => row.kind === "direct" && row.deviceId === null) ??
+    routes.find((row) => row.kind === "tunnel" && row.deviceId === null)
   );
 }
 

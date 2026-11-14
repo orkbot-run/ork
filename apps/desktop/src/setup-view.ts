@@ -95,6 +95,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   let screen: Screen = "checking";
   let directoryStage: "organization" | "servers" | "location" = "organization";
   let waitingServerIds: Set<string> | null = null;
+  let waitingWorkspaceIds: Set<string> | null = null;
   let operation: Operation | null = null;
   let browserSignIn = false;
   let generation = 0;
@@ -669,8 +670,12 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         const newServer = workspaceCatalog.organizations
           .find((organization) => organization.id === selectedOrganizationId)
           ?.servers.some((server) => !waitingServerIds!.has(server.id));
-        if (newServer) {
+        const newWorkspace = workspaceEntries.some(
+          (workspace) => !waitingWorkspaceIds?.has(workspace.id),
+        );
+        if (newServer || newWorkspace) {
           waitingServerIds = null;
+          waitingWorkspaceIds = null;
           directoryStage = "servers";
           show("servers");
         }
@@ -1046,11 +1051,18 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   });
   on("selfhost", "click", () => {
     if (account && !operation) {
+      const organization = workspaceCatalog?.organizations.find(
+        (row) => row.id === selectedOrganizationId,
+      );
+      command.value = organization
+        ? `${SERVER_INSTALL_COMMAND} -s -- --organization ${organization.id} --auto-direct-route`
+        : `${SERVER_INSTALL_COMMAND} -s -- --auto-direct-route`;
       waitingServerIds = new Set(
         workspaceCatalog?.organizations
           .find((organization) => organization.id === selectedOrganizationId)
           ?.servers.map((server) => server.id) ?? [],
       );
+      waitingWorkspaceIds = new Set(workspaceEntries.map((workspace) => workspace.id));
       show("selfhost");
     }
   });
@@ -1121,6 +1133,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     selectedOrganizationId = undefined;
     directoryStage = "organization";
     waitingServerIds = null;
+    waitingWorkspaceIds = null;
     workspaceSnapshot = "";
     workspaceProbeGeneration++;
     element("workspaces-section").hidden = true;

@@ -1173,12 +1173,12 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
   });
 
-  it("shows a static self-host command without creating an installation or pairing code", async () => {
+  it("shows a self-host command without creating an installation or pairing code", async () => {
     const { invoke } = await continueSetup({ session: account });
     node("selfhost").click();
     await flush();
     const value = node<HTMLTextAreaElement>("install-command").value;
-    expect(value).toBe("curl -fsSL https://install.ork.run | sudo -H sh");
+    expect(value).toBe("curl -fsSL https://install.ork.run | sudo -H sh -s -- --auto-direct-route");
     expect(node("installation").hidden).toBe(false);
     expect(node("setup").hidden).toBe(true);
     expect(invoke).not.toHaveBeenCalledWith("create_server_installation");
@@ -1187,6 +1187,26 @@ describe("bundled desktop setup", () => {
     await flush();
     expect(document.activeElement?.id).toBe("install-command");
     expect(node<HTMLTextAreaElement>("install-command").selectionEnd).toBe(value.length);
+  });
+
+  it("includes the selected organization in the self-host installer command", async () => {
+    const workspace = {
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Workspace",
+      url: "https://server.example.com",
+    };
+    await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "workspace_catalog") return catalogFixture([workspace]);
+        if (name === "list_servers") return saved;
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    expect(node<HTMLTextAreaElement>("install-command").value).toBe(
+      "curl -fsSL https://install.ork.run | sudo -H sh -s -- --organization aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa --auto-direct-route",
+    );
   });
 
   it("shows a newly authorized server while waiting on the install instructions", async () => {
@@ -1252,6 +1272,42 @@ describe("bundled desktop setup", () => {
       expect(invoke).toHaveBeenCalledTimes(calls);
     },
   );
+
+  it("shows an existing pending server when its workspace becomes available", async () => {
+    vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    const workspace = {
+      id: "11111111-1111-4111-8111-111111111111",
+      name: "Workspace",
+      url: "https://server.example.com",
+    };
+    const ready = catalogFixture([workspace]);
+    let catalog: typeof ready = {
+      ...ready,
+      organizations: ready.organizations.map((organization) => ({
+        ...organization,
+        servers: organization.servers.map((server) => ({
+          ...server,
+          state: "pending",
+          routes: [],
+        })),
+      })),
+    };
+    await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "workspace_catalog") return catalog;
+        if (name === "list_servers") return saved;
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    expect(screen()).toBe("selfhost");
+    catalog = ready;
+    window.dispatchEvent(new Event("focus"));
+    await flush();
+    expect(screen()).toBe("servers");
+    expect(node("workspaces").textContent).toContain("Workspace");
+  });
 
   it("retries the directory after a stalled saved-server request", async () => {
     vi.useFakeTimers();

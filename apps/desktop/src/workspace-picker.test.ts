@@ -117,15 +117,13 @@ it("retains an unavailable explicit organization and never selects a different o
   expect(open).not.toHaveBeenCalled();
 });
 
-it("keeps an authorized workspace unavailable until the app supports its route", () => {
+it("opens an authorized workspace when a relay is its only route", () => {
   const value = catalog();
   value.organizations[1]!.servers[0]!.routes[0]!.kind = "tunnel";
   const { container, entries, open } = render(value, id(2));
-  expect(container.textContent).toContain("Server unavailable");
-  expect(entries).toEqual([]);
-  for (const button of container.querySelectorAll<HTMLButtonElement>(".workspace-choice"))
-    button.click();
-  expect(open).not.toHaveBeenCalled();
+  expect(entries).toHaveLength(1);
+  container.querySelector<HTMLButtonElement>(".workspace-choice")!.click();
+  expect(open).toHaveBeenCalledWith(id(5));
 });
 
 it("supports keyboard navigation and restores focus when dismissed", () => {

@@ -8,6 +8,7 @@ use std::{
 };
 
 use base64::{engine::general_purpose::STANDARD, Engine};
+use futures_util::{stream::FuturesUnordered, StreamExt};
 use ork_installation_transport::{HttpHeader, HttpRequest, InstallationConnection, RelayRoute};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -35,14 +36,34 @@ pub struct Selection {
 }
 
 impl Selection {
-    /// Check the pinned installation, using a relay capability only after direct transport fails.
-    pub async fn probe_available<F, Fut>(mut self, relay_ticket: F) -> Result<Self, String>
+    /// Check each direct route against the same pinned installation before using the relay.
+    pub async fn probe_direct_candidates<F, Fut>(
+        mut self,
+        direct_candidates: Vec<String>,
+        relay_ticket: F,
+    ) -> Result<Self, String>
     where
         F: FnOnce(Self) -> Fut,
         Fut: std::future::Future<Output = Result<String, String>>,
     {
-        if !self.uses_relay() && self.probe(None).await.is_ok() {
-            return Ok(self);
+        if !self.prefer_relay {
+            if direct_candidates.is_empty() && !self.uses_relay() && self.probe(None).await.is_ok()
+            {
+                return Ok(self);
+            }
+            let mut probes = direct_candidates
+                .into_iter()
+                .map(|candidate| {
+                    let mut route = self.clone();
+                    route.direct_origin = Some(candidate);
+                    async move { route.probe(None).await.ok().map(|()| route) }
+                })
+                .collect::<FuturesUnordered<_>>();
+            while let Some(result) = probes.next().await {
+                if let Some(route) = result {
+                    return Ok(route);
+                }
+            }
         }
         if self.relay_origin.is_none() {
             return Err("Could not connect to this installation. Try again.".into());

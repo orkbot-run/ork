@@ -154,8 +154,9 @@ async fn workspace_card_and_connect_probe_the_pinned_physical_route_not_the_logi
             .unwrap();
         }
         let expected = selection.clone();
+        let direct = selection.direct_origin.clone().into_iter().collect();
         let result = selection
-            .probe_available(|_| async {
+            .probe_direct_candidates(direct, |_| async {
                 panic!("Healthy direct transport must not request a relay ticket")
             })
             .await
@@ -172,8 +173,11 @@ async fn workspace_card_and_connect_probe_the_pinned_physical_route_not_the_logi
 #[tokio::test]
 async fn a_workspace_probe_rejects_an_advertised_identity_with_the_wrong_certificate() {
     let (selection, server, requests) = installation(true).await;
+    let direct = selection.direct_origin.clone().into_iter().collect();
     assert!(selection
-        .probe_available(|_| async { panic!("A missing relay route cannot request a capability") })
+        .probe_direct_candidates(direct, |_| async {
+            panic!("A missing relay route cannot request a capability")
+        })
         .await
         .is_err());
     assert_eq!(requests.load(Ordering::SeqCst), 0);
@@ -181,4 +185,61 @@ async fn a_workspace_probe_rejects_an_advertised_identity_with_the_wrong_certifi
         .await
         .unwrap()
         .unwrap();
+}
+
+#[tokio::test]
+async fn a_later_direct_route_is_tried_with_the_same_pinned_identity() {
+    let (selection, server, requests) = installation(false).await;
+    let available = selection.direct_origin.clone().unwrap();
+    let offline = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let missing = format!("http://{}", offline.local_addr().unwrap());
+    drop(offline);
+    let target = selection.target.clone();
+    let selected = selection
+        .probe_direct_candidates(vec![missing, available.clone()], |_| async {
+            panic!("A healthy direct route must not use the relay")
+        })
+        .await
+        .unwrap();
+    assert_eq!(selected.target, target);
+    assert_eq!(selected.direct_origin.as_deref(), Some(available.as_str()));
+    assert_eq!(requests.load(Ordering::SeqCst), 1);
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn a_wrong_identity_on_one_route_cannot_override_the_pin_for_the_next() {
+    let (wrong, wrong_server, wrong_requests) = installation(true).await;
+    let (selection, server, requests) = installation(false).await;
+    let available = selection.direct_origin.clone().unwrap();
+    let selected = selection
+        .probe_direct_candidates(
+            vec![wrong.direct_origin.unwrap(), available.clone()],
+            |_| async { panic!("A healthy direct route must not use the relay") },
+        )
+        .await
+        .unwrap();
+    assert_eq!(selected.direct_origin.as_deref(), Some(available.as_str()));
+    assert_eq!(wrong_requests.load(Ordering::SeqCst), 0);
+    assert_eq!(requests.load(Ordering::SeqCst), 1);
+    wrong_server.await.unwrap();
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn relay_is_requested_only_after_every_direct_route_fails() {
+    let (mut selection, server, requests) = installation(false).await;
+    server.abort();
+    let direct = selection.direct_origin.clone().unwrap();
+    selection.relay_origin = Some("https://relay.example.test".into());
+    let expected = selection.target.clone();
+    let result = selection
+        .probe_direct_candidates(vec![direct], |route| async move {
+            assert!(route.prefer_relay);
+            assert_eq!(route.target, expected);
+            Err("relay unavailable".to_owned())
+        })
+        .await;
+    assert_eq!(result.unwrap_err(), "relay unavailable");
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
 }

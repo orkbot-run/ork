@@ -179,32 +179,46 @@ impl WorkspaceCatalog {
         Ok(server)
     }
 
-    pub fn direct_origin(
+    pub fn direct_origins(
         &self,
         target: &WorkspaceTarget,
         origin: &Url,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<Vec<String>, String> {
         let server = self.server_for_target(target)?;
         if origin.origin().ascii_serialization()
             != format!("https://{}.installation.ork.invalid", target.server_id)
         {
-            return Ok(None);
+            return Ok(Vec::new());
         }
-        let Some(route) = server
-            .routes
-            .iter()
-            .find(|row| row.kind == "direct" && row.device_id.is_none())
-        else {
-            return Ok(None);
-        };
-        let parsed = normalize_server_url(&route.address)?;
-        if parsed.origin().ascii_serialization() != route.address
-            || parsed.origin() == self::origin().origin()
-            || !uuid(&route.id)
-        {
+        // Accounts can add its own tunnel to the eight installation-published routes.
+        if server.routes.len() > 9 {
             return Err(ERROR.into());
         }
-        Ok(Some(route.address.clone()))
+        let routes = server
+            .routes
+            .iter()
+            .filter(|row| row.kind == "direct" && row.device_id.is_none());
+        let mut origins = Vec::new();
+        for route in routes {
+            let parsed = normalize_server_url(&route.address)?;
+            if parsed.origin().ascii_serialization() != route.address
+                || parsed.scheme() != "https"
+                || parsed.origin() == self::origin().origin()
+                || parsed.host_str().is_some_and(|host| {
+                    host == "localhost"
+                        || host.ends_with(".localhost")
+                        || host
+                            .trim_matches(['[', ']'])
+                            .parse::<std::net::IpAddr>()
+                            .is_ok_and(|ip| ip.is_loopback())
+                })
+                || !uuid(&route.id)
+            {
+                return Err(ERROR.into());
+            }
+            origins.push(route.address.clone());
+        }
+        Ok(origins)
     }
 
     pub fn relay_origin(
@@ -234,6 +248,22 @@ impl WorkspaceCatalog {
             return Err(ERROR.into());
         }
         Ok(Some(route.address.clone()))
+    }
+
+    /// Return the virtual origin only for remote routes belonging to this exact workspace pin.
+    pub fn remote_origin_for_target(
+        &self,
+        target: &WorkspaceTarget,
+    ) -> Result<Option<Url>, String> {
+        target.validate()?;
+        let origin = Url::parse(&format!(
+            "https://{}.installation.ork.invalid",
+            target.server_id
+        ))
+        .map_err(|_| ERROR)?;
+        let direct = self.direct_origins(target, &origin)?;
+        let relay = self.relay_origin(target, &origin)?;
+        Ok((!direct.is_empty() || relay.is_some()).then_some(origin))
     }
 
     pub fn local_installation_routes(
@@ -1654,8 +1684,8 @@ mod tests {
         let target = workspace.target.unwrap();
         let origin = Url::parse(&workspace.url).unwrap();
         assert_eq!(
-            catalog.direct_origin(&target, &origin).unwrap().as_deref(),
-            Some("https://team.example.com")
+            catalog.direct_origins(&target, &origin).unwrap(),
+            vec!["https://team.example.com"]
         );
         assert_eq!(
             catalog.relay_origin(&target, &origin).unwrap().as_deref(),
@@ -1663,7 +1693,86 @@ mod tests {
         );
         let mut wrong = target;
         wrong.binding_version += 1;
-        assert!(catalog.direct_origin(&wrong, &origin).is_err());
+        assert!(catalog.direct_origins(&wrong, &origin).is_err());
+    }
+
+    #[test]
+    fn all_direct_candidates_must_have_valid_public_origins() {
+        let mut value = workspace_catalog();
+        value["organizations"][0]["servers"][0]["routes"].as_array_mut().unwrap().push(
+            serde_json::json!({"id": "22222222-2222-4222-8222-222222222222", "kind": "direct", "address": "https://second.example.com", "deviceId": null}),
+        );
+        let catalog: WorkspaceCatalog = serde_json::from_value(value.clone()).unwrap();
+        let workspace = catalog.clone().workspaces().unwrap().pop().unwrap();
+        let target = workspace.target.unwrap();
+        let origin = Url::parse(&workspace.url).unwrap();
+        assert_eq!(
+            catalog.direct_origins(&target, &origin).unwrap(),
+            vec!["https://team.example.com", "https://second.example.com"]
+        );
+        value["organizations"][0]["servers"][0]["routes"][1]["address"] =
+            serde_json::json!("https://127.0.0.1");
+        let invalid: WorkspaceCatalog = serde_json::from_value(value).unwrap();
+        assert!(invalid.direct_origins(&target, &origin).is_err());
+    }
+
+    #[test]
+    fn accounts_tunnel_can_extend_eight_installation_routes() {
+        let mut value = workspace_catalog();
+        let routes = value["organizations"][0]["servers"][0]["routes"]
+            .as_array_mut()
+            .unwrap();
+        for index in 1..8 {
+            routes.push(serde_json::json!({"id": format!("00000000-0000-4000-8000-{index:012}"), "kind": "direct", "address": format!("https://server-{index}.example.com"), "deviceId": null}));
+        }
+        routes.push(serde_json::json!({"id": "99999999-9999-4999-8999-999999999999", "kind": "tunnel", "address": "https://relay.example.com", "deviceId": null}));
+        let catalog: WorkspaceCatalog = serde_json::from_value(value.clone()).unwrap();
+        let workspace = catalog.clone().workspaces().unwrap().pop().unwrap();
+        let target = workspace.target.unwrap();
+        let origin = Url::parse(&workspace.url).unwrap();
+        assert_eq!(catalog.direct_origins(&target, &origin).unwrap().len(), 8);
+        value["organizations"][0]["servers"][0]["routes"].as_array_mut().unwrap().push(serde_json::json!({"id": DEVICE, "kind": "direct", "address": "https://extra.example.com", "deviceId": null}));
+        let invalid: WorkspaceCatalog = serde_json::from_value(value).unwrap();
+        assert!(invalid.direct_origins(&target, &origin).is_err());
+    }
+
+    #[test]
+    fn local_fallback_only_uses_remote_routes_for_the_same_authorized_pin() {
+        let mut value = workspace_catalog();
+        value["organizations"][0]["servers"][0]["routes"].as_array_mut().unwrap().push(
+            serde_json::json!({"id": "22222222-2222-4222-8222-222222222222", "kind": "local", "address": "http://127.0.0.1:5173", "deviceId": DEVICE}),
+        );
+        let catalog: WorkspaceCatalog = serde_json::from_value(value.clone()).unwrap();
+        let workspace = catalog.clone().workspaces().unwrap().pop().unwrap();
+        assert_eq!(workspace.url, "http://127.0.0.1:5173");
+        let target = workspace.target.unwrap();
+        assert_eq!(
+            catalog
+                .remote_origin_for_target(&target)
+                .unwrap()
+                .unwrap()
+                .origin()
+                .ascii_serialization(),
+            format!("https://{DEVICE}.installation.ork.invalid")
+        );
+        let mut changed = target.clone();
+        changed.key_fingerprint = "b".repeat(64);
+        assert!(catalog.remote_origin_for_target(&changed).is_err());
+        changed = target.clone();
+        changed.binding_version += 1;
+        assert!(catalog.remote_origin_for_target(&changed).is_err());
+        changed = target.clone();
+        changed.workspace_id = "33333333-3333-4333-8333-333333333333".into();
+        assert!(catalog.remote_origin_for_target(&changed).is_err());
+        value["organizations"][0]["servers"][0]["routes"]
+            .as_array_mut()
+            .unwrap()
+            .remove(0);
+        let local_only: WorkspaceCatalog = serde_json::from_value(value).unwrap();
+        assert!(local_only
+            .remote_origin_for_target(&target)
+            .unwrap()
+            .is_none());
     }
     #[test]
     fn tunnel_only_workspaces_use_a_virtual_origin_and_a_separate_exact_relay_route() {
