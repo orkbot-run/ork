@@ -126,6 +126,15 @@ function iosFixture() {
     "app.json",
     JSON.stringify({ expo: { version: "1.3.0", ios: { bundleIdentifier: "run.orkbot.app" } } }),
   );
+  write(
+    "ios/Ork/Info.plist",
+    JSON.stringify({
+      CFBundleIdentifier: "run.orkbot.app",
+      CFBundleShortVersionString: "1.3.0",
+      CFBundleVersion: "1",
+      CFBundleExecutable: "Ork",
+    }),
+  );
   write("ios/Podfile.lock", "- OrkIdentity (0.1.0)\n- OrkTransport (0.1.0)");
   write(
     "ios/Pods/Target Support Files/Pods-Ork/ExpoModulesProvider.swift",
@@ -142,6 +151,7 @@ function iosFixture() {
   const calls = [],
     destinations = [];
   let list = ["/unrelated/login.keychain-db"];
+  let archivedInfo;
   const run = async (command, args) => {
     calls.push({ command, args });
     if (command.endsWith("/security")) {
@@ -156,6 +166,15 @@ function iosFixture() {
       if (args[0] === "find-identity") return identityOutput;
       if (args[0] === "find-certificate") return publicCertificates;
       return "";
+    }
+    if (command.endsWith("/xcodebuild") && args.includes("archive")) {
+      archivedInfo = JSON.parse(readFileSync(path.join(mobile, "ios/Ork/Info.plist"), "utf8"));
+    }
+    if (command.endsWith("/plutil") && args[0] === "-replace") {
+      const file = args.at(-1);
+      const value = JSON.parse(readFileSync(file, "utf8"));
+      value[args[1]] = args[3];
+      writeFileSync(file, JSON.stringify(value));
     }
     if (command.endsWith("/xcodebuild") && args.includes("-exportArchive")) {
       const configuration = JSON.parse(
@@ -173,15 +192,7 @@ function iosFixture() {
     if (command.endsWith("/ditto")) {
       const app = path.join(args.at(-1), "Payload/Ork.app");
       mkdirSync(app, { recursive: true });
-      writeFileSync(
-        path.join(app, "Info.plist"),
-        JSON.stringify({
-          CFBundleIdentifier: "run.orkbot.app",
-          CFBundleShortVersionString: "1.3.0",
-          CFBundleVersion: "17.2",
-          CFBundleExecutable: "Ork",
-        }),
-      );
+      writeFileSync(path.join(app, "Info.plist"), JSON.stringify(archivedInfo));
       writeFileSync(path.join(app, "main.jsbundle"), "embedded production bundle");
       writeFileSync(path.join(app, "Ork"), "OrkIdentityModule\0OrkTransportModule");
     }
@@ -424,6 +435,31 @@ test("native prebuild verification refuses a missing pod, autolinked module or t
   }
 });
 
+test("release stamps Expo's literal main app build number before archiving", async () => {
+  const fixture = iosFixture();
+  try {
+    const source = path.join(fixture.mobile, "ios/Ork/Info.plist");
+    assert.equal(JSON.parse(readFileSync(source, "utf8")).CFBundleVersion, "1");
+    fixture.env.GITHUB_RUN_NUMBER = "321";
+    fixture.env.GITHUB_RUN_ATTEMPT = "3";
+    await buildRelease(fixture.env, fixture.root, fixture.run, async () => {
+      assert.fail("Artifact build contacted App Store app");
+    });
+    const receipt = JSON.parse(
+      readFileSync(path.join(fixture.temporary, "ork-ios-artifacts/verification.json"), "utf8"),
+    );
+    assert.equal(receipt.buildNumber, "321.3");
+    assert.equal(receipt.version, "1.3.0");
+    assert.equal(receipt.bundle, "run.orkbot.app");
+    const archive = fixture.calls.find(
+      ({ command, args }) => command.endsWith("/xcodebuild") && args.includes("archive"),
+    );
+    assert.ok(archive.args.includes("CURRENT_PROJECT_VERSION=321.3"));
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("artifact build verifies native binary/signature and never contacts an App Store app", async () => {
   const fixture = iosFixture();
   try {
@@ -553,8 +589,19 @@ test("export verification checks extension inventory, versions and distribution 
   const fixture = iosFixture();
   try {
     const unpacked = path.join(fixture.temporary, "unpacked");
-    await fixture.run("/usr/bin/ditto", ["-x", "-k", "fixture.ipa", unpacked]);
     const app = path.join(unpacked, "Payload/Ork.app");
+    mkdirSync(app, { recursive: true });
+    writeFileSync(
+      path.join(app, "Info.plist"),
+      JSON.stringify({
+        CFBundleIdentifier: "run.orkbot.app",
+        CFBundleShortVersionString: "1.3.0",
+        CFBundleVersion: "17.2",
+        CFBundleExecutable: "Ork",
+      }),
+    );
+    writeFileSync(path.join(app, "main.jsbundle"), "embedded production bundle");
+    writeFileSync(path.join(app, "Ork"), "OrkIdentityModule\0OrkTransportModule");
     const extension = path.join(app, "PlugIns/Fixture.appex");
     mkdirSync(extension, { recursive: true });
     const metadata = {

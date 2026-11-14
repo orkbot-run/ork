@@ -450,6 +450,14 @@ export async function buildRelease(env, root, run, checkApp, cleanupRun = run) {
       env.APPLE_API_ISSUER,
     ];
     const archive = path.join(temporary, "Ork.xcarchive");
+    // Expo writes a literal CFBundleVersion; the Xcode setting alone cannot replace it.
+    await run("/usr/bin/plutil", [
+      "-replace",
+      "CFBundleVersion",
+      "-string",
+      config.buildNumber,
+      path.join(mobile, "ios/Ork/Info.plist"),
+    ]);
     console.log("Archiving native iOS app");
     await run(
       "/usr/bin/xcodebuild",
