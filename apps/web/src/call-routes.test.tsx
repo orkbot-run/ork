@@ -95,6 +95,10 @@ vi.mock("./lib/performance", () => ({ markOnce: () => {}, markAfterPaint: () => 
 vi.mock("./components/SubscriptionGate", () => ({
   SubscriptionGate: ({ children }: { children: ReactNode }) => children,
 }));
+vi.mock("./components/ModelSetupGate", async () => {
+  const { Outlet } = await import("react-router-dom");
+  return { ModelSetupGate: () => <Outlet /> };
+});
 vi.mock("./components/markdown-link-prompt", () => ({
   MarkdownLinkPrompt: ({ children }: { children: ReactNode }) => children,
 }));
