@@ -2231,6 +2231,10 @@ msgstr "無法載入 MCP 伺服器"
 msgid "Could not load model settings"
 msgstr "無法載入模型設定"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Could not load organization settings."
+msgstr ""
+
 #: src/pages/RoutineRunHistory.tsx
 msgid "Could not load run history"
 msgstr "無法載入執行歷史紀錄"
@@ -3939,6 +3943,10 @@ msgstr "正在載入記憶設定…"
 msgid "Loading model catalog…"
 msgstr "正在載入模型目錄…"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Loading organization settings…"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading plugins…"
 msgstr ""
@@ -4010,8 +4018,8 @@ msgid "Main model"
 msgstr "主模型"
 
 #: src/pages/ServerAISettings.tsx
-msgid "Make available"
-msgstr "設為可用"
+msgid "Make available to organization"
+msgstr ""
 
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -4037,6 +4045,10 @@ msgstr "管理 MCP 伺服器"
 #: src/pages/shell/bot-panel.tsx
 msgid "Manage other bots"
 msgstr "管理其他機器人"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Manage your organization, servers and people in Ork Accounts."
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
@@ -4299,10 +4311,6 @@ msgstr "模型"
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Models (one per line)"
 msgstr "模型（每行一個）"
-
-#: src/pages/ServerAISettings.tsx
-msgid "Models and limits"
-msgstr "模型與限制"
 
 #: src/components/ModelCredits.tsx
 msgid "Models at provider cost"
@@ -4900,6 +4908,14 @@ msgstr "組織"
 msgid "Organization API key"
 msgstr "組織 API 金鑰"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Organization connections"
+msgstr ""
+
+#: src/pages/settings-nav.ts
+msgid "Organization models"
+msgstr ""
+
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
 msgstr "原訊息不可用"
@@ -5453,6 +5469,18 @@ msgstr "移除 {site}"
 msgid "Remove change trigger"
 msgstr "移除變化觸發器"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing account spending limit"
+msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing model spending limit"
+msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing workspace spending limits"
+msgstr ""
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -5461,8 +5489,8 @@ msgid "Remove from every space?"
 msgstr ""
 
 #: src/pages/ServerAISettings.tsx
-msgid "Remove from workspace"
-msgstr "從工作區移除"
+msgid "Remove from organization"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
@@ -5666,6 +5694,7 @@ msgstr "正在還原工作空間"
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/ServerAISettings.tsx
+#: src/pages/SettingsOverlay.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Retry"
 msgstr "重試"
@@ -6061,10 +6090,6 @@ msgstr "請填寫 Serenity 端點。"
 #: src/components/ServerUpdates.tsx
 msgid "Server"
 msgstr "伺服器"
-
-#: src/pages/ServerAISettings.tsx
-msgid "Server accounts"
-msgstr "伺服器帳戶"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
@@ -7449,6 +7474,10 @@ msgstr "何時使用"
 msgid "Where should bots run?"
 msgstr "機器人應在哪裡執行？"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Without an organization model, people can connect their own. These models may process workspace data outside company servers."
+msgstr ""
+
 #: src/pages/shell/sidebar-roster.tsx
 msgid "Woken"
 msgstr "已恢復"
@@ -7580,6 +7609,14 @@ msgstr "你的 OpenAI"
 #: src/lib/run-error.ts
 msgid "Your OpenRouter"
 msgstr "你的 OpenRouter"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
+msgstr ""
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Your organization manages the models used in this workspace."
+msgstr ""
 
 #: src/components/ModelCredits.tsx
 msgid "Your plan becomes {annualPrice} / year when your trial ends."

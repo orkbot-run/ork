@@ -2230,6 +2230,10 @@ msgstr "לא ניתן לטעון את שרתי ה-MCP"
 msgid "Could not load model settings"
 msgstr "לא ניתן לטעון את הגדרות המודל"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Could not load organization settings."
+msgstr ""
+
 #: src/pages/RoutineRunHistory.tsx
 msgid "Could not load run history"
 msgstr "לא ניתן לטעון את היסטוריית ההרצות"
@@ -3938,6 +3942,10 @@ msgstr "טוען הגדרות זיכרון…"
 msgid "Loading model catalog…"
 msgstr "טוען קטלוג מודלים…"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Loading organization settings…"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading plugins…"
 msgstr ""
@@ -4009,8 +4017,8 @@ msgid "Main model"
 msgstr "מודל ראשי"
 
 #: src/pages/ServerAISettings.tsx
-msgid "Make available"
-msgstr "הפיכה לזמין"
+msgid "Make available to organization"
+msgstr ""
 
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -4036,6 +4044,10 @@ msgstr "ניהול שרתי MCP"
 #: src/pages/shell/bot-panel.tsx
 msgid "Manage other bots"
 msgstr "ניהול בוטים אחרים"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Manage your organization, servers and people in Ork Accounts."
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
@@ -4298,10 +4310,6 @@ msgstr "מודלים"
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Models (one per line)"
 msgstr "מודלים (אחד בכל שורה)"
-
-#: src/pages/ServerAISettings.tsx
-msgid "Models and limits"
-msgstr "מודלים ומגבלות"
 
 #: src/components/ModelCredits.tsx
 msgid "Models at provider cost"
@@ -4899,6 +4907,14 @@ msgstr "ארגון"
 msgid "Organization API key"
 msgstr "מפתח API של הארגון"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Organization connections"
+msgstr ""
+
+#: src/pages/settings-nav.ts
+msgid "Organization models"
+msgstr ""
+
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
 msgstr "ההודעה המקורית אינה זמינה"
@@ -5452,6 +5468,18 @@ msgstr "הסרת {site}"
 msgid "Remove change trigger"
 msgstr ""
 
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing account spending limit"
+msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing model spending limit"
+msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing workspace spending limits"
+msgstr ""
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -5460,8 +5488,8 @@ msgid "Remove from every space?"
 msgstr ""
 
 #: src/pages/ServerAISettings.tsx
-msgid "Remove from workspace"
-msgstr "הסרה מסביבת העבודה"
+msgid "Remove from organization"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
@@ -5665,6 +5693,7 @@ msgstr "משחזר את סביבת העבודה"
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/ServerAISettings.tsx
+#: src/pages/SettingsOverlay.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Retry"
 msgstr "לנסות שוב"
@@ -6060,10 +6089,6 @@ msgstr "נדרשת נקודת קצה של Serenity."
 #: src/components/ServerUpdates.tsx
 msgid "Server"
 msgstr "שרת"
-
-#: src/pages/ServerAISettings.tsx
-msgid "Server accounts"
-msgstr "חשבונות השרת"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
@@ -7448,6 +7473,10 @@ msgstr "מתי להשתמש"
 msgid "Where should bots run?"
 msgstr "איפה הבוטים ירוצו?"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Without an organization model, people can connect their own. These models may process workspace data outside company servers."
+msgstr ""
+
 #: src/pages/shell/sidebar-roster.tsx
 msgid "Woken"
 msgstr "התעורר"
@@ -7579,6 +7608,14 @@ msgstr "OpenAI"
 #: src/lib/run-error.ts
 msgid "Your OpenRouter"
 msgstr "OpenRouter"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
+msgstr ""
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Your organization manages the models used in this workspace."
+msgstr ""
 
 #: src/components/ModelCredits.tsx
 msgid "Your plan becomes {annualPrice} / year when your trial ends."

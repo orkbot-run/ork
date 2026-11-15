@@ -2230,6 +2230,10 @@ msgstr "Could not load MCP servers"
 msgid "Could not load model settings"
 msgstr "Could not load model settings"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Could not load organization settings."
+msgstr "Could not load organization settings."
+
 #: src/pages/RoutineRunHistory.tsx
 msgid "Could not load run history"
 msgstr "Could not load run history"
@@ -3938,6 +3942,10 @@ msgstr "Loading memory settings…"
 msgid "Loading model catalog…"
 msgstr "Loading model catalog…"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Loading organization settings…"
+msgstr "Loading organization settings…"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading plugins…"
 msgstr "Loading plugins…"
@@ -4009,8 +4017,8 @@ msgid "Main model"
 msgstr "Main model"
 
 #: src/pages/ServerAISettings.tsx
-msgid "Make available"
-msgstr "Make available"
+msgid "Make available to organization"
+msgstr "Make available to organization"
 
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -4036,6 +4044,10 @@ msgstr "Manage MCP servers"
 #: src/pages/shell/bot-panel.tsx
 msgid "Manage other bots"
 msgstr "Manage other bots"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Manage your organization, servers and people in Ork Accounts."
+msgstr "Manage your organization, servers and people in Ork Accounts."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
@@ -4298,10 +4310,6 @@ msgstr "Models"
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Models (one per line)"
 msgstr "Models (one per line)"
-
-#: src/pages/ServerAISettings.tsx
-msgid "Models and limits"
-msgstr "Models and limits"
 
 #: src/components/ModelCredits.tsx
 msgid "Models at provider cost"
@@ -4899,6 +4907,14 @@ msgstr "Organization"
 msgid "Organization API key"
 msgstr "Organization API key"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Organization connections"
+msgstr "Organization connections"
+
+#: src/pages/settings-nav.ts
+msgid "Organization models"
+msgstr "Organization models"
+
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
 msgstr "Original message unavailable"
@@ -5452,6 +5468,18 @@ msgstr "Remove {site}"
 msgid "Remove change trigger"
 msgstr "Remove change trigger"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing account spending limit"
+msgstr "Remove existing account spending limit"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing model spending limit"
+msgstr "Remove existing model spending limit"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing workspace spending limits"
+msgstr "Remove existing workspace spending limits"
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -5460,8 +5488,8 @@ msgid "Remove from every space?"
 msgstr "Remove from every space?"
 
 #: src/pages/ServerAISettings.tsx
-msgid "Remove from workspace"
-msgstr "Remove from workspace"
+msgid "Remove from organization"
+msgstr "Remove from organization"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
@@ -5665,6 +5693,7 @@ msgstr "Restoring your workspace"
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/ServerAISettings.tsx
+#: src/pages/SettingsOverlay.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Retry"
 msgstr "Retry"
@@ -6060,10 +6089,6 @@ msgstr "Serenity endpoint is required."
 #: src/components/ServerUpdates.tsx
 msgid "Server"
 msgstr "Server"
-
-#: src/pages/ServerAISettings.tsx
-msgid "Server accounts"
-msgstr "Server accounts"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
@@ -7448,6 +7473,10 @@ msgstr "When to use"
 msgid "Where should bots run?"
 msgstr "Where should bots run?"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Without an organization model, people can connect their own. These models may process workspace data outside company servers."
+msgstr "Without an organization model, people can connect their own. These models may process workspace data outside company servers."
+
 #: src/pages/shell/sidebar-roster.tsx
 msgid "Woken"
 msgstr "Woken"
@@ -7579,6 +7608,14 @@ msgstr "Your OpenAI"
 #: src/lib/run-error.ts
 msgid "Your OpenRouter"
 msgstr "Your OpenRouter"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
+msgstr "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Your organization manages the models used in this workspace."
+msgstr "Your organization manages the models used in this workspace."
 
 #: src/components/ModelCredits.tsx
 msgid "Your plan becomes {annualPrice} / year when your trial ends."
