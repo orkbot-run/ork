@@ -271,7 +271,7 @@ describe("bundled desktop setup", () => {
     expect(invoke.mock.calls.map(([name]) => name)).not.toContain("setup_accounts_sign_in");
   });
 
-  it("offers company workspaces beside local and self-hosted choices and opens the selected workspace", async () => {
+  it("offers company workspaces and opens the selected workspace", async () => {
     const { invoke } = await setup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
@@ -381,7 +381,7 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
   });
 
-  it("shows saved servers in the server selection step", async () => {
+  it("hides saved server controls when choosing an organization workspace", async () => {
     const { invoke } = await setup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
@@ -399,11 +399,11 @@ describe("bundled desktop setup", () => {
     });
     expect(node("organization-next").hidden).toBe(false);
     node("organization-next").click();
-    expect(node("saved-servers").hidden).toBe(false);
-    expect(node("servers").textContent).toContain(saved[0]!.url);
-    node("servers").querySelector<HTMLButtonElement>(".server-open")!.click();
-    await flush();
-    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[0]!.id });
+    expect(node("saved-servers").hidden).toBe(true);
+    expect(node("add-server").hidden).toBe(true);
+    expect(node("directory-title").textContent).toBe("Choose workspace");
+    expect(node("workspaces").textContent).toContain("Studio");
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
   });
 
   it("refreshes an unreachable workspace status automatically", async () => {

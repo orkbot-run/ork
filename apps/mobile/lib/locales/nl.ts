@@ -3,6 +3,25 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "Your organization role could not be verified. Check that Accounts and this server are up to date.":
+    "Je organisatierol kon niet worden gecontroleerd. Controleer of Accounts en deze server zijn bijgewerkt.",
+  "Administrator access could not be verified. Sign in again or check the server configuration.":
+    "Beheerderstoegang kon niet worden gecontroleerd. Meld je opnieuw aan of controleer de serverconfiguratie.",
+  "Your organization allows personal models.": "Je organisatie staat persoonlijke modellen toe.",
+  "Allow personal models": "Persoonlijke modellen toestaan",
+  "Use organization models": "Organisatiemodellen gebruiken",
+  "Choose how people in your organization will connect models.":
+    "Kies hoe mensen in je organisatie modellen verbinden.",
+  "Connect organization models": "Organisatiemodellen verbinden",
+  "Let people connect their own models": "Eigen modellen toestaan",
+  "Personal models may process workspace data outside company servers.":
+    "Persoonlijke modellen kunnen werkruimtegegevens buiten de bedrijfsservers verwerken.",
+  "Waiting for an organization administrator to set up models.":
+    "Wachten tot een organisatiebeheerder modellen instelt.",
+  "Add model connection": "Modelverbinding toevoegen",
+  "Edit model connection": "Modelverbinding bewerken",
+  "Disable connection": "Verbinding uitschakelen",
+  "No model connections available": "Geen modelverbindingen beschikbaar",
   "Could not load organization settings.": "Organisatie-instellingen konden niet worden geladen.",
   "Make available to organization": "Beschikbaar maken voor organisatie",
   "Manage your organization, servers and people in Ork Accounts.":

@@ -130,7 +130,7 @@ function computerHostFor(
 export async function modelSetup(deps: RouterDeps, actor: Actor) {
   const managed = await deps.serverAIModels?.actor(actor);
   if (managed && deps.serverAI) {
-    if (!(await deps.serverAI.hasConfiguredModel(managed))) {
+    if (await deps.serverAIModels?.personalModelsAllowed(actor)) {
       const main = await resolveMemberMainModel(
         { prisma: deps.prisma, secretStore: deps.secrets },
         actor,
@@ -147,7 +147,8 @@ export async function modelSetup(deps: RouterDeps, actor: Actor) {
         needsModel: deps.env.agentRuntime !== "scripted" && !connected,
       };
     }
-    const choices = await deps.serverAI.choices(managed);
+    const mode = await deps.serverAI.setupMode(managed);
+    const choices = mode === "pending" ? [] : await deps.serverAI.choices(managed);
     const primary = choices[0];
     const account =
       primary && (await deps.serverAI.list(managed)).find((row) => row.id === primary.connectionId);
@@ -163,7 +164,7 @@ export async function modelSetup(deps: RouterDeps, actor: Actor) {
       funding: null,
       creditsAvailable: false,
       hasDeployment: false,
-      needsModel: deps.env.agentRuntime !== "scripted" && !account,
+      needsModel: mode === "pending" || (deps.env.agentRuntime !== "scripted" && !account),
     };
   }
   const workspaceModel = await findWorkspaceModelPolicy(deps.prisma, actor.spaceId);

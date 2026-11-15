@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
     configure: vi.fn(),
     offer: vi.fn(),
     workspaceBudget: vi.fn(),
+    chooseMode: vi.fn(),
   },
   onboarding: { ensureFirstBot: vi.fn(), start: vi.fn(), promptFocus: vi.fn() },
 }));
@@ -167,13 +168,146 @@ function noLegacyCredentials() {
 
 it("keeps a managed participant out of provider secrets and explains the required workspace assignment", async () => {
   await render();
-  expect(host.textContent).toContain("Ask a workspace administrator");
+  expect(host.textContent).toContain("Waiting for an organization administrator");
   expect(host.querySelector('input[type="password"]')).toBeNull();
   expect(api.serverAI.catalog).not.toHaveBeenCalled();
   noLegacyCredentials();
   await click("Continue");
   expect(api.onboarding.ensureFirstBot).not.toHaveBeenCalled();
   expect(host.querySelector('[role="alert"]')).not.toBeNull();
+});
+
+it("waits for the organization administrator to make the initial model choice", async () => {
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: false,
+    modelSetupMode: "pending",
+  });
+  api.serverAI.status.mockResolvedValue(status({ modelSetupMode: "pending" }));
+  await render();
+  await vi.waitFor(() =>
+    expect(host.textContent).toContain("Waiting for an organization administrator"),
+  );
+  expect(host.textContent).not.toContain("Connect organization models");
+  expect(api.models.list).not.toHaveBeenCalled();
+});
+
+it("explains when the server cannot verify an administrator's organization role", async () => {
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: false,
+    modelSetupMode: "pending",
+  });
+  api.serverAI.status.mockResolvedValue(
+    status({ modelSetupMode: "pending", adminAccessReason: "role_unavailable" }),
+  );
+  await render();
+  await vi.waitFor(() =>
+    expect(host.textContent).toContain("Your organization role could not be verified"),
+  );
+  expect(host.textContent).not.toContain("Connect organization models");
+});
+
+it("opens personal model setup when an administrator makes that choice", async () => {
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: false,
+    modelSetupMode: "pending",
+  });
+  api.serverAI.status.mockResolvedValue(status({ modelSetupMode: "pending" }));
+  await render();
+  await vi.waitFor(() =>
+    expect(host.textContent).toContain("Waiting for an organization administrator"),
+  );
+  await act(async () => focusManager.setFocused(false));
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: true,
+    modelSetupMode: "personal",
+  });
+  api.serverAI.status.mockResolvedValue(status({ modelSetupMode: "personal" }));
+  await act(async () => focusManager.setFocused(true));
+  await vi.waitFor(() => expect(api.models.list).toHaveBeenCalledOnce());
+  expect(host.textContent).toContain("outside company servers");
+});
+
+it("lets the organization administrator allow personal models during setup", async () => {
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: false,
+    modelSetupMode: "pending",
+  });
+  api.serverAI.status.mockResolvedValue(
+    status({ canManageServer: true, canManageWorkspace: true, modelSetupMode: "pending" }),
+  );
+  api.serverAI.chooseMode.mockImplementation(async () => {
+    api.models.workspacePolicy.mockResolvedValue({
+      managed: true,
+      canManage: false,
+      policy: null,
+      personalModelsAllowed: true,
+      modelSetupMode: "personal",
+    });
+  });
+  await render();
+  await vi.waitFor(() => expect(host.textContent).toContain("Let people connect their own models"));
+  await click("Let people connect their own models");
+  await vi.waitFor(() => expect(api.models.list).toHaveBeenCalledOnce());
+  expect(api.serverAI.chooseMode).toHaveBeenCalledWith({ mode: "personal" });
+  expect(host.textContent).toContain("outside company servers");
+});
+
+it("lets a member connect a personal model when the organization permits it", async () => {
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: true,
+  });
+  await render();
+  expect(api.models.list).toHaveBeenCalledOnce();
+  expect(host.querySelector('[data-testid="server-ai-ready"]')).toBeNull();
+  expect(host.textContent).toContain("Connect a model");
+  expect(host.textContent).toContain("outside company servers");
+  expect(host.textContent).not.toContain("Waiting for an organization administrator");
+});
+
+it("does not expose personal setup if the organization permission check fails", async () => {
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: true,
+  });
+  api.serverAI.status.mockRejectedValue(new Error("Permissions unavailable"));
+  await render();
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Permissions unavailable");
+  expect(api.models.list).not.toHaveBeenCalled();
+});
+
+it("keeps organization model setup available to administrators when personal models are allowed", async () => {
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: true,
+  });
+  api.serverAI.status.mockResolvedValue(
+    status({ canManageServer: true, canManageWorkspace: true }),
+  );
+  await render();
+  await vi.waitFor(() => expect(host.textContent).toContain("Add model connection"));
+  expect(api.models.list).not.toHaveBeenCalled();
 });
 
 it("creates an unlimited account and offers it to the workspace during onboarding", async () => {
@@ -214,7 +348,7 @@ it("creates an unlimited account and offers it to the workspace during onboardin
   });
   await render();
   expect(host.textContent).not.toContain("budget");
-  await click("Add AI account");
+  await click("Add model connection");
   expect(host.textContent).not.toContain("budget");
   await field("Name", "Fixture server account");
   await field("Models (one per line)", "model-a");
@@ -279,7 +413,7 @@ it("hides account editing and preserves assignment limits during onboarding", as
   );
   await render();
   expect(host.textContent).not.toContain("budget");
-  expect(host.textContent).not.toContain("Edit AI account");
+  expect(host.textContent).not.toContain("Edit model connection");
   expect(api.serverAI.update).not.toHaveBeenCalled();
   await click("Models");
   expect(host.textContent).not.toContain("budget");
@@ -355,11 +489,12 @@ it("adds an unlimited subscription and explicitly enables it as the default mode
   await render();
   await vi.waitFor(() => {
     expect(
-      [...host.querySelectorAll("button")].find((node) => node.textContent === "Add AI account")
-        ?.disabled,
+      [...host.querySelectorAll("button")].find(
+        (node) => node.textContent === "Add model connection",
+      )?.disabled,
     ).toBe(false);
   });
-  await click("Add AI account");
+  await click("Add model connection");
   expect(host.textContent).not.toContain("budget");
   await click("Sign in");
   expect(api.serverAI.beginOAuth).toHaveBeenCalledWith(
@@ -427,7 +562,7 @@ it("does not offer budget fields in embedded settings", async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   expect(host.textContent).not.toContain("Workspace monthly budget (USD)");
-  expect(host.textContent).toContain("Edit AI account");
+  expect(host.textContent).toContain("Edit model connection");
   const enabled = host.querySelector<HTMLButtonElement>('[role="switch"]')!;
   await act(async () => enabled.click());
   expect(api.serverAI.configure).toHaveBeenCalledOnce();
@@ -530,7 +665,7 @@ it("fails closed on policy discovery errors and retries without exposing the unm
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  expect(host.textContent).toContain("No AI accounts assigned");
+  expect(host.textContent).toContain("No model connections available");
   noLegacyCredentials();
 });
 
@@ -569,8 +704,8 @@ it("never exposes a credential form while workspace management policy is unresol
 it("tells a workspace administrator how to obtain an account without exposing server configuration", async () => {
   api.serverAI.status.mockResolvedValue(status({ canManageWorkspace: true }));
   await render();
-  expect(host.textContent).toContain("Ask a server administrator");
-  expect(host.textContent).not.toContain("Add AI account");
+  expect(host.textContent).toContain("Waiting for an organization administrator");
+  expect(host.textContent).not.toContain("Add model connection");
   expect(api.serverAI.catalog).not.toHaveBeenCalled();
   noLegacyCredentials();
 });
@@ -578,13 +713,13 @@ it("tells a workspace administrator how to obtain an account without exposing se
 it("refreshes model permissions after returning to the app", async () => {
   api.serverAI.status.mockResolvedValue(status({ canManageWorkspace: true }));
   await render();
-  expect(host.textContent).not.toContain("Add AI account");
+  expect(host.textContent).not.toContain("Add model connection");
   await act(async () => focusManager.setFocused(false));
   api.serverAI.status.mockResolvedValue(
     status({ canManageWorkspace: true, canManageServer: true }),
   );
   await act(async () => focusManager.setFocused(true));
-  await vi.waitFor(() => expect(host.textContent).toContain("Add AI account"));
+  await vi.waitFor(() => expect(host.textContent).toContain("Add model connection"));
 });
 
 it("preserves the account form while permissions refresh on focus", async () => {
@@ -594,11 +729,12 @@ it("preserves the account form while permissions refresh on focus", async () => 
   await render();
   await vi.waitFor(() => {
     expect(
-      [...host.querySelectorAll("button")].find((node) => node.textContent === "Add AI account")
-        ?.disabled,
+      [...host.querySelectorAll("button")].find(
+        (node) => node.textContent === "Add model connection",
+      )?.disabled,
     ).toBe(false);
   });
-  await click("Add AI account");
+  await click("Add model connection");
   await field("Name", "Unfinished account");
   const callsBeforeFocus = api.serverAI.status.mock.calls.length;
   await act(async () => focusManager.setFocused(false));
@@ -625,7 +761,7 @@ it("keeps server status failures retryable and prevents a readiness bypass", asy
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  expect(host.textContent).toContain("No AI accounts assigned");
+  expect(host.textContent).toContain("No model connections available");
   noLegacyCredentials();
 });
 

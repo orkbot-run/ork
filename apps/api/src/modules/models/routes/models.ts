@@ -107,14 +107,21 @@ export function modelsRoutes(ctx: RouterContext) {
       workspacePolicy: authed.models.workspacePolicy.handler(async ({ context }) => {
         const managed = await deps.serverAIModels?.actor(context.actor);
         if (managed && deps.serverAI) {
-          const choices = await deps.serverAI.choices(managed);
+          const personalModelsAllowed =
+            (await deps.serverAIModels?.personalModelsAllowed(context.actor)) === true;
+          const modelSetupMode = await deps.serverAI.setupMode(managed);
+          const choices =
+            personalModelsAllowed || modelSetupMode === "pending"
+              ? []
+              : await deps.serverAI.choices(managed);
           const primary = choices[0];
           const connection =
             primary &&
             (await deps.serverAI.list(managed)).find((row) => row.id === primary.connectionId);
           return {
             managed: true,
-            personalModelsAllowed: !(await deps.serverAI.hasConfiguredModel(managed)),
+            personalModelsAllowed,
+            modelSetupMode,
             canManage: false,
             policy:
               connection && primary

@@ -69,7 +69,11 @@ export function ModelSettingsOverlay(props: Parameters<typeof LegacyModelSetting
     return (
       <AISettingsFrame embedded={props.embedded} onClose={props.onClose}>
         <p className="text-sm text-muted-foreground">
-          <Trans>Your organization manages the models used in this workspace.</Trans>
+          {policy.data.modelSetupMode === "pending" ? (
+            <Trans>Waiting for an organization administrator to set up models.</Trans>
+          ) : (
+            <Trans>Your organization manages the models used in this workspace.</Trans>
+          )}
         </p>
       </AISettingsFrame>
     );
@@ -304,10 +308,8 @@ function LegacyModelSettingsOverlay({
     <>
       {policyQuery.data?.managed && policyQuery.data.personalModelsAllowed ? (
         <p className="mb-4 text-sm text-muted-foreground">
-          <Trans>
-            Your organization has not configured a model. You can connect your own; it may process
-            workspace data outside company servers.
-          </Trans>
+          <Trans>Your organization allows personal models.</Trans>{" "}
+          <Trans>Personal models may process workspace data outside company servers.</Trans>
         </p>
       ) : null}
       {policyQuery.data &&

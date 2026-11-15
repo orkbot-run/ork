@@ -54,14 +54,20 @@ export class ServerAIModels {
 
   async assignedAccounts(scope: InstallationModelScope) {
     const actor = await this.actor(scope);
-    return actor && (await this.deps.catalog.hasConfiguredModel(actor))
-      ? (await this.deps.catalog.list(actor)).filter((row) => row.enabled && row.state === "active")
-      : null;
+    if (!actor || (await this.personalModelsAllowed(scope))) return null;
+    if ((await this.deps.catalog.setupMode(actor)) === "pending") return [];
+    return (await this.deps.catalog.list(actor)).filter(
+      (row) => row.enabled && row.state === "active",
+    );
   }
 
   async personalModelsAllowed(scope: InstallationModelScope): Promise<boolean | null> {
     const actor = await this.actor(scope);
-    return actor ? !(await this.deps.catalog.hasConfiguredModel(actor)) : null;
+    if (!actor) return null;
+    const mode = await this.deps.catalog.setupMode(actor);
+    if (mode === "personal") return true;
+    if (mode !== "legacy") return false;
+    return !(await this.deps.catalog.hasConfiguredModel(actor));
   }
 
   private async isServerConnection(actor: AIActor, connectionId: string): Promise<boolean> {
@@ -82,12 +88,13 @@ export class ServerAIModels {
   ): Promise<boolean | null> {
     const actor = await this.actor(scope);
     if (!actor) return null;
-    if (!(await this.deps.catalog.hasConfiguredModel(actor))) {
+    if (await this.personalModelsAllowed(scope)) {
       return selection?.connectionId &&
         (await this.isServerConnection(actor, selection.connectionId))
         ? false
         : null;
     }
+    if ((await this.deps.catalog.setupMode(actor)) === "pending") return false;
     if (!selection) return true;
     return Boolean(await this.selectedAccount(actor, selection));
   }
@@ -118,11 +125,13 @@ export class ServerAIModels {
   ) {
     const actor = await this.actor(scope);
     if (!actor) return null;
-    if (!(await this.deps.catalog.hasConfiguredModel(actor))) {
+    if (await this.personalModelsAllowed(scope)) {
       if (selection?.connectionId && (await this.isServerConnection(actor, selection.connectionId)))
         throw new AIConnectionError("unavailable");
       return null;
     }
+    if ((await this.deps.catalog.setupMode(actor)) === "pending")
+      throw new AIConnectionError("unavailable");
     if (!selection) {
       const choices = await this.deps.catalog.choices(actor);
       for (const choice of choices) {
@@ -154,6 +163,8 @@ export class ServerAIModels {
   async fallbacks(scope: InstallationModelScope): Promise<ModelRoleChoice[] | null> {
     const actor = await this.actor(scope);
     if (!actor) return null;
+    if (await this.personalModelsAllowed(scope)) return null;
+    if ((await this.deps.catalog.setupMode(actor)) === "pending") return [];
     return (await this.deps.catalog.list(actor))
       .filter(
         (row) =>

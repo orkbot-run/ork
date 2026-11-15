@@ -91,6 +91,62 @@ export function ServerAISettings({
       />
     );
   const value = status.data;
+  if (value.modelSetupMode === "pending")
+    return (
+      <View style={{ gap: 16 }}>
+        {error ? (
+          <Text accessibilityRole="alert" style={{ color: native.label }}>
+            {error}
+          </Text>
+        ) : null}
+        {!value.canManageServer && value.adminAccessReason === "role_unavailable" ? (
+          <Text style={{ color: native.secondaryLabel }}>
+            {t(
+              "Your organization role could not be verified. Check that Accounts and this server are up to date.",
+            )}
+          </Text>
+        ) : null}
+        {!value.canManageServer && value.adminAccessReason === "unverified" ? (
+          <Text style={{ color: native.secondaryLabel }}>
+            {t(
+              "Administrator access could not be verified. Sign in again or check the server configuration.",
+            )}
+          </Text>
+        ) : null}
+        {value.canManageServer ? (
+          <>
+            <Text style={{ color: native.secondaryLabel }}>
+              {t("Choose how people in your organization will connect models.")}
+            </Text>
+            <NativeActionButton
+              label={t("Connect organization models")}
+              disabled={busy}
+              onPress={() =>
+                void action((signal) =>
+                  send("serverAI/chooseMode", { mode: "organization" }, { signal }),
+                )
+              }
+            />
+            <NativeActionButton
+              label={t("Let people connect their own models")}
+              disabled={busy}
+              onPress={() =>
+                void action((signal) =>
+                  send("serverAI/chooseMode", { mode: "personal" }, { signal }),
+                )
+              }
+            />
+            <Text style={{ color: native.secondaryLabel }}>
+              {t("Personal models may process workspace data outside company servers.")}
+            </Text>
+          </>
+        ) : (
+          <Text style={{ color: native.secondaryLabel }}>
+            {t("Waiting for an organization administrator to set up models.")}
+          </Text>
+        )}
+      </View>
+    );
   return (
     <View style={{ gap: 16 }}>
       {error ? (
@@ -98,11 +154,44 @@ export function ServerAISettings({
           {error}
         </Text>
       ) : null}
-      {policy.data?.personalModelsAllowed ? (
+      {!value.canManageServer && value.adminAccessReason === "role_unavailable" ? (
         <Text style={{ color: native.secondaryLabel }}>
           {t(
-            "Without an organization model, people can connect their own. These models may process workspace data outside company servers.",
+            "Your organization role could not be verified. Check that Accounts and this server are up to date.",
           )}
+        </Text>
+      ) : null}
+      {!value.canManageServer && value.adminAccessReason === "unverified" ? (
+        <Text style={{ color: native.secondaryLabel }}>
+          {t(
+            "Administrator access could not be verified. Sign in again or check the server configuration.",
+          )}
+        </Text>
+      ) : null}
+      {value.canManageServer &&
+      (value.modelSetupMode === "personal" || value.modelSetupMode === "organization") ? (
+        <NativeActionButton
+          label={
+            value.modelSetupMode === "personal"
+              ? t("Use organization models")
+              : t("Allow personal models")
+          }
+          disabled={busy}
+          onPress={() =>
+            void action((signal) =>
+              send(
+                "serverAI/chooseMode",
+                { mode: value.modelSetupMode === "personal" ? "organization" : "personal" },
+                { signal },
+              ),
+            )
+          }
+        />
+      ) : null}
+      {policy.data?.personalModelsAllowed ? (
+        <Text style={{ color: native.secondaryLabel }}>
+          {t("Your organization allows personal models.")}{" "}
+          {t("Personal models may process workspace data outside company servers.")}
         </Text>
       ) : null}
       {value.canManageWorkspace && value.workspaceMonthlyBudgetMicros !== null ? (
@@ -116,62 +205,63 @@ export function ServerAISettings({
           }
         />
       ) : null}
-      {value.connections.map((row) => (
-        <SettingsGroup key={row.id} label={row.label}>
-          <SettingsRow
-            title={row.provider}
-            value={row.state === "active" ? (row.defaultModelId ?? "") : t("Reconnect")}
-          />
-          {value.canManageWorkspace ? (
-            <>
-              <SettingsSwitch
-                label={t("Enabled")}
-                value={row.enabled}
-                disabled={busy || (!row.enabled && row.state !== "active")}
-                onChange={(enabled) => void configure(row, { enabled })}
-              />
-              <SettingsSwitch
-                label={t("Default")}
-                value={row.isDefault && row.enabled}
-                disabled={busy || !row.enabled || row.state !== "active"}
-                onChange={(isDefault) => void configure(row, { isDefault })}
-              />
-              <SettingsSwitch
-                label={t("Fallback")}
-                value={row.fallback}
-                disabled={busy || !row.enabled || row.state !== "active"}
-                onChange={(fallback) => void configure(row, { fallback })}
-              />
-            </>
-          ) : null}
-          {value.canManageWorkspace ? (
+      {value.modelSetupMode !== "personal" &&
+        value.connections.map((row) => (
+          <SettingsGroup key={row.id} label={row.label}>
             <SettingsRow
-              title={t("Models")}
-              onPress={() => setEditingAssignment(editingAssignment === row.id ? null : row.id)}
-              disabled={busy}
-              chevron="right"
+              title={row.provider}
+              value={row.state === "active" ? (row.defaultModelId ?? "") : t("Reconnect")}
             />
-          ) : null}
-          {editingAssignment === row.id ? (
-            <WorkspaceAIAccountForm
-              key={`${row.id}:${row.assignmentRevision}`}
-              row={row}
-              hideBudget
-              busy={busy}
-              onSave={(patch) => configure(row, patch)}
-              onCancel={() => setEditingAssignment(null)}
-            />
-          ) : null}
-          {value.canManageWorkspace && row.monthlyBudgetMicros !== null ? (
-            <SettingsRow
-              title={t("Remove existing model spending limit")}
-              disabled={busy}
-              onPress={() => void configure(row, { monthlyBudgetMicros: null })}
-            />
-          ) : null}
-        </SettingsGroup>
-      ))}
-      {value.canManageServer ? (
+            {value.canManageWorkspace ? (
+              <>
+                <SettingsSwitch
+                  label={t("Enabled")}
+                  value={row.enabled}
+                  disabled={busy || (!row.enabled && row.state !== "active")}
+                  onChange={(enabled) => void configure(row, { enabled })}
+                />
+                <SettingsSwitch
+                  label={t("Default")}
+                  value={row.isDefault && row.enabled}
+                  disabled={busy || !row.enabled || row.state !== "active"}
+                  onChange={(isDefault) => void configure(row, { isDefault })}
+                />
+                <SettingsSwitch
+                  label={t("Fallback")}
+                  value={row.fallback}
+                  disabled={busy || !row.enabled || row.state !== "active"}
+                  onChange={(fallback) => void configure(row, { fallback })}
+                />
+              </>
+            ) : null}
+            {value.canManageWorkspace ? (
+              <SettingsRow
+                title={t("Models")}
+                onPress={() => setEditingAssignment(editingAssignment === row.id ? null : row.id)}
+                disabled={busy}
+                chevron="right"
+              />
+            ) : null}
+            {editingAssignment === row.id ? (
+              <WorkspaceAIAccountForm
+                key={`${row.id}:${row.assignmentRevision}`}
+                row={row}
+                hideBudget
+                busy={busy}
+                onSave={(patch) => configure(row, patch)}
+                onCancel={() => setEditingAssignment(null)}
+              />
+            ) : null}
+            {value.canManageWorkspace && row.monthlyBudgetMicros !== null ? (
+              <SettingsRow
+                title={t("Remove existing model spending limit")}
+                disabled={busy}
+                onPress={() => void configure(row, { monthlyBudgetMicros: null })}
+              />
+            ) : null}
+          </SettingsGroup>
+        ))}
+      {value.canManageServer && value.modelSetupMode !== "personal" ? (
         <>
           <SettingsGroup label={t("Organization connections")}>
             {value.accounts.map((row) => (
@@ -239,7 +329,7 @@ export function ServerAISettings({
                 )}
                 {row.state !== "disabled" ? (
                   <SettingsRow
-                    title={t("Disable account")}
+                    title={t("Disable connection")}
                     destructive
                     disabled={busy}
                     onPress={() =>
@@ -281,7 +371,7 @@ export function ServerAISettings({
             />
           ) : (
             <NativeActionButton
-              label={t("Add AI account")}
+              label={t("Add model connection")}
               disabled={busy || !catalog.data}
               onPress={() => {
                 setEditingAccount(null);
@@ -299,7 +389,7 @@ export function ServerAISettings({
       ) : null}
       {!value.connections.length ? (
         <SettingsGroup>
-          <SettingsRow title={t("No AI accounts assigned")} />
+          <SettingsRow title={t("No model connections available")} />
         </SettingsGroup>
       ) : null}
     </View>

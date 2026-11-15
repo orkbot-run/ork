@@ -3,6 +3,25 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Your organization role could not be verified. Check that Accounts and this server are up to date.":
+    "組織内のロールを確認できませんでした。Accountsとこのサーバーが最新か確認してください。",
+  "Administrator access could not be verified. Sign in again or check the server configuration.":
+    "管理者権限を確認できませんでした。再ログインするか、サーバーの設定を確認してください。",
+  "Your organization allows personal models.": "組織は個人のモデルを許可しています。",
+  "Allow personal models": "個人のモデルを許可",
+  "Use organization models": "組織のモデルを使用",
+  "Choose how people in your organization will connect models.":
+    "組織のメンバーがモデルを接続する方法を選択します。",
+  "Connect organization models": "組織のモデルを接続",
+  "Let people connect their own models": "各自のモデルを許可",
+  "Personal models may process workspace data outside company servers.":
+    "個人のモデルは会社のサーバー外でデータを処理する場合があります。",
+  "Waiting for an organization administrator to set up models.":
+    "組織の管理者によるモデルの設定を待っています。",
+  "Add model connection": "モデル接続を追加",
+  "Edit model connection": "モデル接続を編集",
+  "Disable connection": "接続を無効にする",
+  "No model connections available": "利用可能なモデル接続がありません",
   "Could not load organization settings.": "組織の設定を読み込めませんでした。",
   "Make available to organization": "組織で利用可能にする",
   "Manage your organization, servers and people in Ork Accounts.":

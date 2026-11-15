@@ -94,6 +94,138 @@ test("Ork credits are chosen like a provider, with nothing else to fill in", asy
   await expect.poll(() => funding).toEqual({ funding: "credits" });
 });
 
+test("a member waits for the administrator's model choice", async ({ page }) => {
+  await page.route("**/rpc/me", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: Record<string, unknown> };
+    await route.fulfill({ response, json: { json: { ...body.json, needsModel: true } } });
+  });
+  await page.route("**/rpc/models/workspacePolicy", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          managed: true,
+          canManage: false,
+          policy: null,
+          personalModelsAllowed: false,
+          modelSetupMode: "pending",
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/serverAI/status", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          available: true,
+          spaceId: "workspace-fixture",
+          workspaceMonthlyBudgetMicros: null,
+          canManageServer: false,
+          canManageWorkspace: false,
+          accounts: [],
+          connections: [],
+          modelSetupMode: "pending",
+          adminAccessReason: "not_admin",
+        },
+      },
+    }),
+  );
+  await signup(page, `model-wait-${Date.now()}@orkbot.test`, "password12", "Member");
+  await expect(
+    page.getByText("Waiting for an organization administrator to set up models."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Let people connect their own models" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Provider" })).toHaveCount(0);
+});
+
+test("an administrator chooses personal models for a new organization", async ({
+  page,
+}, testInfo) => {
+  let mode: "pending" | "personal" = "pending";
+  await page.route("**/rpc/me", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: Record<string, unknown> };
+    await route.fulfill({ response, json: { json: { ...body.json, needsModel: true } } });
+  });
+  await page.route("**/rpc/models/workspacePolicy", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          managed: true,
+          canManage: false,
+          policy: null,
+          personalModelsAllowed: mode === "personal",
+          modelSetupMode: mode,
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/serverAI/status", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          available: true,
+          spaceId: "workspace-fixture",
+          workspaceMonthlyBudgetMicros: null,
+          canManageServer: true,
+          canManageWorkspace: true,
+          accounts: [],
+          connections: [],
+          modelSetupMode: mode,
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/serverAI/chooseMode", (route) => {
+    expect(route.request().postDataJSON().json).toEqual({ mode: "personal" });
+    mode = "personal";
+    return route.fulfill({ json: { json: { ok: true } } });
+  });
+  await signup(page, `model-mode-${Date.now()}@orkbot.test`, "password12", "Administrator");
+  await expect(page.getByRole("button", { name: "Connect organization models" })).toBeVisible();
+  await captureScreenshot(page, testInfo, "organization-model-setup-choice");
+  await page.getByRole("button", { name: "Let people connect their own models" }).click();
+  await expect(page.getByRole("combobox", { name: "Provider" })).toBeVisible();
+  await expect(page.getByText(/outside company servers/)).toBeVisible();
+});
+
+test("a member can connect a personal model when the organization has none", async ({ page }) => {
+  await page.route("**/rpc/me", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: Record<string, unknown> };
+    await route.fulfill({ response, json: { json: { ...body.json, needsModel: true } } });
+  });
+  await page.route("**/rpc/models/workspacePolicy", (route) =>
+    route.fulfill({
+      json: {
+        json: { managed: true, canManage: false, policy: null, personalModelsAllowed: true },
+      },
+    }),
+  );
+  await page.route("**/rpc/serverAI/status", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          available: true,
+          spaceId: "workspace-fixture",
+          workspaceMonthlyBudgetMicros: null,
+          canManageServer: false,
+          canManageWorkspace: false,
+          accounts: [],
+          connections: [],
+        },
+      },
+    }),
+  );
+  await signup(page, `personal-model-${Date.now()}@orkbot.test`, "password12", "Member");
+  await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Provider" })).toBeVisible();
+  await expect(page.getByText(/outside company servers/)).toBeVisible();
+  await expect(page.getByTestId("server-ai-ready")).toHaveCount(0);
+});
+
 test("managed onboarding connects server accounts and requires a workspace default", async ({
   page,
 }, testInfo) => {
@@ -200,7 +332,7 @@ test("managed onboarding connects server accounts and requires a workspace defau
   await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Enable a default model");
-  await page.getByRole("button", { name: "Add AI account", exact: true }).click();
+  await page.getByRole("button", { name: "Add model connection", exact: true }).click();
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Fixture provider");
   await expect(page.getByLabel("Models (one per line)", { exact: true })).toHaveValue(
     account.models[0]!,
@@ -264,9 +396,11 @@ test("managed onboarding asks the workspace administrator instead of collecting 
     "Workspace participant",
   );
   await expect(
-    page.getByText("Ask a workspace administrator to enable an AI account for this workspace."),
+    page.getByText("Waiting for an organization administrator to set up models."),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add AI account", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add model connection", exact: true })).toHaveCount(
+    0,
+  );
   await expect(page.getByLabel("API key", { exact: true })).toHaveCount(0);
   await captureScreenshot(page, testInfo, "managed-onboarding-workspace-access");
 });

@@ -562,10 +562,6 @@ msgstr "新增觸發器以執行此例行任務。"
 msgid "Add a voice provider key and pick a voice in Voice settings."
 msgstr ""
 
-#: src/pages/ServerAISettings.tsx
-msgid "Add AI account"
-msgstr "新增 AI 帳戶"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "請填寫 HTTPS 伺服器 URL。"
@@ -601,6 +597,10 @@ msgstr "新增項目"
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Add MCP server"
 msgstr "新增 MCP 伺服器"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Add model connection"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Add open work"
@@ -668,6 +668,11 @@ msgstr ""
 msgid "Address line 2"
 msgstr ""
 
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Administrator access could not be verified. Sign in again or check the server configuration."
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -731,6 +736,10 @@ msgstr "允許一次"
 
 #: src/lib/dictation.ts
 msgid "Allow Ork to use Speech Recognition and the microphone in System Settings."
+msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "Allow personal models"
 msgstr ""
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -942,14 +951,6 @@ msgstr "成品"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask"
 msgstr "詢問"
-
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a server administrator to make an AI account available to this workspace."
-msgstr ""
-
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a workspace administrator to enable an AI account for this workspace."
-msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask rules are inactive in Never ask."
@@ -1471,6 +1472,11 @@ msgstr "選擇檔案"
 msgid "Choose folder"
 msgstr "選擇資料夾"
 
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Choose how people in your organization will connect models."
+msgstr ""
+
 #: src/components/ModelCredits.tsx
 #: src/components/SubscriptionGate.tsx
 msgid "Choose how to use Ork"
@@ -1806,6 +1812,11 @@ msgstr "連接自己的服務"
 msgid "Connect OAuth"
 msgstr "連線 OAuth"
 
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Connect organization models"
+msgstr ""
+
 #: src/lib/agent-import-errors.ts
 msgid "Connect this model's provider first."
 msgstr "請先連結此模型的供應商。"
@@ -2015,13 +2026,13 @@ msgstr "無法清空對話"
 msgid "Could not complete action"
 msgstr "無法完成操作"
 
-#: src/pages/model-settings/server-ai-account-form.tsx
-msgid "Could not complete AI account sign-in."
-msgstr "無法完成 AI 帳戶登入。"
-
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete OAuth"
 msgstr "無法完成 OAuth"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not complete provider sign-in."
+msgstr ""
 
 #: src/lib/user-error.ts
 msgid "Could not complete sign-in. Retry or ask your administrator to check access."
@@ -2448,6 +2459,10 @@ msgstr "無法儲存此選擇"
 #: src/lib/use-remember-desktop-server.ts
 msgid "Could not save your server."
 msgstr "無法儲存你的伺服器。"
+
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Could not save. Try again."
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -2893,8 +2908,8 @@ msgid "Disable a tool"
 msgstr "停用工具"
 
 #: src/pages/ServerAISettings.tsx
-msgid "Disable account"
-msgstr "停用帳戶"
+msgid "Disable connection"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Disabled"
@@ -3047,13 +3062,13 @@ msgstr "每個名稱只能使用一次。"
 msgid "Edit"
 msgstr "編輯"
 
-#: src/pages/ServerAISettings.tsx
-msgid "Edit AI account"
-msgstr "編輯 AI 帳戶"
-
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "先編輯"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Edit model connection"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
@@ -3877,6 +3892,11 @@ msgstr "退出"
 msgid "Let bots use this computer"
 msgstr ""
 
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Let people connect their own models"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Lets bots save and recall facts by meaning, alongside MEMORY.md."
 msgstr "讓機器人在 MEMORY.md 之外，依語意儲存和回想事實。"
@@ -4569,10 +4589,6 @@ msgstr "下一頁"
 msgid "Next settings sections"
 msgstr "下一組設定區段"
 
-#: src/pages/ServerAISettings.tsx
-msgid "No AI accounts assigned"
-msgstr "未指派 AI 帳戶"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
 msgstr "沒有符合搜尋條件的應用程式。"
@@ -4632,6 +4648,10 @@ msgstr "還沒有與 {peerBotName} 的訊息。"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No model catalog is available."
 msgstr "沒有可用的模型目錄。"
+
+#: src/pages/ServerAISettings.tsx
+msgid "No model connections available"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "No models listed."
@@ -5081,6 +5101,13 @@ msgstr "人設"
 #: src/components/SignupSurvey.tsx
 msgid "Personal"
 msgstr "個人"
+
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Personal models may process workspace data outside company servers."
+msgstr ""
 
 #: src/components/vault/VaultItemDetail.tsx
 #: src/components/vault/VaultItemEditor.tsx
@@ -7232,6 +7259,10 @@ msgstr ""
 msgid "Use my subscription or API key"
 msgstr "使用我的訂閱或 API 金鑰"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Use organization models"
+msgstr ""
+
 #: src/components/ModelCredits.tsx
 msgid "Use Ork credits"
 msgstr "使用 Ork 額度"
@@ -7345,6 +7376,12 @@ msgstr ""
 #: src/lib/model-connection-preflight.ts
 msgid "Wait a moment and test again."
 msgstr "請稍候並重新測試。"
+
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Waiting for an organization administrator to set up models."
+msgstr ""
 
 #: src/components/ServerUpdates.tsx
 msgid "Waiting for update status…"
@@ -7474,10 +7511,6 @@ msgstr "何時使用"
 msgid "Where should bots run?"
 msgstr "機器人應在哪裡執行？"
 
-#: src/pages/ServerAISettings.tsx
-msgid "Without an organization model, people can connect their own. These models may process workspace data outside company servers."
-msgstr ""
-
 #: src/pages/shell/sidebar-roster.tsx
 msgid "Woken"
 msgstr "已恢復"
@@ -7562,6 +7595,10 @@ msgstr "對方用新卡開始試用後，你將獲得一個月免費。"
 msgid "You have control"
 msgstr "你已接管"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Your account does not currently have permission to manage organization models."
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
 msgid "Your Anthropic"
@@ -7611,11 +7648,18 @@ msgid "Your OpenRouter"
 msgstr "你的 OpenRouter"
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
+#: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Your organization allows personal models."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Your organization manages the models used in this workspace."
+msgstr ""
+
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Your organization role could not be verified. Check that Accounts and this server are up to date."
 msgstr ""
 
 #: src/components/ModelCredits.tsx

@@ -561,10 +561,6 @@ msgstr "Dodaj wyzwalacz, aby uruchamiać tę rutynę."
 msgid "Add a voice provider key and pick a voice in Voice settings."
 msgstr "Dodaj klucz dostawcy głosu i wybierz głos w ustawieniach głosu."
 
-#: src/pages/ServerAISettings.tsx
-msgid "Add AI account"
-msgstr "Dodaj konto AI"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "Dodaj adres HTTPS serwera."
@@ -600,6 +596,10 @@ msgstr "Dodaj element"
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Add MCP server"
 msgstr "Dodaj serwer MCP"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Add model connection"
+msgstr "Dodaj połączenie modelu"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Add open work"
@@ -667,6 +667,11 @@ msgstr "Adres"
 msgid "Address line 2"
 msgstr "Druga linia adresu"
 
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Administrator access could not be verified. Sign in again or check the server configuration."
+msgstr "Nie udało się zweryfikować uprawnień administratora. Zaloguj się ponownie lub sprawdź konfigurację serwera."
+
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -731,6 +736,10 @@ msgstr "Zezwól raz"
 #: src/lib/dictation.ts
 msgid "Allow Ork to use Speech Recognition and the microphone in System Settings."
 msgstr "Zezwól Ork na rozpoznawanie mowy i dostęp do mikrofonu w Ustawieniach systemowych."
+
+#: src/pages/ServerAISettings.tsx
+msgid "Allow personal models"
+msgstr "Zezwól na modele osobiste"
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
@@ -941,14 +950,6 @@ msgstr "Artefakty"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask"
 msgstr "Zapytaj"
-
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a server administrator to make an AI account available to this workspace."
-msgstr "Poproś administratora serwera o udostępnienie konta AI temu obszarowi roboczemu."
-
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a workspace administrator to enable an AI account for this workspace."
-msgstr "Poproś administratora obszaru roboczego o włączenie konta AI w tym obszarze."
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask rules are inactive in Never ask."
@@ -1470,6 +1471,11 @@ msgstr "Wybierz plik"
 msgid "Choose folder"
 msgstr "Wybierz folder"
 
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Choose how people in your organization will connect models."
+msgstr "Wybierz, jak osoby w organizacji będą łączyć modele."
+
 #: src/components/ModelCredits.tsx
 #: src/components/SubscriptionGate.tsx
 msgid "Choose how to use Ork"
@@ -1805,6 +1811,11 @@ msgstr "Połącz własne"
 msgid "Connect OAuth"
 msgstr "Połącz przez OAuth"
 
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Connect organization models"
+msgstr "Podłącz modele organizacji"
+
 #: src/lib/agent-import-errors.ts
 msgid "Connect this model's provider first."
 msgstr "Najpierw połącz dostawcę tego modelu."
@@ -2014,13 +2025,13 @@ msgstr "Nie udało się wyczyścić rozmowy"
 msgid "Could not complete action"
 msgstr "Nie udało się wykonać działania"
 
-#: src/pages/model-settings/server-ai-account-form.tsx
-msgid "Could not complete AI account sign-in."
-msgstr "Nie udało się zakończyć logowania na konto AI."
-
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete OAuth"
 msgstr "Nie udało się ukończyć OAuth"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not complete provider sign-in."
+msgstr "Nie udało się zalogować u dostawcy."
 
 #: src/lib/user-error.ts
 msgid "Could not complete sign-in. Retry or ask your administrator to check access."
@@ -2447,6 +2458,10 @@ msgstr "Nie udało się zapisać tego wyboru"
 #: src/lib/use-remember-desktop-server.ts
 msgid "Could not save your server."
 msgstr "Nie udało się zapisać serwera."
+
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Could not save. Try again."
+msgstr "Nie udało się zapisać. Spróbuj ponownie."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -2892,8 +2907,8 @@ msgid "Disable a tool"
 msgstr "Wyłącz narzędzie"
 
 #: src/pages/ServerAISettings.tsx
-msgid "Disable account"
-msgstr "Wyłącz konto"
+msgid "Disable connection"
+msgstr "Wyłącz połączenie"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Disabled"
@@ -3046,13 +3061,13 @@ msgstr "Każdej nazwy można użyć raz."
 msgid "Edit"
 msgstr "Edytuj"
 
-#: src/pages/ServerAISettings.tsx
-msgid "Edit AI account"
-msgstr "Edytuj konto AI"
-
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Najpierw edytuj"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Edit model connection"
+msgstr "Edytuj połączenie modelu"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
@@ -3876,6 +3891,11 @@ msgstr "Opuść"
 msgid "Let bots use this computer"
 msgstr "Pozwól botom używać tego komputera"
 
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Let people connect their own models"
+msgstr "Pozwól każdemu podłączyć własny model"
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Lets bots save and recall facts by meaning, alongside MEMORY.md."
 msgstr "Pozwala botom zapisywać i przywoływać fakty według znaczenia, obok MEMORY.md."
@@ -4568,10 +4588,6 @@ msgstr "Następna strona"
 msgid "Next settings sections"
 msgstr "Następne sekcje ustawień"
 
-#: src/pages/ServerAISettings.tsx
-msgid "No AI accounts assigned"
-msgstr "Nie przydzielono kont AI"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
 msgstr "Żadna aplikacja nie pasuje do wyszukiwania."
@@ -4631,6 +4647,10 @@ msgstr "Brak wiadomości z {peerBotName}."
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No model catalog is available."
 msgstr "Brak dostępnego katalogu modeli."
+
+#: src/pages/ServerAISettings.tsx
+msgid "No model connections available"
+msgstr "Brak dostępnych połączeń modeli"
 
 #: src/lib/model-connection-preflight.ts
 msgid "No models listed."
@@ -5080,6 +5100,13 @@ msgstr "Osobowość"
 #: src/components/SignupSurvey.tsx
 msgid "Personal"
 msgstr "Osobiste"
+
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Personal models may process workspace data outside company servers."
+msgstr "Osobiste modele mogą przetwarzać dane poza serwerami firmy."
 
 #: src/components/vault/VaultItemDetail.tsx
 #: src/components/vault/VaultItemEditor.tsx
@@ -7231,6 +7258,10 @@ msgstr "Użyj w tym bocie"
 msgid "Use my subscription or API key"
 msgstr "Użyj mojej subskrypcji lub klucza API"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Use organization models"
+msgstr "Użyj modeli organizacji"
+
 #: src/components/ModelCredits.tsx
 msgid "Use Ork credits"
 msgstr "Użyj środków Ork"
@@ -7344,6 +7375,12 @@ msgstr "Upłynął czas żądania głosowego."
 #: src/lib/model-connection-preflight.ts
 msgid "Wait a moment and test again."
 msgstr "Poczekaj chwilę i ponów test."
+
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Waiting for an organization administrator to set up models."
+msgstr "Oczekiwanie na skonfigurowanie modeli przez administratora organizacji."
 
 #: src/components/ServerUpdates.tsx
 msgid "Waiting for update status…"
@@ -7473,10 +7510,6 @@ msgstr "Kiedy używać"
 msgid "Where should bots run?"
 msgstr "Gdzie mają działać boty?"
 
-#: src/pages/ServerAISettings.tsx
-msgid "Without an organization model, people can connect their own. These models may process workspace data outside company servers."
-msgstr "Jeśli organizacja nie skonfiguruje modelu, każdy może podłączyć własny. Modele te mogą przetwarzać dane przestrzeni roboczej poza serwerami firmy."
-
 #: src/pages/shell/sidebar-roster.tsx
 msgid "Woken"
 msgstr "Obudzono"
@@ -7561,6 +7594,10 @@ msgstr "Otrzymasz bezpłatny miesiąc, gdy rozpoczną okres próbny z nową kart
 msgid "You have control"
 msgstr "Sterujesz komputerem"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Your account does not currently have permission to manage organization models."
+msgstr "Twoje konto nie ma obecnie uprawnień do zarządzania modelami organizacji."
+
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
 msgid "Your Anthropic"
@@ -7610,12 +7647,19 @@ msgid "Your OpenRouter"
 msgstr "Twój OpenRouter"
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
-msgstr "Organizacja nie skonfigurowała modelu. Możesz podłączyć własny; może on przetwarzać dane przestrzeni roboczej poza serwerami firmy."
+#: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Your organization allows personal models."
+msgstr "Organizacja zezwala na modele osobiste."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Your organization manages the models used in this workspace."
 msgstr "Organizacja zarządza modelami używanymi w tej przestrzeni roboczej."
+
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Your organization role could not be verified. Check that Accounts and this server are up to date."
+msgstr "Nie udało się zweryfikować roli w organizacji. Sprawdź, czy Accounts i ten serwer są aktualne."
 
 #: src/components/ModelCredits.tsx
 msgid "Your plan becomes {annualPrice} / year when your trial ends."

@@ -44,6 +44,8 @@ function fixture(canManageServer = true) {
     accounts: vi.fn(async () => [account]),
     create: vi.fn(async () => account),
     hasConfiguredModel: vi.fn(async () => true),
+    setupMode: vi.fn(async () => "legacy"),
+    adminAccessReason: vi.fn(async () => "not_admin"),
   };
   const deps = {
     prisma: {},
@@ -132,7 +134,7 @@ it("rejects personal credential changes when organization models are configured"
 
 it("uses the personal credential catalog only when no organization model is configured", async () => {
   const { deps, serverAI } = fixture();
-  serverAI.hasConfiguredModel.mockResolvedValue(false);
+  vi.mocked(deps.serverAIModels!.personalModelsAllowed).mockResolvedValue(true);
   expect(
     await installationCredentials(deps, { userId: "member", spaceId: "workspace" } as never),
   ).toBeNull();

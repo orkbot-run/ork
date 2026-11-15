@@ -134,6 +134,18 @@ export class ServerAICatalog {
         centralOrganizationId: binding.centralOrganizationId,
         version: binding.bindingVersion,
         administrator: access.role === "admin",
+        organizationRoleKnown:
+          binding.validUntil.getTime() > Date.now() &&
+          Array.isArray(binding.members) &&
+          binding.members.some(
+            (member) =>
+              member &&
+              typeof member === "object" &&
+              !Array.isArray(member) &&
+              member.userId === access.centralSubject &&
+              member.accessVersion === access.membershipVersion &&
+              typeof member.organizationRole === "string",
+          ),
         organizationAdministrator:
           binding.validUntil.getTime() > Date.now() &&
           Array.isArray(binding.members) &&
@@ -159,6 +171,7 @@ export class ServerAICatalog {
       centralOrganizationId: null,
       version: 0,
       administrator: ["owner", "admin"].includes(member.role),
+      organizationRoleKnown: true,
       organizationAdministrator: ["owner", "admin"].includes(member.role),
     };
   }
@@ -253,6 +266,66 @@ export class ServerAICatalog {
         if (!(error instanceof AIConnectionError) || error.code !== "forbidden") throw error;
       }
       return { canManageServer, canManageWorkspace: canManageServer };
+    });
+  }
+
+  async setupMode(actor: AIActor): Promise<"pending" | "organization" | "personal" | "legacy"> {
+    return runAsSystem("read organization model setup", () =>
+      this.deps.prisma.$transaction(async (tx) => {
+        const workspace = await this.workspace(tx, actor);
+        const identity = await tx.installationIdentity.findUnique({ where: { id: "local" } });
+        if (
+          !identity ||
+          identity.serverId !== workspace.serverId ||
+          identity.centralOrganizationId !== workspace.centralOrganizationId ||
+          identity.localOrganizationId !== workspace.organizationId ||
+          identity.bindingVersion !== workspace.version
+        )
+          return deny("forbidden");
+        const mode = identity.modelSetupMode;
+        if (
+          mode !== "pending" &&
+          mode !== "organization" &&
+          mode !== "personal" &&
+          mode !== "legacy"
+        )
+          return deny("forbidden");
+        return mode;
+      }),
+    );
+  }
+
+  async adminAccessReason(
+    actor: AIActor,
+  ): Promise<"role_unavailable" | "not_admin" | "unverified"> {
+    return runAsSystem("diagnose organization model access", () =>
+      this.deps.prisma.$transaction(async (tx) => {
+        const workspace = await this.workspace(tx, actor);
+        if (!workspace.organizationRoleKnown) return "role_unavailable";
+        return workspace.organizationAdministrator ? "unverified" : "not_admin";
+      }),
+    );
+  }
+
+  async chooseMode(actor: AIActor, mode: "organization" | "personal"): Promise<void> {
+    await runAsSystem("choose organization model setup", async () => {
+      const admin = await this.serverAdmin(actor);
+      await this.deps.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM installation_identity WHERE id = 'local' FOR UPDATE`;
+        const identity = await tx.installationIdentity.findUniqueOrThrow({
+          where: { id: "local" },
+        });
+        if (
+          identity.serverId !== admin.serverId ||
+          identity.localOrganizationId !== admin.organizationId ||
+          identity.bindingVersion !== admin.bindingVersion
+        )
+          return deny("forbidden");
+        await tx.installationIdentity.update({
+          where: { id: "local" },
+          data: { modelSetupMode: mode },
+        });
+      });
     });
   }
 
@@ -820,6 +893,9 @@ export class ServerAICatalog {
       await runAsSystem("atomically reserve AI account capacity and workspace budget", () =>
         this.deps.prisma.$transaction(async (tx) => {
           const workspace = await this.workspace(tx, actor);
+          const identity = await tx.installationIdentity.findUnique({ where: { id: "local" } });
+          if (!identity || !["organization", "legacy"].includes(identity.modelSetupMode))
+            return deny("forbidden");
           await tx.aIWorkspacePolicy.createMany({
             data: { spaceId: actor.spaceId },
             skipDuplicates: true,
@@ -963,6 +1039,9 @@ export class ServerAICatalog {
     modelId: string,
   ) {
     const workspace = await this.workspace(tx, actor);
+    const identity = await tx.installationIdentity.findUnique({ where: { id: "local" } });
+    if (!identity || !["organization", "legacy"].includes(identity.modelSetupMode))
+      return deny("forbidden");
     const account = await tx.serverAIConnection.findUnique({ where: { id: connectionId } });
     const assignment = await tx.workspaceAIConnection.findUnique({
       where: { spaceId_connectionId: { spaceId: actor.spaceId, connectionId } },
@@ -998,6 +1077,9 @@ export class ServerAICatalog {
   async validateInTransaction(tx: Prisma.TransactionClient, claim: AIExecutionClaim) {
     this.live(claim);
     const workspace = await this.workspace(tx, claim.scope);
+    const identity = await tx.installationIdentity.findUnique({ where: { id: "local" } });
+    if (!identity || !["organization", "legacy"].includes(identity.modelSetupMode))
+      return deny("forbidden");
     const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
     const reservation = await tx.aIUsageReservation.findUnique({
       where: { operationId: claim.operationId },

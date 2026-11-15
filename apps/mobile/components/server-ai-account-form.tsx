@@ -181,7 +181,7 @@ export function ServerAIAccountForm({
   }
   return (
     <View style={{ gap: 12 }}>
-      <SettingsGroup label={account ? t("Edit AI account") : t("Add AI account")}>
+      <SettingsGroup label={account ? t("Edit model connection") : t("Add model connection")}>
         <SettingsInputRow
           testID="server-ai-account-name"
           accessibilityLabel={t("Name")}

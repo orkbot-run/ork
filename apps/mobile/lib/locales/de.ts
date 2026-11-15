@@ -3,6 +3,25 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  "Your organization role could not be verified. Check that Accounts and this server are up to date.":
+    "Deine Organisationsrolle konnte nicht überprüft werden. Prüfe, ob Accounts und dieser Server aktuell sind.",
+  "Administrator access could not be verified. Sign in again or check the server configuration.":
+    "Administratorzugriff konnte nicht überprüft werden. Melde dich erneut an oder prüfe die Serverkonfiguration.",
+  "Your organization allows personal models.": "Deine Organisation erlaubt persönliche Modelle.",
+  "Allow personal models": "Persönliche Modelle erlauben",
+  "Use organization models": "Organisationsmodelle verwenden",
+  "Choose how people in your organization will connect models.":
+    "Wähle, wie Personen in deiner Organisation Modelle verbinden.",
+  "Connect organization models": "Organisationsmodelle verbinden",
+  "Let people connect their own models": "Eigene Modelle erlauben",
+  "Personal models may process workspace data outside company servers.":
+    "Persönliche Modelle können Arbeitsbereichsdaten außerhalb der Firmenserver verarbeiten.",
+  "Waiting for an organization administrator to set up models.":
+    "Warten auf die Modelleinrichtung durch einen Organisationsadministrator.",
+  "Add model connection": "Modellverbindung hinzufügen",
+  "Edit model connection": "Modellverbindung bearbeiten",
+  "Disable connection": "Verbindung deaktivieren",
+  "No model connections available": "Keine Modellverbindungen verfügbar",
   "Could not load organization settings.":
     "Organisationseinstellungen konnten nicht geladen werden.",
   "Make available to organization": "Für Organisation verfügbar machen",

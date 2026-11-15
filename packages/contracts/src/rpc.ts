@@ -508,6 +508,9 @@ export const appContract = {
     cancelOAuth: oc.input(z.object({ loginId: Id })).output(z.object({ ok: z.literal(true) })),
     catalog: oc.output(z.array(ModelCatalogEntrySchema)),
     status: oc.output(ServerAIStatusSchema),
+    chooseMode: oc
+      .input(z.object({ mode: z.enum(["organization", "personal"]) }))
+      .output(z.object({ ok: z.literal(true) })),
     create: oc
       .input(
         z.object({
@@ -557,6 +560,7 @@ export const appContract = {
         canManage: z.boolean(),
         managed: z.boolean().optional(),
         personalModelsAllowed: z.boolean().optional(),
+        modelSetupMode: z.enum(["pending", "organization", "personal", "legacy"]).optional(),
         policy: z.object({ provider: z.string(), modelId: z.string() }).nullable(),
       }),
     ),

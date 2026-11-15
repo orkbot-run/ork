@@ -3,6 +3,25 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const RU_MESSAGES: Record<string, string> = {
+  "Your organization role could not be verified. Check that Accounts and this server are up to date.":
+    "Не удалось проверить вашу роль в организации. Убедитесь, что Accounts и сервер обновлены.",
+  "Administrator access could not be verified. Sign in again or check the server configuration.":
+    "Не удалось проверить права администратора. Войдите снова или проверьте настройки сервера.",
+  "Your organization allows personal models.": "Организация разрешает личные модели.",
+  "Allow personal models": "Разрешить личные модели",
+  "Use organization models": "Использовать модели организации",
+  "Choose how people in your organization will connect models.":
+    "Выберите, как участники организации будут подключать модели.",
+  "Connect organization models": "Подключить модели организации",
+  "Let people connect their own models": "Разрешить личные модели",
+  "Personal models may process workspace data outside company servers.":
+    "Личные модели могут обрабатывать данные вне серверов компании.",
+  "Waiting for an organization administrator to set up models.":
+    "Ожидание настройки моделей администратором организации.",
+  "Add model connection": "Добавить подключение модели",
+  "Edit model connection": "Изменить подключение модели",
+  "Disable connection": "Отключить подключение",
+  "No model connections available": "Нет доступных подключений моделей",
   "Could not load organization settings.": "Не удалось загрузить настройки организации.",
   "Make available to organization": "Сделать доступным организации",
   "Manage your organization, servers and people in Ork Accounts.":

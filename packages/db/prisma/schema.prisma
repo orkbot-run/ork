@@ -2538,6 +2538,7 @@ model InstallationIdentity {
   centralOrganizationId String?
   bindingVersion Int @default(1)
   state String @default("unregistered")
+  modelSetupMode String @default("pending")
   projectionGrant String?
   verifiedAt DateTime?
   validUntil DateTime?

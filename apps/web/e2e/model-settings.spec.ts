@@ -145,7 +145,7 @@ test("managed workspace settings show organization models and administration", a
   await page.getByLabel("Fallback priority", { exact: true }).scrollIntoViewIfNeeded();
   await captureScreenshot(page, testInfo, "installation-ai-workspace-limits");
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await page.getByRole("button", { name: "Add AI account", exact: true }).click();
+  await page.getByRole("button", { name: "Add model connection", exact: true }).click();
   await expect(page.getByLabel("Concurrent requests", { exact: true })).toHaveValue("8");
   await page.getByRole("button", { name: "Save", exact: true }).scrollIntoViewIfNeeded();
   await captureScreenshot(page, testInfo, "installation-ai-add-account");

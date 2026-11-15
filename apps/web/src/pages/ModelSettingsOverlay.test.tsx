@@ -1843,7 +1843,7 @@ it("opens managed AI settings without reading or refreshing personal credentials
   });
   const view = await renderSettings(true, testQueryClient(), "account", true);
   try {
-    expect(view.container.textContent).toContain("No AI accounts assigned");
+    expect(view.container.textContent).toContain("No model connections available");
     expect(models.credentials).not.toHaveBeenCalled();
     expect(models.list).not.toHaveBeenCalled();
     expect(models.role).not.toHaveBeenCalled();
