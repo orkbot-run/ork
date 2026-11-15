@@ -3,6 +3,10 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const RU_MESSAGES: Record<string, string> = {
+  "Add model connection": "Добавить подключение модели",
+  "Edit model connection": "Изменить подключение модели",
+  "Disable connection": "Отключить подключение",
+  "No model connections available": "Нет доступных подключений моделей",
   "Could not load organization settings.": "Не удалось загрузить настройки организации.",
   "Make available to organization": "Сделать доступным организации",
   "Manage your organization, servers and people in Ork Accounts.":

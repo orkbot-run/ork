@@ -561,10 +561,6 @@ msgstr "Добавьте триггер для запуска этой проц�
 msgid "Add a voice provider key and pick a voice in Voice settings."
 msgstr ""
 
-#: src/pages/ServerAISettings.tsx
-msgid "Add AI account"
-msgstr "Добавить аккаунт ИИ"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "Добавьте URL-адрес HTTPS-сервера."
@@ -600,6 +596,10 @@ msgstr "Добавить элемент"
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Add MCP server"
 msgstr "Добавить MCP-сервер"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Add model connection"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Add open work"
@@ -943,11 +943,7 @@ msgid "Ask"
 msgstr "Спрашивать"
 
 #: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a server administrator to make an AI account available to this workspace."
-msgstr ""
-
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a workspace administrator to enable an AI account for this workspace."
+msgid "Ask an organization administrator to connect a model."
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
@@ -2014,13 +2010,13 @@ msgstr "Не удалось очистить диалог"
 msgid "Could not complete action"
 msgstr "Не удалось выполнить действие"
 
-#: src/pages/model-settings/server-ai-account-form.tsx
-msgid "Could not complete AI account sign-in."
-msgstr "Не удалось завершить вход в аккаунт ИИ."
-
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete OAuth"
 msgstr "Не удалось завершить OAuth"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not complete provider sign-in."
+msgstr ""
 
 #: src/lib/user-error.ts
 msgid "Could not complete sign-in. Retry or ask your administrator to check access."
@@ -2892,8 +2888,8 @@ msgid "Disable a tool"
 msgstr "Отключить инструмент"
 
 #: src/pages/ServerAISettings.tsx
-msgid "Disable account"
-msgstr "Отключить аккаунт"
+msgid "Disable connection"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Disabled"
@@ -3046,13 +3042,13 @@ msgstr "Каждое имя можно использовать только о�
 msgid "Edit"
 msgstr "Изменить"
 
-#: src/pages/ServerAISettings.tsx
-msgid "Edit AI account"
-msgstr "Изменить аккаунт ИИ"
-
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Сначала отредактируйте"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Edit model connection"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
@@ -4568,10 +4564,6 @@ msgstr "Следующая страница"
 msgid "Next settings sections"
 msgstr ""
 
-#: src/pages/ServerAISettings.tsx
-msgid "No AI accounts assigned"
-msgstr "Аккаунты ИИ не назначены"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
 msgstr "Нет приложений, соответствующих вашему запросу."
@@ -4631,6 +4623,10 @@ msgstr "Сообщений с {peerBotName} пока нет."
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No model catalog is available."
 msgstr "Каталога моделей нет."
+
+#: src/pages/ServerAISettings.tsx
+msgid "No model connections available"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "No models listed."
@@ -7561,6 +7557,10 @@ msgstr "Вы получите бесплатный месяц, когда дру
 msgid "You have control"
 msgstr "Вы управляете"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Your account does not currently have permission to manage organization models."
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
 msgid "Your Anthropic"
@@ -7610,6 +7610,7 @@ msgid "Your OpenRouter"
 msgstr "Ваш OpenRouter"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
 msgstr ""
 

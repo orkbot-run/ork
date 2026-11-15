@@ -83,7 +83,7 @@ export function ServerAIAccountForm({
           setError(
             message === "Connected, but could not refresh."
               ? t`Connected, but could not refresh.`
-              : t`Could not complete AI account sign-in.`,
+              : t`Could not complete provider sign-in.`,
           ),
         onSaved: async () => {
           setKey("");

@@ -88,6 +88,7 @@ export function OnboardingPage() {
   const linkedStep = routeStep === "model" ? routeStep : undefined;
   const [creatingBot, setCreatingBot] = useState(false);
   const [managed, setManaged] = useState<boolean | null>(null);
+  const [personalOrganizationModel, setPersonalOrganizationModel] = useState(false);
   const [loadRevision, setLoadRevision] = useState(0);
   const step = managed === null ? "loading" : creatingBot ? "bot" : (linkedStep ?? "loading");
   const [billingEnabled, setBillingEnabled] = useState(false);
@@ -155,10 +156,16 @@ export function OnboardingPage() {
     void Promise.all([rpc.me(), rpc.models.workspacePolicy()])
       .then(async ([me, policy]) => {
         if (!active || !form.isSelected()) return;
-        const models = policy.managed ? [] : await rpc.models.list().catch(() => []);
+        const organizationSettings =
+          policy.managed && policy.personalModelsAllowed ? await rpc.serverAI.status() : null;
+        const useOrganizationModels =
+          policy.managed &&
+          (!policy.personalModelsAllowed || organizationSettings?.canManageServer);
+        const models = useOrganizationModels ? [] : await rpc.models.list().catch(() => []);
         if (!active || !form.isSelected()) return;
-        setManaged(policy.managed === true);
-        setBillingEnabled(me.billingEnabled);
+        setManaged(Boolean(useOrganizationModels));
+        setPersonalOrganizationModel(Boolean(policy.managed && !useOrganizationModels));
+        setBillingEnabled(!policy.managed && me.billingEnabled);
         setCatalog(models);
         const next = me.needsModel ? "model" : "bot";
         if (!linkedStep) goTo(next);
@@ -536,6 +543,14 @@ export function OnboardingPage() {
             <h1 className="text-2xl font-medium tracking-tight text-foreground">
               <Trans>Connect a model</Trans>
             </h1>
+            {personalOrganizationModel ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                <Trans>
+                  Your organization has not configured a model. You can connect your own; it may
+                  process workspace data outside company servers.
+                </Trans>
+              </p>
+            ) : null}
             <div className="mt-8 block text-sm font-medium text-foreground">
               <span>
                 <Trans>Provider</Trans>

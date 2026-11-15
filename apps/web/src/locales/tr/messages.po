@@ -561,10 +561,6 @@ msgstr "Bu rutini çalıştırmak için bir tetikleyici ekleyin."
 msgid "Add a voice provider key and pick a voice in Voice settings."
 msgstr "Ses sağlayıcısı anahtarı ekle ve Ses ayarlarından bir ses seç."
 
-#: src/pages/ServerAISettings.tsx
-msgid "Add AI account"
-msgstr "Yapay zeka hesabı ekle"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "Bir HTTPS sunucu URL'si gir."
@@ -600,6 +596,10 @@ msgstr "Öğe ekle"
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Add MCP server"
 msgstr "MCP sunucusu ekle"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Add model connection"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Add open work"
@@ -943,11 +943,7 @@ msgid "Ask"
 msgstr "Sor"
 
 #: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a server administrator to make an AI account available to this workspace."
-msgstr ""
-
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a workspace administrator to enable an AI account for this workspace."
+msgid "Ask an organization administrator to connect a model."
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
@@ -2014,13 +2010,13 @@ msgstr "Sohbet temizlenemedi"
 msgid "Could not complete action"
 msgstr "İşlem tamamlanamadı"
 
-#: src/pages/model-settings/server-ai-account-form.tsx
-msgid "Could not complete AI account sign-in."
-msgstr "Yapay zeka hesabına giriş tamamlanamadı."
-
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete OAuth"
 msgstr "OAuth tamamlanamadı"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not complete provider sign-in."
+msgstr ""
 
 #: src/lib/user-error.ts
 msgid "Could not complete sign-in. Retry or ask your administrator to check access."
@@ -2892,8 +2888,8 @@ msgid "Disable a tool"
 msgstr "Bir aracı devre dışı bırak"
 
 #: src/pages/ServerAISettings.tsx
-msgid "Disable account"
-msgstr "Hesabı devre dışı bırak"
+msgid "Disable connection"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Disabled"
@@ -3046,13 +3042,13 @@ msgstr "Her ad yalnızca bir kez kullanılabilir."
 msgid "Edit"
 msgstr "Düzenle"
 
-#: src/pages/ServerAISettings.tsx
-msgid "Edit AI account"
-msgstr "Yapay zeka hesabını düzenle"
-
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Önce düzenle"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Edit model connection"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
@@ -4568,10 +4564,6 @@ msgstr "Sonraki sayfa"
 msgid "Next settings sections"
 msgstr "Sonraki ayar bölümleri"
 
-#: src/pages/ServerAISettings.tsx
-msgid "No AI accounts assigned"
-msgstr "Atanmış yapay zeka hesabı yok"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
 msgstr "Aramanla eşleşen uygulama yok."
@@ -4631,6 +4623,10 @@ msgstr "{peerBotName} ile henüz mesaj yok."
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No model catalog is available."
 msgstr "Kullanılabilir model kataloğu yok."
+
+#: src/pages/ServerAISettings.tsx
+msgid "No model connections available"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "No models listed."
@@ -7561,6 +7557,10 @@ msgstr "Yeni bir kartla deneme sürümünü başlattıklarında sen bir ay ücre
 msgid "You have control"
 msgstr "Kontrol sende"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Your account does not currently have permission to manage organization models."
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
 msgid "Your Anthropic"
@@ -7610,6 +7610,7 @@ msgid "Your OpenRouter"
 msgstr "OpenRouter sağlayıcınız"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
 msgstr ""
 

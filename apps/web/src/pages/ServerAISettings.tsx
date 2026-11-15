@@ -255,7 +255,14 @@ export function ServerAISettings({
         ))}
         {value && !value.connections.length ? (
           <p className="text-sm text-muted-foreground">
-            <Trans>No AI accounts assigned</Trans>
+            <Trans>No model connections available</Trans>
+          </p>
+        ) : null}
+        {value?.available && !value.canManageServer && !onboarding ? (
+          <p className="text-sm text-muted-foreground">
+            <Trans>
+              Your account does not currently have permission to manage organization models.
+            </Trans>
           </p>
         ) : null}
         {policy.data?.personalModelsAllowed ? (
@@ -309,7 +316,7 @@ export function ServerAISettings({
                           setEditingAccount(editingAccount === row.id ? null : row.id);
                         }}
                       >
-                        <Trans>Edit AI account</Trans>
+                        <Trans>Edit model connection</Trans>
                       </Button>
                     ) : null}
                     {value.connections.some((assigned) => assigned.id === row.id) ? (
@@ -356,7 +363,7 @@ export function ServerAISettings({
                           )
                         }
                       >
-                        <Trans>Disable account</Trans>
+                        <Trans>Disable connection</Trans>
                       </Button>
                     ) : null}
                   </div>
@@ -399,7 +406,7 @@ export function ServerAISettings({
                   setAdding(true);
                 }}
               >
-                <Trans>Add AI account</Trans>
+                <Trans>Add model connection</Trans>
               </Button>
             )}
             {catalog.isError ? (

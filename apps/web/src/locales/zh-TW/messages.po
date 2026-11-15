@@ -562,10 +562,6 @@ msgstr "新增觸發器以執行此例行任務。"
 msgid "Add a voice provider key and pick a voice in Voice settings."
 msgstr ""
 
-#: src/pages/ServerAISettings.tsx
-msgid "Add AI account"
-msgstr "新增 AI 帳戶"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "請填寫 HTTPS 伺服器 URL。"
@@ -601,6 +597,10 @@ msgstr "新增項目"
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Add MCP server"
 msgstr "新增 MCP 伺服器"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Add model connection"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Add open work"
@@ -944,11 +944,7 @@ msgid "Ask"
 msgstr "詢問"
 
 #: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a server administrator to make an AI account available to this workspace."
-msgstr ""
-
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a workspace administrator to enable an AI account for this workspace."
+msgid "Ask an organization administrator to connect a model."
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
@@ -2015,13 +2011,13 @@ msgstr "無法清空對話"
 msgid "Could not complete action"
 msgstr "無法完成操作"
 
-#: src/pages/model-settings/server-ai-account-form.tsx
-msgid "Could not complete AI account sign-in."
-msgstr "無法完成 AI 帳戶登入。"
-
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete OAuth"
 msgstr "無法完成 OAuth"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not complete provider sign-in."
+msgstr ""
 
 #: src/lib/user-error.ts
 msgid "Could not complete sign-in. Retry or ask your administrator to check access."
@@ -2893,8 +2889,8 @@ msgid "Disable a tool"
 msgstr "停用工具"
 
 #: src/pages/ServerAISettings.tsx
-msgid "Disable account"
-msgstr "停用帳戶"
+msgid "Disable connection"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Disabled"
@@ -3047,13 +3043,13 @@ msgstr "每個名稱只能使用一次。"
 msgid "Edit"
 msgstr "編輯"
 
-#: src/pages/ServerAISettings.tsx
-msgid "Edit AI account"
-msgstr "編輯 AI 帳戶"
-
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "先編輯"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Edit model connection"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
@@ -4569,10 +4565,6 @@ msgstr "下一頁"
 msgid "Next settings sections"
 msgstr "下一組設定區段"
 
-#: src/pages/ServerAISettings.tsx
-msgid "No AI accounts assigned"
-msgstr "未指派 AI 帳戶"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
 msgstr "沒有符合搜尋條件的應用程式。"
@@ -4632,6 +4624,10 @@ msgstr "還沒有與 {peerBotName} 的訊息。"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No model catalog is available."
 msgstr "沒有可用的模型目錄。"
+
+#: src/pages/ServerAISettings.tsx
+msgid "No model connections available"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "No models listed."
@@ -7562,6 +7558,10 @@ msgstr "對方用新卡開始試用後，你將獲得一個月免費。"
 msgid "You have control"
 msgstr "你已接管"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Your account does not currently have permission to manage organization models."
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
 msgid "Your Anthropic"
@@ -7611,6 +7611,7 @@ msgid "Your OpenRouter"
 msgstr "你的 OpenRouter"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
 msgstr ""
 

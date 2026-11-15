@@ -561,10 +561,6 @@ msgstr "Voeg een trigger toe om deze routine uit te voeren."
 msgid "Add a voice provider key and pick a voice in Voice settings."
 msgstr ""
 
-#: src/pages/ServerAISettings.tsx
-msgid "Add AI account"
-msgstr "AI-account toevoegen"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "Voeg een HTTPS-server-URL toe."
@@ -600,6 +596,10 @@ msgstr "Item toevoegen"
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Add MCP server"
 msgstr "MCP-server toevoegen"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Add model connection"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Add open work"
@@ -943,11 +943,7 @@ msgid "Ask"
 msgstr "Vragen"
 
 #: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a server administrator to make an AI account available to this workspace."
-msgstr ""
-
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask a workspace administrator to enable an AI account for this workspace."
+msgid "Ask an organization administrator to connect a model."
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
@@ -2014,13 +2010,13 @@ msgstr "Gesprek wissen mislukt"
 msgid "Could not complete action"
 msgstr "Actie voltooien mislukt"
 
-#: src/pages/model-settings/server-ai-account-form.tsx
-msgid "Could not complete AI account sign-in."
-msgstr "Aanmelden bij het AI-account kon niet worden voltooid."
-
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete OAuth"
 msgstr "OAuth voltooien mislukt"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not complete provider sign-in."
+msgstr ""
 
 #: src/lib/user-error.ts
 msgid "Could not complete sign-in. Retry or ask your administrator to check access."
@@ -2892,8 +2888,8 @@ msgid "Disable a tool"
 msgstr "Een tool uitschakelen"
 
 #: src/pages/ServerAISettings.tsx
-msgid "Disable account"
-msgstr "Account uitschakelen"
+msgid "Disable connection"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Disabled"
@@ -3046,13 +3042,13 @@ msgstr "Elke naam kan maar één keer worden gebruikt."
 msgid "Edit"
 msgstr "Bewerken"
 
-#: src/pages/ServerAISettings.tsx
-msgid "Edit AI account"
-msgstr "AI-account bewerken"
-
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Eerst bewerken"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Edit model connection"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
@@ -4568,10 +4564,6 @@ msgstr "Volgende pagina"
 msgid "Next settings sections"
 msgstr ""
 
-#: src/pages/ServerAISettings.tsx
-msgid "No AI accounts assigned"
-msgstr "Geen AI-accounts toegewezen"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
 msgstr "Geen apps komen overeen met je zoekopdracht."
@@ -4631,6 +4623,10 @@ msgstr "Nog geen berichten met {peerBotName}."
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No model catalog is available."
 msgstr "Er is geen modelcatalogus beschikbaar."
+
+#: src/pages/ServerAISettings.tsx
+msgid "No model connections available"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "No models listed."
@@ -7561,6 +7557,10 @@ msgstr "Jij krijgt een gratis maand zodra zij hun proefperiode met een nieuwe ka
 msgid "You have control"
 msgstr "Jij hebt de controle"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Your account does not currently have permission to manage organization models."
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
 msgid "Your Anthropic"
@@ -7610,6 +7610,7 @@ msgid "Your OpenRouter"
 msgstr "Jouw OpenRouter"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
 msgstr ""
 

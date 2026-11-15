@@ -3,6 +3,10 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  "Add model connection": "Modellverbindung hinzufügen",
+  "Edit model connection": "Modellverbindung bearbeiten",
+  "Disable connection": "Verbindung deaktivieren",
+  "No model connections available": "Keine Modellverbindungen verfügbar",
   "Could not load organization settings.":
     "Organisationseinstellungen konnten nicht geladen werden.",
   "Make available to organization": "Für Organisation verfügbar machen",

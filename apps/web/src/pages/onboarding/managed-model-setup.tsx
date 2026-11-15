@@ -31,15 +31,9 @@ export function ManagedModelSetup({
       <h1 className="text-[32px] font-medium text-foreground">
         <Trans>Connect a model</Trans>
       </h1>
-      {permissions && !permissions.canManageWorkspace ? (
+      {permissions && !permissions.canManageServer ? (
         <p className="text-sm text-muted-foreground">
-          <Trans>Ask a workspace administrator to enable an AI account for this workspace.</Trans>
-        </p>
-      ) : permissions && !permissions.canManageServer && !permissions.connections.length ? (
-        <p className="text-sm text-muted-foreground">
-          <Trans>
-            Ask a server administrator to make an AI account available to this workspace.
-          </Trans>
+          <Trans>Ask an organization administrator to connect a model.</Trans>
         </p>
       ) : null}
       <ServerAISettings embedded onboarding onClose={() => undefined} />

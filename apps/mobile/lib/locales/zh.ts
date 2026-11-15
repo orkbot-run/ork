@@ -3,6 +3,10 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "Add model connection": "添加模型连接",
+  "Edit model connection": "编辑模型连接",
+  "Disable connection": "停用连接",
+  "No model connections available": "没有可用的模型连接",
   "Could not load organization settings.": "无法加载组织设置。",
   "Make available to organization": "向组织开放",
   "Manage your organization, servers and people in Ork Accounts.":

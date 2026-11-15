@@ -3,6 +3,10 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Add model connection": "モデル接続を追加",
+  "Edit model connection": "モデル接続を編集",
+  "Disable connection": "接続を無効にする",
+  "No model connections available": "利用可能なモデル接続がありません",
   "Could not load organization settings.": "組織の設定を読み込めませんでした。",
   "Make available to organization": "組織で利用可能にする",
   "Manage your organization, servers and people in Ork Accounts.":

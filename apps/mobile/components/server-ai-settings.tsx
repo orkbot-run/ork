@@ -239,7 +239,7 @@ export function ServerAISettings({
                 )}
                 {row.state !== "disabled" ? (
                   <SettingsRow
-                    title={t("Disable account")}
+                    title={t("Disable connection")}
                     destructive
                     disabled={busy}
                     onPress={() =>
@@ -281,7 +281,7 @@ export function ServerAISettings({
             />
           ) : (
             <NativeActionButton
-              label={t("Add AI account")}
+              label={t("Add model connection")}
               disabled={busy || !catalog.data}
               onPress={() => {
                 setEditingAccount(null);
@@ -299,7 +299,7 @@ export function ServerAISettings({
       ) : null}
       {!value.connections.length ? (
         <SettingsGroup>
-          <SettingsRow title={t("No AI accounts assigned")} />
+          <SettingsRow title={t("No model connections available")} />
         </SettingsGroup>
       ) : null}
     </View>

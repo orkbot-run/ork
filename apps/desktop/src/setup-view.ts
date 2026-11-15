@@ -185,8 +185,9 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       screen !== "servers" || directoryStage !== "organization" || !organizationCount;
     element<HTMLButtonElement>("organization-next").disabled =
       operation !== null || !selectedOrganizationId;
-    element("add-server").hidden = directoryStage !== "servers";
-    element("saved-servers").hidden = directoryStage !== "servers";
+    const choosingWorkspaces = directoryStage === "servers" && !!organizationCount;
+    element("add-server").hidden = directoryStage !== "servers" || choosingWorkspaces;
+    element("saved-servers").hidden = directoryStage !== "servers" || choosingWorkspaces;
     element("server-choices").hidden = directoryStage !== "location";
     element("workspaces-section").hidden = !organizationCount || directoryStage === "location";
     element("workspaces-error").hidden =
@@ -197,14 +198,18 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       directoryStage === "organization"
         ? "Choose organization"
         : directoryStage === "servers"
-          ? "Choose server"
+          ? choosingWorkspaces
+            ? "Choose workspace"
+            : "Choose server"
           : "Where will Ork live?",
     );
     element("directory-description").textContent = t(
       directoryStage === "organization"
         ? "Choose an organization to continue."
         : directoryStage === "servers"
-          ? "Choose a server or add a new one."
+          ? choosingWorkspaces
+            ? "Choose a workspace to continue."
+            : "Choose a server or add a new one."
           : "Choose where to run Ork.",
     );
     shell!.dataset.directoryStage = directoryStage;

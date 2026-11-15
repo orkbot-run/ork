@@ -121,21 +121,12 @@ export function renderWorkspacePicker(options: {
   container.append(field);
   const entries: DesktopWorkspace[] = [];
   if (!organization) return entries;
-  if (!organization.servers.length) {
-    const empty = doc.createElement("p");
-    empty.className = "hint";
-    empty.dataset.directoryGroup = "servers";
-    empty.textContent = t("No servers connected");
-    container.append(empty);
-  }
+  let visibleCount = 0;
   for (const server of organization.servers) {
     const visibleWorkspaces = server.workspaces.filter((workspace) => workspace.role !== null);
     if (server.state === "disconnected" || visibleWorkspaces.length === 0) continue;
-    const heading = doc.createElement("h3");
-    heading.textContent = server.name;
-    heading.dataset.directoryGroup = "servers";
-    container.append(heading);
     for (const workspace of visibleWorkspaces) {
+      visibleCount++;
       const choice = catalogWorkspace(catalog, {
         organizationId: organization.id,
         serverId: server.id,
@@ -165,13 +156,20 @@ export function renderWorkspacePicker(options: {
             ? "Preparing workspace"
             : !workspace.canOpen
               ? "Access required"
-              : "Server unavailable",
+              : "Workspace unavailable",
         );
       }
       text.append(name, status);
       button.append(text);
       container.append(button);
     }
+  }
+  if (!visibleCount) {
+    const empty = doc.createElement("p");
+    empty.className = "hint";
+    empty.dataset.directoryGroup = "servers";
+    empty.textContent = t("No workspaces available");
+    container.append(empty);
   }
   if (catalog.defaultOrganizationId !== organization.id) {
     const preferred = doc.createElement("button");
