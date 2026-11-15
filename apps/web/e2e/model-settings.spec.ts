@@ -74,7 +74,7 @@ test("the native renderer manages shared AI on its connected server", async ({
   expect((await rpc<{ policy: unknown }>(page, "models/workspacePolicy", {})).policy).toBeNull();
 });
 
-test("managed workspace settings show assigned accounts and server administration", async ({
+test("managed workspace settings show organization models and administration", async ({
   page,
 }, testInfo) => {
   await signup(
@@ -122,16 +122,25 @@ test("managed workspace settings show assigned accounts and server administratio
   await page.route("**/rpc/serverAI/catalog", (route) =>
     route.fulfill({ json: { json: catalog } }),
   );
-  await openUserSettings(page, "models");
+  const settings = await openUserSettings(page);
+  await settings.getByTestId("settings-nav-organization-models").click();
   await expect(page.getByTestId("server-ai-ready")).toBeVisible();
   await expect(page.getByRole("region", { name: "Shared account", exact: true })).toContainText(
     "small-model",
   );
-  await expect(page.getByRole("region", { name: "Server accounts", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Organization connections", exact: true }),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Add provider", exact: true })).toHaveCount(0);
   await captureScreenshot(page, testInfo, "installation-ai-accounts");
-  await page.getByRole("button", { name: "Models and limits", exact: true }).click();
-  await expect(page.getByLabel("Monthly budget (USD)", { exact: true })).toHaveValue("50");
+  await page
+    .getByTestId("server-ai-ready")
+    .getByRole("button", { name: "Models", exact: true })
+    .click();
+  await expect(page.getByLabel("Monthly budget (USD)", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Remove existing model spending limit" }),
+  ).toBeVisible();
   await expect(page.getByLabel("Default model", { exact: true })).toHaveValue("small-model");
   await page.getByLabel("Fallback priority", { exact: true }).scrollIntoViewIfNeeded();
   await captureScreenshot(page, testInfo, "installation-ai-workspace-limits");
