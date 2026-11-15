@@ -5,7 +5,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -39,20 +38,7 @@ describe("Android APK release workflow", () => {
     expect(workflow).toMatch(/^ {2}workflow_call:/m);
     const triggers = workflow.split("\npermissions:")[0];
     expect(triggers?.match(/default: diagnostic/g)).toHaveLength(2);
-    expect(triggers).toContain("push:\n    branches: [main]");
-    expect(triggers).toContain("pull_request:\n    paths: *android_build_paths");
-    for (const source of [
-      "apps/mobile/**",
-      "packages/chat-ui/**",
-      "packages/client-transport/**",
-      "packages/contracts/**",
-      "packages/core/**",
-      "packages/logging/**",
-      "packages/ui-tokens/**",
-      "packages/ui-web/**",
-      "pnpm-lock.yaml",
-    ])
-      expect(triggers).toContain(source);
+    expect(triggers).not.toMatch(/^ {2}(push|pull_request):/m);
     expect(workflow).toContain("permissions:\n  contents: read");
     expect(workflow).toContain("if: github.ref == 'refs/heads/main'");
     expect(workflow).toContain("persist-credentials: false");
@@ -81,38 +67,14 @@ describe("Android APK release workflow", () => {
     expect(workflowJob("configuration")).not.toContain("secrets.");
   });
 
-  it("rebuilds Android when any resolved mobile workspace changes", () => {
-    const repository = path.resolve(import.meta.dirname, "../../..");
-    const workspaces = new Map<string, string>();
-    for (const entry of readdirSync(path.join(repository, "packages"))) {
-      const directory = `packages/${entry}`;
-      const manifest = path.join(repository, directory, "package.json");
-      if (!existsSync(manifest)) continue;
-      const { name } = JSON.parse(readFileSync(manifest, "utf8"));
-      workspaces.set(name, directory);
-    }
-    // Leaf workspaces can be absent from pnpm's importer list, so read the declared runtime graph.
-    const dependencies = new Set<string>();
-    function visit(directory: string) {
-      if (dependencies.has(directory)) return;
-      dependencies.add(directory);
-      const manifest = JSON.parse(
-        readFileSync(path.join(repository, directory, "package.json"), "utf8"),
-      );
-      for (const [name, version] of Object.entries({
-        ...manifest.dependencies,
-        ...manifest.optionalDependencies,
-      })) {
-        if (typeof version !== "string" || !version.startsWith("workspace:")) continue;
-        const target = workspaces.get(name);
-        if (!target) throw new Error(`Unknown workspace dependency: ${name}`);
-        visit(target);
-      }
-    }
-    visit("apps/mobile");
-    expect(dependencies.has("packages/avatar")).toBe(true);
-    const triggers = workflow.split("\npermissions:")[0];
-    for (const dependency of dependencies) expect(triggers).toContain(`- ${dependency}/**`);
+  it("runs iOS builds only when manually requested", () => {
+    const ios = readFileSync(
+      path.resolve(import.meta.dirname, "../../../.github/workflows/ios-build.yml"),
+      "utf8",
+    );
+    const triggers = ios.split("\npermissions:")[0];
+    expect(triggers).toMatch(/^ {2}workflow_dispatch:/m);
+    expect(triggers).not.toMatch(/^ {2}(push|pull_request):/m);
   });
 
   it("keeps standalone and caller builds in separate queues while serializing one workflow and ref", () => {

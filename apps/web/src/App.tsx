@@ -19,6 +19,7 @@ import { Navigate, Outlet, Route, Routes, useLocation, useSearchParams } from "r
 import { LoadingState } from "./components/ai/primitives";
 import { CallLayout } from "./components/call/CallLayout";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ModelSetupGate } from "./components/ModelSetupGate";
 import { MarkdownLinkPrompt } from "./components/markdown-link-prompt";
 import { PageLoading } from "./components/PageLoading";
 import { ProtocolRecovery } from "./components/ProtocolRecovery";
@@ -297,15 +298,21 @@ function SessionApp() {
                   )
                 }
               >
-                <Route path="/app" element={<ShellPage />} />
-                <Route path="/app/g/:groupId" element={<ShellPage />} />
-                <Route path="/app/:botId" element={<ShellPage />} />
                 <Route element={<CallLayout />}>
                   <Route path="/onboarding/:step?" element={<OnboardingPage />} />
-                  <Route path="/app/artifacts" element={<ArtifactsPage />} />
-                  <Route path="/app/artifacts/:artifactId" element={<ArtifactsPage />} />
-                  {ticketBoardEnabled ? <Route path="/app/board" element={<BoardPage />} /> : null}
-                  <Route path="/app/x/:linkId" element={<NavLinkPage />} />
+                </Route>
+                <Route element={<ModelSetupGate />}>
+                  <Route path="/app" element={<ShellPage />} />
+                  <Route path="/app/g/:groupId" element={<ShellPage />} />
+                  <Route path="/app/:botId" element={<ShellPage />} />
+                  <Route element={<CallLayout />}>
+                    <Route path="/app/artifacts" element={<ArtifactsPage />} />
+                    <Route path="/app/artifacts/:artifactId" element={<ArtifactsPage />} />
+                    {ticketBoardEnabled ? (
+                      <Route path="/app/board" element={<BoardPage />} />
+                    ) : null}
+                    <Route path="/app/x/:linkId" element={<NavLinkPage />} />
+                  </Route>
                 </Route>
               </Route>
               <Route path="*" element={<NotFoundPage />} />

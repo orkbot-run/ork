@@ -3,7 +3,6 @@ import { execFileSync } from "node:child_process";
 import { generateKeyPairSync, verify, X509Certificate } from "node:crypto";
 import {
   existsSync,
-  globSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -663,10 +662,10 @@ test("active workflow keeps iOS on native GitHub build and explicit upload witho
   assert.match(source, /uses: \.\/\.github\/workflows\/release-android-apk.yml/);
 });
 
-test("automatic iOS builds accept pull requests without signing or publishing authority", () => {
+test("manual iOS builds run without signing or publishing authority", () => {
   const source = readFileSync(new URL("../workflows/ios-build.yml", import.meta.url), "utf8");
-  assert.match(source, /push:\n\s+branches: \[main\]/);
-  assert.match(source, /pull_request:/);
+  assert.match(source, /^ {2}workflow_dispatch:/m);
+  assert.doesNotMatch(source, /^ {2}(push|pull_request):/m);
   assert.match(source, /permissions:\n\s+contents: read/);
   assert.match(source, /persist-credentials: false/);
   assert.doesNotMatch(source, /pull_request_target|secrets[.[]|contents: write|id-token: write/);
@@ -677,7 +676,7 @@ test("automatic iOS builds accept pull requests without signing or publishing au
   assert.match(source, /DEVELOPMENT_TEAM=""/);
 });
 
-test("automatic iOS builds embed JavaScript and retain a simulator app artifact", () => {
+test("manual iOS builds embed JavaScript and retain a simulator app artifact", () => {
   const source = readFileSync(new URL("../workflows/ios-build.yml", import.meta.url), "utf8");
   assert.match(source, /expo prebuild --platform ios --no-install/);
   assert.match(source, /-configuration Release/);
@@ -688,31 +687,6 @@ test("automatic iOS builds embed JavaScript and retain a simulator app artifact"
   assert.match(source, /ditto -c -k --sequesterRsrc --keepParent/);
   assert.match(source, /uses: actions\/upload-artifact@/);
   assert.match(source, /if-no-files-found: error/);
-});
-
-test("automatic iOS paths include the runtime workspace closure, including leaf packages", () => {
-  const root = path.resolve(import.meta.dirname, "../..");
-  const source = readFileSync(new URL("../workflows/ios-build.yml", import.meta.url), "utf8");
-  const packages = new Map(
-    globSync("packages/*/package.json", { cwd: root }).map((file) => {
-      const manifest = JSON.parse(readFileSync(path.join(root, file), "utf8"));
-      return [manifest.name, { directory: path.dirname(file), manifest }];
-    }),
-  );
-  const seen = new Set(["apps/mobile"]);
-  const visit = (manifest) => {
-    for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
-      if (!version.startsWith("workspace:")) continue;
-      const dependency = packages.get(name);
-      assert.ok(dependency, `Missing workspace dependency: ${name}`);
-      if (seen.has(dependency.directory)) continue;
-      seen.add(dependency.directory);
-      visit(dependency.manifest);
-    }
-  };
-  visit(JSON.parse(readFileSync(path.join(root, "apps/mobile/package.json"), "utf8")));
-  for (const directory of seen)
-    assert.equal(source.split(`'${directory}/**'`).length - 1, 2, `${directory} on push and PR`);
 });
 
 function fakeAppStore({ buildStates = ["VALID"], existingVersion } = {}) {

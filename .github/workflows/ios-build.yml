@@ -4,47 +4,7 @@
 name: ios-build
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/mobile/**'
-      - 'packages/avatar/**'
-      - 'packages/chat-ui/**'
-      - 'packages/client-transport/**'
-      - 'packages/contracts/**'
-      - 'packages/core/**'
-      - 'packages/logging/**'
-      - 'packages/ui-tokens/**'
-      - 'packages/ui-web/**'
-      - 'patches/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - '.npmrc'
-      - 'tsconfig*.json'
-      - '.github/workflows/ios-build.yml'
-      - '.github/scripts/app-store-review*.mjs'
-      - '.github/scripts/ios-release.mjs'
-  pull_request:
-    paths:
-      - 'apps/mobile/**'
-      - 'packages/avatar/**'
-      - 'packages/chat-ui/**'
-      - 'packages/client-transport/**'
-      - 'packages/contracts/**'
-      - 'packages/core/**'
-      - 'packages/logging/**'
-      - 'packages/ui-tokens/**'
-      - 'packages/ui-web/**'
-      - 'patches/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - '.npmrc'
-      - 'tsconfig*.json'
-      - '.github/workflows/ios-build.yml'
-      - '.github/scripts/app-store-review*.mjs'
-      - '.github/scripts/ios-release.mjs'
+  # Automatic mobile builds are paused; manual builds remain available.
   workflow_dispatch:
 
 permissions:

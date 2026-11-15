@@ -9,28 +9,7 @@ env:
   ORK_ACCOUNTS_MOBILE_CLIENT_ID: ${{ vars.ORK_ACCOUNTS_MOBILE_CLIENT_ID }}
 
 on:
-  push:
-    branches: [main]
-    paths: &android_build_paths
-      - .github/workflows/release-android-apk.yml
-      - .github/scripts/*android*
-      - apps/mobile/**
-      - packages/avatar/**
-      - packages/chat-ui/**
-      - packages/client-transport/**
-      - packages/contracts/**
-      - packages/core/**
-      - packages/logging/**
-      - packages/ui-tokens/**
-      - packages/ui-web/**
-      - package.json
-      - pnpm-lock.yaml
-      - pnpm-workspace.yaml
-      - .npmrc
-      - tsconfig*.json
-      - patches/**
-  pull_request:
-    paths: *android_build_paths
+  # Automatic mobile builds are paused; manual builds remain available.
   workflow_dispatch:
     inputs:
       mode:

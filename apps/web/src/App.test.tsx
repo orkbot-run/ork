@@ -67,6 +67,10 @@ vi.mock("./lib/rpc", () => ({ rpc: { analytics: { screen: capability.screen } } 
 vi.mock("./components/SubscriptionGate", () => ({
   SubscriptionGate: ({ children }: { children: ReactNode }) => children,
 }));
+vi.mock("./components/ModelSetupGate", async () => {
+  const { Outlet } = await import("react-router-dom");
+  return { ModelSetupGate: () => <Outlet /> };
+});
 vi.mock("./pages/Shell", () => ({ ShellPage: () => <div>Shell</div> }));
 vi.mock("./components/call/CallLayout", async () => {
   const { Outlet } = await import("react-router-dom");
