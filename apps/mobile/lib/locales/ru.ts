@@ -3,6 +3,23 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const RU_MESSAGES: Record<string, string> = {
+  "Could not load organization settings.": "Не удалось загрузить настройки организации.",
+  "Make available to organization": "Сделать доступным организации",
+  "Manage your organization, servers and people in Ork Accounts.":
+    "Управляйте организацией, серверами и участниками в Ork Accounts.",
+  "Organization connections": "Подключения организации",
+  "Organization models": "Модели организации",
+  "Remove existing account spending limit": "Удалить существующий лимит расходов аккаунта",
+  "Remove existing model spending limit": "Удалить существующий лимит расходов модели",
+  "Remove existing workspace spending limits":
+    "Удалить существующие лимиты расходов рабочих пространств",
+  "Remove from organization": "Удалить из организации",
+  "Without an organization model, people can connect their own. These models may process workspace data outside company servers.":
+    "Если организация не настроила модель, участники могут подключить свою. Такие модели могут обрабатывать данные рабочего пространства вне серверов компании.",
+  "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers.":
+    "Организация не настроила модель. Вы можете подключить свою; она может обрабатывать данные рабочего пространства вне серверов компании.",
+  "Your organization manages the models used in this workspace.":
+    "Организация управляет моделями этого рабочего пространства.",
   "Connected, but could not refresh": "Подключено, но обновить не удалось",
 
   "Access required": "Требуется доступ",

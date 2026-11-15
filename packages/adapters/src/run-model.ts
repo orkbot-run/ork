@@ -172,7 +172,7 @@ export async function resolveModelKey(...args: Parameters<typeof resolveModelKey
   if (personalAllowed === true && !deps.runtime?.describe().capabilities.scripted)
     args[7] = { ...args[7], requireStoredSecret: true };
   if (
-    !args[7]?.requireStoredSecret &&
+    personalAllowed !== true &&
     billingEnabled &&
     (await hasHostedModelCredits(deps.prisma, scope, provider))
   ) {
