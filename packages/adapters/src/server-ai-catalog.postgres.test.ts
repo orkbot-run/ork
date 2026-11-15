@@ -148,6 +148,7 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
           operationId: randomUUID(),
           challenge: "c".repeat(43),
           state: "ready",
+          modelSetupMode: "legacy",
           projectionGrant: "fixture-signed-projection",
           localOrganizationId: "ai-test-org",
           serverId: "44444444-4444-4444-8444-444444444444",
@@ -237,6 +238,44 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
   };
   const settle = (claim: AIExecutionClaim, cost: number | null) =>
     claimOwners.get(claim)!.settle(claim, cost);
+
+  it("blocks personal models until an organization administrator chooses a setup", async () => {
+    const runtime = new ServerAIModels(authDeps());
+    await system(() =>
+      prisma!.installationIdentity.update({
+        where: { id: "local" },
+        data: { modelSetupMode: "pending" },
+      }),
+    );
+    expect(await runtime.personalModelsAllowed(member)).toBe(false);
+    expect(await runtime.validateSelection(member)).toBe(false);
+    await expect(catalog.chooseMode(member, "personal")).rejects.toMatchObject({
+      code: "forbidden",
+    });
+    await catalog.chooseMode(admin, "personal");
+    expect(await runtime.personalModelsAllowed(member)).toBe(true);
+    await catalog.chooseMode(admin, "organization");
+    expect(await runtime.personalModelsAllowed(member)).toBe(false);
+  });
+
+  it("distinguishes an unavailable organization role from a verified member role", async () => {
+    expect(await catalog.adminAccessReason(member)).toBe("not_admin");
+    await system(() =>
+      prisma!.centralWorkspaceBinding.update({ where: { id: scopeA }, data: { members: [] } }),
+    );
+    expect(await catalog.adminAccessReason(admin)).toBe("role_unavailable");
+  });
+
+  it("revokes organization model claims when an administrator switches to personal models", async () => {
+    const account = await catalog.create(admin, input());
+    await assign(account.id);
+    await catalog.chooseMode(admin, "organization");
+    const reserved = await claim(account.id);
+    await catalog.chooseMode(admin, "personal");
+    await expect(catalog.validate(reserved)).rejects.toMatchObject({ code: "forbidden" });
+    await settle(reserved, 0).catch(() => undefined);
+    await expect(claim(account.id)).rejects.toMatchObject({ code: "forbidden" });
+  });
 
   it("preserves the latest budget when setup submits a stale budget value", async () => {
     const account = await catalog.create(admin, input());

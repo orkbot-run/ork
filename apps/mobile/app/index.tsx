@@ -180,6 +180,9 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
   const [botSections, setBotSections] = useState<MobileBotSection[]>([]);
   const [spaces, setSpaces] = useState<MobileSpace[]>([]);
   const [me, setMe] = useState<Pick<MobileMe, "userId" | "spaceId" | "name"> | null>(null);
+  const [modelSetupPending, setModelSetupPending] = useState<"choose" | "connect" | "wait" | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   // Kept apart from action errors so a failed action never borrows the load's title.
   const [inboxLoading, setInboxLoading] = useState(false);
@@ -265,6 +268,13 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
       if (!(await selectInitialSpace(nextMe.spaceId))) {
         throw new Error(t("Could not save the default space"));
       }
+      const modelPolicy = nextMe.needsModel
+        ? await rpc("models/workspacePolicy").catch(() => null)
+        : null;
+      const modelSetup =
+        modelPolicy?.modelSetupMode === "pending" || modelPolicy?.modelSetupMode === "organization"
+          ? await rpc("serverAI/status").catch(() => null)
+          : null;
       if (
         requestId !== inboxRequestId.current ||
         generation !== currentSessionGeneration() ||
@@ -308,6 +318,15 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
       setGroups((current) => retainInboxValue(current, navigation.current.groups));
       setSpaces((current) => retainInboxValue(current, navigation.spaces));
       setMe((current) => retainInboxValue(current, nextMe));
+      setModelSetupPending(
+        modelPolicy?.modelSetupMode === "pending" || modelPolicy?.modelSetupMode === "organization"
+          ? modelSetup?.canManageServer
+            ? modelPolicy.modelSetupMode === "pending"
+              ? "choose"
+              : "connect"
+            : "wait"
+          : null,
+      );
       // Emails follow the app's language, so the account keeps the one this app runs in. Once
       // per account and launch: polls must not undo a language picked on another device since.
       // A server that predates it leaves `locale` out.
@@ -927,6 +946,25 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
                 }
                 ListHeaderComponent={
                   <>
+                    {modelSetupPending ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() =>
+                          router.push({
+                            pathname: "/(settings)/models",
+                            params: { organization: "1" },
+                          })
+                        }
+                      >
+                        <Text style={styles.error}>
+                          {modelSetupPending === "choose"
+                            ? t("Choose how people in your organization will connect models.")
+                            : modelSetupPending === "connect"
+                              ? t("Connect organization models")
+                              : t("Waiting for an organization administrator to set up models.")}
+                        </Text>
+                      </Pressable>
+                    ) : null}
                     {inlineError ? <Text style={styles.error}>{inlineError}</Text> : null}
                     {spaceRecoveryId ? (
                       <Pressable

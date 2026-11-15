@@ -9,10 +9,11 @@ model you run yourself.
 
 For a connected organization, administrators open **Settings → Organization models**
 to add a connection on the current server and make it available to its workspaces.
-Members can use **Settings → Models** for their personal connections when the
-organization has no enabled model. Those providers may process workspace data outside
-the company's servers. An enabled but unavailable organization connection does not
-automatically fall back to a personal model.
+On a new server, an administrator chooses organization models or personal connections.
+Members wait for that choice and can use **Settings → Models** for their own connections
+when the administrator allows them. Personal providers may process workspace data outside
+the company's servers. An unavailable organization connection does not automatically
+fall back to a personal model. An administrator can change the choice in organization settings.
 
 For personal installations, open **Settings → Models**. Pick a provider and connect it:
 

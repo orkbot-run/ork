@@ -49,6 +49,8 @@ export const ServerAIStatusSchema = z.object({
   workspaceMonthlyBudgetMicros: AIBudgetSchema,
   canManageServer: z.boolean(),
   canManageWorkspace: z.boolean(),
+  modelSetupMode: z.enum(["pending", "organization", "personal", "legacy"]).optional(),
+  adminAccessReason: z.enum(["role_unavailable", "not_admin", "unverified"]).optional(),
   accounts: z.array(ServerAIAccountSchema),
   connections: z.array(WorkspaceAIAccountSchema),
 });

@@ -83,7 +83,7 @@ export default function Models() {
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
       >
-        {params.organization === "1" ? (
+        {params.organization === "1" || policy.data.modelSetupMode === "pending" ? (
           <ServerAISettings
             key={`${session}:${selection}`}
             send={owner.send}
@@ -336,9 +336,8 @@ function LegacyModels() {
         ) : null}
         {workspacePolicy?.managed && workspacePolicy.personalModelsAllowed ? (
           <Text style={{ color: native.secondaryLabel }}>
-            {t(
-              "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers.",
-            )}
+            {t("Your organization allows personal models.")}{" "}
+            {t("Personal models may process workspace data outside company servers.")}
           </Text>
         ) : null}
         {workspacePolicy && !workspacePolicy.managed ? (

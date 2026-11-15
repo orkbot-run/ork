@@ -667,6 +667,11 @@ msgstr ""
 msgid "Address line 2"
 msgstr ""
 
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Administrator access could not be verified. Sign in again or check the server configuration."
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -730,6 +735,10 @@ msgstr "한 번 허용"
 
 #: src/lib/dictation.ts
 msgid "Allow Ork to use Speech Recognition and the microphone in System Settings."
+msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "Allow personal models"
 msgstr ""
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -941,10 +950,6 @@ msgstr ""
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask"
 msgstr "묻기"
-
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Ask an organization administrator to connect a model."
-msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask rules are inactive in Never ask."
@@ -1466,6 +1471,11 @@ msgstr "파일 선택"
 msgid "Choose folder"
 msgstr "폴더 선택"
 
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Choose how people in your organization will connect models."
+msgstr ""
+
 #: src/components/ModelCredits.tsx
 #: src/components/SubscriptionGate.tsx
 msgid "Choose how to use Ork"
@@ -1800,6 +1810,11 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Connect OAuth"
 msgstr "OAuth 연결"
+
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Connect organization models"
+msgstr ""
 
 #: src/lib/agent-import-errors.ts
 msgid "Connect this model's provider first."
@@ -2443,6 +2458,10 @@ msgstr "선택 내용을 저장하지 못했습니다."
 #: src/lib/use-remember-desktop-server.ts
 msgid "Could not save your server."
 msgstr "서버를 저장하지 못했습니다."
+
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Could not save. Try again."
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
@@ -3872,6 +3891,11 @@ msgstr "나가기"
 msgid "Let bots use this computer"
 msgstr ""
 
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Let people connect their own models"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Lets bots save and recall facts by meaning, alongside MEMORY.md."
 msgstr "MEMORY.md와 함께 봇이 의미를 기준으로 사실을 저장하고 떠올릴 수 있게 합니다."
@@ -5075,6 +5099,13 @@ msgstr "페르소나"
 
 #: src/components/SignupSurvey.tsx
 msgid "Personal"
+msgstr ""
+
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Personal models may process workspace data outside company servers."
 msgstr ""
 
 #: src/components/vault/VaultItemDetail.tsx
@@ -7227,6 +7258,10 @@ msgstr ""
 msgid "Use my subscription or API key"
 msgstr ""
 
+#: src/pages/ServerAISettings.tsx
+msgid "Use organization models"
+msgstr ""
+
 #: src/components/ModelCredits.tsx
 msgid "Use Ork credits"
 msgstr ""
@@ -7340,6 +7375,12 @@ msgstr ""
 #: src/lib/model-connection-preflight.ts
 msgid "Wait a moment and test again."
 msgstr "잠시 기다린 뒤 다시 테스트하세요."
+
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Waiting for an organization administrator to set up models."
+msgstr ""
 
 #: src/components/ServerUpdates.tsx
 msgid "Waiting for update status…"
@@ -7468,10 +7509,6 @@ msgstr "언제 사용할지"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Bot을 어디에서 실행할까요?"
-
-#: src/pages/ServerAISettings.tsx
-msgid "Without an organization model, people can connect their own. These models may process workspace data outside company servers."
-msgstr ""
 
 #: src/pages/shell/sidebar-roster.tsx
 msgid "Woken"
@@ -7611,11 +7648,17 @@ msgstr "사용 중인 OpenRouter"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
-msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
+#: src/pages/ServerAISettings.tsx
+msgid "Your organization allows personal models."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Your organization manages the models used in this workspace."
+msgstr ""
+
+#: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Your organization role could not be verified. Check that Accounts and this server are up to date."
 msgstr ""
 
 #: src/components/ModelCredits.tsx

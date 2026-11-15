@@ -157,10 +157,16 @@ export function OnboardingPage() {
       .then(async ([me, policy]) => {
         if (!active || !form.isSelected()) return;
         const organizationSettings =
-          policy.managed && policy.personalModelsAllowed ? await rpc.serverAI.status() : null;
+          policy.managed &&
+          policy.personalModelsAllowed &&
+          (!policy.modelSetupMode || policy.modelSetupMode === "legacy")
+            ? await rpc.serverAI.status()
+            : null;
         const useOrganizationModels =
           policy.managed &&
-          (!policy.personalModelsAllowed || organizationSettings?.canManageServer);
+          (policy.modelSetupMode === "personal"
+            ? false
+            : !policy.personalModelsAllowed || organizationSettings?.canManageServer);
         const models = useOrganizationModels ? [] : await rpc.models.list().catch(() => []);
         if (!active || !form.isSelected()) return;
         setManaged(Boolean(useOrganizationModels));
@@ -536,6 +542,10 @@ export function OnboardingPage() {
             saving={saving}
             error={error}
             onContinue={() => void continueManagedModel()}
+            onModeChanged={() => {
+              setManaged(null);
+              setLoadRevision((value) => value + 1);
+            }}
           />
         ) : null}
         {step === "model" && !managed ? (
@@ -545,10 +555,8 @@ export function OnboardingPage() {
             </h1>
             {personalOrganizationModel ? (
               <p className="mt-3 text-sm text-muted-foreground">
-                <Trans>
-                  Your organization has not configured a model. You can connect your own; it may
-                  process workspace data outside company servers.
-                </Trans>
+                <Trans>Your organization allows personal models.</Trans>{" "}
+                <Trans>Personal models may process workspace data outside company servers.</Trans>
               </p>
             ) : null}
             <div className="mt-8 block text-sm font-medium text-foreground">

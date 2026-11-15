@@ -117,9 +117,19 @@ export function serverAIRoutes(ctx: RouterContext) {
               ? await deps.serverAI.workspaceBudget(scoped)
               : null,
             ...permissions,
+            modelSetupMode: await deps.serverAI.setupMode(scoped),
+            ...(permissions.canManageServer
+              ? {}
+              : { adminAccessReason: await deps.serverAI.adminAccessReason(scoped) }),
             connections: await deps.serverAI.list(scoped),
             accounts: permissions.canManageServer ? await deps.serverAI.accounts(scoped) : [],
           };
+        }),
+      ),
+      chooseMode: authed.serverAI.chooseMode.handler(({ context, input }) =>
+        safe(async () => {
+          await deps.serverAI!.chooseMode(await actorOf(context), input.mode);
+          return { ok: true as const };
         }),
       ),
       create: authed.serverAI.create.handler(({ context, input }) =>

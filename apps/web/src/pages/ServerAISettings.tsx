@@ -168,6 +168,65 @@ export function ServerAISettings({
             <Trans>Retry</Trans>
           </Button>
         ) : null}
+        {value?.modelSetupMode === "pending" && !onboarding ? (
+          value.canManageServer ? (
+            <div className="grid gap-3">
+              <p className="text-sm text-muted-foreground">
+                <Trans>Choose how people in your organization will connect models.</Trans>
+              </p>
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  void action((signal) =>
+                    owner.client.serverAI.chooseMode({ mode: "organization" }, { signal }),
+                  )
+                }
+              >
+                <Trans>Connect organization models</Trans>
+              </Button>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() =>
+                  void action((signal) =>
+                    owner.client.serverAI.chooseMode({ mode: "personal" }, { signal }),
+                  )
+                }
+              >
+                <Trans>Let people connect their own models</Trans>
+              </Button>
+              <p className="text-sm text-muted-foreground">
+                <Trans>Personal models may process workspace data outside company servers.</Trans>
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              <Trans>Waiting for an organization administrator to set up models.</Trans>
+            </p>
+          )
+        ) : null}
+        {value?.canManageServer &&
+        !onboarding &&
+        (value.modelSetupMode === "organization" || value.modelSetupMode === "personal") ? (
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              void action((signal) =>
+                owner.client.serverAI.chooseMode(
+                  { mode: value.modelSetupMode === "organization" ? "personal" : "organization" },
+                  { signal },
+                ),
+              )
+            }
+          >
+            {value.modelSetupMode === "organization" ? (
+              <Trans>Allow personal models</Trans>
+            ) : (
+              <Trans>Use organization models</Trans>
+            )}
+          </Button>
+        ) : null}
         {value?.canManageWorkspace && !onboarding && value.workspaceMonthlyBudgetMicros !== null ? (
           <Button
             variant="outline"
@@ -181,99 +240,113 @@ export function ServerAISettings({
             <Trans>Remove existing workspace spending limits</Trans>
           </Button>
         ) : null}
-        {value?.connections.map((row) => (
-          <section
-            className="grid gap-3 border-b border-border pb-4"
-            key={row.id}
-            aria-label={row.label}
-          >
-            <div>
-              <h3 className="text-sm font-medium">{row.label}</h3>
-              <p className="text-sm text-muted-foreground">
-                {row.state === "active" ? (row.defaultModelId ?? row.provider) : t`Reconnect`}
-              </p>
-            </div>
-            {value.canManageWorkspace ? (
-              <div className="grid gap-3">
-                <Label className="flex items-center justify-between">
-                  <Trans>Enabled</Trans>
-                  <Switch
-                    checked={row.enabled}
-                    disabled={busy || (!row.enabled && row.state !== "active")}
-                    onCheckedChange={(enabled) => void configure(row, { enabled })}
-                  />
-                </Label>
-                <Label className="flex items-center justify-between">
-                  <Trans>Default</Trans>
-                  <Switch
-                    checked={row.enabled && row.isDefault}
-                    disabled={busy || !row.enabled || row.state !== "active"}
-                    onCheckedChange={(isDefault) => void configure(row, { isDefault })}
-                  />
-                </Label>
-                <Label className="flex items-center justify-between">
-                  <Trans>Fallback</Trans>
-                  <Switch
-                    checked={row.fallback}
-                    disabled={busy || !row.enabled || row.state !== "active"}
-                    onCheckedChange={(fallback) => void configure(row, { fallback })}
-                  />
-                </Label>
+        {value?.modelSetupMode !== "personal" &&
+          value?.modelSetupMode !== "pending" &&
+          value?.connections.map((row) => (
+            <section
+              className="grid gap-3 border-b border-border pb-4"
+              key={row.id}
+              aria-label={row.label}
+            >
+              <div>
+                <h3 className="text-sm font-medium">{row.label}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {row.state === "active" ? (row.defaultModelId ?? row.provider) : t`Reconnect`}
+                </p>
               </div>
-            ) : null}
-            {value.canManageWorkspace ? (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => setEditingAssignment(editingAssignment === row.id ? null : row.id)}
-              >
-                <Trans>Models</Trans>
-              </Button>
-            ) : null}
-            {editingAssignment === row.id ? (
-              <WorkspaceAIAccountForm
-                key={`${row.id}:${row.assignmentRevision}`}
-                row={row}
-                hideBudget
-                busy={busy}
-                onSave={(patch) => configure(row, patch)}
-                onCancel={() => setEditingAssignment(null)}
-              />
-            ) : null}
-            {value.canManageWorkspace && !onboarding && row.monthlyBudgetMicros !== null ? (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => void configure(row, { monthlyBudgetMicros: null })}
-              >
-                <Trans>Remove existing model spending limit</Trans>
-              </Button>
-            ) : null}
-          </section>
-        ))}
-        {value && !value.connections.length ? (
+              {value.canManageWorkspace ? (
+                <div className="grid gap-3">
+                  <Label className="flex items-center justify-between">
+                    <Trans>Enabled</Trans>
+                    <Switch
+                      checked={row.enabled}
+                      disabled={busy || (!row.enabled && row.state !== "active")}
+                      onCheckedChange={(enabled) => void configure(row, { enabled })}
+                    />
+                  </Label>
+                  <Label className="flex items-center justify-between">
+                    <Trans>Default</Trans>
+                    <Switch
+                      checked={row.enabled && row.isDefault}
+                      disabled={busy || !row.enabled || row.state !== "active"}
+                      onCheckedChange={(isDefault) => void configure(row, { isDefault })}
+                    />
+                  </Label>
+                  <Label className="flex items-center justify-between">
+                    <Trans>Fallback</Trans>
+                    <Switch
+                      checked={row.fallback}
+                      disabled={busy || !row.enabled || row.state !== "active"}
+                      onCheckedChange={(fallback) => void configure(row, { fallback })}
+                    />
+                  </Label>
+                </div>
+              ) : null}
+              {value.canManageWorkspace ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => setEditingAssignment(editingAssignment === row.id ? null : row.id)}
+                >
+                  <Trans>Models</Trans>
+                </Button>
+              ) : null}
+              {editingAssignment === row.id ? (
+                <WorkspaceAIAccountForm
+                  key={`${row.id}:${row.assignmentRevision}`}
+                  row={row}
+                  hideBudget
+                  busy={busy}
+                  onSave={(patch) => configure(row, patch)}
+                  onCancel={() => setEditingAssignment(null)}
+                />
+              ) : null}
+              {value.canManageWorkspace && !onboarding && row.monthlyBudgetMicros !== null ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => void configure(row, { monthlyBudgetMicros: null })}
+                >
+                  <Trans>Remove existing model spending limit</Trans>
+                </Button>
+              ) : null}
+            </section>
+          ))}
+        {value && value.modelSetupMode !== "pending" && !value.connections.length ? (
           <p className="text-sm text-muted-foreground">
             <Trans>No model connections available</Trans>
           </p>
         ) : null}
         {value?.available && !value.canManageServer && !onboarding ? (
           <p className="text-sm text-muted-foreground">
-            <Trans>
-              Your account does not currently have permission to manage organization models.
-            </Trans>
+            {value.adminAccessReason === "role_unavailable" ? (
+              <Trans>
+                Your organization role could not be verified. Check that Accounts and this server
+                are up to date.
+              </Trans>
+            ) : value.adminAccessReason === "unverified" ? (
+              <Trans>
+                Administrator access could not be verified. Sign in again or check the server
+                configuration.
+              </Trans>
+            ) : (
+              <Trans>
+                Your account does not currently have permission to manage organization models.
+              </Trans>
+            )}
           </p>
         ) : null}
         {policy.data?.personalModelsAllowed ? (
           <p className="text-sm text-muted-foreground">
-            <Trans>
-              Without an organization model, people can connect their own. These models may process
-              workspace data outside company servers.
-            </Trans>
+            <Trans>Your organization allows personal models.</Trans>{" "}
+            <Trans>Personal models may process workspace data outside company servers.</Trans>
           </p>
         ) : null}
-        {value?.canManageServer ? (
+        {value?.canManageServer &&
+        value.modelSetupMode !== "personal" &&
+        value.modelSetupMode !== "pending" ? (
           <>
             <section className="grid gap-3" aria-label={t`Organization connections`}>
               <h3 className="text-sm font-medium">

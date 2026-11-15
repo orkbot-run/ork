@@ -12,7 +12,8 @@ export async function installationCatalog(
 ): Promise<ModelCatalogEntry[] | null> {
   const scoped = await deps.serverAIModels?.actor(actor);
   if (!scoped || !deps.serverAI) return null;
-  if (!(await deps.serverAI.hasConfiguredModel(scoped))) return null;
+  if (await deps.serverAIModels?.personalModelsAllowed(actor)) return null;
+  if ((await deps.serverAI.setupMode(scoped)) === "pending") return [];
   const catalog = listPiCatalog();
   const offered = new Map<string, ModelCatalogEntry>();
   for (const account of await deps.serverAI.list(scoped)) {
@@ -38,7 +39,8 @@ export async function installationCredentials(
 ): Promise<ModelCredential[] | null> {
   const scoped = await deps.serverAIModels?.actor(actor);
   if (!scoped || !deps.serverAI) return null;
-  if (!(await deps.serverAI.hasConfiguredModel(scoped))) return null;
+  if (await deps.serverAIModels?.personalModelsAllowed(actor)) return null;
+  if ((await deps.serverAI.setupMode(scoped)) === "pending") return [];
   return (await deps.serverAI.list(scoped))
     .filter((account) => account.enabled && account.state === "active")
     .map((account) => ({

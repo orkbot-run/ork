@@ -3,6 +3,19 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  "Your organization role could not be verified. Check that Accounts and this server are up to date.":
+    "無法驗證你的組織角色。請確認 Accounts 和此伺服器均已更新。",
+  "Administrator access could not be verified. Sign in again or check the server configuration.":
+    "無法驗證管理員權限。請重新登入或檢查伺服器設定。",
+  "Your organization allows personal models.": "你的組織允許使用個人模型。",
+  "Allow personal models": "允許個人模型",
+  "Use organization models": "使用組織模型",
+  "Choose how people in your organization will connect models.": "選擇組織成員連接模型的方式。",
+  "Connect organization models": "連接組織模型",
+  "Let people connect their own models": "允許成員連接自己的模型",
+  "Personal models may process workspace data outside company servers.":
+    "個人模型可能在公司伺服器以外處理工作區資料。",
+  "Waiting for an organization administrator to set up models.": "正在等待組織管理員設定模型。",
   "Add model connection": "新增模型連線",
   "Edit model connection": "編輯模型連線",
   "Disable connection": "停用連線",

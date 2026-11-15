@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
     configure: vi.fn(),
     offer: vi.fn(),
     workspaceBudget: vi.fn(),
+    chooseMode: vi.fn(),
   },
   onboarding: { ensureFirstBot: vi.fn(), start: vi.fn(), promptFocus: vi.fn() },
 }));
@@ -167,13 +168,103 @@ function noLegacyCredentials() {
 
 it("keeps a managed participant out of provider secrets and explains the required workspace assignment", async () => {
   await render();
-  expect(host.textContent).toContain("Ask an organization administrator");
+  expect(host.textContent).toContain("Waiting for an organization administrator");
   expect(host.querySelector('input[type="password"]')).toBeNull();
   expect(api.serverAI.catalog).not.toHaveBeenCalled();
   noLegacyCredentials();
   await click("Continue");
   expect(api.onboarding.ensureFirstBot).not.toHaveBeenCalled();
   expect(host.querySelector('[role="alert"]')).not.toBeNull();
+});
+
+it("waits for the organization administrator to make the initial model choice", async () => {
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: false,
+    modelSetupMode: "pending",
+  });
+  api.serverAI.status.mockResolvedValue(status({ modelSetupMode: "pending" }));
+  await render();
+  await vi.waitFor(() =>
+    expect(host.textContent).toContain("Waiting for an organization administrator"),
+  );
+  expect(host.textContent).not.toContain("Connect organization models");
+  expect(api.models.list).not.toHaveBeenCalled();
+});
+
+it("explains when the server cannot verify an administrator's organization role", async () => {
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: false,
+    modelSetupMode: "pending",
+  });
+  api.serverAI.status.mockResolvedValue(
+    status({ modelSetupMode: "pending", adminAccessReason: "role_unavailable" }),
+  );
+  await render();
+  await vi.waitFor(() =>
+    expect(host.textContent).toContain("Your organization role could not be verified"),
+  );
+  expect(host.textContent).not.toContain("Connect organization models");
+});
+
+it("opens personal model setup when an administrator makes that choice", async () => {
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: false,
+    modelSetupMode: "pending",
+  });
+  api.serverAI.status.mockResolvedValue(status({ modelSetupMode: "pending" }));
+  await render();
+  await vi.waitFor(() =>
+    expect(host.textContent).toContain("Waiting for an organization administrator"),
+  );
+  await act(async () => focusManager.setFocused(false));
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: true,
+    modelSetupMode: "personal",
+  });
+  api.serverAI.status.mockResolvedValue(status({ modelSetupMode: "personal" }));
+  await act(async () => focusManager.setFocused(true));
+  await vi.waitFor(() => expect(api.models.list).toHaveBeenCalledOnce());
+  expect(host.textContent).toContain("outside company servers");
+});
+
+it("lets the organization administrator allow personal models during setup", async () => {
+  api.models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    canManage: false,
+    policy: null,
+    personalModelsAllowed: false,
+    modelSetupMode: "pending",
+  });
+  api.serverAI.status.mockResolvedValue(
+    status({ canManageServer: true, canManageWorkspace: true, modelSetupMode: "pending" }),
+  );
+  api.serverAI.chooseMode.mockImplementation(async () => {
+    api.models.workspacePolicy.mockResolvedValue({
+      managed: true,
+      canManage: false,
+      policy: null,
+      personalModelsAllowed: true,
+      modelSetupMode: "personal",
+    });
+  });
+  await render();
+  await vi.waitFor(() => expect(host.textContent).toContain("Let people connect their own models"));
+  await click("Let people connect their own models");
+  await vi.waitFor(() => expect(api.models.list).toHaveBeenCalledOnce());
+  expect(api.serverAI.chooseMode).toHaveBeenCalledWith({ mode: "personal" });
+  expect(host.textContent).toContain("outside company servers");
 });
 
 it("lets a member connect a personal model when the organization permits it", async () => {
@@ -188,7 +279,7 @@ it("lets a member connect a personal model when the organization permits it", as
   expect(host.querySelector('[data-testid="server-ai-ready"]')).toBeNull();
   expect(host.textContent).toContain("Connect a model");
   expect(host.textContent).toContain("outside company servers");
-  expect(host.textContent).not.toContain("Ask an organization administrator");
+  expect(host.textContent).not.toContain("Waiting for an organization administrator");
 });
 
 it("does not expose personal setup if the organization permission check fails", async () => {
@@ -613,7 +704,7 @@ it("never exposes a credential form while workspace management policy is unresol
 it("tells a workspace administrator how to obtain an account without exposing server configuration", async () => {
   api.serverAI.status.mockResolvedValue(status({ canManageWorkspace: true }));
   await render();
-  expect(host.textContent).toContain("Ask an organization administrator");
+  expect(host.textContent).toContain("Waiting for an organization administrator");
   expect(host.textContent).not.toContain("Add model connection");
   expect(api.serverAI.catalog).not.toHaveBeenCalled();
   noLegacyCredentials();

@@ -83,9 +83,13 @@ in Accounts. Removing or changing an organization role updates its workspace acc
 
 Organization administrators configure AI through the connected app. Connections stay
 on the server where they are configured and apply to its organization's workspaces.
-When no organization model is enabled, members may connect personal models; those
-providers may process workspace data outside the company's servers. An enabled but
-unavailable organization model never silently falls back to a personal connection.
+On a new server, an organization administrator chooses whether to connect organization
+models or allow members to connect their own. Other members wait until that choice is
+made. Administrators can change the choice in **Organization models**. Personal
+providers may process workspace data outside the company's servers. Organization
+models do not silently fall back to personal connections if they become unavailable.
+During upgrades, servers with existing model connections retain their previous behavior;
+servers without connections ask for the initial choice.
 
 Update Accounts before updating the Ork server. Organization administration uses an
 opt-in signed role projection; an older Accounts deployment does not provide this role
