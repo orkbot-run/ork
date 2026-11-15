@@ -664,8 +664,8 @@ test("active workflow keeps iOS on native GitHub build and explicit upload witho
 
 test("manual iOS builds run without signing or publishing authority", () => {
   const source = readFileSync(new URL("../workflows/ios-build.yml", import.meta.url), "utf8");
-  assert.match(source, /^  workflow_dispatch:/m);
-  assert.doesNotMatch(source, /^  (push|pull_request):/m);
+  assert.match(source, /^ {2}workflow_dispatch:/m);
+  assert.doesNotMatch(source, /^ {2}(push|pull_request):/m);
   assert.match(source, /permissions:\n\s+contents: read/);
   assert.match(source, /persist-credentials: false/);
   assert.doesNotMatch(source, /pull_request_target|secrets[.[]|contents: write|id-token: write/);
