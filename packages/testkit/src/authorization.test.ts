@@ -310,6 +310,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ],
       ["serverUpdates/policy", { automatic: true, expectedRevision: 0 }],
       ["serverAI/status"],
+      ["serverAI/chooseMode", { mode: "personal" }],
       [
         "serverAI/beginOAuth",
         {
