@@ -2232,7 +2232,7 @@ msgstr "Nie udało się wczytać ustawień modeli"
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Could not load organization settings."
-msgstr ""
+msgstr "Nie udało się załadować ustawień organizacji."
 
 #: src/pages/RoutineRunHistory.tsx
 msgid "Could not load run history"
@@ -3944,7 +3944,7 @@ msgstr "Wczytywanie katalogu modeli…"
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Loading organization settings…"
-msgstr ""
+msgstr "Wczytywanie ustawień organizacji…"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading plugins…"
@@ -4018,7 +4018,7 @@ msgstr "Główny model"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Make available to organization"
-msgstr ""
+msgstr "Udostępnij organizacji"
 
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -4047,7 +4047,7 @@ msgstr "Zarządzaj innymi botami"
 
 #: src/pages/SettingsOverlay.tsx
 msgid "Manage your organization, servers and people in Ork Accounts."
-msgstr ""
+msgstr "Zarządzaj organizacją, serwerami i osobami w Ork Accounts."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
@@ -4909,11 +4909,11 @@ msgstr "Klucz API organizacji"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Organization connections"
-msgstr ""
+msgstr "Połączenia organizacji"
 
 #: src/pages/settings-nav.ts
 msgid "Organization models"
-msgstr ""
+msgstr "Modele organizacji"
 
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
@@ -5470,15 +5470,15 @@ msgstr "Usuń wyzwalacz zmiany"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Remove existing account spending limit"
-msgstr ""
+msgstr "Usuń istniejący limit wydatków konta"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Remove existing model spending limit"
-msgstr ""
+msgstr "Usuń istniejący limit wydatków modelu"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Remove existing workspace spending limits"
-msgstr ""
+msgstr "Usuń istniejące limity wydatków przestrzeni roboczych"
 
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -5489,7 +5489,7 @@ msgstr "Usunąć ze wszystkich przestrzeni?"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Remove from organization"
-msgstr ""
+msgstr "Usuń z organizacji"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
@@ -7475,7 +7475,7 @@ msgstr "Gdzie mają działać boty?"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Without an organization model, people can connect their own. These models may process workspace data outside company servers."
-msgstr ""
+msgstr "Jeśli organizacja nie skonfiguruje modelu, każdy może podłączyć własny. Modele te mogą przetwarzać dane przestrzeni roboczej poza serwerami firmy."
 
 #: src/pages/shell/sidebar-roster.tsx
 msgid "Woken"
@@ -7611,11 +7611,11 @@ msgstr "Twój OpenRouter"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
-msgstr ""
+msgstr "Organizacja nie skonfigurowała modelu. Możesz podłączyć własny; może on przetwarzać dane przestrzeni roboczej poza serwerami firmy."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Your organization manages the models used in this workspace."
-msgstr ""
+msgstr "Organizacja zarządza modelami używanymi w tej przestrzeni roboczej."
 
 #: src/components/ModelCredits.tsx
 msgid "Your plan becomes {annualPrice} / year when your trial ends."
