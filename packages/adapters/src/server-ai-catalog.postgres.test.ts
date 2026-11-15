@@ -35,6 +35,7 @@ const admin: AIActor = {
   spaceId: "ai-test-a",
   membershipVersion: revision,
 };
+const adminB: AIActor = { ...admin, spaceId: "ai-test-b" };
 const member: AIActor = {
   userId: "ai-test-member",
   spaceId: "ai-test-a",
@@ -75,7 +76,7 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
       prisma: prisma!,
       secrets,
       realtime,
-      principal: async (actor) => (actor.userId === admin.userId ? adminKey : null),
+      principal: async () => adminKey,
       authorizeWork,
     });
     replicas.push(catalog);
@@ -147,6 +148,8 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
           operationId: randomUUID(),
           challenge: "c".repeat(43),
           state: "ready",
+          projectionGrant: "fixture-signed-projection",
+          localOrganizationId: "ai-test-org",
           serverId: "44444444-4444-4444-8444-444444444444",
           centralOrganizationId: "55555555-5555-4555-8555-555555555555",
           bindingVersion: 1,
@@ -167,12 +170,19 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
             bindingVersion: 1,
             permissionVersion: 1,
             state: "ready",
-            members: [],
+            members: [admin, adminB, member, workspaceAdmin]
+              .filter((actor) => actor.spaceId === spaceId)
+              .map((actor) => ({
+                userId: `central-${actor.userId}`,
+                accessVersion: revision,
+                role: actor === member ? "member" : "admin",
+                organizationRole: actor.userId === admin.userId ? "admin" : "member",
+              })),
             verifiedAt: new Date(),
             validUntil: new Date(Date.now() + 300_000),
           },
         });
-      for (const actor of [admin, member, workspaceAdmin])
+      for (const actor of [admin, adminB, member, workspaceAdmin])
         await prisma!.centralWorkspaceAccess.create({
           data: {
             workspaceId: actor.spaceId === "ai-test-a" ? scopeA : scopeB,
@@ -182,9 +192,6 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
             role: actor === member ? "member" : "admin",
           },
         });
-      await prisma!.aIConnectionAdministrator.create({
-        data: { accountKey: adminKey, bindingVersion: 1 },
-      });
     });
     catalog = replica();
   });
@@ -201,7 +208,7 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
     budget: number | null = null,
   ) => {
     await catalog.offer(admin, actor.spaceId, connectionId, true);
-    await catalog.configure(actor, connectionId, {
+    await catalog.configure(actor.spaceId === admin.spaceId ? admin : adminB, connectionId, {
       enabled: true,
       allowedModels: ["model-a"],
       defaultModelId: "model-a",
@@ -426,7 +433,12 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
     await expect(claim(connection.id, admin)).rejects.toMatchObject({ code: "forbidden" });
   });
 
-  it("separates server delegation from workspace administration and rejects unoffered models", async () => {
+  it("allows organization administrators but not workspace-only administrators to manage accounts", async () => {
+    expect(await catalog.permissions(admin)).toMatchObject({ canManageServer: true });
+    expect(await catalog.permissions(workspaceAdmin)).toMatchObject({
+      canManageServer: false,
+      canManageWorkspace: false,
+    });
     await expect(catalog.create(workspaceAdmin, input())).rejects.toMatchObject({
       code: "forbidden",
     });
@@ -451,7 +463,7 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
       }),
     ).rejects.toMatchObject({ code: "forbidden" });
     await expect(
-      catalog.configure(workspaceAdmin, connection.id, {
+      catalog.configure(adminB, connection.id, {
         enabled: true,
         allowedModels: ["another-model"],
         defaultModelId: "another-model",
@@ -459,8 +471,74 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
         monthlyBudgetMicros: null,
       }),
     ).rejects.toMatchObject({ code: "invalid" });
-    expect(await catalog.choices(member)).toEqual([]);
-    await expect(claim(connection.id)).rejects.toMatchObject({ code: "forbidden" });
+    expect(await catalog.choices(member)).toMatchObject([{ connectionId: connection.id }]);
+    await settle(await claim(connection.id), 1);
+  });
+
+  it("refuses organization administration when the verified role is missing or expired", async () => {
+    await system(() =>
+      prisma!.centralWorkspaceBinding.update({ where: { id: scopeA }, data: { members: [] } }),
+    );
+    await expect(catalog.accounts(admin)).rejects.toMatchObject({ code: "forbidden" });
+    await system(() =>
+      prisma!.centralWorkspaceBinding.update({
+        where: { id: scopeA },
+        data: {
+          members: [
+            {
+              userId: `central-${admin.userId}`,
+              role: "admin",
+              accessVersion: revision,
+              organizationRole: "admin",
+            },
+          ],
+          validUntil: new Date(Date.now() - 1),
+        },
+      }),
+    );
+    await expect(catalog.accounts(admin)).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("does not expose or modify another organization's AI accounts", async () => {
+    const own = await catalog.create(admin, input("Own"));
+    const otherId = randomUUID();
+    await system(async () => {
+      await prisma!.organization.create({
+        data: {
+          id: "ai-test-other-org",
+          name: "Other",
+          slug: "ai-test-other-org",
+          createdAt: new Date(),
+        },
+      });
+      await prisma!.serverAIConnection.create({
+        data: {
+          id: otherId,
+          localOrganizationId: "ai-test-other-org",
+          label: "Other",
+          provider: "openai",
+          models: ["model-a"],
+          secretId: "other",
+          secretRef: "other",
+        },
+      });
+    });
+    try {
+      expect((await catalog.accounts(admin)).map((account) => account.id)).toEqual([own.id]);
+      await expect(catalog.disable(admin, otherId)).rejects.toThrow();
+      await expect(catalog.offer(admin, admin.spaceId, otherId, true)).rejects.toMatchObject({
+        code: "forbidden",
+      });
+      expect(
+        (
+          await system(() =>
+            prisma!.serverAIConnection.findUniqueOrThrow({ where: { id: otherId } }),
+          )
+        ).state,
+      ).toBe("active");
+    } finally {
+      await system(() => prisma!.organization.delete({ where: { id: "ai-test-other-org" } }));
+    }
   });
 
   it("uses only installation assignments in the actual runtime model resolvers", async () => {
@@ -471,8 +549,9 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
       serverAIModels,
       deploymentModelConfigured: true,
       deploymentModelKey: "unrelated-deployment-secret",
+      runtime: { describe: () => ({ capabilities: { scripted: false } }) },
     } as unknown as ExecutorDeps;
-    await expect(resolveRunModel(deps, member)).rejects.toMatchObject({ code: "unavailable" });
+    await expect(system(() => resolveRunModel(deps, member))).rejects.toThrow();
     const account = await catalog.create(admin, input());
     await assign(account.id);
     const main = await resolveRunModel(deps, member);
@@ -499,7 +578,82 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
       }),
     ).rejects.toMatchObject({ code: "forbidden" });
     await catalog.offer(admin, member.spaceId, account.id, false);
-    await expect(resolveRunModel(deps, member)).rejects.toMatchObject({ code: "unavailable" });
+    await expect(system(() => resolveRunModel(deps, member))).rejects.toThrow();
+  });
+
+  it("uses a member's personal connection only while no organization model is enabled", async () => {
+    const serverAIModels = new ServerAIModels(authDeps());
+    const personalSecret = await secrets.put(
+      JSON.stringify({ kind: "api_key", key: "fixture-personal-key" }),
+      {
+        userId: member.userId,
+        spaceId: member.spaceId,
+        operationId: "personal-test",
+        traceId: "personal-test",
+        signal: new AbortController().signal,
+      },
+      { recordId: randomUUID() },
+    );
+    await system(async () => {
+      await prisma!.secret.create({
+        data: {
+          id: personalSecret.id,
+          userId: member.userId,
+          kind: "model",
+          ciphertext: personalSecret.ref,
+        },
+      });
+      await prisma!.userModelCredential.create({
+        data: {
+          id: "personal-connection",
+          userId: member.userId,
+          provider: "openai",
+          label: "Personal",
+          secretId: personalSecret.id,
+        },
+      });
+      await prisma!.userModelRoleChoice.create({
+        data: {
+          userId: member.userId,
+          role: "main",
+          position: 0,
+          provider: "openai",
+          modelId: "model-a",
+          credentialId: "personal-connection",
+        },
+      });
+    });
+    const deps = {
+      prisma: prisma!,
+      secretStore: secrets,
+      serverAIModels,
+      deploymentModelConfigured: true,
+      deploymentModelKey: "unrelated-deployment-secret",
+      runtime: { describe: () => ({ capabilities: { scripted: false } }) },
+    } as unknown as ExecutorDeps;
+    expect(await serverAIModels.personalModelsAllowed(member)).toBe(true);
+    const personal = await system(() => resolveRunModel(deps, member));
+    expect(personal.apiKey).toBe("fixture-personal-key");
+    expect(personal.callObserver).toBeDefined();
+    const account = await catalog.create(admin, input());
+    await assign(account.id);
+    expect(await serverAIModels.personalModelsAllowed(member)).toBe(false);
+    await expect(
+      personal.callObserver!.beforeCall({
+        provider: "openai",
+        modelId: "model-a",
+        inputTokensEstimate: 1,
+        maxOutputTokens: 1,
+      }),
+    ).rejects.toThrow("organization model changed");
+    expect((await system(() => resolveRunModel(deps, member))).apiKey).toBe(
+      "fixture-private-api-key",
+    );
+    await catalog.disable(admin, account.id);
+    expect(await serverAIModels.personalModelsAllowed(member)).toBe(false);
+    await expect(system(() => resolveRunModel(deps, member))).rejects.toMatchObject({
+      code: "unavailable",
+    });
   });
 
   it("serializes only the shared account capacity across workspaces and replicas", async () => {
@@ -707,7 +861,7 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
         modelId: "model-a",
         connectionId: primary.id,
       }),
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
     await expect(runtime.resolve(member)).resolves.toMatchObject({
       model: { connectionId: primary.id },
     });
@@ -910,7 +1064,7 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
     await system(async () => {
       await prisma!.installationIdentity.update({
         where: { id: "local" },
-        data: { bindingVersion: 2 },
+        data: { bindingVersion: 2, projectionGrant: null },
       });
       await prisma!.centralWorkspaceBinding.update({
         where: { id: scopeA },

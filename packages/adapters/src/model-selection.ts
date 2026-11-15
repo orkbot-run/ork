@@ -633,11 +633,23 @@ export async function validateBotModelChange(
       return { ok: false, error: "Unsupported thinking level" };
     return { ok: true, provider, model, thinkingLevel: input.thinkingLevel ?? null };
   }
-  if (input.connectionId) return { ok: false, error: PINNED_PROVIDER_NOT_CONNECTED };
+  const personalAllowed = (await deps.serverAIModels?.personalModelsAllowed(scope)) === true;
+  if (input.connectionId && !personalAllowed)
+    return { ok: false, error: PINNED_PROVIDER_NOT_CONNECTED };
+  if (
+    input.connectionId &&
+    (!provider ||
+      !model ||
+      !(await findConnectedModelCredential(deps.prisma, deps.secretStore, scope, provider, model, {
+        credentialId: input.connectionId,
+      })))
+  )
+    return { ok: false, error: PINNED_PROVIDER_NOT_CONNECTED };
   const changing = provider !== input.current?.provider || model !== input.current?.model;
   if (
     !changing &&
     input.thinkingLevel &&
+    !personalAllowed &&
     (await findWorkspaceModelPolicy(deps.prisma, input.spaceId))
   ) {
     // Existing bot settings may still name a personal credential. A profile edit should not
@@ -645,7 +657,9 @@ export async function validateBotModelChange(
     return { ok: true, provider, model, thinkingLevel: null };
   }
   if (changing && provider && model) {
-    const policy = await findWorkspaceModelPolicy(deps.prisma, input.spaceId);
+    const policy = personalAllowed
+      ? null
+      : await findWorkspaceModelPolicy(deps.prisma, input.spaceId);
     if (policy) {
       if (policy.provider !== provider || policy.modelId !== model)
         return { ok: false, error: "Models are managed by the workspace owner." };
@@ -655,11 +669,14 @@ export async function validateBotModelChange(
   }
   if (changing && provider && model) {
     const hosted =
+      !personalAllowed &&
       deps.hostedProvider === provider &&
       (await hasHostedModelCredits(deps.prisma, scope, provider));
     const credential = hosted
       ? null
-      : await findConnectedModelCredential(deps.prisma, deps.secretStore, scope, provider, model);
+      : await findConnectedModelCredential(deps.prisma, deps.secretStore, scope, provider, model, {
+          credentialId: input.connectionId ?? undefined,
+        });
     if (!credential) {
       if (hosted && isCatalogModelChoice(provider, model)) {
         const allowed = listPiCatalog().find(

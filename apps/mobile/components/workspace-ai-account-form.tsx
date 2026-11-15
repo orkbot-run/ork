@@ -17,11 +17,13 @@ export function WorkspaceAIAccountForm({
   busy,
   onSave,
   onCancel,
+  hideBudget = false,
 }: {
   row: Assignment;
   busy: boolean;
   onSave(patch: Partial<RpcInput<"serverAI/configure">>): Promise<boolean>;
   onCancel(): void;
+  hideBudget?: boolean;
 }) {
   const { t } = useI18n();
   const [allowed, setAllowed] = useState(
@@ -36,7 +38,7 @@ export function WorkspaceAIAccountForm({
   async function save() {
     setInvalid(false);
     try {
-      const monthlyBudgetMicros = parseAIBudget(budget);
+      const monthlyBudgetMicros = hideBudget ? row.monthlyBudgetMicros : parseAIBudget(budget);
       if (!/^\d+$/.test(priority) || Number(priority) > 1000 || !allowed.includes(model)) {
         setInvalid(true);
         return;
@@ -83,14 +85,16 @@ export function WorkspaceAIAccountForm({
             <SettingsRow title={t("Default model")} value={model} chevron="down" />
           </View>
         </MenuPickerMenu>
-        <SettingsInputRow
-          accessibilityLabel={t("Monthly budget (USD)")}
-          placeholder={t("Monthly budget (USD)")}
-          keyboardType="decimal-pad"
-          value={budget}
-          onChangeText={setBudget}
-          editable={!busy}
-        />
+        {!hideBudget ? (
+          <SettingsInputRow
+            accessibilityLabel={t("Monthly budget (USD)")}
+            placeholder={t("Monthly budget (USD)")}
+            keyboardType="decimal-pad"
+            value={budget}
+            onChangeText={setBudget}
+            editable={!busy}
+          />
+        ) : null}
         <SettingsInputRow
           accessibilityLabel={t("Fallback priority")}
           placeholder={t("Fallback priority")}

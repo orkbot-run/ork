@@ -166,7 +166,16 @@ export async function resolveModelKey(...args: Parameters<typeof resolveModelKey
   const [deps, userId, spaceId, , provider] = args;
   const billingEnabled = await modelCreditBillingEnabled(deps);
   const scope = { userId, spaceId };
-  if (billingEnabled && (await hasHostedModelCredits(deps.prisma, scope, provider))) {
+  const personalAllowed = await deps.serverAIModels?.personalModelsAllowed(scope);
+  if (personalAllowed === false)
+    throw new Error("The organization model changed. Start the run again.");
+  if (personalAllowed === true && !deps.runtime?.describe().capabilities.scripted)
+    args[7] = { ...args[7], requireStoredSecret: true };
+  if (
+    !args[7]?.requireStoredSecret &&
+    billingEnabled &&
+    (await hasHostedModelCredits(deps.prisma, scope, provider))
+  ) {
     args[3] = null;
     // Funded managed backups use deployment credentials just like the primary.
     args[7] = { ...args[7], requireStoredSecret: false };
@@ -190,7 +199,18 @@ export async function resolveModelKey(...args: Parameters<typeof resolveModelKey
     throw new UnavailableModelForAuthError(MISSING_MODEL_RUN_ERROR);
   }
   const callObserver =
-    !credential && billingEnabled ? await hostedModelCreditObserver(deps.prisma, scope) : undefined;
+    personalAllowed === true
+      ? {
+          beforeCall: async () => {
+            if ((await deps.serverAIModels?.personalModelsAllowed(scope)) !== true)
+              throw new Error("The organization model changed. Start the run again.");
+            return "personal-model";
+          },
+          afterCall: async () => {},
+        }
+      : !credential && billingEnabled
+        ? await hostedModelCreditObserver(deps.prisma, scope)
+        : undefined;
   return { ...material, apiKey: material.apiKey ?? runtimeKey, callObserver };
 }
 
@@ -469,9 +489,11 @@ export async function resolveConnectedModelKey(
   requireStoredSecret = false,
   credentialId?: string,
 ) {
-  const hostedProvider = (await modelCreditBillingEnabled(deps))
-    ? resolveDeploymentModel().provider
-    : undefined;
+  const central = Boolean(await deps.serverAIModels?.actor(scope));
+  const hostedProvider =
+    !central && (await modelCreditBillingEnabled(deps))
+      ? resolveDeploymentModel().provider
+      : undefined;
   const validationError = await validateConnectedModelChoice(
     deps.prisma,
     deps.secretStore,
@@ -498,7 +520,7 @@ export async function resolveConnectedModelKey(
     provider,
     modelId,
     registerSecrets,
-    { requireStoredSecret },
+    { requireStoredSecret: requireStoredSecret || central },
   );
   return { credential, resolved };
 }
@@ -592,6 +614,7 @@ export async function resolveRunModel(
         ? ThinkingLevelSchema.parse(override.thinkingLevel)
         : workspace.model.thinkingLevel,
     };
+  const central = Boolean(await deps.serverAIModels?.actor(scope));
   const hasOverride = Boolean(override?.modelProvider && override.modelId);
   const [overrideCredential, main, settings] = await Promise.all([
     hasOverride
@@ -601,6 +624,7 @@ export async function resolveRunModel(
           scope,
           override!.modelProvider!,
           override!.modelId,
+          { credentialId: override!.modelConnectionId ?? undefined },
         )
       : Promise.resolve(null),
     resolveMemberMainModel(deps, scope),
@@ -612,13 +636,16 @@ export async function resolveRunModel(
     override,
     overrideCredential,
     main,
-    hostedProvider: (await modelCreditBillingEnabled(deps))
-      ? resolveDeploymentModel().provider
-      : undefined,
-    defaults: {
-      settings,
-      deployment: deps.deploymentModelConfigured ? resolveDeploymentModel() : null,
-    },
+    hostedProvider:
+      !central && (await modelCreditBillingEnabled(deps))
+        ? resolveDeploymentModel().provider
+        : undefined,
+    defaults: central
+      ? {}
+      : {
+          settings,
+          deployment: deps.deploymentModelConfigured ? resolveDeploymentModel() : null,
+        },
   });
   const { credential, thinkingLevel } = selected;
   let { provider, id } = selected;
@@ -636,6 +663,8 @@ export async function resolveRunModel(
     credential,
     provider,
     id,
+    undefined,
+    { requireStoredSecret: central && !deps.runtime.describe().capabilities.scripted },
   );
   return {
     provider,

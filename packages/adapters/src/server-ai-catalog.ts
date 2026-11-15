@@ -74,24 +74,35 @@ export class ServerAICatalog {
   private async serverAdmin(actor: AIActor) {
     const key = await this.deps.principal(actor);
     if (!key) return deny("forbidden");
-    const [delegation, installation] = await Promise.all([
-      this.deps.prisma.aIConnectionAdministrator.findUnique({ where: { accountKey: key } }),
+    const [workspace, installation] = await Promise.all([
+      this.deps.prisma.$transaction((tx) => this.workspace(tx, actor)),
       this.deps.prisma.installationIdentity.findUnique({ where: { id: "local" } }),
     ]);
     if (
-      !delegation ||
+      !workspace.organizationAdministrator ||
       !installation ||
       installation.state !== "ready" ||
-      delegation.bindingVersion !== installation.bindingVersion
+      !installation.serverId ||
+      !installation.projectionGrant ||
+      workspace.serverId !== installation.serverId ||
+      workspace.centralOrganizationId !== installation.centralOrganizationId ||
+      workspace.organizationId !== installation.localOrganizationId ||
+      workspace.version !== installation.bindingVersion
     )
       return deny("forbidden");
-    return { accountKey: key, bindingVersion: installation.bindingVersion };
+    return {
+      accountKey: key,
+      bindingVersion: installation.bindingVersion,
+      organizationId: workspace.organizationId,
+      serverId: installation.serverId,
+    };
   }
 
   async adminIdentity(actor: AIActor) {
-    return runAsSystem("verify the canonical installation AI administrator", () =>
-      this.serverAdmin(actor),
-    );
+    return runAsSystem("verify the organization AI administrator", async () => {
+      const { accountKey, bindingVersion } = await this.serverAdmin(actor);
+      return { accountKey, bindingVersion };
+    });
   }
 
   private async workspace(tx: Prisma.TransactionClient, actor: AIActor, administration = false) {
@@ -119,8 +130,22 @@ export class ServerAICatalog {
       }
       return {
         organizationId: binding.localOrganizationId,
+        serverId: binding.serverId,
+        centralOrganizationId: binding.centralOrganizationId,
         version: binding.bindingVersion,
         administrator: access.role === "admin",
+        organizationAdministrator:
+          binding.validUntil.getTime() > Date.now() &&
+          Array.isArray(binding.members) &&
+          binding.members.some(
+            (member) =>
+              member &&
+              typeof member === "object" &&
+              !Array.isArray(member) &&
+              member.userId === access.centralSubject &&
+              member.accessVersion === access.membershipVersion &&
+              member.organizationRole === "admin",
+          ),
       };
     }
     const member = await tx.spaceMember.findUnique({
@@ -130,8 +155,11 @@ export class ServerAICatalog {
       return deny("forbidden");
     return {
       organizationId: member.organizationId,
+      serverId: null,
+      centralOrganizationId: null,
       version: 0,
       administrator: ["owner", "admin"].includes(member.role),
+      organizationAdministrator: ["owner", "admin"].includes(member.role),
     };
   }
 
@@ -203,9 +231,12 @@ export class ServerAICatalog {
     return runAsSystem(
       "read server AI catalog as a delegated connection administrator",
       async () => {
-        await this.serverAdmin(actor);
+        const admin = await this.serverAdmin(actor);
         return (
-          await this.deps.prisma.serverAIConnection.findMany({ orderBy: { createdAt: "asc" } })
+          await this.deps.prisma.serverAIConnection.findMany({
+            where: { localOrganizationId: admin.organizationId },
+            orderBy: { createdAt: "asc" },
+          })
         ).map((row) => this.metadata(row));
       },
     );
@@ -213,7 +244,7 @@ export class ServerAICatalog {
 
   async permissions(actor: AIActor) {
     return runAsSystem("read installation AI management permissions", async () => {
-      const workspace = await this.deps.prisma.$transaction((tx) => this.workspace(tx, actor));
+      await this.deps.prisma.$transaction((tx) => this.workspace(tx, actor));
       let canManageServer = false;
       try {
         await this.serverAdmin(actor);
@@ -221,8 +252,36 @@ export class ServerAICatalog {
       } catch (error) {
         if (!(error instanceof AIConnectionError) || error.code !== "forbidden") throw error;
       }
-      return { canManageServer, canManageWorkspace: workspace.administrator };
+      return { canManageServer, canManageWorkspace: canManageServer };
     });
+  }
+
+  /** An enabled connection remains configured even when its provider is unavailable. */
+  async hasConfiguredModel(actor: AIActor): Promise<boolean> {
+    return runAsSystem("check workspace model policy", () =>
+      this.deps.prisma.$transaction(async (tx) => {
+        const workspace = await this.workspace(tx, actor);
+        return Boolean(
+          await tx.workspaceAIConnection.findFirst({
+            where: {
+              space: {
+                organizationId: workspace.organizationId,
+                centralBinding: {
+                  state: { in: ["ready", "provisioning"] },
+                  bindingVersion: workspace.version,
+                  serverId: workspace.serverId ?? undefined,
+                  centralOrganizationId: workspace.centralOrganizationId ?? undefined,
+                },
+              },
+              bindingVersion: workspace.version,
+              available: true,
+              enabled: true,
+            },
+            select: { connectionId: true },
+          }),
+        );
+      }),
+    );
   }
 
   async update(
@@ -237,12 +296,12 @@ export class ServerAICatalog {
   ) {
     const data = accountSettingsSchema.parse(input);
     const result = await runAsSystem("update installation AI account limits", async () => {
-      await this.serverAdmin(actor);
+      const admin = await this.serverAdmin(actor);
       return this.deps.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM server_ai_connections WHERE id = ${connectionId} FOR UPDATE`;
         return this.metadata(
           await tx.serverAIConnection.update({
-            where: { id: connectionId },
+            where: { id: connectionId, localOrganizationId: admin.organizationId },
             data: {
               ...data,
               monthlyBudgetMicros:
@@ -273,7 +332,7 @@ export class ServerAICatalog {
     }
     if (next.kind === "oauth" && next.reconnectRequired) return deny("invalid");
     const result = await runAsSystem("reconnect an explicitly delegated AI account", async () => {
-      await this.serverAdmin(actor);
+      const admin = await this.serverAdmin(actor);
       return withOAuthRefreshLock(
         this.deps.prisma,
         "server-ai-oauth-v2",
@@ -281,7 +340,7 @@ export class ServerAICatalog {
         async (tx) => {
           await tx.$queryRaw`SELECT id FROM server_ai_connections WHERE id = ${connectionId} FOR UPDATE`;
           const account = await tx.serverAIConnection.findUniqueOrThrow({
-            where: { id: connectionId },
+            where: { id: connectionId, localOrganizationId: admin.organizationId },
           });
           if (expectedRevision !== undefined && account.revision !== expectedRevision)
             return deny("conflict");
@@ -365,11 +424,7 @@ export class ServerAICatalog {
     }
     const id = randomUUID();
     return runAsSystem("create an installation-owned AI account", async () => {
-      await this.serverAdmin(actor);
-      const organization = await this.deps.prisma.space.findUniqueOrThrow({
-        where: { id: actor.spaceId },
-        select: { organizationId: true },
-      });
+      const admin = await this.serverAdmin(actor);
       const stored = await this.deps.secrets.put(
         data.plaintext,
         {
@@ -384,7 +439,7 @@ export class ServerAICatalog {
         const row = await this.deps.prisma.serverAIConnection.create({
           data: {
             id,
-            localOrganizationId: organization.organizationId,
+            localOrganizationId: admin.organizationId,
             label: data.label,
             provider: data.provider,
             models: data.models,
@@ -409,9 +464,10 @@ export class ServerAICatalog {
     connectionId: string,
     available: boolean,
   ): Promise<void> {
-    await runAsSystem("offer an AI account to an explicit workspace", async () => {
-      await this.serverAdmin(actor);
-      await this.deps.prisma.$transaction(async (tx) => {
+    await runAsSystem("make an organization AI account available on this server", async () => {
+      const admin = await this.serverAdmin(actor);
+      const targets = await this.deps.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM organization WHERE id = ${admin.organizationId} FOR UPDATE`;
         await tx.$queryRaw`SELECT id FROM server_ai_connections WHERE id = ${connectionId} FOR UPDATE`;
         const connection = await tx.serverAIConnection.findUnique({ where: { id: connectionId } });
         const space = await tx.space.findUnique({
@@ -426,28 +482,54 @@ export class ServerAICatalog {
           !connection ||
           !space ||
           space.deletingAt ||
-          space.organizationId !== connection.localOrganizationId
+          space.organizationId !== connection.localOrganizationId ||
+          space.organizationId !== admin.organizationId
         )
           return deny("forbidden");
-        await tx.workspaceAIConnection.upsert({
-          where: { spaceId_connectionId: { spaceId, connectionId } },
-          create: {
-            spaceId,
-            connectionId,
-            available,
-            enabled: false,
-            allowedModels: modelsSchema.parse(connection.models),
-            bindingVersion: space.centralBinding?.bindingVersion ?? 0,
+        const workspaces = await tx.centralWorkspaceBinding.findMany({
+          where: {
+            localOrganizationId: admin.organizationId,
+            serverId: admin.serverId,
+            bindingVersion: admin.bindingVersion,
+            state: { in: ["ready", "provisioning"] },
+            space: { deletingAt: null },
           },
-          update: {
-            available,
-            enabled: false,
-            bindingVersion: space.centralBinding?.bindingVersion ?? 0,
-            revision: { increment: 1 },
-          },
+          select: { spaceId: true, bindingVersion: true },
+          orderBy: { spaceId: "asc" },
         });
+        if (!workspaces.some((workspace) => workspace.spaceId === spaceId))
+          return deny("forbidden");
+        for (const workspace of workspaces) {
+          const current = await tx.workspaceAIConnection.findUnique({
+            where: { spaceId_connectionId: { spaceId: workspace.spaceId, connectionId } },
+          });
+          if (
+            current?.available === available &&
+            current.bindingVersion === workspace.bindingVersion
+          )
+            continue;
+          await tx.workspaceAIConnection.upsert({
+            where: { spaceId_connectionId: { spaceId: workspace.spaceId, connectionId } },
+            create: {
+              spaceId: workspace.spaceId,
+              connectionId,
+              available,
+              enabled: false,
+              allowedModels: modelsSchema.parse(connection.models),
+              bindingVersion: workspace.bindingVersion,
+            },
+            update: {
+              available,
+              enabled: false,
+              bindingVersion: workspace.bindingVersion,
+              revision: { increment: 1 },
+            },
+          });
+        }
+        return workspaces.map((workspace) => workspace.spaceId);
       });
-      await this.deps.realtime.publish(workspaceTopic(spaceId), JSON.stringify({ connectionId }));
+      for (const target of targets)
+        await this.deps.realtime.publish(workspaceTopic(target), JSON.stringify({ connectionId }));
     });
   }
 
@@ -482,9 +564,11 @@ export class ServerAICatalog {
       })
       .strict()
       .parse(input);
-    await runAsSystem("assign permitted AI accounts as a workspace administrator", () =>
-      this.deps.prisma.$transaction(async (tx) => {
+    const targets = await runAsSystem("configure an organization AI account", async () => {
+      const admin = await this.serverAdmin(actor);
+      return this.deps.prisma.$transaction(async (tx) => {
         const workspace = await this.workspace(tx, actor, true);
+        await tx.$queryRaw`SELECT id FROM organization WHERE id = ${admin.organizationId} FOR UPDATE`;
         await tx.aIWorkspacePolicy.createMany({
           data: { spaceId: actor.spaceId },
           skipDuplicates: true,
@@ -525,11 +609,24 @@ export class ServerAICatalog {
           });
           if (otherDefault) return deny("conflict");
         }
+        const workspaces = await tx.centralWorkspaceBinding.findMany({
+          where: {
+            localOrganizationId: admin.organizationId,
+            serverId: admin.serverId,
+            bindingVersion: admin.bindingVersion,
+            state: { in: ["ready", "provisioning"] },
+            space: { deletingAt: null },
+          },
+          select: { spaceId: true, bindingVersion: true },
+          orderBy: { spaceId: "asc" },
+        });
+        const workspaceIds = workspaces.map((item) => item.spaceId);
+        if (!workspaceIds.includes(actor.spaceId)) return deny("forbidden");
         if (data.enabled && isDefault && !data.preserveDefault)
           await tx.workspaceAIConnection.updateMany({
             where: {
-              spaceId: actor.spaceId,
-              bindingVersion: workspace.version,
+              spaceId: { in: workspaceIds },
+              bindingVersion: admin.bindingVersion,
               connectionId: { not: connectionId },
               isDefault: true,
             },
@@ -541,37 +638,59 @@ export class ServerAICatalog {
           expectedRevision: _expectedRevision,
           ...configuration
         } = data;
-        await tx.workspaceAIConnection.update({
-          where: { spaceId_connectionId: { spaceId: actor.spaceId, connectionId } },
-          data: {
-            ...configuration,
-            isDefault,
-            monthlyBudgetMicros: preserveBudget
-              ? assignment.monthlyBudgetMicros
-              : data.monthlyBudgetMicros === null
-                ? null
-                : BigInt(data.monthlyBudgetMicros),
-            bindingVersion: workspace.version,
-            revision: { increment: 1 },
-          },
-        });
-      }),
-    ).catch((error: unknown) => {
+        for (const target of workspaces)
+          await tx.workspaceAIConnection.upsert({
+            where: { spaceId_connectionId: { spaceId: target.spaceId, connectionId } },
+            create: {
+              spaceId: target.spaceId,
+              connectionId,
+              available: true,
+              ...configuration,
+              isDefault,
+              monthlyBudgetMicros: preserveBudget
+                ? assignment.monthlyBudgetMicros
+                : data.monthlyBudgetMicros === null
+                  ? null
+                  : BigInt(data.monthlyBudgetMicros),
+              bindingVersion: target.bindingVersion,
+            },
+            update: {
+              available: true,
+              ...configuration,
+              isDefault,
+              monthlyBudgetMicros: preserveBudget
+                ? assignment.monthlyBudgetMicros
+                : data.monthlyBudgetMicros === null
+                  ? null
+                  : BigInt(data.monthlyBudgetMicros),
+              bindingVersion: target.bindingVersion,
+              revision: { increment: 1 },
+            },
+          });
+        return workspaceIds;
+      });
+    }).catch((error: unknown) => {
       if (error && typeof error === "object" && "code" in error && error.code === "P2002")
         return deny("conflict");
       throw error;
     });
-    await this.deps.realtime.publish(
-      workspaceTopic(actor.spaceId),
-      JSON.stringify({ connectionId }),
-    );
+    for (const target of targets)
+      await this.deps.realtime.publish(workspaceTopic(target), JSON.stringify({ connectionId }));
   }
 
   async workspaceBudget(actor: AIActor): Promise<number | null> {
     return runAsSystem("read the authorized workspace AI budget", () =>
       this.deps.prisma.$transaction(async (tx) => {
-        await this.workspace(tx, actor);
-        const policy = await tx.aIWorkspacePolicy.findUnique({ where: { spaceId: actor.spaceId } });
+        const workspace = await this.workspace(tx, actor);
+        const policy = await tx.aIWorkspacePolicy.findFirst({
+          where: {
+            monthlyBudgetMicros: { not: null },
+            space: {
+              organizationId: workspace.organizationId,
+              centralBinding: { bindingVersion: workspace.version },
+            },
+          },
+        });
         return policy?.monthlyBudgetMicros == null ? null : Number(policy.monthlyBudgetMicros);
       }),
     );
@@ -579,9 +698,23 @@ export class ServerAICatalog {
 
   async setWorkspaceBudget(actor: AIActor, monthlyBudgetMicros: number | null): Promise<void> {
     const budget = microsSchema.parse(monthlyBudgetMicros);
-    await runAsSystem("set the workspace AI usage budget", () =>
-      this.deps.prisma.$transaction(async (tx) => {
+    await runAsSystem("set the organization AI usage limit", async () => {
+      const admin = await this.serverAdmin(actor);
+      await this.deps.prisma.$transaction(async (tx) => {
         await this.workspace(tx, actor, true);
+        await tx.$queryRaw`SELECT id FROM organization WHERE id = ${admin.organizationId} FOR UPDATE`;
+        if (budget === null) {
+          await tx.aIWorkspacePolicy.updateMany({
+            where: {
+              space: {
+                organizationId: admin.organizationId,
+                centralBinding: { serverId: admin.serverId, bindingVersion: admin.bindingVersion },
+              },
+            },
+            data: { monthlyBudgetMicros: null, revision: { increment: 1 } },
+          });
+          return;
+        }
         await tx.aIWorkspacePolicy.upsert({
           where: { spaceId: actor.spaceId },
           create: {
@@ -593,8 +726,8 @@ export class ServerAICatalog {
             revision: { increment: 1 },
           },
         });
-      }),
-    );
+      });
+    });
   }
 
   notifyAccount(connectionId: string): Promise<void> {
@@ -603,9 +736,9 @@ export class ServerAICatalog {
 
   async disable(actor: AIActor, connectionId: string): Promise<void> {
     await runAsSystem("disable an AI account without destroying its usage history", async () => {
-      await this.serverAdmin(actor);
+      const admin = await this.serverAdmin(actor);
       await this.deps.prisma.serverAIConnection.update({
-        where: { id: connectionId },
+        where: { id: connectionId, localOrganizationId: admin.organizationId },
         data: { state: "disabled", revision: { increment: 1 } },
       });
     });

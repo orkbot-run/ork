@@ -806,6 +806,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 run,
                 modelChoice.modelProvider,
                 modelChoice.modelId,
+                { credentialId: modelChoice.modelConnectionId ?? undefined },
               )
             : null;
         const attemptSignal = runAbortController.signal;
@@ -1041,7 +1042,10 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             }),
           );
         }
-        const runDeployment = deps.deploymentModelConfigured ? resolveDeploymentModel() : null;
+        const runDeployment =
+          !run.centralWorkspaceId && deps.deploymentModelConfigured
+            ? resolveDeploymentModel()
+            : null;
         const runtimeFallback = runtimeFallbackModel(deps.runtime);
         const pinError =
           !workspaceModel &&
@@ -1072,10 +1076,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 override: modelChoice,
                 overrideCredential,
                 main,
-                hostedProvider: (await modelCreditBillingEnabled(deps))
-                  ? resolveDeploymentModel().provider
-                  : undefined,
-                defaults: { settings, deployment: runDeployment },
+                hostedProvider:
+                  !run.centralWorkspaceId && (await modelCreditBillingEnabled(deps))
+                    ? resolveDeploymentModel().provider
+                    : undefined,
+                defaults: run.centralWorkspaceId ? {} : { settings, deployment: runDeployment },
               });
         const selectedProvider = selected.provider ?? runtimeFallback?.provider;
         const selectedModelId = selected.id ?? runtimeFallback?.id;
@@ -1214,6 +1219,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                       selectedProvider,
                       selectedModelId,
                       (values) => runSecrets.push(...values),
+                      {
+                        requireStoredSecret:
+                          Boolean(run.centralWorkspaceId) &&
+                          !deps.runtime.describe().capabilities.scripted,
+                      },
                     ),
             };
           } catch (error) {
@@ -1964,6 +1974,15 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const currentPolicy = run.centralWorkspaceId
           ? null
           : await findWorkspaceModelPolicy(deps.prisma, run.spaceId);
+        if (
+          run.centralWorkspaceId &&
+          !workspaceModel &&
+          deps.serverAIModels &&
+          (await deps.serverAIModels.personalModelsAllowed(run)) === false
+        ) {
+          await failRunBeforeModel("The workspace model changed. Start the run again.");
+          return;
+        }
         if (
           !run.centralWorkspaceId &&
           (currentPolicy?.secretId ?? null) !== (workspaceModel?.secretId ?? null)

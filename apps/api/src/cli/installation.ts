@@ -13,7 +13,6 @@ import type { InstallationConfiguration } from "@orkbot/auth/installation-client
 import { resolveEncryptionKey } from "@orkbot/core";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import { createDb } from "@orkbot/db";
-import { setAIAdministrator } from "#modules/models/ai-administrators";
 import { loadServerClaimRuntime } from "#modules/platform/server-claim-runtime";
 
 await loadServerClaimRuntime(process.env);
@@ -112,19 +111,8 @@ try {
       await authority.synchronize();
       process.stdout.write("Workspace mapping acknowledged.\n");
       break;
-    case "grant-ai-admin":
-    case "revoke-ai-admin":
-      await setAIAdministrator(database.prisma, {
-        accountKey: required("--account-key"),
-        fingerprint: required("--fingerprint"),
-        enabled: process.argv[2] === "grant-ai-admin",
-      });
-      process.stdout.write("AI administration delegation saved.\n");
-      break;
     default:
-      throw new Error(
-        "Use enroll, reconnect, confirm, status, publish-routes, map-workspace, grant-ai-admin or revoke-ai-admin",
-      );
+      throw new Error("Use enroll, reconnect, confirm, status, publish-routes or map-workspace");
   }
 } finally {
   authority.dispose();

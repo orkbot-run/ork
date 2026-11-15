@@ -93,11 +93,12 @@ export function modelsRoutes(ctx: RouterContext) {
     };
   };
   const requireUnmanagedWorkspace = async (actor: { userId: string; spaceId: string }) => {
-    if (await deps.serverAIModels?.actor(actor))
+    if ((await deps.serverAIModels?.personalModelsAllowed(actor)) === false)
       throw new ORPCError("FORBIDDEN", { message: "Manage AI connections on this server." });
   };
   const requirePersonalModelsAllowed = async (actor: { userId: string; spaceId: string }) => {
     await requireUnmanagedWorkspace(actor);
+    if ((await deps.serverAIModels?.personalModelsAllowed(actor)) === true) return;
     if (await findWorkspaceModelPolicy(deps.prisma, actor.spaceId))
       throw new ORPCError("FORBIDDEN", { message: "Models are managed by the workspace owner." });
   };
@@ -113,6 +114,7 @@ export function modelsRoutes(ctx: RouterContext) {
             (await deps.serverAI.list(managed)).find((row) => row.id === primary.connectionId);
           return {
             managed: true,
+            personalModelsAllowed: !(await deps.serverAI.hasConfiguredModel(managed)),
             canManage: false,
             policy:
               connection && primary

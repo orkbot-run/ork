@@ -43,7 +43,7 @@ import { ConnectionNameField, ProvidersSection } from "./model-settings/provider
 import type { ConnectableProvider } from "./model-settings/role-model-picker";
 import { SpaceBotsModelNotice } from "./model-settings/space-bots-model";
 import { useModelSettings } from "./model-settings/use-model-settings";
-import { AISettingsFrame, ServerAISettings } from "./ServerAISettings";
+import { AISettingsFrame } from "./ServerAISettings";
 import { WorkspaceModelPolicy } from "./WorkspaceModelPolicy";
 
 export function ModelSettingsOverlay(props: Parameters<typeof LegacyModelSettingsOverlay>[0]) {
@@ -65,8 +65,14 @@ export function ModelSettingsOverlay(props: Parameters<typeof LegacyModelSetting
         </Button>
       </AISettingsFrame>
     );
-  if (policy.data.managed)
-    return <ServerAISettings embedded={props.embedded} onClose={props.onClose} />;
+  if (policy.data.managed && !policy.data.personalModelsAllowed)
+    return (
+      <AISettingsFrame embedded={props.embedded} onClose={props.onClose}>
+        <p className="text-sm text-muted-foreground">
+          <Trans>Your organization manages the models used in this workspace.</Trans>
+        </p>
+      </AISettingsFrame>
+    );
   return <LegacyModelSettingsOverlay {...props} />;
 }
 
@@ -296,6 +302,14 @@ function LegacyModelSettingsOverlay({
 
   const content = (
     <>
+      {policyQuery.data?.managed && policyQuery.data.personalModelsAllowed ? (
+        <p className="mb-4 text-sm text-muted-foreground">
+          <Trans>
+            Your organization has not configured a model. You can connect your own; it may process
+            workspace data outside company servers.
+          </Trans>
+        </p>
+      ) : null}
       {policyQuery.data &&
       (scope === "space" || policyQuery.data.canManage || policyQuery.data.policy) ? (
         <WorkspaceModelPolicy

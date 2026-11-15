@@ -228,8 +228,8 @@ it("creates an unlimited account and offers it to the workspace during onboardin
     }),
     { signal: expect.any(AbortSignal) },
   );
-  await vi.waitFor(() => expect(host.textContent).toContain("Make available"));
-  await click("Make available");
+  await vi.waitFor(() => expect(host.textContent).toContain("Make available to organization"));
+  await click("Make available to organization");
   expect(api.serverAI.offer).toHaveBeenCalledExactlyOnceWith(
     { spaceId: "workspace-a", connectionId: "account-a", available: true },
     { signal: expect.any(AbortSignal) },
@@ -281,7 +281,7 @@ it("hides account editing and preserves assignment limits during onboarding", as
   expect(host.textContent).not.toContain("budget");
   expect(host.textContent).not.toContain("Edit AI account");
   expect(api.serverAI.update).not.toHaveBeenCalled();
-  await click("Models and limits");
+  await click("Models");
   expect(host.textContent).not.toContain("budget");
   await click("Save");
   expect(api.serverAI.configure).toHaveBeenCalledWith(
@@ -368,8 +368,8 @@ it("adds an unlimited subscription and explicitly enables it as the default mode
   );
   await field("Verification code", "fixture-code");
   await click("Complete sign-in");
-  await vi.waitFor(() => expect(host.textContent).toContain("Make available"));
-  await click("Make available");
+  await vi.waitFor(() => expect(host.textContent).toContain("Make available to organization"));
+  await click("Make available to organization");
   expect(api.serverAI.offer).toHaveBeenCalledWith(
     { spaceId: "workspace-a", connectionId: subscription.id, available: true },
     { signal: expect.any(AbortSignal) },
@@ -405,7 +405,7 @@ it("adds an unlimited subscription and explicitly enables it as the default mode
   );
 });
 
-it("keeps budget controls available in embedded settings", async () => {
+it("does not offer budget fields in embedded settings", async () => {
   api.serverAI.status.mockResolvedValue(
     status({
       canManageWorkspace: true,
@@ -426,7 +426,7 @@ it("keeps budget controls available in embedded settings", async () => {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-  expect(host.textContent).toContain("Workspace monthly budget (USD)");
+  expect(host.textContent).not.toContain("Workspace monthly budget (USD)");
   expect(host.textContent).toContain("Edit AI account");
   const enabled = host.querySelector<HTMLButtonElement>('[role="switch"]')!;
   await act(async () => enabled.click());

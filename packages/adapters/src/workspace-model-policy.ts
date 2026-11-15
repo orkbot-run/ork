@@ -29,6 +29,7 @@ export async function resolveWorkspaceModel(
   if (deps.serverAIModels && scope) {
     const managed = await deps.serverAIModels.resolve(scope, selection);
     if (managed) return managed;
+    if (await deps.serverAIModels.actor(scope)) return null;
   }
   const policy = await findWorkspaceModelPolicy(deps.prisma, spaceId);
   if (!policy) return null;

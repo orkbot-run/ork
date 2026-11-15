@@ -52,10 +52,14 @@ const { memoryConfigs, memoryConfigChange, providerConfig, updaterStatus } = vi.
 }));
 vi.mock("../lib/rpc", () => ({
   rpc: { updater: { status: updaterStatus } },
-  createSpaceRpc: () => ({ memory: { providerConfig: () => providerConfig("") } }),
+  createSpaceRpc: () => ({
+    memory: { providerConfig: () => providerConfig("") },
+    models: { workspacePolicy: async () => ({ canManage: false, policy: null }) },
+  }),
   selectedSpaceId: () => null,
   rpcForSpace: (spaceId: string) => ({
     memory: { providerConfig: () => providerConfig(spaceId) },
+    models: { workspacePolicy: async () => ({ canManage: false, policy: null }) },
   }),
 }));
 const serverUpdatesVisibility = vi.hoisted(() => ({ available: false }));

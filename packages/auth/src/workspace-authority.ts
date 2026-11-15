@@ -5,6 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { RealtimeFanout } from "@orkbot/adapter-kit";
 import type { WorkspaceProjection } from "@orkbot/contracts";
 import {
+  AIModelsSchema,
   IDENTITY_LOGIN_PURPOSE,
   IDENTITY_PROJECTION_PURPOSE,
   personalActivationMessage,
@@ -23,6 +24,51 @@ import { PersonalWorkspaceAccess } from "./personal-workspace-access.js";
 import { WorkspaceAuthorityWindow } from "./workspace-authority-window.js";
 
 const refused = () => new Error("Workspace authority unavailable");
+
+async function inheritOrganizationModels(
+  tx: Prisma.TransactionClient,
+  configuration: InstallationConfiguration,
+  localOrganizationId: string,
+  spaceId: string,
+) {
+  const template = await tx.centralWorkspaceBinding.findFirst({
+    where: {
+      localOrganizationId,
+      serverId: configuration.serverId,
+      bindingVersion: configuration.bindingVersion,
+      state: "ready",
+      spaceId: { not: spaceId },
+    },
+    select: { spaceId: true },
+    orderBy: { spaceId: "asc" },
+  });
+  if (!template) return;
+  const models = await tx.workspaceAIConnection.findMany({
+    where: {
+      spaceId: template.spaceId,
+      available: true,
+      bindingVersion: configuration.bindingVersion,
+    },
+  });
+  for (const model of models)
+    await tx.workspaceAIConnection.upsert({
+      where: { spaceId_connectionId: { spaceId, connectionId: model.connectionId } },
+      create: {
+        spaceId,
+        connectionId: model.connectionId,
+        available: model.available,
+        enabled: model.enabled,
+        allowedModels: AIModelsSchema.parse(model.allowedModels),
+        defaultModelId: model.defaultModelId,
+        isDefault: model.isDefault,
+        fallback: model.fallback,
+        priority: model.priority,
+        monthlyBudgetMicros: model.monthlyBudgetMicros,
+        bindingVersion: configuration.bindingVersion,
+      },
+      update: {},
+    });
+}
 
 /** Central projections control admission; local IDs, settings and data remain on this installation. */
 export class WorkspaceAuthority {
@@ -48,7 +94,20 @@ export class WorkspaceAuthority {
     if (!configuration) throw refused();
     const restoration = await this.personal.restorationCheckpoint(configuration);
     const { response, nonce, startedAt } = await this.installation
-      .signedRequest("/servers/synchronize", { personalDeviceProtocol: 1 }, configuration)
+      .signedRequest(
+        "/servers/synchronize",
+        { personalDeviceProtocol: 1, organizationRoleProtocol: 1 },
+        configuration,
+      )
+      .catch((error) => {
+        if (error instanceof InstallationRequestError && error.status === 400)
+          return this.installation.signedRequest(
+            "/servers/synchronize",
+            { personalDeviceProtocol: 1 },
+            configuration,
+          );
+        throw error;
+      })
       .catch(async (error) => {
         if (
           error instanceof InstallationRequestError &&
@@ -352,6 +411,7 @@ export class WorkspaceAuthority {
               data: { localOrganizationId },
             });
           }
+          await tx.$queryRaw`SELECT id FROM organization WHERE id = ${localOrganizationId} FOR UPDATE`;
           const spaceId = randomUUID();
           await tx.space.create({
             data: {
@@ -376,6 +436,7 @@ export class WorkspaceAuthority {
               validUntil: new Date(0),
             },
           });
+          await inheritOrganizationModels(tx, configuration, localOrganizationId, spaceId);
           return { localOrganizationId, spaceId };
         }),
     );
@@ -417,6 +478,7 @@ export class WorkspaceAuthority {
         });
         if (!space || space.organizationId !== localOrganizationId || space.deletingAt)
           throw refused();
+        await tx.$queryRaw`SELECT id FROM organization WHERE id = ${localOrganizationId} FOR UPDATE`;
         const existing = await tx.centralWorkspaceBinding.findUnique({
           where: { id: workspaceId },
         });
@@ -445,6 +507,8 @@ export class WorkspaceAuthority {
           },
           update: {},
         });
+        if (!existing)
+          await inheritOrganizationModels(tx, configuration, localOrganizationId, spaceId);
         await tx.installationIdentity.update({
           where: { id: "local" },
           data: { localOrganizationId },

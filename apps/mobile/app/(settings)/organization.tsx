@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text } from "react-native";
@@ -14,6 +15,7 @@ import {
   refreshOrganizations,
   useOrganizations,
 } from "../../lib/organizations";
+import { queryClient, rpcQuery } from "../../lib/query";
 import { openFromSettingsSheet } from "../../lib/settings-sheet";
 import { useSideInsets } from "../../lib/side-insets";
 import { errorText } from "../../lib/user-error";
@@ -24,12 +26,49 @@ export default function OrganizationSettings() {
   const sideInsets = useSideInsets();
   const styles = useThemedStyles(createStyles);
   const query = useOrganizations();
+  const modelPolicy = useQuery(rpcQuery("models/workspacePolicy"), queryClient);
   const organization = activeOrganization(query.data);
   const [draft, setDraft] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  if (modelPolicy.isPending || modelPolicy.isError) {
+    return (
+      <SafeAreaView edges={["bottom"]} style={styles.screen}>
+        <ScrollView style={sideInsets} contentContainerStyle={styles.content}>
+          {modelPolicy.isError ? (
+            <LoadFailure
+              message={t("Could not load organization settings.")}
+              onRetry={() => void modelPolicy.refetch()}
+            />
+          ) : (
+            <ActivityIndicator color={native.secondaryLabel} />
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (modelPolicy.data?.managed) {
+    return (
+      <SafeAreaView edges={["bottom"]} style={styles.screen}>
+        <ScrollView style={sideInsets} contentContainerStyle={styles.content}>
+          <Text style={{ color: native.secondaryLabel }}>
+            {t("Manage your organization, servers and people in Ork Accounts.")}
+          </Text>
+          <SettingsGroup>
+            <SettingsRow
+              title={t("Organization models")}
+              chevron="right"
+              onPress={() => openFromSettingsSheet(router, "/models?organization=1")}
+            />
+          </SettingsGroup>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   if (!organization) {
     return (

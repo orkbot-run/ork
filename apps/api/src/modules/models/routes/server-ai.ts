@@ -113,7 +113,9 @@ export function serverAIRoutes(ctx: RouterContext) {
           return {
             spaceId: context.actor.spaceId,
             available: true,
-            workspaceMonthlyBudgetMicros: await deps.serverAI.workspaceBudget(scoped),
+            workspaceMonthlyBudgetMicros: permissions.canManageServer
+              ? await deps.serverAI.workspaceBudget(scoped)
+              : null,
             ...permissions,
             connections: await deps.serverAI.list(scoped),
             accounts: permissions.canManageServer ? await deps.serverAI.accounts(scoped) : [],

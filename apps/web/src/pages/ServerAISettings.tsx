@@ -23,10 +23,7 @@ import { useSpaceQueries } from "../lib/query";
 import { captureRpcContext } from "../lib/rpc";
 import { useBoundSpaceId, useSpaceRpc } from "../lib/space-rpc";
 import { ServerAIAccountForm } from "./model-settings/server-ai-account-form";
-import {
-  WorkspaceAIAccountForm,
-  WorkspaceAIBudgetForm,
-} from "./model-settings/workspace-ai-account-form";
+import { WorkspaceAIAccountForm } from "./model-settings/workspace-ai-account-form";
 
 export function AISettingsFrame({
   embedded,
@@ -90,6 +87,7 @@ export function ServerAISettings({
     queryFn: () => owner.client.serverAI.status(),
     refetchOnWindowFocus: "always",
   });
+  const policy = useQuery(queries.models.workspacePolicy.queryOptions());
   const catalog = useQuery({
     ...queries.serverAI.catalog.queryOptions(),
     queryFn: () => owner.client.serverAI.catalog(),
@@ -114,6 +112,7 @@ export function ServerAISettings({
   }, [owner]);
   const refresh = async () => {
     await status.refetch();
+    await policy.refetch();
     if (owner.isCurrent())
       await queryClient.invalidateQueries({ queryKey: queries.me.queryOptions().queryKey });
   };
@@ -169,17 +168,18 @@ export function ServerAISettings({
             <Trans>Retry</Trans>
           </Button>
         ) : null}
-        {value?.canManageWorkspace && !onboarding ? (
-          <WorkspaceAIBudgetForm
-            key={`${value.spaceId}:${value.workspaceMonthlyBudgetMicros}`}
-            budget={value.workspaceMonthlyBudgetMicros}
-            busy={busy}
-            onSave={(monthlyBudgetMicros) =>
-              action((signal) =>
-                owner.client.serverAI.workspaceBudget({ monthlyBudgetMicros }, { signal }),
+        {value?.canManageWorkspace && !onboarding && value.workspaceMonthlyBudgetMicros !== null ? (
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() =>
+              void action((signal) =>
+                owner.client.serverAI.workspaceBudget({ monthlyBudgetMicros: null }, { signal }),
               )
             }
-          />
+          >
+            <Trans>Remove existing workspace spending limits</Trans>
+          </Button>
         ) : null}
         {value?.connections.map((row) => (
           <section
@@ -228,18 +228,28 @@ export function ServerAISettings({
                 disabled={busy}
                 onClick={() => setEditingAssignment(editingAssignment === row.id ? null : row.id)}
               >
-                <Trans>Models and limits</Trans>
+                <Trans>Models</Trans>
               </Button>
             ) : null}
             {editingAssignment === row.id ? (
               <WorkspaceAIAccountForm
                 key={`${row.id}:${row.assignmentRevision}`}
                 row={row}
-                hideBudget={onboarding}
+                hideBudget
                 busy={busy}
                 onSave={(patch) => configure(row, patch)}
                 onCancel={() => setEditingAssignment(null)}
               />
+            ) : null}
+            {value.canManageWorkspace && !onboarding && row.monthlyBudgetMicros !== null ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => void configure(row, { monthlyBudgetMicros: null })}
+              >
+                <Trans>Remove existing model spending limit</Trans>
+              </Button>
             ) : null}
           </section>
         ))}
@@ -248,15 +258,46 @@ export function ServerAISettings({
             <Trans>No AI accounts assigned</Trans>
           </p>
         ) : null}
+        {policy.data?.personalModelsAllowed ? (
+          <p className="text-sm text-muted-foreground">
+            <Trans>
+              Without an organization model, people can connect their own. These models may process
+              workspace data outside company servers.
+            </Trans>
+          </p>
+        ) : null}
         {value?.canManageServer ? (
           <>
-            <section className="grid gap-3" aria-label={t`Server accounts`}>
+            <section className="grid gap-3" aria-label={t`Organization connections`}>
               <h3 className="text-sm font-medium">
-                <Trans>Server accounts</Trans>
+                <Trans>Organization connections</Trans>
               </h3>
               {value.accounts.map((row) => (
                 <div className="grid gap-2 border-b border-border pb-3" key={row.id}>
                   <span className="text-sm font-medium">{row.label}</span>
+                  {!onboarding && row.monthlyBudgetMicros !== null ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() =>
+                        void action((signal) =>
+                          owner.client.serverAI.update(
+                            {
+                              connectionId: row.id,
+                              label: row.label,
+                              models: row.models,
+                              concurrencyLimit: row.concurrencyLimit,
+                              monthlyBudgetMicros: null,
+                            },
+                            { signal },
+                          ),
+                        )
+                      }
+                    >
+                      <Trans>Remove existing account spending limit</Trans>
+                    </Button>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     {!onboarding ? (
                       <Button
@@ -285,7 +326,7 @@ export function ServerAISettings({
                           )
                         }
                       >
-                        <Trans>Remove from workspace</Trans>
+                        <Trans>Remove from organization</Trans>
                       </Button>
                     ) : (
                       <Button
@@ -301,7 +342,7 @@ export function ServerAISettings({
                           )
                         }
                       >
-                        <Trans>Make available</Trans>
+                        <Trans>Make available to organization</Trans>
                       </Button>
                     )}
                     {row.state !== "disabled" ? (
@@ -326,7 +367,7 @@ export function ServerAISettings({
               <ServerAIAccountForm
                 key={editingAccount}
                 account={value.accounts.find((row) => row.id === editingAccount)}
-                hideBudget={onboarding}
+                hideBudget
                 catalog={catalog.data}
                 client={owner.client}
                 isCurrent={owner.isCurrent}
@@ -340,7 +381,7 @@ export function ServerAISettings({
             {adding && catalog.data ? (
               <ServerAIAccountForm
                 catalog={catalog.data}
-                hideBudget={onboarding}
+                hideBudget
                 client={owner.client}
                 isCurrent={owner.isCurrent}
                 onSaved={async () => {
