@@ -1199,6 +1199,10 @@ msgstr "Explorar"
 msgid "Browse MCP servers"
 msgstr "Explorar servidores MCP"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Browse models"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Built-in"
@@ -2233,6 +2237,7 @@ msgstr "No se pudieron cargar las integraciones"
 msgid "Could not load MCP servers"
 msgstr "No se pudieron cargar los servidores MCP"
 
+#: src/components/ModelSetupGate.tsx
 #: src/pages/model-settings/use-model-settings.ts
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -5709,6 +5714,7 @@ msgstr "Restaurando tu espacio de trabajo"
 #: src/components/AccountAccess.tsx
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
+#: src/components/ModelSetupGate.tsx
 #: src/components/PasskeySettings.tsx
 #: src/lib/use-remember-desktop-server.ts
 #: src/pages/AdminAccessPage.tsx

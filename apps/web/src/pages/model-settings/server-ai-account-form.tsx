@@ -7,6 +7,7 @@ import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
 import { formatAIBudget, parseAIBudget, ServerAIOAuthAttempt } from "@orkbot/core";
 import { Button, Input, Label, NativeSelect, NativeSelectOption, Textarea } from "@orkbot/ui-web";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { FoundModelPicker } from "../../components/FoundModelPicker";
 import type { RpcClient } from "../../lib/rpc";
 
 function defaultModel(catalog: ModelCatalogEntry[], provider: string) {
@@ -35,11 +36,12 @@ export function ServerAIAccountForm({
 }) {
   const { t } = useLingui();
   const id = useId();
-  const providers = [
-    ...new Map(
-      catalog.filter((row) => row.protocol !== "decisions").map((row) => [row.provider, row]),
-    ).values(),
-  ];
+  const providersById = new Map<string, ModelCatalogEntry>();
+  for (const row of catalog) {
+    if (row.protocol !== "decisions" && !providersById.has(row.provider))
+      providersById.set(row.provider, row);
+  }
+  const providers = [...providersById.values()];
   const initialProvider = account?.provider ?? providers[0]?.provider ?? "";
   const [provider, setProvider] = useState(initialProvider);
   const [label, setLabel] = useState(
@@ -94,6 +96,22 @@ export function ServerAIAccountForm({
   );
   useEffect(() => () => oauth.cancel(false), [oauth]);
   const locked = busy || oauthPending;
+  const availableModels = useMemo(
+    () => [
+      ...new Set(
+        catalog
+          .filter(
+            (row) =>
+              row.provider === provider &&
+              row.protocol !== "decisions" &&
+              !row.placeholder &&
+              row.id,
+          )
+          .map((row) => row.id),
+      ),
+    ],
+    [catalog, provider],
+  );
   const selected = providers.find((row) => row.provider === provider);
   const supportsOAuth = selected?.auth === "oauth" || selected?.auth === "both";
   const subscriptionSignIn = supportsOAuth && authentication === "sign-in";
@@ -262,6 +280,26 @@ export function ServerAIAccountForm({
         <Label htmlFor={`${id}-models`}>
           <Trans>Models (one per line)</Trans>
         </Label>
+        {availableModels.length > 0 && !locked ? (
+          <FoundModelPicker
+            models={availableModels}
+            value={t`Browse models`}
+            otherValue="__custom_model__"
+            onChange={(model) => {
+              if (model === "__custom_model__") {
+                document.getElementById(`${id}-models`)?.focus();
+                return;
+              }
+              setModels((current) => {
+                const entries = current
+                  .split(/\r?\n/)
+                  .map((entry) => entry.trim())
+                  .filter(Boolean);
+                return entries.includes(model) ? current : [...entries, model].join("\n");
+              });
+            }}
+          />
+        ) : null}
         <Textarea
           id={`${id}-models`}
           value={models}

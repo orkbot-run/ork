@@ -184,6 +184,8 @@ test("an administrator chooses personal models for a new organization", async ({
     return route.fulfill({ json: { json: { ok: true } } });
   });
   await signup(page, `model-mode-${Date.now()}@orkbot.test`, "password12", "Administrator");
+  await page.goto("/app");
+  await expect(page).toHaveURL(/\/onboarding\/model/);
   await expect(page.getByRole("button", { name: "Connect organization models" })).toBeVisible();
   await captureScreenshot(page, testInfo, "organization-model-setup-choice");
   await page.getByRole("button", { name: "Let people connect their own models" }).click();
@@ -233,7 +235,7 @@ test("managed onboarding connects server accounts and requires a workspace defau
     id: "server-account",
     label: "Server account",
     provider: "fixture-provider",
-    models: ["workspace-model"],
+    models: ["workspace-model", "workspace-model-two"],
     state: "active" as const,
     revision: 1,
     concurrencyLimit: 8,
@@ -283,6 +285,13 @@ test("managed onboarding connects server accounts and requires a workspace defau
             oauthLabel: "Sign in with fixture subscription",
             authHint: "Fixture subscription or API key",
             recommended: true,
+          },
+          {
+            provider: "fixture-provider",
+            providerName: "Fixture provider",
+            id: "workspace-model-two",
+            label: "Second workspace model",
+            auth: "both",
           },
         ],
       },
@@ -337,6 +346,9 @@ test("managed onboarding connects server accounts and requires a workspace defau
   await expect(page.getByLabel("Models (one per line)", { exact: true })).toHaveValue(
     account.models[0]!,
   );
+  await page.getByRole("button", { name: "Models from server" }).click();
+  await page.getByRole("option", { name: "workspace-model-two" }).click();
+  await expect(page.getByLabel("Models (one per line)")).toHaveValue(account.models.join("\n"));
   const authentication = page.getByRole("combobox", { name: "Authentication", exact: true });
   await expect(authentication).toHaveValue("sign-in");
   await expect(
