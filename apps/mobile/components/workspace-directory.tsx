@@ -66,44 +66,53 @@ export function WorkspaceDirectory({
           />
         ) : null}
       </SettingsGroup>
-      {organization?.servers.map((server) => (
-        <SettingsGroup key={server.id} label={server.name}>
-          {server.workspaces.map((workspace) => {
-            const entry = entries.find(
-              (row) =>
-                row.id === workspace.id && (!row.workspace || row.workspace.serverId === server.id),
-            );
-            const available =
-              !!entry &&
-              workspace.canOpen &&
-              workspace.state === "ready" &&
-              server.state === "ready";
-            return (
-              <SettingsRow
-                key={workspace.id}
-                title={workspace.name || (entry ? displayApiHost(entry.url) : t("Workspace"))}
-                value={
-                  server.state === "update-required"
-                    ? t("Update server")
-                    : workspace.state === "provisioning"
-                      ? t("Preparing workspace")
-                      : !workspace.canOpen
-                        ? t("Access required")
-                        : !entry
-                          ? t("Server unavailable")
-                          : undefined
-                }
-                disabled={pending || !available}
-                onPress={available ? () => onSelect(entry!) : undefined}
-                chevron={available ? "right" : undefined}
-              />
-            );
-          })}
-          {!server.workspaces.length ? (
-            <SettingsRow title={t("No available workspaces")} disabled />
-          ) : null}
-        </SettingsGroup>
-      ))}
+      {organization?.servers
+        .filter(
+          (server) =>
+            server.state !== "disconnected" &&
+            server.workspaces.some((workspace) => workspace.role !== null),
+        )
+        .map((server) => (
+          <SettingsGroup key={server.id} label={server.name}>
+            {server.workspaces
+              .filter((workspace) => workspace.role !== null)
+              .map((workspace) => {
+                const entry = entries.find(
+                  (row) =>
+                    row.id === workspace.id &&
+                    (!row.workspace || row.workspace.serverId === server.id),
+                );
+                const available =
+                  !!entry &&
+                  workspace.canOpen &&
+                  workspace.state === "ready" &&
+                  server.state === "ready";
+                return (
+                  <SettingsRow
+                    key={workspace.id}
+                    title={workspace.name || (entry ? displayApiHost(entry.url) : t("Workspace"))}
+                    value={
+                      server.state === "update-required"
+                        ? t("Update server")
+                        : workspace.state === "provisioning"
+                          ? t("Preparing workspace")
+                          : !workspace.canOpen
+                            ? t("Access required")
+                            : !entry
+                              ? t("Server unavailable")
+                              : undefined
+                    }
+                    disabled={pending || !available}
+                    onPress={available ? () => onSelect(entry!) : undefined}
+                    chevron={available ? "right" : undefined}
+                  />
+                );
+              })}
+            {!server.workspaces.length ? (
+              <SettingsRow title={t("No available workspaces")} disabled />
+            ) : null}
+          </SettingsGroup>
+        ))}
       {organization && !organization.servers.length ? (
         <SettingsGroup>
           <SettingsRow title={t("No servers connected")} disabled />

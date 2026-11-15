@@ -17,7 +17,7 @@ export function desktopWorkspaceRoute(
   );
 }
 
-/** Present the complete catalog, including organizations and resources that cannot open yet. */
+/** Show only workspaces assigned to the current account. */
 export function renderWorkspacePicker(options: {
   document: Document;
   container: HTMLElement;
@@ -129,11 +129,13 @@ export function renderWorkspacePicker(options: {
     container.append(empty);
   }
   for (const server of organization.servers) {
+    const visibleWorkspaces = server.workspaces.filter((workspace) => workspace.role !== null);
+    if (server.state === "disconnected" || visibleWorkspaces.length === 0) continue;
     const heading = doc.createElement("h3");
     heading.textContent = server.name;
     heading.dataset.directoryGroup = "servers";
     container.append(heading);
-    for (const workspace of server.workspaces) {
+    for (const workspace of visibleWorkspaces) {
       const choice = catalogWorkspace(catalog, {
         organizationId: organization.id,
         serverId: server.id,

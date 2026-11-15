@@ -77,9 +77,9 @@ Device-local routes remain scoped to their registered device.
 
 ## Workspace access and AI administration
 
-An organization administrator can manage the registry without access to workspace
-content. Add workspace members explicitly in Accounts. Administrators who need
-content access must grant it to themselves through the same audited operation.
+Organization administrators and managers have administrator access to every
+workspace in the organization. Add regular members to each workspace they need
+in Accounts. Removing or changing an organization role updates its workspace access.
 
 Configure AI through the connected app. A workspace administrator
 can enable offered AI accounts, select permitted models and set the workspace
@@ -158,7 +158,8 @@ This command requires an authoritative refusal of the previous binding. A timeou
 Accounts outage cannot authorize recovery. It retains the installation key and data,
 retires old local admissions and AI delegations, and issues a new approval code.
 Complete fingerprint verification in Accounts, then run `installation confirm` again.
-Recreate the required workspace access and AI assignments explicitly.
+Recreate regular member access and AI assignments explicitly. Organization
+administrators and managers regain their workspace access automatically.
 
 Legacy server-claim registrations may require the Accounts operator's existing
 disconnect procedure before reconnection. Preserve their ownership receipts for that

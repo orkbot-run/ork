@@ -31,7 +31,13 @@ function catalog(): IdentityCatalog {
             workspaces: [
               { id: id(5), name: "Research", state: "ready", role: "member", canOpen: true },
               { id: id(6), name: "Restricted", state: "ready", role: null, canOpen: false },
-              { id: id(7), name: "Preparing", state: "provisioning", role: null, canOpen: false },
+              {
+                id: id(7),
+                name: "Preparing",
+                state: "provisioning",
+                role: "admin",
+                canOpen: false,
+              },
             ],
           },
         ],
@@ -89,16 +95,15 @@ it("keeps organizations without servers in the chooser and waits for a choice", 
   expect(personal.entries).toEqual([]);
 });
 
-it("does not turn organization administration into workspace access", () => {
+it("hides workspaces without access and shows assigned workspaces that are still preparing", () => {
   const { container, entries, open, setDefaultOrganization } = render(catalog(), id(2));
   expect(container.textContent).toContain("Research server");
   expect(entries.map((row) => row.id)).toEqual([id(5)]);
   const buttons = [...container.querySelectorAll<HTMLButtonElement>(".workspace-choice")];
-  expect(buttons.map((button) => button.disabled)).toEqual([false, true, true]);
-  expect(buttons[1]!.textContent).toContain("Access required");
-  expect(buttons[2]!.textContent).toContain("Preparing workspace");
+  expect(buttons.map((button) => button.disabled)).toEqual([false, true]);
+  expect(container.textContent).not.toContain("Restricted");
+  expect(buttons[1]!.textContent).toContain("Preparing workspace");
   buttons[1]!.click();
-  buttons[2]!.click();
   expect(open).not.toHaveBeenCalled();
   buttons[0]!.click();
   expect(open).toHaveBeenCalledWith(id(5));
