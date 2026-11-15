@@ -5,8 +5,13 @@ import { chmodSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterAll, expect, it } from "vitest";
-import { loadServerClaimRuntime, serverClaimInstructions } from "./server-claim-runtime.js";
+import type { InstallationClient } from "@orkbot/auth/installation-client";
+import { afterAll, expect, it, vi } from "vitest";
+import {
+  loadServerClaimRuntime,
+  serverEnrollmentInstructions,
+  startServerEnrollment,
+} from "./server-claim-runtime.js";
 
 const root = mkdtempSync(path.join(tmpdir(), "ork-claim-runtime-"));
 const loader = pathToFileURL(
@@ -14,40 +19,38 @@ const loader = pathToFileURL(
 ).href;
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-it("directs setup to a workspace", () => {
-  const instructions = serverClaimInstructions("23456789AB", Math.floor(Date.now() / 1000) + 900);
-  expect(instructions).toContain("select your workspace");
-  expect(instructions).not.toContain("Personal account");
-  expect(instructions).toContain("23456789AB");
+it("issues a current enrollment code and shows the fingerprint to verify", async () => {
+  const fingerprint = "a".repeat(64);
+  const installation = {
+    resetExpiredEnrollment: vi.fn(),
+    resumePendingEnrollment: vi.fn().mockResolvedValue(null),
+    beginEnrollment: vi.fn().mockResolvedValue({
+      code: "23456789AB",
+      expiresAt: Math.floor(Date.now() / 1000) + 900,
+      keyFingerprint: fingerprint,
+    }),
+  } as unknown as InstallationClient;
+  const instructions = await startServerEnrollment(installation);
+  expect(installation.beginEnrollment).toHaveBeenCalledExactlyOnceWith("Ork server");
+  expect(instructions).toContain("https://app.ork.run/account/connect-server#code=23456789AB");
+  expect(instructions).toContain(fingerprint);
   expect(instructions).toContain("expires in 15 minutes");
-  expect(() => serverClaimInstructions("invalid", Math.floor(Date.now() / 1000) + 900)).toThrow();
-});
-
-it("sends an existing server's owner to the select your workspace", () => {
-  const instructions = serverClaimInstructions(
-    "23456789AB",
-    Math.floor(Date.now() / 1000) + 900,
-    true,
-  );
-  expect(instructions).toContain("select your workspace");
-  expect(instructions).toContain("23456789AB");
-  expect(instructions).toContain("already has an owner");
-  expect(instructions).toContain("expires in 15 minutes");
-  expect(instructions).toContain(
-    "https://app.ork.run/account/connect-server#code=23456789AB&workspace=1",
-  );
-});
-
-it.each([false, true])("shows the actual fallback lifetime for workspace %s", (workspace) => {
-  const instructions = serverClaimInstructions(
-    "23456789AB",
-    Math.floor(Date.now() / 1000) + 300,
-    workspace,
-  );
-  expect(instructions).toContain("expires in 5 minutes");
   expect(() =>
-    serverClaimInstructions("23456789AB", Math.floor(Date.now() / 1000) - 1, workspace),
+    serverEnrollmentInstructions("invalid", Math.floor(Date.now() / 1000) + 900, fingerprint),
   ).toThrow();
+  expect(() =>
+    serverEnrollmentInstructions("23456789AB", Math.floor(Date.now() / 1000) - 1, fingerprint),
+  ).toThrow();
+});
+
+it("does not start a second enrollment when a previous one is ready", async () => {
+  const installation = {
+    resetExpiredEnrollment: vi.fn(),
+    resumePendingEnrollment: vi.fn().mockResolvedValue({ serverId: "fixture" }),
+    beginEnrollment: vi.fn(),
+  } as unknown as InstallationClient;
+  expect(await startServerEnrollment(installation)).toBe("Server enrollment confirmed.\n");
+  expect(installation.beginEnrollment).not.toHaveBeenCalled();
 });
 
 it("loads a private Compose role file using the production runtime loader", async () => {

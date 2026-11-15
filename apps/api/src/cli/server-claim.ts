@@ -2,11 +2,16 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { contentKeyProviderFromEnv, unwrapEnvFromKeyManager } from "@orkbot/adapters";
-import { clearWorkspaceBinding, issueServerClaim, synchronizeWorkspaceBinding } from "@orkbot/auth";
+import {
+  clearWorkspaceBinding,
+  InstallationClient,
+  synchronizeWorkspaceBinding,
+} from "@orkbot/auth";
+import { resolveEncryptionKey } from "@orkbot/core";
 import { createDb, runAsSystem } from "@orkbot/db";
 import {
   loadServerClaimRuntime,
-  serverClaimInstructions,
+  startServerEnrollment,
 } from "#modules/platform/server-claim-runtime";
 
 await loadServerClaimRuntime(process.env);
@@ -57,15 +62,11 @@ try {
       "Local workspace binding removed. Existing users and data were preserved.\n",
     );
   } else {
-    const claim = await runAsSystem("local server authorization", () =>
-      issueServerClaim(prisma, {
-        origin,
-        issuer: "https://api.ork.run",
-        bootstrapSecret: secret,
-        mode: "workspace",
-      }),
-    );
-    process.stdout.write(serverClaimInstructions(claim.code, claim.expiresAt, true));
+    const installation = new InstallationClient(prisma, {
+      issuer: "https://api.ork.run",
+      encryptionKey: resolveEncryptionKey(process.env),
+    });
+    process.stdout.write(await startServerEnrollment(installation));
   }
 } finally {
   await prisma.$disconnect();

@@ -3,20 +3,29 @@
 
 import { existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import type { InstallationClient } from "@orkbot/auth/installation-client";
 
-export function serverClaimInstructions(
+export function serverEnrollmentInstructions(
   code: string,
   expiresAt: number,
-  _workspace = true,
+  fingerprint: string,
 ): string {
-  if (!/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{10}$/.test(code))
+  if (!/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{10}$/.test(code) || !/^[a-f0-9]{64}$/.test(fingerprint))
     throw new Error("Invalid server authorization code.");
   const remaining = expiresAt * 1000 - Date.now();
   if (!Number.isSafeInteger(expiresAt) || remaining <= 0)
     throw new Error("Server authorization has expired.");
   const minutes = Math.min(15, Math.ceil(remaining / 60_000));
   const duration = `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
-  return `\nConnect your server:\nhttps://app.ork.run/account/connect-server#code=${code}&workspace=1\n\nOr enter the code manually:\n\n1. Open https://app.ork.run\n2. Sign in and select your workspace.\n3. Open Server and enter this code:\n\n   ${code}\n\n4. Check the server address and confirm the connection.\n\nThe code expires in ${duration}. If the server already has an owner, sign in as that owner.\n`;
+  return `\nConnect your server:\nhttps://app.ork.run/account/connect-server#code=${code}\n\nSetup code: ${code}\nFingerprint: ${fingerprint}\n\nIn Accounts, select your organization, enter the code on Servers, and verify the fingerprint before approving.\nThe code expires in ${duration}.\n`;
+}
+
+/** The current Accounts dashboard accepts installation enrollments, not legacy claims. */
+export async function startServerEnrollment(installation: InstallationClient): Promise<string> {
+  await installation.resetExpiredEnrollment();
+  if (await installation.resumePendingEnrollment()) return "Server enrollment confirmed.\n";
+  const ticket = await installation.beginEnrollment("Ork server");
+  return serverEnrollmentInstructions(ticket.code, ticket.expiresAt, ticket.keyFingerprint);
 }
 
 /** The Compose self-host API stores its role environment in a private mounted file. */
