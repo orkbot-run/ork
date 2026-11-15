@@ -221,7 +221,7 @@ test("managed onboarding connects server accounts and requires a workspace defau
   await captureScreenshot(page, testInfo, "managed-onboarding-server-account");
   await page.getByLabel("API key", { exact: true }).fill("fake-test-key");
   await page.getByRole("button", { name: "Save", exact: true }).click();
-  await page.getByRole("button", { name: "Make available", exact: true }).click();
+  await page.getByRole("button", { name: "Make available to organization", exact: true }).click();
   await page.getByRole("switch", { name: "Enabled", exact: true }).click();
   await expect(page.getByRole("switch", { name: "Default", exact: true })).toBeEnabled();
   await page.getByRole("switch", { name: "Default", exact: true }).click();

@@ -5,6 +5,7 @@
 import { useLingui } from "@lingui/react/macro";
 import type { ComputerCapabilities, Me, SpaceMemoryConfig, UsageSummary } from "@orkbot/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, XIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalRulesSettings } from "../components/ApprovalRulesSettings";
@@ -13,6 +14,7 @@ import { SETTINGS_CONTENT_WIDTH, SettingsGroup, SettingsRow } from "../component
 import { VaultSettings } from "../components/VaultSettings";
 
 import { desktopBridge } from "../lib/desktop";
+import { useSpaceQueries } from "../lib/query";
 import { useServerUpdates } from "../lib/server-updates";
 import { SpaceRpcProvider } from "../lib/space-rpc";
 import {
@@ -27,6 +29,7 @@ import { MessagingSettingsPanel } from "./MessagingSettingsPanel";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
 import { OrganizationSettingsPanel } from "./OrganizationSettingsPanel";
 import { PaymentWalletSettingsPanel } from "./PaymentWalletSettingsPanel";
+import { ServerAISettings } from "./ServerAISettings";
 import { SpaceSettingsPanel } from "./SpaceSettingsPanel";
 import { useSettingsNavItems } from "./settings-nav";
 import type { SettingsSpace } from "./shell/dialogs";
@@ -94,6 +97,8 @@ export function SettingsOverlay({
   onVoiceStatusMaybeChanged?: () => void | Promise<void>;
 }) {
   const { t, i18n } = useLingui();
+  const queries = useSpaceQueries();
+  const modelPolicy = useQuery(queries.models.workspacePolicy.queryOptions());
   const panelRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const [navOverflow, setNavOverflow] = useState({ previous: false, next: false });
@@ -155,6 +160,7 @@ export function SettingsOverlay({
     computer: showComputer,
     billing: billingEnabled,
     updates: showUpdates,
+    organizationModels: modelPolicy.data?.managed === true,
   });
 
   useEffect(() => {
@@ -404,7 +410,24 @@ export function SettingsOverlay({
                     />
                   ) : null}
                   {section === "organization" ? (
-                    <OrganizationSettingsPanel onBusyChange={setVoiceBusy} />
+                    modelPolicy.isPending ? (
+                      <p>{t`Loading organization settings…`}</p>
+                    ) : modelPolicy.isError ? (
+                      <div>
+                        <p role="alert">{t`Could not load organization settings.`}</p>
+                        <Button
+                          variant="outline"
+                          onClick={() => void modelPolicy.refetch()}
+                        >{t`Retry`}</Button>
+                      </div>
+                    ) : modelPolicy.data?.managed ? (
+                      <p className="text-sm text-muted-foreground">{t`Manage your organization, servers and people in Ork Accounts.`}</p>
+                    ) : (
+                      <OrganizationSettingsPanel onBusyChange={setVoiceBusy} />
+                    )
+                  ) : null}
+                  {section === "organization-models" && modelPolicy.data?.managed ? (
+                    <ServerAISettings embedded onClose={requestClose} />
                   ) : null}
                   {section === "confirmations" ? <ApprovalRulesSettings scope="account" /> : null}
                   {section === "vault" ? <VaultSettings scope="account" /> : null}

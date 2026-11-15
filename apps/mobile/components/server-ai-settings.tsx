@@ -14,7 +14,7 @@ import { LoadFailure } from "./load-failure";
 import { NativeActionButton } from "./native-action-button";
 import { ServerAIAccountForm } from "./server-ai-account-form";
 import { SettingsGroup, SettingsRow, SettingsSwitch } from "./settings-group";
-import { WorkspaceAIAccountForm, WorkspaceAIBudgetForm } from "./workspace-ai-account-form";
+import { WorkspaceAIAccountForm } from "./workspace-ai-account-form";
 
 type Assignment = RpcOutput<"serverAI/status">["connections"][number];
 export function ServerAISettings({
@@ -29,6 +29,13 @@ export function ServerAISettings({
   const { t } = useI18n();
   const status = useQuery(
     { ...rpcQuery("serverAI/status", undefined, spaceId), queryFn: () => send("serverAI/status") },
+    queryClient,
+  );
+  const policy = useQuery(
+    {
+      ...rpcQuery("models/workspacePolicy", undefined, spaceId),
+      queryFn: () => send("models/workspacePolicy"),
+    },
     queryClient,
   );
   const catalog = useQuery(
@@ -48,6 +55,7 @@ export function ServerAISettings({
   useEffect(() => () => operation.current?.abort(), []);
   const refresh = async () => {
     await status.refetch();
+    await policy.refetch();
     if (!isCurrent()) return;
     const me = await send("me");
     if (isCurrent()) queryClient.setQueryData(rpcQuery("me", undefined, spaceId).queryKey, me);
@@ -90,14 +98,20 @@ export function ServerAISettings({
           {error}
         </Text>
       ) : null}
-      {value.canManageWorkspace ? (
-        <WorkspaceAIBudgetForm
-          key={`${value.spaceId}:${value.workspaceMonthlyBudgetMicros}`}
-          budget={value.workspaceMonthlyBudgetMicros}
-          busy={busy}
-          onSave={(monthlyBudgetMicros) =>
-            action((signal) =>
-              send("serverAI/workspaceBudget", { monthlyBudgetMicros }, { signal }),
+      {policy.data?.personalModelsAllowed ? (
+        <Text style={{ color: native.secondaryLabel }}>
+          {t(
+            "Without an organization model, people can connect their own. These models may process workspace data outside company servers.",
+          )}
+        </Text>
+      ) : null}
+      {value.canManageWorkspace && value.workspaceMonthlyBudgetMicros !== null ? (
+        <NativeActionButton
+          label={t("Remove existing workspace spending limits")}
+          disabled={busy}
+          onPress={() =>
+            void action((signal) =>
+              send("serverAI/workspaceBudget", { monthlyBudgetMicros: null }, { signal }),
             )
           }
         />
@@ -132,7 +146,7 @@ export function ServerAISettings({
           ) : null}
           {value.canManageWorkspace ? (
             <SettingsRow
-              title={t("Models and limits")}
+              title={t("Models")}
               onPress={() => setEditingAssignment(editingAssignment === row.id ? null : row.id)}
               disabled={busy}
               chevron="right"
@@ -142,18 +156,47 @@ export function ServerAISettings({
             <WorkspaceAIAccountForm
               key={`${row.id}:${row.assignmentRevision}`}
               row={row}
+              hideBudget
               busy={busy}
               onSave={(patch) => configure(row, patch)}
               onCancel={() => setEditingAssignment(null)}
+            />
+          ) : null}
+          {value.canManageWorkspace && row.monthlyBudgetMicros !== null ? (
+            <SettingsRow
+              title={t("Remove existing model spending limit")}
+              disabled={busy}
+              onPress={() => void configure(row, { monthlyBudgetMicros: null })}
             />
           ) : null}
         </SettingsGroup>
       ))}
       {value.canManageServer ? (
         <>
-          <SettingsGroup label={t("Server accounts")}>
+          <SettingsGroup label={t("Organization connections")}>
             {value.accounts.map((row) => (
               <View key={row.id}>
+                {row.monthlyBudgetMicros !== null ? (
+                  <SettingsRow
+                    title={t("Remove existing account spending limit")}
+                    disabled={busy}
+                    onPress={() =>
+                      void action((signal) =>
+                        send(
+                          "serverAI/update",
+                          {
+                            connectionId: row.id,
+                            label: row.label,
+                            models: row.models,
+                            concurrencyLimit: row.concurrencyLimit,
+                            monthlyBudgetMicros: null,
+                          },
+                          { signal },
+                        ),
+                      )
+                    }
+                  />
+                ) : null}
                 <SettingsRow
                   title={row.label}
                   detail={row.provider}
@@ -166,7 +209,7 @@ export function ServerAISettings({
                 />
                 {value.connections.some((assigned) => assigned.id === row.id) ? (
                   <SettingsRow
-                    title={t("Remove from workspace")}
+                    title={t("Remove from organization")}
                     destructive
                     disabled={busy}
                     onPress={() =>
@@ -181,7 +224,7 @@ export function ServerAISettings({
                   />
                 ) : (
                   <SettingsRow
-                    title={t("Make available")}
+                    title={t("Make available to organization")}
                     disabled={busy || row.state !== "active"}
                     onPress={() =>
                       void action((signal) =>
@@ -211,6 +254,7 @@ export function ServerAISettings({
           </SettingsGroup>
           {editingAccount && catalog.data ? (
             <ServerAIAccountForm
+              hideBudget
               key={editingAccount}
               account={value.accounts.find((row) => row.id === editingAccount)}
               catalog={catalog.data}
@@ -225,6 +269,7 @@ export function ServerAISettings({
           ) : null}
           {adding && catalog.data ? (
             <ServerAIAccountForm
+              hideBudget
               catalog={catalog.data}
               send={send}
               isCurrent={isCurrent}

@@ -3,6 +3,7 @@
 
 import { createRouterClient } from "@orpc/server";
 import { describe, expect, it, vi } from "vitest";
+import { installationCredentials } from "#modules/models/installation-catalog";
 import type { RouterDeps } from "#modules/platform/router";
 import { createRouter } from "#modules/platform/router";
 
@@ -42,12 +43,16 @@ function fixture(canManageServer = true) {
     workspaceBudget: vi.fn(async () => null),
     accounts: vi.fn(async () => [account]),
     create: vi.fn(async () => account),
+    hasConfiguredModel: vi.fn(async () => true),
   };
   const deps = {
     prisma: {},
     secrets: {},
     serverAI,
-    serverAIModels: { actor: vi.fn(async () => principal) },
+    serverAIModels: {
+      actor: vi.fn(async () => principal),
+      personalModelsAllowed: vi.fn(async () => false),
+    },
     env: { agentRuntime: "pi", defaultProvider: "openrouter", defaultModel: "example/model" },
     modelConnectionFetch: vi.fn(async () => Response.json({})),
   } as unknown as RouterDeps;
@@ -107,7 +112,7 @@ describe("installation AI RPC boundary", () => {
   });
 });
 
-it("rejects every legacy credential path before accessing the personal store in a managed workspace", async () => {
+it("rejects personal credential changes when organization models are configured", async () => {
   const { client, deps } = fixture();
   for (const work of [
     () =>
@@ -123,6 +128,15 @@ it("rejects every legacy credential path before accessing the personal store in 
   ])
     await expect(work()).rejects.toMatchObject({ code: "FORBIDDEN" });
   expect(deps.modelConnectionFetch).not.toHaveBeenCalled();
+});
+
+it("uses the personal credential catalog only when no organization model is configured", async () => {
+  const { deps, serverAI } = fixture();
+  serverAI.hasConfiguredModel.mockResolvedValue(false);
+  expect(
+    await installationCredentials(deps, { userId: "member", spaceId: "workspace" } as never),
+  ).toBeNull();
+  expect(serverAI.list).not.toHaveBeenCalled();
 });
 
 it("returns only assigned account picker metadata without reading personal credentials", async () => {

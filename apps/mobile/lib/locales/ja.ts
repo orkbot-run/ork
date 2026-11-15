@@ -3,6 +3,22 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Could not load organization settings.": "組織の設定を読み込めませんでした。",
+  "Make available to organization": "組織で利用可能にする",
+  "Manage your organization, servers and people in Ork Accounts.":
+    "組織、サーバー、メンバーはOrk Accountsで管理します。",
+  "Organization connections": "組織の接続",
+  "Organization models": "組織のモデル",
+  "Remove existing account spending limit": "既存のアカウント支出上限を削除",
+  "Remove existing model spending limit": "既存のモデル支出上限を削除",
+  "Remove existing workspace spending limits": "既存のワークスペース支出上限を削除",
+  "Remove from organization": "組織から削除",
+  "Without an organization model, people can connect their own. These models may process workspace data outside company servers.":
+    "組織のモデルがない場合、各自のモデルを接続できます。ワークスペースのデータが会社のサーバー外で処理される場合があります。",
+  "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers.":
+    "組織はモデルを設定していません。各自のモデルを接続できますが、ワークスペースのデータが会社のサーバー外で処理される場合があります。",
+  "Your organization manages the models used in this workspace.":
+    "このワークスペースで使用するモデルは組織が管理します。",
   "Connected, but could not refresh": "接続しましたが、更新できませんでした",
 
   "Access required": "アクセス権が必要です",

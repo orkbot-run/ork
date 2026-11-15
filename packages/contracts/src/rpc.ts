@@ -556,6 +556,7 @@ export const appContract = {
       z.object({
         canManage: z.boolean(),
         managed: z.boolean().optional(),
+        personalModelsAllowed: z.boolean().optional(),
         policy: z.object({ provider: z.string(), modelId: z.string() }).nullable(),
       }),
     ),

@@ -54,9 +54,25 @@ export class ServerAIModels {
 
   async assignedAccounts(scope: InstallationModelScope) {
     const actor = await this.actor(scope);
-    return actor
+    return actor && (await this.deps.catalog.hasConfiguredModel(actor))
       ? (await this.deps.catalog.list(actor)).filter((row) => row.enabled && row.state === "active")
       : null;
+  }
+
+  async personalModelsAllowed(scope: InstallationModelScope): Promise<boolean | null> {
+    const actor = await this.actor(scope);
+    return actor ? !(await this.deps.catalog.hasConfiguredModel(actor)) : null;
+  }
+
+  private async isServerConnection(actor: AIActor, connectionId: string): Promise<boolean> {
+    return runAsSystem("check a pinned server model connection", async () =>
+      Boolean(
+        await this.deps.prisma.serverAIConnection.findFirst({
+          where: { id: connectionId, organization: { spaces: { some: { id: actor.spaceId } } } },
+          select: { id: true },
+        }),
+      ),
+    );
   }
 
   /** Validate picker metadata without loading credentials or contacting a provider. */
@@ -66,6 +82,12 @@ export class ServerAIModels {
   ): Promise<boolean | null> {
     const actor = await this.actor(scope);
     if (!actor) return null;
+    if (!(await this.deps.catalog.hasConfiguredModel(actor))) {
+      return selection?.connectionId &&
+        (await this.isServerConnection(actor, selection.connectionId))
+        ? false
+        : null;
+    }
     if (!selection) return true;
     return Boolean(await this.selectedAccount(actor, selection));
   }
@@ -96,6 +118,11 @@ export class ServerAIModels {
   ) {
     const actor = await this.actor(scope);
     if (!actor) return null;
+    if (!(await this.deps.catalog.hasConfiguredModel(actor))) {
+      if (selection?.connectionId && (await this.isServerConnection(actor, selection.connectionId)))
+        throw new AIConnectionError("unavailable");
+      return null;
+    }
     if (!selection) {
       const choices = await this.deps.catalog.choices(actor);
       for (const choice of choices) {

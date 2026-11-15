@@ -177,6 +177,7 @@ vi.mock("@orkbot/ui-web", async (importOriginal) => {
 import { rpc } from "../lib/rpc";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
 import { useModelSettings } from "./model-settings/use-model-settings";
+import { ServerAISettings } from "./ServerAISettings";
 
 const STORED_PLACEHOLDER = "Paste a replacement key";
 const deepseekEntry = {
@@ -337,6 +338,7 @@ async function renderSettings(
   embedded = true,
   queryClient = testQueryClient(),
   scope: "account" | "space" = "account",
+  organization = false,
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -344,7 +346,11 @@ async function renderSettings(
   await act(async () => {
     root.render(
       <QueryClientProvider client={queryClient}>
-        <ModelSettingsOverlay embedded={embedded} scope={scope} onClose={() => undefined} />
+        {organization ? (
+          <ServerAISettings embedded={embedded} onClose={() => undefined} />
+        ) : (
+          <ModelSettingsOverlay embedded={embedded} scope={scope} onClose={() => undefined} />
+        )}
       </QueryClientProvider>,
     );
   });
@@ -1807,6 +1813,23 @@ it("sends a new shared key directly to the captured server session", async () =>
   }
 });
 
+it("explains personal models when the organization has none configured", async () => {
+  models.workspacePolicy.mockResolvedValue({
+    managed: true,
+    personalModelsAllowed: true,
+    canManage: false,
+    policy: null,
+  });
+  const view = await renderSettings();
+  try {
+    expect(view.container.textContent).toContain(
+      "may process workspace data outside company servers",
+    );
+  } finally {
+    await view.unmount();
+  }
+});
+
 it("opens managed AI settings without reading or refreshing personal credentials", async () => {
   models.workspacePolicy.mockResolvedValue({ managed: true, canManage: false, policy: null });
   serverAI.status.mockResolvedValue({
@@ -1818,7 +1841,7 @@ it("opens managed AI settings without reading or refreshing personal credentials
     accounts: [],
     connections: [],
   });
-  const view = await renderSettings();
+  const view = await renderSettings(true, testQueryClient(), "account", true);
   try {
     expect(view.container.textContent).toContain("No AI accounts assigned");
     expect(models.credentials).not.toHaveBeenCalled();
@@ -1860,7 +1883,7 @@ it("changes the managed default with one captured-server request and preserves t
     connections: [row],
   });
   serverAI.configure.mockResolvedValue({ ok: true });
-  const view = await renderSettings();
+  const view = await renderSettings(true, testQueryClient(), "account", true);
   try {
     const switches = view.container.querySelectorAll('[role="switch"]');
     expect(switches.length).toBe(3);

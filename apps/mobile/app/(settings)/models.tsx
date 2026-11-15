@@ -41,7 +41,7 @@ const noBots: MobileBot[] = [];
  * Space, it edits that Space's override instead of the account's.
  */
 export default function Models() {
-  const params = useLocalSearchParams<{ spaceId?: string }>();
+  const params = useLocalSearchParams<{ spaceId?: string; organization?: string }>();
   const session = useSyncExternalStore(
     subscribeSessionGeneration,
     currentSessionGeneration,
@@ -73,7 +73,8 @@ export default function Models() {
         onRetry={() => void policy.refetch()}
       />
     );
-  if (!policy.data.managed) return <LegacyModels key={`${session}:${selection}`} />;
+  if (!policy.data.managed || (params.organization !== "1" && policy.data.personalModelsAllowed))
+    return <LegacyModels key={`${session}:${selection}`} />;
   return (
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
       <ScrollView
@@ -82,12 +83,18 @@ export default function Models() {
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
       >
-        <ServerAISettings
-          key={`${session}:${selection}`}
-          send={owner.send}
-          isCurrent={owner.isCurrent}
-          spaceId={spaceId}
-        />
+        {params.organization === "1" ? (
+          <ServerAISettings
+            key={`${session}:${selection}`}
+            send={owner.send}
+            isCurrent={owner.isCurrent}
+            spaceId={spaceId}
+          />
+        ) : (
+          <Text style={{ color: native.secondaryLabel }}>
+            {t("Your organization manages the models used in this workspace.")}
+          </Text>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -327,7 +334,14 @@ function LegacyModels() {
             {shownError}
           </Text>
         ) : null}
-        {workspacePolicy ? (
+        {workspacePolicy?.managed && workspacePolicy.personalModelsAllowed ? (
+          <Text style={{ color: native.secondaryLabel }}>
+            {t(
+              "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers.",
+            )}
+          </Text>
+        ) : null}
+        {workspacePolicy && !workspacePolicy.managed ? (
           <WorkspaceModelSettings
             key={JSON.stringify([me?.userId, spaceId ?? me?.spaceId])}
             value={workspacePolicy}

@@ -551,6 +551,84 @@ describe.skipIf(!enabled)(
       }
     });
 
+    it("inherits organization model assignments when provisioning a workspace", async () => {
+      await enroll();
+      authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);
+      await authority.synchronize();
+      const templateId = randomUUID();
+      const connectionId = randomUUID();
+      await system(async () => {
+        await prisma!.organization.create({
+          data: { id: "identity-test-org", name: "Org", slug: randomUUID(), createdAt: new Date() },
+        });
+        await prisma!.installationIdentity.update({
+          where: { id: "local" },
+          data: { localOrganizationId: "identity-test-org" },
+        });
+        await prisma!.space.create({
+          data: {
+            id: "identity-test-template",
+            organizationId: "identity-test-org",
+            name: "Template",
+          },
+        });
+        await prisma!.centralWorkspaceBinding.create({
+          data: {
+            id: templateId,
+            serverId,
+            centralOrganizationId: organizationId,
+            localOrganizationId: "identity-test-org",
+            spaceId: "identity-test-template",
+            operationId: randomUUID(),
+            bindingVersion: 1,
+            permissionVersion: 1,
+            state: "ready",
+            members: [],
+            verifiedAt: new Date(),
+            validUntil: new Date(Date.now() + 300_000),
+          },
+        });
+        await prisma!.serverAIConnection.create({
+          data: {
+            id: connectionId,
+            localOrganizationId: "identity-test-org",
+            label: "Provider",
+            provider: "fixture",
+            models: ["model-a"],
+            secretId: "fixture",
+            secretRef: "fixture",
+          },
+        });
+        await prisma!.workspaceAIConnection.create({
+          data: {
+            spaceId: "identity-test-template",
+            connectionId,
+            available: true,
+            enabled: true,
+            allowedModels: ["model-a"],
+            defaultModelId: "model-a",
+            isDefault: true,
+            bindingVersion: 1,
+          },
+        });
+      });
+      await authority.provisionWorkspace(workspaceId);
+      const binding = await system(() =>
+        prisma!.centralWorkspaceBinding.findUniqueOrThrow({ where: { id: workspaceId } }),
+      );
+      const inherited = await system(() =>
+        prisma!.workspaceAIConnection.findUniqueOrThrow({
+          where: { spaceId_connectionId: { spaceId: binding.spaceId, connectionId } },
+        }),
+      );
+      expect(inherited).toMatchObject({
+        enabled: true,
+        available: true,
+        defaultModelId: "model-a",
+        isDefault: true,
+      });
+    });
+
     it("opens transport only after pairing and keeps the enrolled key across certificate renewal", async () => {
       await installation.ensureIdentity();
       await expect(installation.transportIdentity()).rejects.toThrow("unavailable");

@@ -3,6 +3,23 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "Could not load organization settings.": "Organisatie-instellingen konden niet worden geladen.",
+  "Make available to organization": "Beschikbaar maken voor organisatie",
+  "Manage your organization, servers and people in Ork Accounts.":
+    "Beheer je organisatie, servers en personen in Ork Accounts.",
+  "Organization connections": "Organisatieverbindingen",
+  "Organization models": "Organisatiemodellen",
+  "Remove existing account spending limit": "Bestaande bestedingslimiet van account verwijderen",
+  "Remove existing model spending limit": "Bestaande bestedingslimiet van model verwijderen",
+  "Remove existing workspace spending limits":
+    "Bestaande bestedingslimieten van werkruimten verwijderen",
+  "Remove from organization": "Uit organisatie verwijderen",
+  "Without an organization model, people can connect their own. These models may process workspace data outside company servers.":
+    "Zonder organisatiemodel kunnen mensen hun eigen model verbinden. Deze modellen kunnen werkruimtegegevens buiten de bedrijfsservers verwerken.",
+  "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers.":
+    "Je organisatie heeft geen model ingesteld. Je kunt je eigen model verbinden; dit kan werkruimtegegevens buiten de bedrijfsservers verwerken.",
+  "Your organization manages the models used in this workspace.":
+    "Je organisatie beheert de modellen in deze werkruimte.",
   "Connected, but could not refresh": "Verbonden, maar vernieuwen is mislukt",
 
   "Access required": "Toegang vereist",

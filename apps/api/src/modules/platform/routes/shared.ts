@@ -130,6 +130,23 @@ function computerHostFor(
 export async function modelSetup(deps: RouterDeps, actor: Actor) {
   const managed = await deps.serverAIModels?.actor(actor);
   if (managed && deps.serverAI) {
+    if (!(await deps.serverAI.hasConfiguredModel(managed))) {
+      const main = await resolveMemberMainModel(
+        { prisma: deps.prisma, secretStore: deps.secrets },
+        actor,
+      );
+      const connected = main?.credential ? main : null;
+      return {
+        main: connected,
+        workspaceModel: null,
+        model: connected ?? { provider: "", modelId: "" },
+        settings: await deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+        funding: null,
+        creditsAvailable: false,
+        hasDeployment: false,
+        needsModel: deps.env.agentRuntime !== "scripted" && !connected,
+      };
+    }
     const choices = await deps.serverAI.choices(managed);
     const primary = choices[0];
     const account =

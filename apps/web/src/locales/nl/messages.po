@@ -2230,6 +2230,10 @@ msgstr "MCP-servers laden mislukt"
 msgid "Could not load model settings"
 msgstr "Modelinstellingen laden mislukt"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Could not load organization settings."
+msgstr ""
+
 #: src/pages/RoutineRunHistory.tsx
 msgid "Could not load run history"
 msgstr "Rungeschiedenis laden mislukt"
@@ -3938,6 +3942,10 @@ msgstr "Geheugeninstellingen laden…"
 msgid "Loading model catalog…"
 msgstr "Modelcatalogus laden…"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Loading organization settings…"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading plugins…"
 msgstr ""
@@ -4009,8 +4017,8 @@ msgid "Main model"
 msgstr "Hoofdmodel"
 
 #: src/pages/ServerAISettings.tsx
-msgid "Make available"
-msgstr "Beschikbaar maken"
+msgid "Make available to organization"
+msgstr ""
 
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -4036,6 +4044,10 @@ msgstr "MCP-servers beheren"
 #: src/pages/shell/bot-panel.tsx
 msgid "Manage other bots"
 msgstr "Andere bots beheren"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Manage your organization, servers and people in Ork Accounts."
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Manual"
@@ -4298,10 +4310,6 @@ msgstr "Modellen"
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Models (one per line)"
 msgstr "Modellen (één per regel)"
-
-#: src/pages/ServerAISettings.tsx
-msgid "Models and limits"
-msgstr "Modellen en limieten"
 
 #: src/components/ModelCredits.tsx
 msgid "Models at provider cost"
@@ -4899,6 +4907,14 @@ msgstr "Organisatie"
 msgid "Organization API key"
 msgstr "Organisatie-API-sleutel"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Organization connections"
+msgstr ""
+
+#: src/pages/settings-nav.ts
+msgid "Organization models"
+msgstr ""
+
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
 msgstr "Oorspronkelijk bericht niet beschikbaar"
@@ -5452,6 +5468,18 @@ msgstr "{site} verwijderen"
 msgid "Remove change trigger"
 msgstr "Wijzigingstrigger verwijderen"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing account spending limit"
+msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing model spending limit"
+msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "Remove existing workspace spending limits"
+msgstr ""
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -5460,8 +5488,8 @@ msgid "Remove from every space?"
 msgstr ""
 
 #: src/pages/ServerAISettings.tsx
-msgid "Remove from workspace"
-msgstr "Uit werkruimte verwijderen"
+msgid "Remove from organization"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
@@ -5665,6 +5693,7 @@ msgstr "Je werkruimte herstellen"
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/ServerAISettings.tsx
+#: src/pages/SettingsOverlay.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Retry"
 msgstr "Opnieuw proberen"
@@ -6060,10 +6089,6 @@ msgstr "Serenity-eindpunt is vereist."
 #: src/components/ServerUpdates.tsx
 msgid "Server"
 msgstr "Server"
-
-#: src/pages/ServerAISettings.tsx
-msgid "Server accounts"
-msgstr "Serveraccounts"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
@@ -7448,6 +7473,10 @@ msgstr "Wanneer gebruiken"
 msgid "Where should bots run?"
 msgstr "Waar moeten bots draaien?"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Without an organization model, people can connect their own. These models may process workspace data outside company servers."
+msgstr ""
+
 #: src/pages/shell/sidebar-roster.tsx
 msgid "Woken"
 msgstr "Weer actief"
@@ -7579,6 +7608,14 @@ msgstr "Jouw OpenAI"
 #: src/lib/run-error.ts
 msgid "Your OpenRouter"
 msgstr "Jouw OpenRouter"
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers."
+msgstr ""
+
+#: src/pages/ModelSettingsOverlay.tsx
+msgid "Your organization manages the models used in this workspace."
+msgstr ""
 
 #: src/components/ModelCredits.tsx
 msgid "Your plan becomes {annualPrice} / year when your trial ends."

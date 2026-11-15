@@ -20,6 +20,7 @@ export function ServerAIAccountForm({
   isCurrent,
   onSaved,
   onCancel,
+  hideBudget = false,
 }: {
   account?: RpcOutput<"serverAI/status">["accounts"][number];
   catalog: ModelCatalogEntry[];
@@ -27,6 +28,7 @@ export function ServerAIAccountForm({
   isCurrent(): boolean;
   onSaved(): Promise<unknown>;
   onCancel(): void;
+  hideBudget?: boolean;
 }) {
   const { t } = useI18n();
   const providers = [
@@ -105,7 +107,9 @@ export function ServerAIAccountForm({
           ),
         ],
         concurrencyLimit: limit,
-        monthlyBudgetMicros: parseAIBudget(budget),
+        monthlyBudgetMicros: hideBudget
+          ? (account?.monthlyBudgetMicros ?? null)
+          : parseAIBudget(budget),
       });
     } catch {
       setError(t("Could not save"));
@@ -136,7 +140,9 @@ export function ServerAIAccountForm({
         label: label.trim(),
         models: allowed,
         concurrencyLimit: limit,
-        monthlyBudgetMicros: parseAIBudget(budget),
+        monthlyBudgetMicros: hideBudget
+          ? (account?.monthlyBudgetMicros ?? null)
+          : parseAIBudget(budget),
       };
       const connection = {
         provider,
@@ -263,14 +269,16 @@ export function ServerAIAccountForm({
           keyboardType="number-pad"
           editable={!locked}
         />
-        <SettingsInputRow
-          accessibilityLabel={t("Monthly budget (USD)")}
-          placeholder={t("Monthly budget (USD)")}
-          value={budget}
-          onChangeText={setBudget}
-          keyboardType="decimal-pad"
-          editable={!locked}
-        />
+        {!hideBudget ? (
+          <SettingsInputRow
+            accessibilityLabel={t("Monthly budget (USD)")}
+            placeholder={t("Monthly budget (USD)")}
+            value={budget}
+            onChangeText={setBudget}
+            keyboardType="decimal-pad"
+            editable={!locked}
+          />
+        ) : null}
       </SettingsGroup>
       {error ? (
         <Text accessibilityRole="alert" style={{ color: native.label }}>

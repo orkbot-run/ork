@@ -3,6 +3,21 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  "Could not load organization settings.": "無法載入組織設定。",
+  "Make available to organization": "開放給組織使用",
+  "Manage your organization, servers and people in Ork Accounts.":
+    "在 Ork Accounts 中管理組織、伺服器和成員。",
+  "Organization connections": "組織連線",
+  "Organization models": "組織模型",
+  "Remove existing account spending limit": "移除現有帳戶支出上限",
+  "Remove existing model spending limit": "移除現有模型支出上限",
+  "Remove existing workspace spending limits": "移除現有工作區支出上限",
+  "Remove from organization": "從組織移除",
+  "Without an organization model, people can connect their own. These models may process workspace data outside company servers.":
+    "若組織未設定模型，成員可以連接自己的模型。這些模型可能在公司伺服器以外處理工作區資料。",
+  "Your organization has not configured a model. You can connect your own; it may process workspace data outside company servers.":
+    "組織尚未設定模型。你可以連接自己的模型；它可能在公司伺服器以外處理工作區資料。",
+  "Your organization manages the models used in this workspace.": "組織管理此工作區使用的模型。",
   "Connected, but could not refresh": "已連線，但無法重新整理",
 
   "Access required": "需要存取權限",

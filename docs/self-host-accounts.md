@@ -81,24 +81,15 @@ Organization administrators and managers have administrator access to every
 workspace in the organization. Add regular members to each workspace they need
 in Accounts. Removing or changing an organization role updates its workspace access.
 
-Configure AI through the connected app. A workspace administrator
-can enable offered AI accounts, select permitted models and set the workspace
-budget. Local operators delegate server-wide AI administration.
-An organization role never supplies that delegation automatically.
+Organization administrators configure AI through the connected app. Connections stay
+on the server where they are configured and apply to its organization's workspaces.
+When no organization model is enabled, members may connect personal models; those
+providers may process workspace data outside the company's servers. An enabled but
+unavailable organization model never silently falls back to a personal connection.
 
-After checking the authenticated account's exact account key and the installation
-fingerprint, an operator can grant or remove it in the API console:
-
-```sh
-installation grant-ai-admin --account-key "<verified-account-key>" --fingerprint "<installation-fingerprint>"
-installation revoke-ai-admin --account-key "<verified-account-key>" --fingerprint "<installation-fingerprint>"
-```
-
-Both values are 64-character hexadecimal identifiers. Verify the account key against
-the central issuer and subject, rather than choosing an account by email or name.
-The delegation is bound to the current installation binding and recorded in its audit
-log. A server administrator must make an account available to the workspace before
-the workspace administrator can enable it and choose a default model.
+Update Accounts before updating the Ork server. Organization administration uses an
+opt-in signed role projection; an older Accounts deployment does not provide this role
+and the server denies organization AI administration until Accounts is updated.
 
 ## Upgrade an existing installation
 

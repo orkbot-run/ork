@@ -30,11 +30,15 @@ export function useSettingsNavItems(available: {
   computer: boolean;
   billing: boolean;
   updates: boolean;
+  organizationModels?: boolean;
 }): SettingsNavItem[] {
   const { t } = useLingui();
   return [
     { id: "general", label: t`General`, icon: Settings },
     { id: "organization", label: t`Organization`, icon: Building2 },
+    ...(available.organizationModels
+      ? [{ id: "organization-models" as const, label: t`Organization models`, icon: Cpu }]
+      : []),
     { id: "models", label: t`Models`, icon: Cpu },
     { id: "voice", label: t`Voice`, icon: Volume2 },
     { id: "confirmations", label: t`Approvals`, icon: ShieldCheck },

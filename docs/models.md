@@ -7,7 +7,14 @@ model you run yourself.
 
 ## Connect a provider
 
-Open **Settings → Models**. Under **Add provider**, pick a provider and connect it:
+For a connected organization, administrators open **Settings → Organization models**
+to add a connection on the current server and make it available to its workspaces.
+Members can use **Settings → Models** for their personal connections when the
+organization has no enabled model. Those providers may process workspace data outside
+the company's servers. An enabled but unavailable organization connection does not
+automatically fall back to a personal model.
+
+For personal installations, open **Settings → Models**. Pick a provider and connect it:
 
 - **Sign in** with a ChatGPT or Claude subscription to use the plan you already pay for.
 - **Connect API key** for OpenAI, Anthropic, Google, OpenRouter and many others.

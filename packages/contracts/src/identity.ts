@@ -49,6 +49,7 @@ export const workspaceProjectionSchema = z
                     userId: z.string().min(1).max(200),
                     role: workspaceAccessRoleSchema,
                     accessVersion: id,
+                    organizationRole: z.enum(["admin", "manager", "member"]).nullable().optional(),
                   })
                   .strict(),
               )
