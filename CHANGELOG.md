@@ -9,6 +9,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-17
+
+### Security
+
+- Organization model administration requires a verified organization administrator. Members cannot configure models before an administrator chooses the organization's model policy, and unavailable organization models do not silently fall back to personal connections.
+
+### Added
+
+- Organization administrators can connect AI models on a server and share them across the organization's workspaces. Choose organization models or allow personal connections, and change that choice later. See [Models](docs/models.md).
+- Desktop and mobile have separate organization and personal model settings, with clearer information about who manages model keys and where personal models may process workspace data.
+
+### Changed
+
+- The desktop app checks managed workspace model setup before opening the workspace. Administrators finish setup first; members wait for the administrator's choice or connect personal models when permitted.
+
+### Fixed
+
+- Self-host server setup generates enrollment codes and fingerprints accepted by the current Accounts connection screen.
+- Desktop and mobile workspace pickers hide unassigned workspaces and empty disconnected server groups. The desktop picker also hides saved server URLs when choosing an organization workspace.
+
+### Self-host upgrade notes
+
+- Update Accounts before upgrading the Ork server so it supplies signed organization roles. Older Accounts deployments cannot authorize organization model administration. See [Accounts and server setup](docs/self-host-accounts.md#workspace-access-and-ai-administration).
+- Upgrade the desktop app and server together. The database migration preserves existing model connections and encrypted credentials; installations without model connections require an organization administrator to choose the model policy.
+- Configure organization models in the connected app; the separate server AI administrator CLI commands have been removed. Connections apply to workspaces on the current server, and existing spending limits remain effective until an administrator removes them.
+- Back up the database, configuration and bot data before upgrading. Restoring an older image does not reverse database migrations.
+
 ## [1.5.1] - 2026-11-14
 
 ### Changed
