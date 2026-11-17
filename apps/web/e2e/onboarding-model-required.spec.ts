@@ -3,13 +3,62 @@
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
 import type { RpcOutput } from "@orkbot/contracts";
-import { captureScreenshot, signup } from "./helpers";
+import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
 
 test.afterEach(async ({ page }) => {
   // Not "wait": a handler whose fulfill() lost a race to the route teardown never settles,
   // and "wait" would then hang the test to its timeout.
   await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("managed organization settings are separate and explain model key ownership", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `settings-managed-${Date.now()}@orkbot.test`, "password12", "Administrator");
+  await completeOnboarding(page);
+  await page.route("**/rpc/models/workspacePolicy", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          managed: true,
+          canManage: false,
+          policy: null,
+          personalModelsAllowed: true,
+          modelSetupMode: "personal",
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/serverAI/status", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          available: true,
+          spaceId: "workspace-fixture",
+          workspaceMonthlyBudgetMicros: null,
+          canManageServer: true,
+          canManageWorkspace: true,
+          accounts: [],
+          connections: [],
+          modelSetupMode: "personal",
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/serverAI/catalog", (route) => route.fulfill({ json: { json: [] } }));
+  await page.reload();
+  await page.getByTestId("user-menu-trigger").click();
+  await page.getByRole("button", { name: "Organization settings" }).click();
+  const settings = page.getByTestId("user-settings");
+  await expect(settings.getByTestId("settings-nav-organization-models")).toBeVisible();
+  await expect(settings.getByTestId("settings-nav-models")).toHaveCount(0);
+  await settings.getByTestId("settings-nav-organization-models").click();
+  await expect(settings.getByText(/Model keys are managed by this server/)).toBeVisible();
+  await captureScreenshot(page, testInfo, "organization-settings-models");
+  await settings.getByRole("button", { name: "Your settings" }).click();
+  await expect(settings.getByTestId("settings-nav-models")).toHaveText("Personal models");
+  await expect(settings.getByTestId("settings-nav-organization-models")).toHaveCount(0);
 });
 
 test("onboarding cannot continue with an empty or failed model catalog", async ({ page }) => {

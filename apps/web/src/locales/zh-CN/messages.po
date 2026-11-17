@@ -4320,6 +4320,11 @@ msgstr "模型连接"
 msgid "Model id"
 msgstr "模型 ID"
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them."
+msgstr "模型密钥由此服务器管理，而非 Ork Accounts。服务器运营者负责管理密钥。"
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
@@ -4937,8 +4942,14 @@ msgid "Organization connections"
 msgstr ""
 
 #: src/pages/settings-nav.ts
+#: src/pages/SettingsOverlay.tsx
 msgid "Organization models"
 msgstr ""
+
+#: src/components/SidebarFooter.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization settings"
+msgstr "组织设置"
 
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
@@ -5105,6 +5116,10 @@ msgstr "人设"
 #: src/components/SignupSurvey.tsx
 msgid "Personal"
 msgstr "个人"
+
+#: src/pages/settings-nav.ts
+msgid "Personal models"
+msgstr "个人模型"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -7679,6 +7694,10 @@ msgstr "试用结束后，你的方案将变为 {tierTargetLabel}。"
 #: src/lib/approval-messages.ts
 msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
 msgstr "你的录音会被发送用于转录，你播放的文本会被发送用于生成语音。"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Your settings"
+msgstr "个人设置"
 
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"

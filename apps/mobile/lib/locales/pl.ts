@@ -3,6 +3,10 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const PL_MESSAGES: Record<string, string> = {
+  "Organization settings": "Ustawienia organizacji",
+  "Personal models": "Modele osobiste",
+  "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them.":
+    "Kluczami modeli zarządza ten serwer, nie Ork Accounts. Odpowiada za nie operator serwera.",
   "Your organization role could not be verified. Check that Accounts and this server are up to date.":
     "Nie udało się zweryfikować roli w organizacji. Sprawdź, czy Accounts i ten serwer są aktualne.",
   "Administrator access could not be verified. Sign in again or check the server configuration.":

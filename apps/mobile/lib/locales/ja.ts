@@ -3,6 +3,10 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Organization settings": "組織の設定",
+  "Personal models": "個人のモデル",
+  "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them.":
+    "モデルのキーはOrk Accountsではなく、このサーバーが管理します。サーバーの運営者がその責任を負います。",
   "Your organization role could not be verified. Check that Accounts and this server are up to date.":
     "組織内のロールを確認できませんでした。Accountsとこのサーバーが最新か確認してください。",
   "Administrator access could not be verified. Sign in again or check the server configuration.":

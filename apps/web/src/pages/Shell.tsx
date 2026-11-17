@@ -218,6 +218,7 @@ function SpaceShell() {
     peerBotName: string;
   } | null>("peerConversation", null);
   const agentSkillsQuery = useQuery(queries.agentSkills.list.queryOptions());
+  const modelPolicy = useQuery(queries.models.workspacePolicy.queryOptions());
   const agentSkills = agentSkillsQuery.data ?? NO_AGENT_SKILLS;
   const setAgentSkills = useCallback(
     (skills: AgentSkillCatalogEntry[]) =>
@@ -920,6 +921,7 @@ function SpaceShell() {
     computer: computersAreUnavailable(bootstrapMe?.computerCapabilities),
     billing: bootstrapMe?.billingEnabled === true,
     updates: Boolean(desktopBridge()?.update),
+    organizationModels: modelPolicy.data?.managed === true,
   });
   const paletteActions: CommandPaletteAction[] = [
     {

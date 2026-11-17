@@ -123,6 +123,7 @@ test("managed workspace settings show organization models and administration", a
     route.fulfill({ json: { json: catalog } }),
   );
   const settings = await openUserSettings(page);
+  await settings.getByRole("button", { name: "Organization settings", exact: true }).click();
   await settings.getByTestId("settings-nav-organization-models").click();
   await expect(page.getByTestId("server-ai-ready")).toBeVisible();
   await expect(page.getByRole("region", { name: "Shared account", exact: true })).toContainText(

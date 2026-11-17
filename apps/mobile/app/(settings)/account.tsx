@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 behavior is preserved. Ork-only avatar changes follow LICENSE.md.
-// Modified by Ork contributors for device-local haptics and managed workspace selection.
+// Modified by Ork contributors for device-local haptics, managed workspace selection and organization settings.
 
 import { MenuView } from "@expo/ui/community/menu";
 import type { AccountSecurity, UsageSummary } from "@orkbot/contracts";
 import { accountDisplay, displayName } from "@orkbot/core";
+import { useQuery } from "@tanstack/react-query";
 import * as Notifications from "expo-notifications";
 import type { Href } from "expo-router";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -79,6 +80,7 @@ import {
   renamePasskey,
 } from "../../lib/passkey";
 import { registerPushToken } from "../../lib/push";
+import { queryClient, rpcQuery } from "../../lib/query";
 import { createQueuedSave } from "../../lib/queued-save";
 import {
   getCachedRemoteImagesEnabled,
@@ -231,6 +233,7 @@ export default function Account() {
     .join(". ");
   const approvals = useApprovalSettings(ACCOUNT_SETTINGS);
   const organizations = useOrganizations().data;
+  const modelPolicy = useQuery(rpcQuery("models/workspacePolicy"), queryClient);
   const settingsLink = ({ title, href }: { title: string; href: Extract<Href, string> }) => (
     <SettingsRow
       key={href}
@@ -504,14 +507,14 @@ export default function Account() {
             />
           </SettingsGroup>
         ) : null}
-        {organizations ? (
+        {organizations || modelPolicy.data?.managed ? (
           <SettingsGroup>
             <SettingsRow
               key="organization"
               accessibilityRole="button"
               chevron="right"
               onPress={() => router.push("/organization")}
-              title={t("Organization")}
+              title={t("Organization settings")}
               value={activeOrganization(organizations)?.name}
             />
           </SettingsGroup>
@@ -719,7 +722,10 @@ export default function Account() {
             [
               ...(me?.ticketBoardEnabled ? [{ title: t("Board"), href: "/board" } as const] : []),
               { title: t("Artifacts"), href: "/artifacts" },
-              { title: t("Models"), href: "/models" },
+              {
+                title: modelPolicy.data?.managed ? t("Personal models") : t("Models"),
+                href: "/models",
+              },
               { title: t("Voice"), href: "/voice" },
             ] as const
           ).map(settingsLink)}

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited sidebar behavior is preserved; organization settings access follows LICENSE.md.
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { Bot, Group, NavLink } from "@orkbot/contracts";
 import { accountDisplay } from "@orkbot/core";
@@ -9,6 +12,7 @@ import {
   InputGroupInput,
   Sidebar,
 } from "@orkbot/ui-web";
+import { useQuery } from "@tanstack/react-query";
 import { Search, SlidersHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -19,7 +23,7 @@ import { useBilling } from "../../components/SubscriptionGate";
 import { formatBillingDate } from "../../lib/billing";
 import type { BotsSidebarDensity } from "../../lib/bots-sidebar-density-pref";
 import { switchOrganization, useOrganizations } from "../../lib/organizations";
-import { useQueryUserId } from "../../lib/query";
+import { useQueryUserId, useSpaceQueries } from "../../lib/query";
 import type { Panel } from "../../lib/right-panel-state";
 import { useSignOut } from "../../lib/sign-out";
 import { ActivityList } from "../ActivityList";
@@ -325,6 +329,8 @@ function ShellSidebarFooter({
 }) {
   const { t, i18n } = useLingui();
   const userId = useQueryUserId();
+  const queries = useSpaceQueries();
+  const modelPolicy = useQuery(queries.models.workspacePolicy.queryOptions());
   const { organizations, activeOrganizationId } = useOrganizations();
   const { status: billing, showPlans } = useBilling();
   const freeUntil =
@@ -402,6 +408,14 @@ function ShellSidebarFooter({
           setMenuOpen(false);
           openSettings("general");
         }}
+        onOrganizationSettings={
+          modelPolicy.data?.managed
+            ? () => {
+                setMenuOpen(false);
+                openSettings("organization");
+              }
+            : undefined
+        }
         onInvite={
           referral
             ? () => {

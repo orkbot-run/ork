@@ -44,22 +44,36 @@ vi.mock("./AccountSettingsOverlay", () => ({
   UpdatesSettingsPanel: () => null,
   UsageSettingsPanel: () => null,
 }));
-const { memoryConfigs, memoryConfigChange, providerConfig, updaterStatus } = vi.hoisted(() => ({
-  memoryConfigs: [] as unknown[],
-  memoryConfigChange: { current: (_config: unknown) => {} },
-  providerConfig: vi.fn(async (_spaceId: string): Promise<unknown> => null),
-  updaterStatus: vi.fn(async (): Promise<unknown> => ({ installKind: "compose" })),
-}));
+const { memoryConfigs, memoryConfigChange, providerConfig, updaterStatus, policyState } =
+  vi.hoisted(() => ({
+    memoryConfigs: [] as unknown[],
+    memoryConfigChange: { current: (_config: unknown) => {} },
+    providerConfig: vi.fn(async (_spaceId: string): Promise<unknown> => null),
+    updaterStatus: vi.fn(async (): Promise<unknown> => ({ installKind: "compose" })),
+    policyState: { managed: false },
+  }));
 vi.mock("../lib/rpc", () => ({
   rpc: { updater: { status: updaterStatus } },
   createSpaceRpc: () => ({
     memory: { providerConfig: () => providerConfig("") },
-    models: { workspacePolicy: async () => ({ canManage: false, policy: null }) },
+    models: {
+      workspacePolicy: async () => ({
+        canManage: false,
+        policy: null,
+        managed: policyState.managed,
+      }),
+    },
   }),
   selectedSpaceId: () => null,
   rpcForSpace: (spaceId: string) => ({
     memory: { providerConfig: () => providerConfig(spaceId) },
-    models: { workspacePolicy: async () => ({ canManage: false, policy: null }) },
+    models: {
+      workspacePolicy: async () => ({
+        canManage: false,
+        policy: null,
+        managed: policyState.managed,
+      }),
+    },
   }),
 }));
 const serverUpdatesVisibility = vi.hoisted(() => ({ available: false }));
@@ -168,6 +182,33 @@ function button(container: HTMLElement, label: string) {
   if (!match) throw new Error(`Missing ${label}`);
   return match;
 }
+
+it("separates organization and personal settings in a managed workspace", async () => {
+  policyState.managed = true;
+  const onSectionChange = vi.fn();
+  const { container, rerender, cleanup } = await render({ onSectionChange });
+  try {
+    await vi.waitFor(() => expect(container.textContent).toContain("Organization settings"));
+    expect(container.querySelector('[data-testid="settings-nav-organization"]')).toBeNull();
+    expect(container.querySelector('[data-testid="settings-nav-models"]')).not.toBeNull();
+    await rerender({ section: "organization", onSectionChange });
+    await vi.waitFor(() =>
+      expect(
+        container.querySelector('[data-testid="settings-nav-organization-models"]'),
+      ).not.toBeNull(),
+    );
+    expect(container.querySelector('[data-testid="settings-nav-models"]')).toBeNull();
+    expect(container.textContent).toContain("Your settings");
+    const modelsButton = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "Organization models" && !item.hasAttribute("data-testid"),
+    );
+    await act(async () => modelsButton?.click());
+    expect(onSectionChange).toHaveBeenCalledWith("organization-models");
+  } finally {
+    policyState.managed = false;
+    await cleanup();
+  }
+});
 
 it("lists the spaces under General and opens the one picked", async () => {
   const onOpenSpace = vi.fn();

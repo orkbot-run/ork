@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited settings navigation is preserved; organization scope labels follow LICENSE.md.
 import { useLingui } from "@lingui/react/macro";
 import {
   Brain,
@@ -39,7 +42,11 @@ export function useSettingsNavItems(available: {
     ...(available.organizationModels
       ? [{ id: "organization-models" as const, label: t`Organization models`, icon: Cpu }]
       : []),
-    { id: "models", label: t`Models`, icon: Cpu },
+    {
+      id: "models",
+      label: available.organizationModels ? t`Personal models` : t`Models`,
+      icon: Cpu,
+    },
     { id: "voice", label: t`Voice`, icon: Volume2 },
     { id: "confirmations", label: t`Approvals`, icon: ShieldCheck },
     { id: "vault", label: t`Vault`, icon: KeyRound },

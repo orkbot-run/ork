@@ -154,7 +154,7 @@ export function SettingsOverlay({
     }
   }, [section, onUsageOpen]);
 
-  const navItems = useSettingsNavItems({
+  const allNavItems = useSettingsNavItems({
     messaging: messagingEnabled,
     wallet: Boolean(paymentWalletProvider),
     computer: showComputer,
@@ -162,6 +162,16 @@ export function SettingsOverlay({
     updates: showUpdates,
     organizationModels: modelPolicy.data?.managed === true,
   });
+  const organizationScope =
+    modelPolicy.data?.managed === true &&
+    (section === "organization" || section === "organization-models");
+  const navItems = modelPolicy.data?.managed
+    ? allNavItems.filter((item) =>
+        organizationScope
+          ? item.id === "organization" || item.id === "organization-models"
+          : item.id !== "organization" && item.id !== "organization-models",
+      )
+    : allNavItems;
 
   useEffect(() => {
     const nav = navRef.current;
@@ -302,6 +312,18 @@ export function SettingsOverlay({
                   </button>
                 );
               })}
+              {modelPolicy.data?.managed ? (
+                <button
+                  type="button"
+                  disabled={panelBusy}
+                  onClick={() => onSectionChange(organizationScope ? "general" : "organization")}
+                  className="flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-start text-[13.5px] text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                >
+                  <span className="whitespace-nowrap">
+                    {organizationScope ? t`Your settings` : t`Organization settings`}
+                  </span>
+                </button>
+              ) : null}
             </nav>
             <Button
               variant="ghost"
@@ -421,7 +443,14 @@ export function SettingsOverlay({
                         >{t`Retry`}</Button>
                       </div>
                     ) : modelPolicy.data?.managed ? (
-                      <p className="text-sm text-muted-foreground">{t`Manage your organization, servers and people in Ork Accounts.`}</p>
+                      <div className="grid gap-4">
+                        <p className="text-sm text-muted-foreground">{t`Manage your organization, servers and people in Ork Accounts.`}</p>
+                        <Button
+                          variant="outline"
+                          className="w-fit"
+                          onClick={() => onSectionChange("organization-models")}
+                        >{t`Organization models`}</Button>
+                      </div>
                     ) : (
                       <OrganizationSettingsPanel onBusyChange={setVoiceBusy} />
                     )

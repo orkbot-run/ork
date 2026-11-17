@@ -4320,6 +4320,11 @@ msgstr "モデル接続"
 msgid "Model id"
 msgstr "モデルID"
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them."
+msgstr "モデルのキーはOrk Accountsではなく、このサーバーが管理します。サーバーの運営者がその責任を負います。"
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
@@ -4937,8 +4942,14 @@ msgid "Organization connections"
 msgstr ""
 
 #: src/pages/settings-nav.ts
+#: src/pages/SettingsOverlay.tsx
 msgid "Organization models"
 msgstr ""
+
+#: src/components/SidebarFooter.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization settings"
+msgstr "組織の設定"
 
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
@@ -5105,6 +5116,10 @@ msgstr "ペルソナ"
 #: src/components/SignupSurvey.tsx
 msgid "Personal"
 msgstr "個人"
+
+#: src/pages/settings-nav.ts
+msgid "Personal models"
+msgstr "個人のモデル"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -7679,6 +7694,10 @@ msgstr "トライアル終了後、プランは {tierTargetLabel} になりま�
 #: src/lib/approval-messages.ts
 msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
 msgstr "録音は文字起こしのために送信され、再生するテキストは音声生成のために送信されます。"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Your settings"
+msgstr "個人設定"
 
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"

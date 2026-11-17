@@ -15,6 +15,7 @@ import {
 } from "@orkbot/ui-web";
 import {
   BookOpen,
+  Building2,
   Check,
   Download,
   FolderOpen,
@@ -49,6 +50,7 @@ type Props = {
   onLink?: (link: NavLink) => void;
   onArtifacts: () => void;
   onSettings: () => void;
+  onOrganizationSettings?: () => void;
   onInvite?: () => void;
   onLogOut: () => void;
   signingOut: boolean;
@@ -79,6 +81,7 @@ export function SidebarFooter({
   onLink,
   onArtifacts,
   onSettings,
+  onOrganizationSettings,
   onInvite,
   onLogOut,
   signingOut,
@@ -192,6 +195,16 @@ export function SidebarFooter({
               <Settings className="text-muted-foreground" strokeWidth={1.75} />
               <Trans>Settings</Trans>
             </Button>
+            {onOrganizationSettings ? (
+              <Button
+                variant="ghost"
+                className="h-9 w-full justify-start gap-2.5 font-normal"
+                onClick={onOrganizationSettings}
+              >
+                <Building2 className="text-muted-foreground" strokeWidth={1.75} />
+                <Trans>Organization settings</Trans>
+              </Button>
+            ) : null}
             <Button
               variant="ghost"
               className="h-9 w-full justify-start gap-2.5 font-normal"

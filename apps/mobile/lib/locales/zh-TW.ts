@@ -3,6 +3,10 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  "Organization settings": "組織設定",
+  "Personal models": "個人模型",
+  "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them.":
+    "模型金鑰由此伺服器管理，而非 Ork Accounts。伺服器營運者負責管理金鑰。",
   "Your organization role could not be verified. Check that Accounts and this server are up to date.":
     "無法驗證你的組織角色。請確認 Accounts 和此伺服器均已更新。",
   "Administrator access could not be verified. Sign in again or check the server configuration.":

@@ -4320,6 +4320,11 @@ msgstr "Modellverbindungen"
 msgid "Model id"
 msgstr "Modell-ID"
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them."
+msgstr "Modellschlüssel werden von diesem Server verwaltet, nicht von Ork Accounts. Der Serverbetreiber ist dafür verantwortlich."
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
@@ -4937,8 +4942,14 @@ msgid "Organization connections"
 msgstr ""
 
 #: src/pages/settings-nav.ts
+#: src/pages/SettingsOverlay.tsx
 msgid "Organization models"
 msgstr ""
+
+#: src/components/SidebarFooter.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization settings"
+msgstr "Organisationseinstellungen"
 
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
@@ -5105,6 +5116,10 @@ msgstr "Persona"
 #: src/components/SignupSurvey.tsx
 msgid "Personal"
 msgstr ""
+
+#: src/pages/settings-nav.ts
+msgid "Personal models"
+msgstr "Persönliche Modelle"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -7679,6 +7694,10 @@ msgstr "Nach dem Testzeitraum kostet dein Plan {tierTargetLabel}."
 #: src/lib/approval-messages.ts
 msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
 msgstr "Deine Aufnahmen werden zur Transkription gesendet, und Text, den du abspielst, wird zur Spracherzeugung gesendet."
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Your settings"
+msgstr "Ihre Einstellungen"
 
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"
