@@ -4320,6 +4320,11 @@ msgstr "모델 연결"
 msgid "Model id"
 msgstr "모델 ID"
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them."
+msgstr ""
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
@@ -4937,7 +4942,13 @@ msgid "Organization connections"
 msgstr ""
 
 #: src/pages/settings-nav.ts
+#: src/pages/SettingsOverlay.tsx
 msgid "Organization models"
+msgstr ""
+
+#: src/components/SidebarFooter.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization settings"
 msgstr ""
 
 #: src/pages/shell/chat-context.tsx
@@ -5104,6 +5115,10 @@ msgstr "페르소나"
 
 #: src/components/SignupSurvey.tsx
 msgid "Personal"
+msgstr ""
+
+#: src/pages/settings-nav.ts
+msgid "Personal models"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -7679,6 +7694,10 @@ msgstr "체험이 끝나면 요금제가 {tierTargetLabel}(으)로 바뀝니다.
 #: src/lib/approval-messages.ts
 msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
 msgstr "녹음은 텍스트로 변환하기 위해 전송되며, 재생할 텍스트는 음성을 생성하기 위해 전송됩니다."
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Your settings"
+msgstr ""
 
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"

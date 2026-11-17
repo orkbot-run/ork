@@ -4320,6 +4320,11 @@ msgstr "मॉडल कनेक्शन"
 msgid "Model id"
 msgstr "मॉडल आईडी"
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
+msgid "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them."
+msgstr ""
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
@@ -4937,7 +4942,13 @@ msgid "Organization connections"
 msgstr ""
 
 #: src/pages/settings-nav.ts
+#: src/pages/SettingsOverlay.tsx
 msgid "Organization models"
+msgstr ""
+
+#: src/components/SidebarFooter.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization settings"
 msgstr ""
 
 #: src/pages/shell/chat-context.tsx
@@ -5104,6 +5115,10 @@ msgstr "व्यक्तित्व"
 
 #: src/components/SignupSurvey.tsx
 msgid "Personal"
+msgstr ""
+
+#: src/pages/settings-nav.ts
+msgid "Personal models"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -7679,6 +7694,10 @@ msgstr "ट्रायल खत्म होने पर आपका प्�
 #: src/lib/approval-messages.ts
 msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
 msgstr "आपकी रिकॉर्डिंग को टेक्स्ट में बदलने के लिए भेजा जाता है और जो टेक्स्ट आप सुनते हैं, उसे आवाज़ में बदलने के लिए भेजा जाता है।"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Your settings"
+msgstr ""
 
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"
