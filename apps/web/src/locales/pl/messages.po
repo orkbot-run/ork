@@ -16,6 +16,18 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
 
+msgid "Organization settings"
+msgstr "Ustawienia organizacji"
+
+msgid "Your settings"
+msgstr "Twoje ustawienia"
+
+msgid "Personal models"
+msgstr "Modele osobiste"
+
+msgid "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them."
+msgstr "Kluczami modeli zarządza ten serwer, nie Ork Accounts. Odpowiada za nie operator serwera."
+
 #: src/pages/shell/sidebar-roster.tsx
 msgid " (unread)"
 msgstr " (nieprzeczytane)"

@@ -157,6 +157,14 @@ export function ServerAISettings({
   return (
     <AISettingsFrame embedded={embedded} onClose={onClose}>
       <div className="grid gap-5" data-testid={value ? "server-ai-ready" : undefined}>
+        {value?.canManageServer ? (
+          <p className="text-sm text-muted-foreground">
+            <Trans>
+              Model keys are managed by this server, not Ork Accounts. The server operator is
+              responsible for them.
+            </Trans>
+          </p>
+        ) : null}
         {status.isPending ? <Spinner /> : null}
         {error || status.isError ? (
           <p role="alert" className="text-sm text-destructive">

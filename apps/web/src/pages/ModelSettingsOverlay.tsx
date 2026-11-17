@@ -309,10 +309,15 @@ function LegacyModelSettingsOverlay({
       {policyQuery.data?.managed && policyQuery.data.personalModelsAllowed ? (
         <p className="mb-4 text-sm text-muted-foreground">
           <Trans>Your organization allows personal models.</Trans>{" "}
-          <Trans>Personal models may process workspace data outside company servers.</Trans>
+          <Trans>Personal models may process workspace data outside company servers.</Trans>{" "}
+          <Trans>
+            Model keys are managed by this server, not Ork Accounts. The server operator is
+            responsible for them.
+          </Trans>
         </p>
       ) : null}
       {policyQuery.data &&
+      !policyQuery.data.managed &&
       (scope === "space" || policyQuery.data.canManage || policyQuery.data.policy) ? (
         <WorkspaceModelPolicy
           key={JSON.stringify([model.me?.userId, policySpaceId])}

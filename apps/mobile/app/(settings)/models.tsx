@@ -337,7 +337,10 @@ function LegacyModels() {
         {workspacePolicy?.managed && workspacePolicy.personalModelsAllowed ? (
           <Text style={{ color: native.secondaryLabel }}>
             {t("Your organization allows personal models.")}{" "}
-            {t("Personal models may process workspace data outside company servers.")}
+            {t("Personal models may process workspace data outside company servers.")}{" "}
+            {t(
+              "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them.",
+            )}
           </Text>
         ) : null}
         {workspacePolicy && !workspacePolicy.managed ? (

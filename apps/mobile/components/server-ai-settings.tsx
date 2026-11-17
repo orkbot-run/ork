@@ -94,6 +94,13 @@ export function ServerAISettings({
   if (value.modelSetupMode === "pending")
     return (
       <View style={{ gap: 16 }}>
+        {value.canManageServer ? (
+          <Text style={{ color: native.secondaryLabel }}>
+            {t(
+              "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them.",
+            )}
+          </Text>
+        ) : null}
         {error ? (
           <Text accessibilityRole="alert" style={{ color: native.label }}>
             {error}
@@ -149,6 +156,13 @@ export function ServerAISettings({
     );
   return (
     <View style={{ gap: 16 }}>
+      {value.canManageServer ? (
+        <Text style={{ color: native.secondaryLabel }}>
+          {t(
+            "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them.",
+          )}
+        </Text>
+      ) : null}
       {error ? (
         <Text accessibilityRole="alert" style={{ color: native.label }}>
           {error}
