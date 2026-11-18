@@ -99,6 +99,7 @@ function runBridge(
   );
   const random = vi.fn((bytes: Uint8Array) => bytes.fill(options.randomByte ?? 11));
   const timeOrigin = options.timeOrigin ?? 1_700_000_000_000.125;
+  const mark = vi.fn();
   const context = vm.createContext({
     window,
     crypto: { getRandomValues: random, randomUUID: () => "44444444-4444-4444-8444-444444444444" },
@@ -119,7 +120,7 @@ function runBridge(
     btoa,
     setTimeout,
     clearTimeout,
-    performance: { timeOrigin },
+    performance: { timeOrigin, mark },
     __nativeInvoke: invoke,
     __nativeWebviewLabel: options.currentLabel ?? config.label,
   });
@@ -142,6 +143,7 @@ function runBridge(
     window,
     invoke,
     random,
+    mark,
     documentId,
     signal,
     evaluate,
@@ -164,6 +166,32 @@ function nativeEventLiteral(origin: string, document: string, kind: string, payl
 }
 
 describe("Tauri native bridge", () => {
+  it("records bounded native startup phases without request metadata", async () => {
+    let reads = 0;
+    const { window, mark } = runBridge({
+      transport: true,
+      invoke: async (_command, { command }) => {
+        if (command.type === "transport.head") return { status: 200, headers: [] };
+        if (command.type === "transport.read") return reads++ % 3 === 2 ? null : btoa("ok");
+      },
+    });
+    const response = await window.fetch("https://app.example.com/private?secret=fixture");
+    expect(mark.mock.calls.map(([name]) => name)).toEqual([
+      "rk:native:first-request:start",
+      "rk:native:first-request:channel-ready",
+      "rk:native:first-request:headers",
+    ]);
+    expect(await response.text()).toBe("okok");
+    await (await window.fetch("https://app.example.com/another")).text();
+    expect(mark.mock.calls.map(([name]) => name)).toEqual([
+      "rk:native:first-request:start",
+      "rk:native:first-request:channel-ready",
+      "rk:native:first-request:headers",
+      "rk:native:first-request:first-byte",
+      "rk:native:first-request:complete",
+    ]);
+  });
+
   it("streams browser-encoded multipart files through bounded native upload chunks", async () => {
     let finish!: () => void;
     const finished = new Promise<void>((resolve) => {

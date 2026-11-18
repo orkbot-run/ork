@@ -8,7 +8,8 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const api = vi.hoisted(() => ({ me: vi.fn(), policy: vi.fn() }));
+const api = vi.hoisted(() => ({ me: vi.fn(), policy: vi.fn(), bootstrap: vi.fn() }));
+vi.mock("../lib/bootstrap", () => ({ peekInitialBootstrap: api.bootstrap }));
 vi.mock("../lib/rpc", () => ({
   SPACE_SELECTED_EVENT: "space-selected",
   captureRpcContext: () => ({
@@ -74,6 +75,42 @@ it("keeps the app closed after a failed check and retries", async () => {
   expect(host.textContent).not.toContain("App content");
   await act(async () => host.querySelector("button")!.click());
   expect(host.textContent).toContain("App content");
+});
+
+it("shares the initial bootstrap identity while starting the policy request immediately", async () => {
+  let resolve!: (bootstrap: { me: { needsModel: boolean } }) => void;
+  api.bootstrap.mockReturnValue(
+    new Promise((complete) => {
+      resolve = complete;
+    }),
+  );
+  api.policy.mockResolvedValue({ managed: true, modelSetupMode: "organization" });
+  await render();
+  expect(api.me).not.toHaveBeenCalled();
+  expect(api.policy).toHaveBeenCalledOnce();
+  expect(host.textContent).not.toContain("App content");
+  await act(async () => resolve({ me: { needsModel: false } }));
+  expect(host.textContent).toContain("App content");
+});
+
+it("falls back to a fresh identity when the initial bootstrap fails", async () => {
+  api.bootstrap.mockReturnValue(Promise.reject(new Error("bootstrap unavailable")));
+  api.me.mockResolvedValue({ needsModel: false });
+  api.policy.mockResolvedValue({ managed: false });
+  await render();
+  expect(api.me).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain("App content");
+});
+
+it("does not reuse the startup identity after selecting another workspace", async () => {
+  api.bootstrap.mockResolvedValue({ me: { needsModel: false } });
+  api.policy.mockResolvedValue({ managed: true, modelSetupMode: "organization" });
+  await render();
+  expect(api.me).not.toHaveBeenCalled();
+  api.me.mockResolvedValue({ needsModel: true });
+  await act(async () => window.dispatchEvent(new Event("space-selected")));
+  expect(api.me).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain("Model setup");
 });
 
 it("checks again when the selected workspace changes", async () => {

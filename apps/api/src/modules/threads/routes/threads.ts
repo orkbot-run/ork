@@ -4,6 +4,7 @@
 // Inherited Apache material is preserved; Ork changes consolidate database error matching.
 // Inherited routes remain Apache-2.0; Space work admission guards are Ork additions.
 // Ork thread-lock budget and stream-lifetime changes are PolyForm-covered.
+// Ork overlaps independent chat-send preflight reads.
 
 import { runContinueJob, runJobKey } from "@orkbot/adapter-kit";
 import { settleCallRequest } from "@orkbot/adapters";
@@ -126,8 +127,10 @@ export function threadsRoutes(ctx: RouterContext) {
     },
     startRoutines?: Parameters<typeof sendThreadMessage>[5],
   ) => {
-    const setup = await modelSetup(deps, actor);
-    const target = await resolveThreadTarget(deps.prisma, actor, input);
+    const [setup, target] = await Promise.all([
+      modelSetup(deps, actor),
+      resolveThreadTarget(deps.prisma, actor, input),
+    ]);
     // A bot with its own runnable model needs no main model, and stopping work needs none.
     const replied =
       target.kind === "group" ? await replyParentBotId(deps.prisma, target, input) : undefined;

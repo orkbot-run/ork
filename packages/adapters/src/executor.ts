@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Modified by Ork contributors for coordinated OAuth refreshes, Space work admission and producer lifetimes. See LICENSE.md.
 // Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
+// Ork measures per-attempt setup latency before dispatch to the model runtime.
 
 import type { AgentRunRequest, ComputerRef, SemanticMemoryProvider } from "@orkbot/adapter-kit";
 import {
@@ -496,6 +497,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         return;
       }
       let attempt: { id: string };
+      const setupStarted = performance.now();
       // Resumed attempts keep the first start, so lateness reflects when the run began.
       const executionStartedAt = current.startedAt ?? new Date();
       // Classified with the first start, so a retry, resume or later schedule edit keeps it.
@@ -2029,6 +2031,9 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
 
         try {
           if (checkpointLoadError) throw checkpointLoadError;
+          getLogger().info("run.model_dispatched", {
+            "run.setup_ms": Math.round(performance.now() - setupStarted),
+          });
           const runtimeEvents = deps.runtime.run(
             {
               botId: bot.id,

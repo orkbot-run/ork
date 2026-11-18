@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 composition is preserved. Native OIDC callbacks and delegated server updates are Ork additions.
 // Ork deferred messaging SDK loading is PolyForm-covered.
 // Ork adds optional durable messaging progress admission.
+// Ork adds RPC phase timing.
 
 import { hostname } from "node:os";
 import { join } from "node:path";
@@ -1045,7 +1046,14 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     },
   });
   const rpc = new RPCHandler(router, {
-    clientInterceptors: [onError((error, { path, signal }) => handleRpcError(error, path, signal))],
+    clientInterceptors: [
+      ({ path, next }) => {
+        // oRPC supplies the matched procedure name, independent of user-controlled input.
+        enrichLogContext({ "rpc.procedure": path.join(".") });
+        return next();
+      },
+      onError((error, { path, signal }) => handleRpcError(error, path, signal)),
+    ],
   });
   const app = new Hono();
   const inFlight = trackInFlightRequests();
@@ -1281,7 +1289,10 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   );
   const limitRpcBody = rpcBodyLimit(env.maxUploadSizeBytes);
   app.use("/rpc/*", async (c, next) => {
-    const session = await requestSession(c.req.raw);
+    const sessionStarted = performance.now();
+    const session = await requestSession(c.req.raw).finally(() => {
+      enrichLogContext({ "rpc.session_ms": Math.round(performance.now() - sessionStarted) });
+    });
     const actor = session?.actor ?? null;
     const tooLarge = await limitRpcBody(c, actor !== null);
     if (tooLarge) return tooLarge;
@@ -1297,24 +1308,29 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       return c.json({ error: "Forbidden" }, 403);
     }
     try {
-      const { matched, response } = await rpc.handle(c.req.raw, {
-        prefix: "/rpc",
-        context: {
-          actor,
-          sessionId: session?.sessionId,
-          signal: permission
-            ? AbortSignal.any([c.req.raw.signal, permission.signal])
-            : c.req.raw.signal,
-          // Same user in the same space, so leaving the space also ends a stream.
-          // A database failure rejects this check; only a missing membership is unauthorized.
-          stillAuthorized: async () => {
-            const current = await sessionActor(c.req.raw);
-            return Boolean(
-              actor && current?.userId === actor.userId && current.spaceId === actor.spaceId,
-            );
+      const dispatchStarted = performance.now();
+      const { matched, response } = await rpc
+        .handle(c.req.raw, {
+          prefix: "/rpc",
+          context: {
+            actor,
+            sessionId: session?.sessionId,
+            signal: permission
+              ? AbortSignal.any([c.req.raw.signal, permission.signal])
+              : c.req.raw.signal,
+            // Same user in the same space, so leaving the space also ends a stream.
+            // A database failure rejects this check; only a missing membership is unauthorized.
+            stillAuthorized: async () => {
+              const current = await sessionActor(c.req.raw);
+              return Boolean(
+                actor && current?.userId === actor.userId && current.spaceId === actor.spaceId,
+              );
+            },
           },
-        },
-      });
+        })
+        .finally(() => {
+          enrichLogContext({ "rpc.dispatch_ms": Math.round(performance.now() - dispatchStarted) });
+        });
       if (matched) {
         const result = c.newResponse(response.body, response);
         if (!permission) return result;

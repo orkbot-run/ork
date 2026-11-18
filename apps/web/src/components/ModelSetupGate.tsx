@@ -5,6 +5,7 @@ import { Trans } from "@lingui/react/macro";
 import { Button } from "@orkbot/ui-web";
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
+import { peekInitialBootstrap } from "../lib/bootstrap";
 import { modelSetupDeferred } from "../lib/model-setup-preference";
 import { captureRpcContext, SPACE_SELECTED_EVENT } from "../lib/rpc";
 import { PageLoading } from "./PageLoading";
@@ -27,7 +28,16 @@ export function ModelSetupGate() {
     let active = true;
     const context = captureRpcContext();
     setState("loading");
-    void Promise.all([context.client.me(), context.client.models.workspacePolicy()])
+    // Startup already requested this identity with the shell bootstrap. Later workspace
+    // changes and retries must read the current scope instead of reusing that first result.
+    const primed = revision === 0 ? peekInitialBootstrap() : undefined;
+    const me = primed
+      ? primed.then(
+          (bootstrap) => bootstrap.me,
+          () => context.client.me(),
+        )
+      : context.client.me();
+    void Promise.all([me, context.client.models.workspacePolicy()])
       .then(([me, policy]) => {
         if (active && context.isCurrent())
           setState(

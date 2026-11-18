@@ -164,18 +164,47 @@ if (
   if (config.transport) {
     const pending = new Set<string>();
     let retired = false;
+    // Keep a bounded startup trace in the existing User Timing diagnostics. All phases
+    // belong to one request; names contain no route, identity, or response data.
+    let measuredRequest: string | undefined;
+    let measuredBody = false;
+    let measuredComplete = false;
+    const markRequest = (id: string, phase: string) => {
+      if (id === measuredRequest && !measuredComplete)
+        performance.mark(`rk:native:first-request:${phase}`);
+    };
     const http: NativeHttpBridge = {
       open: async (_session, _revision, id, input) => {
+        if (measuredRequest === undefined) {
+          measuredRequest = id;
+          markRequest(id, "start");
+        }
         pending.add(id);
         await call<void>("transport.open", { id, input });
       },
-      start: (_session, _revision, id) => call("transport.start", { id }),
+      start: async (_session, _revision, id) => {
+        await call<void>("transport.start", { id });
+        markRequest(id, "channel-ready");
+      },
       write: (_session, _revision, id, bytes) => call("transport.write", { id, bytes }),
       finish: (_session, _revision, id) => call("transport.finish", { id }),
-      head: (_session, _revision, id) => call("transport.head", { id }),
+      head: async (_session, _revision, id) => {
+        const head = await call<Awaited<ReturnType<NativeHttpBridge["head"]>>>("transport.head", {
+          id,
+        });
+        markRequest(id, "headers");
+        return head;
+      },
       read: async (_session, _revision, id) => {
         const bytes = await call<string | null>("transport.read", { id });
-        if (bytes === null) pending.delete(id);
+        if (bytes === null) {
+          pending.delete(id);
+          markRequest(id, "complete");
+          if (id === measuredRequest) measuredComplete = true;
+        } else if (id === measuredRequest && !measuredBody) {
+          measuredBody = true;
+          markRequest(id, "first-byte");
+        }
         return bytes;
       },
       cancel: async (_session, _revision, id) => {

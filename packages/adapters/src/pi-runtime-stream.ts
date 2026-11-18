@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Ork adds model upstream response timing. See LICENSE.md for inherited Apache material.
+
 import { randomUUID } from "node:crypto";
 import type {
   Api,
@@ -10,6 +14,7 @@ import type {
   ProviderHeaders,
 } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
+import { getLogger } from "@orkbot/logging";
 import { codexComputeResidency } from "./pi-oauth.js";
 import {
   modelStreamIdleTimeoutMs,
@@ -216,6 +221,7 @@ export function reliableModelStream(
   cacheRetention?: ModelsSimpleStreamOptions["cacheRetention"],
 ): AssistantMessageEventStream {
   const watchdog = modelStreamIdleWatchdog(options?.signal);
+  const started = performance.now();
   try {
     const preparedOptions = reliableStreamOptions(
       model,
@@ -228,7 +234,12 @@ export function reliableModelStream(
         // Only a 2xx arms the shared watchdog. Error bodies are bounded by
         // the fetch wrapper where supported; caller hooks still see every status.
         onResponse: (response, requestModel) => {
-          if (response.status >= 200 && response.status < 300) watchdog.ping();
+          if (response.status >= 200 && response.status < 300) {
+            watchdog.ping();
+            getLogger().info("model.response_headers", {
+              "model.headers_ms": Math.round(performance.now() - started),
+            });
+          }
           return options?.onResponse?.(response, requestModel);
         },
       },
