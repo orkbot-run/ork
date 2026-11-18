@@ -2941,6 +2941,7 @@ msgid "Disable connection"
 msgstr "Disable connection"
 
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Disabled"
 msgstr "Disabled"
 
@@ -3098,6 +3099,10 @@ msgstr "Edit first"
 #: src/pages/ServerAISettings.tsx
 msgid "Edit model connection"
 msgstr "Edit model connection"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Edit models"
+msgstr "Edit models"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
@@ -7137,6 +7142,10 @@ msgstr "Type your answer"
 #: src/pages/Shell.tsx
 msgid "Unassigned"
 msgstr "Unassigned"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Unavailable"
+msgstr "Unavailable"
 
 #: src/components/AskCard.tsx
 msgid "Undo"

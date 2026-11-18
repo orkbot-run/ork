@@ -1885,8 +1885,10 @@ it("changes the managed default with one captured-server request and preserves t
   serverAI.configure.mockResolvedValue({ ok: true });
   const view = await renderSettings(true, testQueryClient(), "account", true);
   try {
+    expect(view.container.textContent).toContain("model-b");
+    await click(buttons(view.container, "Edit models")[0]);
     const switches = view.container.querySelectorAll('[role="switch"]');
-    expect(switches.length).toBe(3);
+    expect(switches.length).toBe(4);
     await click(switches[1] as HTMLButtonElement);
     expect(serverAI.configure).toHaveBeenCalledExactlyOnceWith(
       {
