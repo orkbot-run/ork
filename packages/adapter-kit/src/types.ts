@@ -663,19 +663,22 @@ export interface AgentUsage {
 export type UsageOperationKind = "answer" | "setup" | "retrieval" | "subagent" | "compaction";
 
 export interface ModelCallObserver {
-  beforeCall(call: {
-    callId?: string;
-    runId?: string;
-    operationKind?: UsageOperationKind;
-    provider: string;
-    modelId: string;
-    inputTokensEstimate: number;
-    maxOutputTokens: number;
-    /** Conservative dollar bound from the resolved model pricing; absent means unknown. */
-    maxCostUsd?: number;
-    /** Explicit adapter-known write bucket required by this request, not a billing prediction. */
-    cacheWriteRetention?: "1h";
-  }): string | Promise<string>;
+  beforeCall(
+    call: {
+      callId?: string;
+      runId?: string;
+      operationKind?: UsageOperationKind;
+      provider: string;
+      modelId: string;
+      inputTokensEstimate: number;
+      maxOutputTokens: number;
+      /** Conservative dollar bound from the resolved model pricing; absent means unknown. */
+      maxCostUsd?: number;
+      /** Explicit adapter-known write bucket required by this request, not a billing prediction. */
+      cacheWriteRetention?: "1h";
+    },
+    signal?: AbortSignal,
+  ): string | Promise<string>;
   /** A per-call authorization lease may end a provider request before it produces more data. */
   signalForCall?(reservationId: string): AbortSignal | undefined;
   afterCall(reservationId: string, usage: AgentUsage | null): void | Promise<void>;

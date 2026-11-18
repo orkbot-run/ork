@@ -70,6 +70,7 @@ describe.each(["openrouter", "typesafe"] as const)("%s decision conformance", (p
     if (provider === "openrouter")
       expect(beforeCall).toHaveBeenCalledWith(
         expect.objectContaining({ maxCostUsd: expect.any(Number) }),
+        expect.any(AbortSignal),
       );
   });
   it("rejects unknown answers while retaining provider costs", async () => {

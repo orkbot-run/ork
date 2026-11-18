@@ -17,6 +17,7 @@ RUN_FIELDS = {
     "run.execution_started": ("run.pre_run_wait_ms", "run.queue_wait_ms"),
     "run.model_dispatched": ("run.setup_ms",),
     "model.response_headers": ("model.headers_ms",),
+    "model.first_text": ("model.first_text_ms", "model.headers_to_first_text_ms"),
     "run.first_response": ("run.first_response_ms",),
     "run.finished": ("run.total_ms",),
 }

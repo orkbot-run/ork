@@ -194,6 +194,7 @@ it.each([false, true])(
       expect(observer.beforeCall).toHaveBeenCalledTimes(2);
       expect(observer.beforeCall).toHaveBeenCalledWith(
         expect.objectContaining({ provider: config.provider, modelId: config.id }),
+        expect.any(AbortSignal),
       );
       expect(observer.afterCall).toHaveBeenCalledTimes(2);
       expect(observer.afterCall).toHaveBeenCalledWith(

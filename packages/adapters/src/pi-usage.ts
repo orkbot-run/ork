@@ -396,22 +396,25 @@ export function observedPiStream(
           : 0;
         const cacheWriteRetention = requestedPiCacheWriteRetention(model, cacheRetention);
         reservation = observer
-          ? await observer.beforeCall({
-              callId,
-              runId: attribution.runId,
-              operationKind: attribution.operationKind,
-              provider: model.provider,
-              modelId: model.id,
-              inputTokensEstimate,
-              maxOutputTokens: options?.maxTokens ?? model.maxTokens,
-              maxCostUsd: maximumModelCallCost(
-                model.cost,
+          ? await observer.beforeCall(
+              {
+                callId,
+                runId: attribution.runId,
+                operationKind: attribution.operationKind,
+                provider: model.provider,
+                modelId: model.id,
                 inputTokensEstimate,
-                options?.maxTokens ?? model.maxTokens,
+                maxOutputTokens: options?.maxTokens ?? model.maxTokens,
+                maxCostUsd: maximumModelCallCost(
+                  model.cost,
+                  inputTokensEstimate,
+                  options?.maxTokens ?? model.maxTokens,
+                  cacheWriteRetention,
+                ),
                 cacheWriteRetention,
-              ),
-              cacheWriteRetention,
-            })
+              },
+              options?.signal,
+            )
           : undefined;
         const authorizationSignal =
           reservation !== undefined ? observer?.signalForCall?.(reservation) : undefined;

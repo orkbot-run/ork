@@ -46,7 +46,10 @@ export interface StreamIdleWatchdog {
   /** Re-arms the idle bound; invoke on response headers and each delivered event. */
   ping(): void;
   /** Wraps the provider stream so every delivered event re-arms the idle bound. */
-  wrap(stream: AssistantMessageEventStream): AssistantMessageEventStream;
+  wrap(
+    stream: AssistantMessageEventStream,
+    observe?: (event: AssistantMessageEvent) => void,
+  ): AssistantMessageEventStream;
   dispose(): void;
 }
 
@@ -117,12 +120,13 @@ export function modelStreamIdleWatchdog(
     signal: controller.signal,
     ping,
     dispose,
-    wrap(inner) {
+    wrap(inner, observe) {
       class Watched extends AssistantMessageEventStream {
         override async *[Symbol.asyncIterator](): AsyncGenerator<AssistantMessageEvent> {
           try {
             for await (const event of inner) {
               ping();
+              observe?.(event);
               yield rewrite(event);
             }
           } finally {
@@ -222,6 +226,8 @@ export function reliableModelStream(
 ): AssistantMessageEventStream {
   const watchdog = modelStreamIdleWatchdog(options?.signal);
   const started = performance.now();
+  let headersAt: number | undefined;
+  let firstTextRecorded = false;
   try {
     const preparedOptions = reliableStreamOptions(
       model,
@@ -236,8 +242,9 @@ export function reliableModelStream(
         onResponse: (response, requestModel) => {
           if (response.status >= 200 && response.status < 300) {
             watchdog.ping();
+            headersAt = performance.now();
             getLogger().info("model.response_headers", {
-              "model.headers_ms": Math.round(performance.now() - started),
+              "model.headers_ms": Math.round(headersAt - started),
             });
           }
           return options?.onResponse?.(response, requestModel);
@@ -250,7 +257,17 @@ export function reliableModelStream(
     const stream = runStream
       ? runStream(preparedOptions)
       : models.streamSimple(model, context, preparedOptions);
-    return watchdog.wrap(stream);
+    return watchdog.wrap(stream, (event) => {
+      if (firstTextRecorded || event.type !== "text_delta" || !event.delta.trim()) return;
+      firstTextRecorded = true;
+      const at = performance.now();
+      getLogger().info("model.first_text", {
+        "model.first_text_ms": Math.round(at - started),
+        ...(headersAt === undefined
+          ? {}
+          : { "model.headers_to_first_text_ms": Math.round(at - headersAt) }),
+      });
+    });
   } catch (error) {
     watchdog.dispose();
     throw error;
