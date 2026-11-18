@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Modified by Ork contributors for empty-space onboarding recovery. See LICENSE.md.
+// Modified by Ork contributors for empty-space onboarding recovery and workspace navigation. See LICENSE.md.
 
 import { captureScreenshot, completeOnboarding, openNewSpace, rpc, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
@@ -50,10 +50,13 @@ test("a new space chooses what it can use, and a skill can be limited to some sp
     "aria-current",
     "page",
   );
-  const chiefs = sidebar.getByRole("button", { name: /^Chief/ });
-  await expect(chiefs).toHaveCount(2);
-  const personalChief = chiefs.first();
-  await personalChief.click();
+  await expect(sidebar.getByRole("button", { name: /^Chief/ })).toHaveCount(1);
+  const personal = page
+    .getByRole("navigation", { name: "Workspaces" })
+    .getByRole("button", { name: "Personal", exact: true });
+  await personal.click();
+  await expect(personal).toHaveAttribute("aria-current", "true");
+  const personalChief = sidebar.getByRole("button", { name: /^Chief/ });
   await expect(personalChief).toHaveAttribute("aria-current", "page");
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("orkbot:space-id")))

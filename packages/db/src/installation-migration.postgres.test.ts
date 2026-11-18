@@ -28,7 +28,7 @@ async function snapshot(client: Client) {
     "workspace_model_policy",
     "deployment_settings",
   ];
-  const rows: Array<[string, unknown]> = [];
+  const rows: Array<[string, { row: Record<string, unknown> }[]]> = [];
   for (const table of tables) {
     const result = await client.query(
       `SELECT to_jsonb(t) AS row FROM "${table}" t ORDER BY to_jsonb(t)::text`,
@@ -113,6 +113,8 @@ describe.skipIf(!enabled)("installation identity schema upgrade (PostgreSQL)", (
         "INSERT INTO deployment_settings (id, \"ownerUserId\", \"nativeAccountsOwnerKey\", \"nativeAccountsOrganizationId\", \"nativeAccountsWorkspaceClaimId\", \"nativeAccountsWorkspaceReceipt\", \"deploymentModelCredentialCipher\", \"updatedAt\") VALUES ('default', 'migration-owner', 'fictional-owner-proof', 'retained-central-organization', 'retained-claim', 'fictional-receipt-ciphertext', 'fictional-deployment-ciphertext', now())",
       );
       const before = await snapshot(owner);
+      // Existing Spaces stay server-owned when the nullable admission column is added.
+      for (const { row } of before.spaces!) row.admissionWorkspaceId = null;
       const oldJournal = (
         await owner.query(
           'SELECT migration_name, checksum FROM "_prisma_migrations" WHERE finished_at IS NOT NULL ORDER BY migration_name',

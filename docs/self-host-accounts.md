@@ -58,9 +58,10 @@ In the desktop app, choose **Install on your own server** to copy an install com
 for the selected organization. The desktop picker refreshes while you approve and
 start the server.
 
-Clean installations prepare the approver's initial workspace and acknowledge it to
-Accounts. After signing in to that server, create and switch workspaces from the left
-sidebar in Ork. Existing local data requires the explicit mapping described below.
+Clean installations prepare an initial workspace and acknowledge it to Accounts.
+Accounts applies the organization's access policy to the new entry. After signing in
+to that server, create and switch workspaces from the left sidebar in Ork. Existing
+local data requires the explicit mapping described below.
 
 For a remotely hosted server, publish its reachable HTTPS origin. Create a JSON file
 inside the API container, for example `/tmp/ork-routes.json`, containing:
