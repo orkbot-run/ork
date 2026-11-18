@@ -129,6 +129,9 @@ test("managed workspace settings show organization models and administration", a
   await expect(page.getByRole("region", { name: "Shared account", exact: true })).toContainText(
     "small-model",
   );
+  await expect(page.getByRole("region", { name: "Shared account", exact: true })).toContainText(
+    "large-model",
+  );
   await expect(
     page.getByRole("region", { name: "Organization connections", exact: true }),
   ).toBeVisible();
@@ -136,8 +139,9 @@ test("managed workspace settings show organization models and administration", a
   await captureScreenshot(page, testInfo, "installation-ai-accounts");
   await page
     .getByTestId("server-ai-ready")
-    .getByRole("button", { name: "Models", exact: true })
+    .getByRole("button", { name: "Edit models", exact: true })
     .click();
+  await expect(page.getByRole("dialog", { name: "Edit models · Shared account" })).toBeVisible();
   await expect(page.getByLabel("Monthly budget (USD)", { exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Remove existing model spending limit" }),

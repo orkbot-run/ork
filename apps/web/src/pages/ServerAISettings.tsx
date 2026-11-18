@@ -16,7 +16,7 @@ import {
   Switch,
 } from "@orkbot/ui-web";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { Pencil, Plus, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSpaceQueries } from "../lib/query";
@@ -350,73 +350,105 @@ export function ServerAISettings({
           value?.modelSetupMode !== "pending" &&
           value?.connections.map((row) => (
             <section
-              className="grid gap-3 border-b border-border pb-4"
+              className="grid gap-4 rounded-xl border border-border p-4"
               key={row.id}
               aria-label={row.label}
             >
-              <div>
-                <h3 className="text-sm font-medium">{row.label}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {row.state === "active" ? (row.defaultModelId ?? row.provider) : t`Reconnect`}
-                </p>
-              </div>
-              {value.canManageWorkspace ? (
-                <div className="grid gap-3">
-                  <Label className="flex items-center justify-between">
-                    <Trans>Enabled</Trans>
-                    <Switch
-                      checked={row.enabled}
-                      disabled={busy || (!row.enabled && row.state !== "active")}
-                      onCheckedChange={(enabled) => void configure(row, { enabled })}
-                    />
-                  </Label>
-                  <Label className="flex items-center justify-between">
-                    <Trans>Default</Trans>
-                    <Switch
-                      checked={row.enabled && row.isDefault}
-                      disabled={busy || !row.enabled || row.state !== "active"}
-                      onCheckedChange={(isDefault) => void configure(row, { isDefault })}
-                    />
-                  </Label>
-                  <Label className="flex items-center justify-between">
-                    <Trans>Fallback</Trans>
-                    <Switch
-                      checked={row.fallback}
-                      disabled={busy || !row.enabled || row.state !== "active"}
-                      onCheckedChange={(fallback) => void configure(row, { fallback })}
-                    />
-                  </Label>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="break-words text-sm font-medium">{row.label}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {row.state !== "active" ? t`Reconnect` : row.enabled ? t`Enabled` : t`Disabled`}
+                  </p>
                 </div>
-              ) : null}
-              {value.canManageWorkspace ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => setEditingAssignment(editingAssignment === row.id ? null : row.id)}
-                >
-                  <Trans>Models</Trans>
-                </Button>
-              ) : null}
+                {value.canManageWorkspace ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => setEditingAssignment(row.id)}
+                  >
+                    <Pencil aria-hidden="true" />
+                    <Trans>Edit models</Trans>
+                  </Button>
+                ) : null}
+              </div>
+              <ul className="grid gap-2" aria-label={t`Models`}>
+                {row.models.map((model) => (
+                  <li
+                    key={model}
+                    className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                  >
+                    <span className="min-w-0 break-all">{model}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {!row.allowedModels.includes(model)
+                        ? t`Unavailable`
+                        : model === row.defaultModelId && row.isDefault && row.enabled
+                          ? t`Default`
+                          : null}
+                    </span>
+                  </li>
+                ))}
+              </ul>
               {editingAssignment === row.id ? (
-                <WorkspaceAIAccountForm
-                  key={`${row.id}:${row.assignmentRevision}`}
-                  row={row}
-                  hideBudget
-                  busy={busy}
-                  onSave={(patch) => configure(row, patch)}
-                  onCancel={() => setEditingAssignment(null)}
-                />
-              ) : null}
-              {value.canManageWorkspace && !onboarding && row.monthlyBudgetMicros !== null ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void configure(row, { monthlyBudgetMicros: null })}
+                <Dialog
+                  open
+                  onOpenChange={(open) => {
+                    if (!open) setEditingAssignment(null);
+                  }}
                 >
-                  <Trans>Remove existing model spending limit</Trans>
-                </Button>
+                  <DialogContent className="rk-scroll max-h-[calc(100%-2rem)] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>
+                        <Trans>Edit models</Trans> · {row.label}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4">
+                      <Label className="flex items-center justify-between gap-4">
+                        <Trans>Enabled</Trans>
+                        <Switch
+                          checked={row.enabled}
+                          disabled={busy || (!row.enabled && row.state !== "active")}
+                          onCheckedChange={(enabled) => void configure(row, { enabled })}
+                        />
+                      </Label>
+                      <Label className="flex items-center justify-between gap-4">
+                        <Trans>Default</Trans>
+                        <Switch
+                          checked={row.enabled && row.isDefault}
+                          disabled={busy || !row.enabled || row.state !== "active"}
+                          onCheckedChange={(isDefault) => void configure(row, { isDefault })}
+                        />
+                      </Label>
+                      <Label className="flex items-center justify-between gap-4">
+                        <Trans>Fallback</Trans>
+                        <Switch
+                          checked={row.fallback}
+                          disabled={busy || !row.enabled || row.state !== "active"}
+                          onCheckedChange={(fallback) => void configure(row, { fallback })}
+                        />
+                      </Label>
+                      <WorkspaceAIAccountForm
+                        key={`${row.id}:${row.assignmentRevision}`}
+                        row={row}
+                        hideBudget
+                        busy={busy}
+                        onSave={(patch) => configure(row, patch)}
+                        onCancel={() => setEditingAssignment(null)}
+                      />
+                      {!onboarding && row.monthlyBudgetMicros !== null ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => void configure(row, { monthlyBudgetMicros: null })}
+                        >
+                          <Trans>Remove existing model spending limit</Trans>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </DialogContent>
+                </Dialog>
               ) : null}
             </section>
           ))}
@@ -456,146 +488,183 @@ export function ServerAISettings({
         value.modelSetupMode !== "pending" ? (
           <>
             <section className="grid gap-3" aria-label={t`Organization connections`}>
-              <h3 className="text-sm font-medium">
-                <Trans>Organization connections</Trans>
-              </h3>
-              {value.accounts.map((row) => (
-                <div className="grid gap-2 border-b border-border pb-3" key={row.id}>
-                  <span className="text-sm font-medium">{row.label}</span>
-                  {row.isDefault ? (
-                    <span className="text-sm text-muted-foreground">
-                      <Trans>Default</Trans>
-                      {row.defaultModelId ? ` · ${row.defaultModelId}` : ""}
-                    </span>
-                  ) : null}
-                  {!onboarding && row.monthlyBudgetMicros !== null ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() =>
-                        void action((signal) =>
-                          owner.client.serverAI.update(
-                            {
-                              connectionId: row.id,
-                              label: row.label,
-                              models: row.models,
-                              concurrencyLimit: row.concurrencyLimit,
-                              monthlyBudgetMicros: null,
-                            },
-                            { signal },
-                          ),
-                        )
-                      }
-                    >
-                      <Trans>Remove existing account spending limit</Trans>
-                    </Button>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    {!onboarding ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busy || !catalog.data}
-                        onClick={() => {
-                          setAdding(false);
-                          setEditingAccount(editingAccount === row.id ? null : row.id);
-                        }}
-                      >
-                        <Trans>Edit model connection</Trans>
-                      </Button>
-                    ) : null}
-                    {value.connections.some((assigned) => assigned.id === row.id) ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() =>
-                          void action((signal) =>
-                            owner.client.serverAI.offer(
-                              { spaceId: value.spaceId, connectionId: row.id, available: false },
-                              { signal },
-                            ),
-                          )
-                        }
-                      >
-                        <Trans>Remove from organization</Trans>
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={busy || row.state !== "active"}
-                        onClick={() =>
-                          void action((signal) =>
-                            owner.client.serverAI.offer(
-                              { spaceId: value.spaceId, connectionId: row.id, available: true },
-                              { signal },
-                            ),
-                          )
-                        }
-                      >
-                        <Trans>Make available to organization</Trans>
-                      </Button>
-                    )}
-                    {row.state !== "disabled" ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() =>
-                          void action((signal) =>
-                            owner.client.serverAI.disable({ connectionId: row.id }, { signal }),
-                          )
-                        }
-                      >
-                        <Trans>Disable connection</Trans>
-                      </Button>
-                    ) : null}
-                  </div>
+              <details className="rounded-xl border border-border p-4">
+                <summary className="cursor-pointer text-sm font-medium">
+                  <Trans>Organization connections</Trans>
+                </summary>
+                <div className="mt-4 grid gap-3">
+                  {value.accounts.map((row) => (
+                    <div className="grid gap-2 border-b border-border pb-3" key={row.id}>
+                      <span className="text-sm font-medium">{row.label}</span>
+                      {row.isDefault ? (
+                        <span className="text-sm text-muted-foreground">
+                          <Trans>Default</Trans>
+                          {row.defaultModelId ? ` · ${row.defaultModelId}` : ""}
+                        </span>
+                      ) : null}
+                      {!onboarding && row.monthlyBudgetMicros !== null ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() =>
+                            void action((signal) =>
+                              owner.client.serverAI.update(
+                                {
+                                  connectionId: row.id,
+                                  label: row.label,
+                                  models: row.models,
+                                  concurrencyLimit: row.concurrencyLimit,
+                                  monthlyBudgetMicros: null,
+                                },
+                                { signal },
+                              ),
+                            )
+                          }
+                        >
+                          <Trans>Remove existing account spending limit</Trans>
+                        </Button>
+                      ) : null}
+                      <div className="flex flex-wrap gap-2">
+                        {!onboarding ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={busy || !catalog.data}
+                            onClick={() => {
+                              setAdding(false);
+                              setEditingAccount(editingAccount === row.id ? null : row.id);
+                            }}
+                          >
+                            <Trans>Edit model connection</Trans>
+                          </Button>
+                        ) : null}
+                        {value.connections.some((assigned) => assigned.id === row.id) ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() =>
+                              void action((signal) =>
+                                owner.client.serverAI.offer(
+                                  {
+                                    spaceId: value.spaceId,
+                                    connectionId: row.id,
+                                    available: false,
+                                  },
+                                  { signal },
+                                ),
+                              )
+                            }
+                          >
+                            <Trans>Remove from organization</Trans>
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={busy || row.state !== "active"}
+                            onClick={() =>
+                              void action((signal) =>
+                                owner.client.serverAI.offer(
+                                  { spaceId: value.spaceId, connectionId: row.id, available: true },
+                                  { signal },
+                                ),
+                              )
+                            }
+                          >
+                            <Trans>Make available to organization</Trans>
+                          </Button>
+                        )}
+                        {row.state !== "disabled" ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() =>
+                              void action((signal) =>
+                                owner.client.serverAI.disable({ connectionId: row.id }, { signal }),
+                              )
+                            }
+                          >
+                            <Trans>Disable connection</Trans>
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              </details>
             </section>
             {!onboarding && editingAccount && catalog.data ? (
-              <ServerAIAccountForm
-                key={editingAccount}
-                account={value.accounts.find((row) => row.id === editingAccount)}
-                hideBudget
-                catalog={catalog.data}
-                client={owner.client}
-                isCurrent={owner.isCurrent}
-                onSaved={async () => {
-                  setEditingAccount(null);
-                  await refresh();
-                }}
-                onCancel={() => setEditingAccount(null)}
-              />
-            ) : null}
-            {adding && catalog.data ? (
-              <ServerAIAccountForm
-                setup
-                catalog={catalog.data}
-                hideBudget
-                client={owner.client}
-                isCurrent={owner.isCurrent}
-                onSaved={async () => {
-                  setAdding(false);
-                  await refresh();
-                }}
-                onCancel={() => setAdding(false)}
-              />
-            ) : (
-              <Button
-                variant="outline"
-                disabled={busy || !catalog.data}
-                onClick={() => {
-                  setEditingAccount(null);
-                  setAdding(true);
+              <Dialog
+                open
+                onOpenChange={(open) => {
+                  if (!open) setEditingAccount(null);
                 }}
               >
-                <Trans>Add model connection</Trans>
-              </Button>
-            )}
+                <DialogContent className="rk-scroll max-h-[calc(100%-2rem)] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>
+                      <Trans>Edit model connection</Trans>
+                    </DialogTitle>
+                  </DialogHeader>
+                  <ServerAIAccountForm
+                    key={editingAccount}
+                    account={value.accounts.find((row) => row.id === editingAccount)}
+                    hideBudget
+                    catalog={catalog.data}
+                    client={owner.client}
+                    isCurrent={owner.isCurrent}
+                    onSaved={async () => {
+                      setEditingAccount(null);
+                      await refresh();
+                    }}
+                    onCancel={() => setEditingAccount(null)}
+                  />
+                </DialogContent>
+              </Dialog>
+            ) : null}
+            {adding && catalog.data ? (
+              <Dialog
+                open
+                onOpenChange={(open) => {
+                  if (!open) setAdding(false);
+                }}
+              >
+                <DialogContent className="rk-scroll max-h-[calc(100%-2rem)] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>
+                      <Trans>Add model connection</Trans>
+                    </DialogTitle>
+                  </DialogHeader>
+                  <ServerAIAccountForm
+                    setup
+                    catalog={catalog.data}
+                    hideBudget
+                    client={owner.client}
+                    isCurrent={owner.isCurrent}
+                    onSaved={async () => {
+                      setAdding(false);
+                      await refresh();
+                    }}
+                    onCancel={() => setAdding(false)}
+                  />
+                </DialogContent>
+              </Dialog>
+            ) : null}
+            <Button
+              variant="outline"
+              className="justify-self-start"
+              disabled={busy || !catalog.data}
+              onClick={() => {
+                setEditingAccount(null);
+                setAdding(true);
+              }}
+            >
+              <Plus aria-hidden="true" />
+              <Trans>Add model connection</Trans>
+            </Button>
             {catalog.isError ? (
               <Button variant="outline" onClick={() => void catalog.refetch()}>
                 <Trans>Retry</Trans>
