@@ -9,6 +9,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-18
+
+### Added
+
+- Create an organization in the desktop setup and install Ork locally or copy a command for your own server. The server list refreshes automatically while setup is open.
+- Create and switch between workspaces from the desktop sidebar. Ork restores your last available chat in each workspace.
+
+### Changed
+
+- Pick a provider from the existing list. Ork opens the provider's sign-in immediately or asks for an API key and offers advanced options on demand.
+- The first working model connection becomes the default for the server. A workspace can choose its own default and additional allowed connections.
+
+### Fixed
+
+- Personal installations use their existing Accounts registration during first setup, so new users can proceed to chat.
+
+### Self-host upgrade notes
+
+- Update Accounts before upgrading the Ork server and desktop app. The upgrade retains existing workspace links, assignments, and model connections. See [Accounts and server setup](https://github.com/orkbot-run/ork/blob/main/docs/self-host-accounts.md).
+
 ## [1.6.0] - 2026-11-17
 
 ### Security
