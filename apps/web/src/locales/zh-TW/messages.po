@@ -675,12 +675,18 @@ msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Advanced"
 msgstr "進階"
+
+#: src/pages/SpaceSettingOverrides.tsx
+msgid "Advanced models"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
@@ -1450,6 +1456,7 @@ msgstr "選擇模型"
 msgid "Choose a new password"
 msgstr "設定新密碼"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
@@ -1476,7 +1483,6 @@ msgstr "選擇檔案"
 msgid "Choose folder"
 msgstr "選擇資料夾"
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Choose how people in your organization will connect models."
 msgstr ""
@@ -1765,6 +1771,8 @@ msgstr "請確認此瀏覽器工作階段可以存取該 URL，然後重新測�
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/model-settings/role-model-picker.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1816,7 +1824,6 @@ msgstr "連接自己的服務"
 msgid "Connect OAuth"
 msgstr "連線 OAuth"
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Connect organization models"
 msgstr ""
@@ -1902,7 +1909,6 @@ msgstr "上下文長度限制"
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Continue"
@@ -2465,10 +2471,6 @@ msgstr "無法儲存此選擇"
 msgid "Could not save your server."
 msgstr "無法儲存你的伺服器。"
 
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Could not save. Try again."
-msgstr ""
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "無法搜尋目錄"
@@ -2624,6 +2626,10 @@ msgstr "建立例行任務"
 #: src/pages/shell/dialogs.tsx
 msgid "Create space"
 msgstr "建立空間"
+
+#: src/pages/shell/workspace-rail.tsx
+msgid "Create workspace"
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Create your Ork"
@@ -3897,7 +3903,6 @@ msgstr "退出"
 msgid "Let bots use this computer"
 msgstr ""
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Let people connect their own models"
 msgstr ""
@@ -5124,7 +5129,6 @@ msgstr "個人模型"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Personal models may process workspace data outside company servers."
 msgstr ""
@@ -7292,6 +7296,10 @@ msgstr "使用 Ork 額度"
 msgid "Use Protected input for passwords."
 msgstr "輸入密碼時，請使用受保護的輸入。"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Use server default"
+msgstr ""
+
 #: src/pages/model-settings/space-bots-model.tsx
 msgid "Use space default"
 msgstr "使用空間預設模型"
@@ -7398,7 +7406,6 @@ msgstr ""
 msgid "Wait a moment and test again."
 msgstr "請稍候並重新測試。"
 
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Waiting for an organization administrator to set up models."
@@ -7575,6 +7582,10 @@ msgstr ""
 msgid "Workspace monthly budget (USD)"
 msgstr "工作區每月預算（美元）"
 
+#: src/pages/shell/workspace-rail.tsx
+msgid "Workspaces"
+msgstr ""
+
 #: src/lib/billing.ts
 msgid "year"
 msgstr "年"
@@ -7672,10 +7683,6 @@ msgstr "你的 OpenRouter"
 #: src/pages/Onboarding.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Your organization allows personal models."
-msgstr ""
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Your organization manages the models used in this workspace."
 msgstr ""
 
 #: src/pages/onboarding/managed-model-setup.tsx

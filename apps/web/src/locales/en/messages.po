@@ -674,12 +674,18 @@ msgstr "Administrator access could not be verified. Sign in again or check the s
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Advanced"
 msgstr "Advanced"
+
+#: src/pages/SpaceSettingOverrides.tsx
+msgid "Advanced models"
+msgstr "Advanced models"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
@@ -1449,6 +1455,7 @@ msgstr "Choose a model"
 msgid "Choose a new password"
 msgstr "Choose a new password"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
@@ -1475,7 +1482,6 @@ msgstr "Choose file"
 msgid "Choose folder"
 msgstr "Choose folder"
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Choose how people in your organization will connect models."
 msgstr "Choose how people in your organization will connect models."
@@ -1764,6 +1770,8 @@ msgstr "Confirm the URL is reachable from this browser session, then test again.
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/model-settings/role-model-picker.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1815,7 +1823,6 @@ msgstr "Connect my own"
 msgid "Connect OAuth"
 msgstr "Connect OAuth"
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Connect organization models"
 msgstr "Connect organization models"
@@ -1901,7 +1908,6 @@ msgstr "Context limit"
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Continue"
@@ -2464,10 +2470,6 @@ msgstr "Could not save this choice"
 msgid "Could not save your server."
 msgstr "Could not save your server."
 
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Could not save. Try again."
-msgstr "Could not save. Try again."
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "Could not search catalog"
@@ -2623,6 +2625,10 @@ msgstr "Create Routine"
 #: src/pages/shell/dialogs.tsx
 msgid "Create space"
 msgstr "Create space"
+
+#: src/pages/shell/workspace-rail.tsx
+msgid "Create workspace"
+msgstr "Create workspace"
 
 #: src/pages/Auth.tsx
 msgid "Create your Ork"
@@ -3896,7 +3902,6 @@ msgstr "Leave"
 msgid "Let bots use this computer"
 msgstr "Let bots use this computer"
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Let people connect their own models"
 msgstr "Let people connect their own models"
@@ -5123,7 +5128,6 @@ msgstr "Personal models"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Personal models may process workspace data outside company servers."
 msgstr "Personal models may process workspace data outside company servers."
@@ -7291,6 +7295,10 @@ msgstr "Use Ork credits"
 msgid "Use Protected input for passwords."
 msgstr "Use Protected input for passwords."
 
+#: src/pages/ServerAISettings.tsx
+msgid "Use server default"
+msgstr "Use server default"
+
 #: src/pages/model-settings/space-bots-model.tsx
 msgid "Use space default"
 msgstr "Use space default"
@@ -7397,7 +7405,6 @@ msgstr "Voice request timed out."
 msgid "Wait a moment and test again."
 msgstr "Wait a moment and test again."
 
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Waiting for an organization administrator to set up models."
@@ -7574,6 +7581,10 @@ msgstr "Workspace model"
 msgid "Workspace monthly budget (USD)"
 msgstr "Workspace monthly budget (USD)"
 
+#: src/pages/shell/workspace-rail.tsx
+msgid "Workspaces"
+msgstr "Workspaces"
+
 #: src/lib/billing.ts
 msgid "year"
 msgstr "year"
@@ -7673,10 +7684,6 @@ msgstr "Your OpenRouter"
 msgid "Your organization allows personal models."
 msgstr "Your organization allows personal models."
 
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Your organization manages the models used in this workspace."
-msgstr "Your organization manages the models used in this workspace."
-
 #: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Your organization role could not be verified. Check that Accounts and this server are up to date."
@@ -7726,15 +7733,3 @@ msgstr "Your voice provider key was rejected."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "ZIP or postal code"
-
-msgid "Workspaces"
-msgstr "Workspaces"
-
-msgid "Create workspace"
-msgstr "Create workspace"
-
-msgid "Advanced models"
-msgstr "Advanced models"
-
-msgid "Use server default"
-msgstr "Use server default"
