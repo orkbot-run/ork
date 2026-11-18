@@ -1,6 +1,7 @@
 import type { MessageBlock } from "@orkbot/contracts";
 import type { ActionApprovalRule } from "@orkbot/core";
 import {
+  botMessageContext,
   connectorKindFromToolName,
   inboundRoutinePrompts,
   SITE_SENDING_TOOLS,
@@ -56,7 +57,7 @@ export function connectorTrustKeys(
 export function createRunTrustLoaders(
   deps: ExecutorDeps,
   input: {
-    run: { userId: string; spaceId: string; trigger: string };
+    run: { userId: string; spaceId: string; trigger: string; sourceMessageId?: string | null };
     runId: string;
     botId: string;
     taskPrompt: string;
@@ -151,6 +152,53 @@ export function createRunTrustLoaders(
       });
     return trustedSitesPromise;
   };
+  let delegatedFetchSites: Promise<Set<string>> | undefined;
+  const loadDelegatedFetchSites = () =>
+    (delegatedFetchSites ??= (async () => {
+      if (run.trigger !== "bot_message" || messagingChannelRun) return new Set<string>();
+      const source =
+        sourceMessage ??
+        (run.sourceMessageId
+          ? await deps.prisma.message.findUnique({
+              where: { id: run.sourceMessageId },
+              select: { blocks: true },
+            })
+          : null);
+      const delegation = botMessageContext((source?.blocks ?? []) as MessageBlock[]);
+      if (!delegation?.returnToMessageId || (delegation.intent ?? "request") !== "request")
+        return new Set<string>();
+      const sent = await deps.prisma.message.findFirst({
+        where: { id: delegation.returnToMessageId, role: "bot", botId: delegation.fromBotId },
+        select: { runId: true, blocks: true },
+      });
+      if (
+        !sent?.runId ||
+        !(sent.blocks as MessageBlock[]).some(
+          (block) =>
+            block.kind === "bot_message_sent" &&
+            block.toBotId === botId &&
+            block.text === delegation.text,
+        )
+      )
+        return new Set<string>();
+      const parent = await deps.prisma.run.findFirst({
+        where: {
+          id: sent.runId,
+          spaceId: run.spaceId,
+          userId: run.userId,
+          botId: delegation.fromBotId,
+          trigger: { in: ["user", "follow_up"] },
+        },
+        select: { sourceMessage: { select: { role: true, blocks: true } } },
+      });
+      if (parent?.sourceMessage?.role !== "user") return new Set<string>();
+      const ownerSites = sitesInText(
+        (parent.sourceMessage.blocks as MessageBlock[])
+          .flatMap((block) => (block.kind === "text" ? [block.text] : []))
+          .join("\n"),
+      );
+      return new Set([...sitesInText(delegation.text)].filter((site) => ownerSites.has(site)));
+    })());
   const routineNamesNewSite = async (prompt: string) => {
     const trusted = await loadTrustedSites();
     const rules = await loadApprovalRules();
@@ -207,6 +255,7 @@ export function createRunTrustLoaders(
     loadAutoReviewPreference,
     loadOwnerWords,
     loadTrustedSites,
+    loadDelegatedFetchSites,
     routineNamesNewSite,
     loadTrustedConnectors,
     receivedOutsideMessage,

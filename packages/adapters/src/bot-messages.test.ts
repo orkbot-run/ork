@@ -10,6 +10,7 @@ import {
   currentBotMessageHop,
   loadBotMessageContext,
   messageBot,
+  peerRunHistory,
   returnBotMessageOutcome,
 } from "./bot-messages.js";
 import type { ExecutorDeps } from "./executor-deps.js";
@@ -275,40 +276,47 @@ describe("messaging another bot", () => {
     expect(harness.tx.run.create).not.toHaveBeenCalled();
   });
 
-  it("allows a final result back through after the request hop limit", async () => {
-    const harness = deps({
-      hopBlocks: [
-        {
-          kind: "bot_message_received",
-          fromBotId: "bot-target",
-          fromBotName: "Analyst",
-          text: "please finish",
-          hop: 6,
-          intent: "request",
-          returnToMessageId: "message-request",
-        },
-      ],
-    });
-    const sent = await messageBot(
-      harness.deps,
-      { ...run, sourceMessageId: "message-source" },
-      sender,
-      { bot_id: "bot-target", message: "finished", intent: "result" },
-      { allowTerminalSource: true },
-    );
-    expect(sent.ok).toBe(true);
-    expect(
-      harness.tx.$queryRaw.mock.calls.filter(([query]) => String(query).includes("FOR UPDATE")),
-    ).toHaveLength(2);
-    expect(harness.tx.message.create).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          replyToMessageId: "message-request",
-          blocks: expect.arrayContaining([expect.objectContaining({ intent: "result" })]),
+  it.each([
+    ["result", true],
+    ["status", true],
+    ["result", false],
+  ] as const)(
+    "returns a linked %s without consuming another hop (automatic: %s)",
+    async (intent, automatic) => {
+      const harness = deps({
+        hopBlocks: [
+          {
+            kind: "bot_message_received",
+            fromBotId: "bot-target",
+            fromBotName: "Analyst",
+            text: "please finish",
+            hop: 6,
+            intent: "request",
+            returnToMessageId: "message-request",
+          },
+        ],
+      });
+      const sent = await messageBot(
+        harness.deps,
+        { ...run, sourceMessageId: "message-source" },
+        sender,
+        { bot_id: "bot-target", message: "finished", intent },
+        { allowTerminalSource: automatic },
+      );
+      expect(sent.ok).toBe(true);
+      expect(
+        harness.tx.$queryRaw.mock.calls.filter(([query]) => String(query).includes("FOR UPDATE")),
+      ).toHaveLength(2);
+      expect(harness.tx.message.create).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            replyToMessageId: "message-request",
+            blocks: expect.arrayContaining([expect.objectContaining({ intent, hop: 6 })]),
+          }),
         }),
-      }),
-    );
-  });
+      );
+    },
+  );
 
   it("does not inherit a request reply link when messaging another bot", async () => {
     const harness = deps({
@@ -654,6 +662,178 @@ describe("hardening", () => {
       timeout: 20_000,
     });
     expect(harness.enqueue).toHaveBeenCalledOnce();
+  });
+});
+
+describe("delegation batch context", () => {
+  function batchContext(intent: "result" | "status", terminalStatus = false) {
+    const sent = (id: string, name: string) => ({
+      id,
+      blocks: [{ kind: "bot_message_sent", toBotId: id, toBotName: name, intent: "request" }],
+    });
+    const received = (id: string, replyIntent: string, nonce: string | null = null) => ({
+      replyToMessageId: id,
+      clientNonce: nonce,
+      blocks: [{ kind: "bot_message_received", fromBotId: id, intent: replyIntent }],
+    });
+    const findMany = vi
+      .fn()
+      .mockResolvedValueOnce([sent("a", "Alpha"), sent("b", "Beta")])
+      .mockResolvedValueOnce([
+        received("a", "status"),
+        received("b", intent, terminalStatus ? "bot-message:auto-outcome:run-b" : null),
+      ]);
+    const findUnique = vi.fn().mockResolvedValue({
+      threadId: "coordinator-thread",
+      seq: 12,
+      blocks: [{ kind: "bot_message_received", fromBotId: "b", intent }],
+      replyTo: {
+        id: "b",
+        threadId: "coordinator-thread",
+        runId: "batch-run",
+        blocks: sent("b", "Beta").blocks,
+      },
+    });
+    const findDispatches = vi.fn().mockResolvedValue([{ id: "batch-run" }]);
+    const prisma = {
+      message: { findUnique, findMany },
+      $queryRaw: findDispatches,
+    } as unknown as PrismaClient;
+    const load = () => loadBotMessageContext(prisma, "incoming", { includeDelegationBatch: true });
+    return { load, findMany, findDispatches, received, sent };
+  }
+
+  it("uses one originating run and the incoming sequence, keeping interim status pending", async () => {
+    const h = batchContext("result");
+    const context = await h.load();
+    expect(context?.sourceSeq).toBe(12);
+    expect(h.findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: { threadId: "coordinator-thread", runId: { in: ["batch-run"] }, role: "bot" },
+      }),
+    );
+    expect(h.findMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: {
+          threadId: "coordinator-thread",
+          replyToMessageId: { in: ["a", "b"] },
+          seq: { lte: 12 },
+        },
+      }),
+    );
+    expect(context?.delegationBatchPrompt).toContain(
+      '"completed":1,"total":2,"pending":["Alpha"],"allFinished":false',
+    );
+  });
+
+  it.each([false, true])(
+    "only counts automatic terminal status as finished (%s)",
+    async (terminal) => {
+      const h = batchContext("status", terminal);
+      const context = await h.load();
+      expect(context?.delegationBatchPrompt).toContain(`"completed":${terminal ? 1 : 0}`);
+      expect(context?.delegationBatchPrompt).toContain('"allFinished":false');
+    },
+  );
+
+  it("confirms completion only after all linked assignments have terminal returns", async () => {
+    const h = batchContext("result");
+    h.findMany
+      .mockReset()
+      .mockResolvedValueOnce([
+        {
+          id: "b",
+          blocks: [
+            { kind: "bot_message_sent", toBotId: "b", toBotName: "Beta", intent: "request" },
+          ],
+        },
+      ])
+      .mockResolvedValueOnce([h.received("b", "result")]);
+    const context = await h.load();
+    expect(context?.delegationBatchPrompt).toContain(
+      '"completed":1,"total":1,"pending":[],"allFinished":true',
+    );
+    expect(context?.delegationBatchPrompt).toContain(
+      "This state covers assignments already sent, including retries",
+    );
+  });
+
+  it("keeps an original sibling pending after receiving a retry from the same bot", async () => {
+    const h = batchContext("result");
+    h.findDispatches.mockResolvedValueOnce([{ id: "original" }, { id: "batch-run" }]);
+    h.findMany
+      .mockReset()
+      .mockResolvedValueOnce([
+        { ...h.sent("b", "Beta"), id: "b-first" },
+        h.sent("a", "Alpha"),
+        h.sent("b", "Beta"),
+      ])
+      .mockResolvedValueOnce([
+        { ...h.received("b", "result"), replyToMessageId: "b-first" },
+        h.received("b", "result"),
+      ]);
+    expect((await h.load())?.delegationBatchPrompt).toContain(
+      '"completed":2,"total":3,"pending":["Alpha"],"allFinished":false',
+    );
+    expect(h.findMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: {
+          threadId: "coordinator-thread",
+          runId: { in: ["original", "batch-run"] },
+          role: "bot",
+        },
+      }),
+    );
+  });
+
+  it("omits batch claims when the originating request is missing", async () => {
+    const h = batchContext("result");
+    h.findMany.mockReset().mockResolvedValueOnce([]);
+    expect((await h.load())?.delegationBatchPrompt).toBeUndefined();
+    expect(h.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not infer completion while more requests can still be dispatched", async () => {
+    const h = batchContext("result");
+    h.findDispatches.mockResolvedValueOnce([]);
+    expect((await h.load())?.delegationBatchPrompt).toBeUndefined();
+    expect(h.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("peer run history", () => {
+  const ordinaryTurn = (seq: number, role: string) => ({
+    seq,
+    role,
+    blocks: [{ kind: "text", text: "Chat message" }],
+  });
+  const peerResult = (seq: number) => ({
+    seq,
+    role: "user",
+    blocks: [{ kind: "bot_message_received", intent: "result", text: "A worker result" }],
+  });
+
+  it("leaves later peer results for their own runs and keeps prior coordinator updates", () => {
+    const messages = [
+      ordinaryTurn(1, "user"),
+      peerResult(2),
+      peerResult(3),
+      peerResult(4),
+      ordinaryTurn(5, "bot"),
+      ordinaryTurn(6, "user"),
+    ];
+
+    expect(peerRunHistory(messages, 3)).toEqual([
+      messages[0],
+      messages[1],
+      messages[2],
+      messages[4],
+      messages[5],
+    ]);
+    expect(peerRunHistory(messages, undefined)).toBe(messages);
   });
 });
 

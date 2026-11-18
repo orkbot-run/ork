@@ -59,3 +59,64 @@ describe("connectorTrustKeys", () => {
     ).toEqual(["resource:mcp:server-a"]);
   });
 });
+
+it.each(["user", "bot"])(
+  "inherits public-site choices only from the person's %s message",
+  async (role) => {
+    const text = "Check https://example.org/about and https://untrusted.test/next.";
+    const findSent = vi.fn(async () => ({
+      runId: "parent-run",
+      blocks: [{ kind: "bot_message_sent", toBotId: "worker", text }],
+    }));
+    const findParent = vi.fn(async () => ({
+      sourceMessage: {
+        role,
+        blocks: [{ kind: "text", text: "Delegate a check of https://example.org/about." }],
+      },
+    }));
+    const deps = {
+      prisma: { message: { findFirst: findSent }, run: { findFirst: findParent } },
+    } as unknown as ExecutorDeps;
+    const trust = createRunTrustLoaders(deps, {
+      run: { userId: "owner", spaceId: "space", trigger: "bot_message" },
+      runId: "worker-run",
+      botId: "worker",
+      taskPrompt: text,
+      ownerStartedRun: false,
+      messagingChannelRun: false,
+      sourceMessage: {
+        role: "user",
+        blocks: [
+          {
+            kind: "bot_message_received",
+            fromBotId: "coordinator",
+            returnToMessageId: "outbound",
+            intent: "request",
+            text,
+          },
+        ],
+      },
+      connectedPlugins: [],
+    });
+
+    expect([...(await trust.loadDelegatedFetchSites())]).toEqual(
+      role === "user" ? ["example.org"] : [],
+    );
+    expect(findSent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "outbound", role: "bot", botId: "coordinator" },
+      }),
+    );
+    expect(findParent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "parent-run",
+          userId: "owner",
+          spaceId: "space",
+          botId: "coordinator",
+          trigger: { in: ["user", "follow_up"] },
+        },
+      }),
+    );
+  },
+);

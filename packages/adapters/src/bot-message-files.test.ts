@@ -377,9 +377,15 @@ describe("bounded bot file preparation", () => {
       },
     ];
     const receiving = { ...run, botId: "receiver", threadId: "target" };
-    expect(
-      await delegatedFilesInstruction(f.deps, receiving, f.computerSnapshot, blocks),
-    ).toContain('"/bots/sender/report.txt"');
+    const instructions = await delegatedFilesInstruction(
+      f.deps,
+      receiving,
+      f.computerSnapshot,
+      blocks,
+    );
+    expect(instructions).toContain('"/bots/sender/report.txt"');
+    expect(instructions).toContain("Pass these paths exactly to read_file or attach_file");
+    expect(instructions).toContain("call attach_file directly with the path listed here");
     expect(f.prisma.bot.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({

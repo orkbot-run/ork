@@ -23,14 +23,13 @@ export function narrationStatusLine(text: string): string {
 
 /**
  * How a message the person sends while the bot works reaches the model: it knows the message
- * came mid-task. The answer goes through message_user, because a plain-text answer ends the
- * turn and the task with it; without that tool it is only asked to take the message into account.
+ * came mid-task. A brief answer or acknowledgement can go through message_user while work continues.
  */
 export function midTaskMessagePrompt(text: string, canMessageUser: boolean): string {
   const next = canMessageUser
-    ? "If it asks something or changes the plan, answer briefly with message_user, then continue the task."
-    : "Take it into account and continue the task.";
-  return `The person sent this while you were working:\n\n${text}\n\n${next}`;
+    ? " Use message_user to answer a quick question or briefly acknowledge the new instructions while you work."
+    : "";
+  return `The person sent this while you were working:\n\n${text}\n\nApply any changes to the current task. If they added another task, do it before ending, in the order they requested.${next}`;
 }
 
 const MID_TASK_SOURCES = {

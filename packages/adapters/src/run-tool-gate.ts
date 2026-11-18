@@ -216,7 +216,10 @@ export async function gateToolCall(
           trusted:
             ctx.trust.searchResultUrls.has(fetchUrl) ||
             (name === "web_fetch" && ORKBOT_DOCS_URLS.includes(fetchUrl)) ||
-            (await ctx.trust.loadTrustedSites()).has(fetchSite),
+            (await ctx.trust.loadTrustedSites()).has(fetchSite) ||
+            (name === "web_fetch" &&
+              !new URL(fetchUrl).search &&
+              (await ctx.trust.loadDelegatedFetchSites()).has(fetchSite)),
           rules: await ctx.trust.loadApprovalRules(),
         })
       : "allow";
@@ -533,6 +536,27 @@ export async function gateToolCall(
   }
 
   const needsApproval = gateDecision === "ask";
+  if (
+    needsApproval &&
+    run.trigger === "bot_message" &&
+    name === "web_fetch" &&
+    siteGate === "new" &&
+    approvalResolved.decision !== "ask" &&
+    !requiresMandatoryApproval &&
+    applied?.effect.status === "intended"
+  ) {
+    // A worker can keep researching without sending data to the proposed
+    // destination or making the coordinator wait for a hidden approval card.
+    const result = {
+      error:
+        "This URL was not fetched. Continue the research with an exact URL from web_search or another trusted public source.",
+    };
+    await deps.prisma.externalEffect.updateMany({
+      where: { id: applied.effect.id, status: "intended" },
+      data: { status: "denied", result },
+    });
+    return { result };
+  }
   if (needsApproval && run.trigger === "background_helper") {
     return {
       result: { error: "This action needs approval and cannot run in a background helper." },

@@ -453,7 +453,8 @@ function toAgentTool(
     // so a sibling request cannot start after one pauses for its card and share its answer.
     ...(SCHEDULE_TOOL_NAMES.has(tool.name) ||
     tool.name === "remember" ||
-    tool.name === "request_secret"
+    tool.name === "request_secret" ||
+    tool.name === "spawn_bot"
       ? { executionMode: "sequential" as const }
       : {}),
     parameters: parametersFor(tool),
@@ -545,7 +546,7 @@ function toAgentTool(
           description: raw.description ? String(raw.description) : "",
           instructions: raw.instructions ? String(raw.instructions) : "",
           prompt: raw.prompt ? String(raw.prompt) : "",
-          computer_mode: raw.computer_mode ? String(raw.computer_mode) : "",
+          ...(raw.computer_mode ? { computer_mode: String(raw.computer_mode) } : {}),
         };
       }
       if (tool.name === "update_bot" || FLEET_TOOL_NAMES.some((name) => name === tool.name)) {

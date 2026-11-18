@@ -449,5 +449,9 @@ export async function delegatedFilesInstruction(
   } catch {
     return "The delegated file references are invalid.";
   }
-  return `Files shared on this computer (use these workspace-root paths):\n${paths.map((item) => `- ${JSON.stringify(`/${item}`)}`).join("\n")}`;
+  return [
+    "Files shared on this computer:",
+    ...paths.map((item) => `- ${JSON.stringify(`/${item}`)}`),
+    "Pass these paths exactly to read_file or attach_file. They start at the workspace root; paths quoted in the sender's message may refer to a different directory. To give the user a download, call attach_file directly with the path listed here.",
+  ].join("\n");
 }

@@ -151,7 +151,10 @@ function webLookupClause(disabled?: ReadonlySet<string>): string | undefined {
   const search = builtinOffered(disabled, "web_search");
   const fetch = builtinOffered(disabled, "web_fetch");
   if (search && fetch) {
-    return "Use web_search and web_fetch to look something up or read a page without a computer.";
+    return [
+      "Use web_search and web_fetch to look something up or read a page without a computer.",
+      "Pass the exact URL returned by web_search to web_fetch. If a public URL is unavailable, continue with another search result.",
+    ].join(" ");
   }
   if (search) return "Use web_search to look something up without a computer.";
   if (fetch) return "Use web_fetch to read a page without a computer.";
@@ -242,7 +245,7 @@ const FOLLOW_UP_INSTRUCTION =
 function spawnBotClause(disabled?: ReadonlySet<string>): string | undefined {
   if (!builtinOffered(disabled, "spawn_bot")) return undefined;
   const demo = builtinOffered(disabled, "run_subagent") ? " Do not run_subagent to demo it." : "";
-  return `spawn_bot creates a lasting regular bot (own chat, computer, memory) that appears in the user's bot list. If the user asked to create a bot, call spawn_bot once and stop.${demo}`;
+  return `spawn_bot creates a lasting regular bot (own chat, computer, memory) that appears in the user's bot list. When the user asks to create bots, call spawn_bot directly once per requested bot. Count successful creations, report any actual error, and continue any remaining requested work.${demo}`;
 }
 
 /** The fleet rules, naming only the tools the run was offered; none without a write tool. */

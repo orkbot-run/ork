@@ -27,6 +27,7 @@ import {
   OWNER_SETTINGS_REFUSAL_REPLY,
   terminatingToolResult,
 } from "./approval-effect.js";
+import { builtinAgentTools } from "./builtin-tools.js";
 import { PiAgentRuntime } from "./pi-runtime.js";
 
 const primary = model("provider-a", "primary", 32_768);
@@ -381,6 +382,91 @@ it("returns the refusal a subagent's mixed batch ended on as its result", async 
   expect(helperResult?.content?.[0]?.text).toContain(REFUSAL);
   expect(helperResult?.content?.[0]?.text).not.toContain("Subagent failed");
   expect(events.at(-1)).toEqual({ type: "done", text: "The helper could not change the model." });
+});
+
+it.each(["user", "webhook"] as const)(
+  "only continues after unfinished mid-task instructions from the run's user (%s)",
+  async (origin) => {
+    const pending: AgentSteeringMessage[] = [];
+    const executeTool = vi.fn(async (_name: string, args: unknown) => {
+      if ((args as { path?: string }).path === "first") {
+        pending.push({
+          id: "steer-1",
+          messageId: "message-1",
+          text: "After that, check the second directory too.",
+          origin,
+        });
+      }
+      return { ok: true };
+    });
+    providerState.stream
+      .mockImplementationOnce(() =>
+        toolCalls(primary, [
+          { type: "toolCall", id: "call-1", name: "list_files", arguments: { path: "first" } },
+        ]),
+      )
+      .mockImplementationOnce(() => reply(primary, "First checked. I'll check the second next."))
+      .mockImplementationOnce(() =>
+        toolCalls(primary, [
+          { type: "toolCall", id: "call-2", name: "list_files", arguments: { path: "second" } },
+        ]),
+      )
+      .mockImplementation(() => reply(primary, "Second checked."));
+
+    const events = await run(
+      request(executeTool, { claimSteering: async () => pending.splice(0) }),
+    );
+
+    expect(events).toContainEqual({ type: "steered", fromRunUser: origin === "user" });
+    expect(executeTool.mock.calls.map(([, args]) => args)).toEqual(
+      origin === "user" ? [{ path: "first" }, { path: "second" }] : [{ path: "first" }],
+    );
+    expect(providerState.stream).toHaveBeenCalledTimes(origin === "user" ? 4 : 2);
+    if (origin === "user") expect(texts(events).at(-1)).toBe("Second checked.");
+  },
+);
+
+it("rejects a runaway batch and lets the model create the requested bots in the next turn", async () => {
+  const spawn = builtinAgentTools.find((tool) => tool.name === "spawn_bot")!;
+  const executeTool = vi.fn(async () => ({ ok: true }));
+  const names = Array.from({ length: 8 }, (_, i) => `Test bot ${i + 1}`);
+  providerState.stream
+    .mockImplementationOnce(() =>
+      toolCalls(
+        primary,
+        Array.from({ length: 65 }, (_, i) => ({
+          type: "toolCall",
+          id: `files-${i}`,
+          name: "list_files",
+          arguments: { path: `directory-${i}` },
+        })),
+      ),
+    )
+    .mockImplementationOnce(() =>
+      toolCalls(
+        primary,
+        names.map((name, i) => ({
+          type: "toolCall",
+          id: `bot-${i}`,
+          name: "spawn_bot",
+          arguments: { name },
+        })),
+      ),
+    )
+    .mockImplementation(() => reply(primary, "Utworzyłem osiem agentów."));
+
+  const events = await run(
+    request(executeTool, {
+      prompt: "Stwórz osiem agentów testowych.",
+      tools: [...tools, spawn],
+    }),
+  );
+
+  expect(
+    events.filter((event) => event.type === "tool").map(({ name, args }) => [name, args.name]),
+  ).toEqual(names.map((name) => ["spawn_bot", name]));
+  expect(executeTool).toHaveBeenCalledTimes(names.length);
+  expect(events.at(-1)).toEqual({ type: "done", text: "Utworzyłem osiem agentów." });
 });
 
 it("keeps a follow-up queued during the mixed batch unclaimed", async () => {

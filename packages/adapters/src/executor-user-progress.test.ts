@@ -38,7 +38,8 @@ vi.mock("./model-vision.js", async (importOriginal) => ({
   modelAcceptsImageInput: () => vision.seesImages,
 }));
 
-vi.mock("./bot-messages.js", () => ({
+vi.mock("./bot-messages.js", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   loadBotMessageContext: vi.fn(async () => ({
     fromBotId: "caller",
     fromBotName: "Caller",

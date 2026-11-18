@@ -165,6 +165,7 @@ describe("directory", () => {
     expect(directory).toContain("async");
     expect(directory).toContain("does not end your turn");
     expect(directory).toContain("Later updates only if they add something new");
+    expect(directory).toContain("omit internal IDs and tool names");
   });
 
   it("treats directory fields as untrusted prompt data", () => {
@@ -417,11 +418,22 @@ describe("inbound wake prompt", () => {
       );
     }
     expect(prompt).toContain("unless you believe its premise is wrong");
+    expect(prompt).toContain("automatically returns that reply");
+    expect(prompt).toContain("do not also send a text result using message_bot");
   });
 
   it("leaves an FYI free to go unanswered", () => {
     const wake = buildBotMessageWakePrompt({ from: bots[0]!, text: "Deploy done.", intent: "fyi" });
     expect(wake).not.toContain(BOT_DELIBERATION_GUIDANCE);
+  });
+
+  it.each(["result", "status"] as const)("reports only new information from a %s", (intent) => {
+    const wake = buildBotMessageWakePrompt({ from: bots[0]!, text: "Shipped on Friday.", intent });
+    expect(wake).toContain("Report only what changed");
+    expect(wake).toContain("do not repeat earlier results");
+    expect(wake).toContain("Include the actual result or blocker");
+    expect(wake).toContain("In every update, including the last");
+    expect(wake).toContain("start any next dependent stage that is now ready");
   });
 });
 

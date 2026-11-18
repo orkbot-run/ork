@@ -2877,6 +2877,35 @@ describe("outbound destinations", () => {
     });
   });
 
+  it("keeps a delegated research run moving when a proposed page needs approval", async () => {
+    const f = fixture({ builtin: true, trigger: "bot_message" });
+    f.web.searchHits = [{ title: "Public source", url: "https://found.test/article", snippet: "" }];
+    f.setCalls([
+      { name: "web_fetch", args: { url: "https://unknown.test/guide" }, executionId: "call-1" },
+      { name: "web_search", args: { query: "public source" }, executionId: "call-2" },
+      { name: "web_fetch", args: { url: "https://found.test/article" }, executionId: "call-3" },
+    ]);
+    await f.run();
+    expect(f.pauseRunForInput).not.toHaveBeenCalled();
+    expect(f.results[0]).toEqual({ error: expect.stringContaining("exact URL from web_search") });
+    expect(f.fetchedUrls).toEqual(["https://found.test/article"]);
+  });
+
+  it("honors an explicit site policy on a delegated public fetch", async () => {
+    const f = fixture({
+      builtin: true,
+      trigger: "bot_message",
+      rules: [{ effect: "require_approval", matchKind: "site", matchValue: "example.com" }],
+    });
+    f.setCalls([
+      { name: "web_fetch", args: { url: "https://example.com/guide" }, executionId: "call-1" },
+    ]);
+
+    await f.run();
+    expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+    expect(f.fetchedUrls).toEqual([]);
+  });
+
   it("fetches an always-allowed site in a webhook run", async () => {
     const f = fixture({
       builtin: true,

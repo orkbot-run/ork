@@ -52,6 +52,7 @@ describe("built-in tool bridge", () => {
       "search_history",
       "shell",
       "skill_read",
+      "spawn_bot",
       "update_bot",
       "update_preferences",
       "use_tool",
@@ -62,7 +63,7 @@ describe("built-in tool bridge", () => {
     // request_secret carries the card and contact kinds; update_bot carries instructions paging;
     // the history tools point at files from earlier messages; a watch says it takes no other timing;
     // read_file takes a line range; ask_user carries bounded proposal detail; history can find tool work.
-    expect(definitionBytes(listed)).toBeLessThanOrEqual(32_753);
+    expect(definitionBytes(listed)).toBeLessThanOrEqual(33_700);
     expect(deferred.map((tool) => tool.name)).toEqual(
       expect.arrayContaining(["render_plot", "create_space", "generate_secret", "scratchpad_add"]),
     );

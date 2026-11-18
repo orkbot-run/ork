@@ -204,16 +204,17 @@ describe("narrationStatusLine", () => {
 });
 
 describe("midTaskMessagePrompt", () => {
-  it("asks for a short answer through message_user, then the rest of the task", () => {
-    expect(midTaskMessagePrompt("Still working?", true)).toBe(
-      "The person sent this while you were working:\n\nStill working?\n\nIf it asks something or changes the plan, answer briefly with message_user, then continue the task.",
-    );
+  it("permits an interim response and asks to complete added work", () => {
+    const prompt = midTaskMessagePrompt("Also check the second directory.", true);
+    expect(prompt).toContain("\n\nAlso check the second directory.\n\n");
+    expect(prompt).toContain("do it before ending, in the order they requested");
+    expect(prompt).toContain("Use message_user");
   });
 
-  it("asks for no plain-text answer, which would end the task, when message_user is off", () => {
+  it("asks to apply the instructions even without the interim messaging tool", () => {
     const prompt = midTaskMessagePrompt("Still working?", false);
     expect(prompt).toContain("\n\nStill working?\n\n");
-    expect(prompt).toContain("continue the task");
-    expect(prompt).not.toMatch(/reply|answer/);
+    expect(prompt).toContain("Apply any changes to the current task");
+    expect(prompt).not.toContain("message_user");
   });
 });

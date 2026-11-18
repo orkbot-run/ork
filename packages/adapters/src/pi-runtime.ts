@@ -105,10 +105,16 @@ const running = new Map<string, { controller: AbortController; work: Promise<voi
 // instead of taking another assistant turn. A bounded internal follow-up keeps
 // that provider quirk from making a long task look complete after one step.
 const MAX_SILENT_TOOL_CONTINUATIONS = 3;
+// A malformed model response can emit hundreds of calls at once, which bypass the
+// loop guard that compares responses. Refuse the whole batch so a retry is unambiguous.
+const MAX_TOOL_CALLS_PER_RESPONSE = 64;
 // Sent in the user's role, so marked as automated: otherwise models read it as the user
 // telling them never to stop, and keep going instead of asking.
 export const SILENT_TOOL_CONTINUATION_PROMPT = automated(
   "Your last turn ended right after a tool result, without a reply. Continue the original task from the latest tool result. If you need information or a decision from the user, ask them instead of guessing; otherwise use any remaining tools needed, then give the user the final answer.",
+);
+const USER_STEERING_CONTINUATION_PROMPT = automated(
+  "Check the person's latest instructions against the work and tool results so far. If work remains, use the relevant available tool directly before reporting it blocked. An acknowledgement or a promise to start is not completion. Respect cancellations and any pending approvals. Report specific blockers and results in the person's language. If work is complete or already awaiting the person's input, end without repeating the answer or actions.",
 );
 // Sent after a reply was cut off by a dropped connection; the cut text is the previous turn.
 export const CUT_REPLY_CONTINUATION_PROMPT = automated(
@@ -310,6 +316,7 @@ export class PiAgentRuntime implements AgentRuntime {
         let tools = allTools;
         const seenSteeringIds: string[] = [];
         const initialSteering = request.claimSteering ? await request.claimSteering([]) : [];
+        let userSteeringNeedsReview = false;
         let hasCurrentImages = Boolean(
           request.currentRunRequiresImageInput ||
             (request.currentTurnImages?.length && !request.currentTurnImageFileFallback) ||
@@ -595,9 +602,17 @@ export class PiAgentRuntime implements AgentRuntime {
               mode === "computer",
             );
         }
+        let oversizedToolBatch = false;
         agent = new Agent({
           sessionId: conversationSessionId(request.threadId, request.botId),
           steeringMode: "all",
+          beforeToolCall: async () =>
+            oversizedToolBatch
+              ? {
+                  block: true,
+                  reason: `No tools in this batch ran. Use at most ${MAX_TOOL_CALLS_PER_RESPONSE} tool calls in one response and choose only the tools needed for the user's task.`,
+                }
+              : undefined,
           streamFn: (_m, ctx, options) =>
             fallbackAwareModelStream(
               fallbackState,
@@ -647,6 +662,8 @@ export class PiAgentRuntime implements AgentRuntime {
             if (terminatedReply && !host.pausePending) return update;
             const steering = await request.claimSteering([...seenSteeringIds]);
             if (steering.length === 0) return update;
+            const fromRunUser = steering.some((item) => item.origin === "user");
+            if (fromRunUser) userSteeringNeedsReview = true;
             seenSteeringIds.push(...steering.map((item) => item.id));
             for (const item of steering) representedHistoryIds.add(item.messageId);
             if (steering.some((item) => item.images?.length && !item.imageFileFallback))
@@ -667,10 +684,7 @@ export class PiAgentRuntime implements AgentRuntime {
               });
             }
             // Ordered with the turn's other events, so the run can treat it as a turn boundary.
-            queue.push({
-              type: "steered",
-              fromRunUser: steering.some((item) => item.origin === "user"),
-            });
+            queue.push({ type: "steered", fromRunUser });
             return update;
           },
           initialState: {
@@ -800,11 +814,16 @@ export class PiAgentRuntime implements AgentRuntime {
           if (event.type === "message_end") {
             stopThinking();
             await piSession?.appendMessage(event.message);
+            if (event.message.role === "assistant") {
+              oversizedToolBatch =
+                event.message.content.filter((part) => part.type === "toolCall").length >
+                MAX_TOOL_CALLS_PER_RESPONSE;
+            }
           }
           if (event.type === "tool_execution_start") {
             stopThinking();
             finishedCalls.delete(event.toolCallId);
-            if (host.toolCallBudget.exceeded) return;
+            if (host.toolCallBudget.exceeded || oversizedToolBatch) return;
             toolCalls += 1;
             // Live activity feedback: without this the thread shows a bare
             // "working…" for the whole tool call with nothing actionable.
@@ -894,6 +913,29 @@ export class PiAgentRuntime implements AgentRuntime {
                   timestamp: Date.now(),
                 });
               }
+            }
+            // Give newly claimed user instructions one execution pass before the run
+            // can finish. Let an already queued continuation finish its work first.
+            if (
+              userSteeringNeedsReview &&
+              event.message.role === "assistant" &&
+              event.message.stopReason === "stop" &&
+              !hasToolCalls &&
+              !hasToolResults &&
+              !toolWorkPendingFinal &&
+              !agent.hasQueuedMessages() &&
+              !host.pausePending &&
+              !host.toolCallBudget.exceeded &&
+              !terminatedReply &&
+              !outputCutFailed &&
+              !signal.aborted
+            ) {
+              userSteeringNeedsReview = false;
+              agent.followUp({
+                role: "user",
+                content: USER_STEERING_CONTINUATION_PROMPT,
+                timestamp: Date.now(),
+              });
             }
           }
           if (event.type === "message_end" && event.message.role === "assistant") {

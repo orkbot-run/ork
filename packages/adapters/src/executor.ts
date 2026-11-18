@@ -63,7 +63,7 @@ import { formatAgentEnvironmentInstruction } from "./agent-environment.js";
 import { createApprovedEffectReplayQueue } from "./approval-effect.js";
 import { PARTIAL_REPLY_NOTE } from "./automated-messages.js";
 import { delegatedFilesInstruction, loadDelegatedFileSource } from "./bot-message-files.js";
-import { loadBotMessageContext } from "./bot-messages.js";
+import { loadBotMessageContext, peerRunHistory } from "./bot-messages.js";
 import {
   commandCredentialRedactions,
   loadBotCommandEnvironment,
@@ -705,7 +705,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const messagingChannelRun = isMessagingChannelRun(run.trigger, sourceBlocks);
         const [
           thread,
-          messages,
+          historyRows,
           peerMessage,
           task,
           storedConnections,
@@ -723,7 +723,9 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           deps.prisma.thread.findUniqueOrThrow({ where: { id: run.threadId } }),
           loadRunHistoryMessages(deps.prisma, run, LEGACY_HISTORY_WINDOW_SIZE, channelId),
           run.trigger === "bot_message"
-            ? loadBotMessageContext(deps.prisma, run.sourceMessageId)
+            ? loadBotMessageContext(deps.prisma, run.sourceMessageId, {
+                includeDelegationBatch: true,
+              })
             : Promise.resolve(undefined),
           deps.prisma.task.findUniqueOrThrow({ where: { id: run.taskId } }),
           deps.prisma.connection.findMany({
@@ -759,6 +761,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           loadRunLoginRedactions(deps.prisma, deps.secretStore, run, run.id),
           loadRunCodeRedactions(deps.prisma, deps.secretStore, run, run.id),
         ]);
+        const messages = peerRunHistory(historyRows, peerMessage?.sourceSeq);
         // Team chat reaches people besides the owner, so their runs get a group channel's limits.
         const teamChatConversationId =
           run.trigger === "messaging" ? thread.externalConversationId : null;
@@ -1878,6 +1881,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const prompt = [
           replyContext,
           run.trigger === "reaction" && replyContext ? undefined : basePrompt,
+          peerMessage?.delegationBatchPrompt,
           takeoverResume?.promptNote,
           approvalContinuation,
           // A hang-up turn is read, not heard: no spoken-reply constraint.
