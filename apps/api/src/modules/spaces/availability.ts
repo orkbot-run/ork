@@ -12,6 +12,7 @@ import {
   runAsSystem,
   runAsSystemInTransaction,
   spaceAvailability,
+  workspaceAdmissionBinding,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
 
@@ -333,6 +334,7 @@ export async function chooseForSpace(
  */
 export async function rehomeItemsLeaving(prisma: PrismaClient, spaceId: string): Promise<void> {
   await runAsSystem("keep items other spaces use when their space is deleted", async () => {
+    if (await workspaceAdmissionBinding(prisma, spaceId)) return;
     const include = { availableIn: AVAILABILITY_SELECT };
     const where = { spaceId, OR: [{ allSpaces: true }, { availableIn: { some: {} } }] };
     const [installs, servers, skills] = await Promise.all([

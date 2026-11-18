@@ -174,7 +174,7 @@ export function OnboardingPage() {
         setBillingEnabled(!policy.managed && me.billingEnabled);
         setCatalog(models);
         const next = me.needsModel ? "model" : "bot";
-        if (!linkedStep) goTo(next);
+        if (!linkedStep || !me.needsModel) goTo(next);
       })
       .catch((err: unknown) => {
         if (active && form.isSelected()) setError(errorText(err, t`Could not load model settings`));
@@ -257,7 +257,7 @@ export function OnboardingPage() {
     ],
     [billingEnabled, providerOptions, t],
   );
-  const selectedProviderOption = providerOptions.main.find(
+  const selectedProviderOption = [...providerOptions.main, ...providerOptions.rest].find(
     (option) =>
       option.provider === provider &&
       option.auth === providerAuth &&
@@ -330,6 +330,17 @@ export function OnboardingPage() {
     invalidatePreflight();
     setError(null);
     setNotice(null);
+    const entry = catalog.find((row) => row.provider === nextProvider && row.id === nextModel);
+    if (auth === "sign-in" && entry?.id) {
+      oauthForm.current = formState.capture();
+      void startSubscriptionSignIn({
+        provider: entry.provider,
+        modelId: entry.id,
+        label: entry.providerName ?? entry.provider,
+        makeDefault: true,
+        scope: "account",
+      });
+    }
   }
 
   function preflightStillCurrent(revision: number): boolean {
@@ -576,7 +587,9 @@ export function OnboardingPage() {
                     return;
                   }
                   setCredits(false);
-                  const option = providerOptions.main.find((item) => item.value === value);
+                  const option = [...providerOptions.main, ...providerOptions.rest].find(
+                    (item) => item.value === value,
+                  );
                   if (option)
                     selectProvider(
                       option.provider,
@@ -619,7 +632,10 @@ export function OnboardingPage() {
             {provider ? (
               <>
                 {isOpenAiCompatible ? (
-                  <div className="mt-6 block text-sm text-foreground">
+                  <details className="mt-6 text-sm text-foreground">
+                    <summary className="cursor-pointer font-medium">
+                      <Trans>Advanced</Trans>
+                    </summary>
                     <label htmlFor={`${fieldId}-base-url`} className="block font-medium">
                       <Trans>Server URL</Trans>
                       <Input
@@ -720,7 +736,7 @@ export function OnboardingPage() {
                         </NativeSelectOption>
                       </NativeSelect>
                     </label>
-                  </div>
+                  </details>
                 ) : null}
                 {subscriptionSignIn ? (
                   <div className="mt-4">
@@ -916,60 +932,67 @@ export function OnboardingPage() {
                     </label>
                   )
                 ) : null}
-                {acceptsKey && !isOpenAiCompatible && selected?.catalogProbe ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="mt-3"
-                      disabled={preflightTesting || apiKey.trim().length < 8}
-                      onClick={() => void testApiKeyConnection()}
-                    >
-                      {modelPreflightTestingLabel(
-                        preflightTesting && preflightTarget === "api-key",
-                        "api-key",
-                      )}
-                    </Button>
-                    {preflightTarget === "api-key" ? (
-                      <ModelPreflightFeedback
-                        success={preflightSuccess}
-                        failure={preflightFailure}
-                      />
+                {acceptsKey && !isOpenAiCompatible ? (
+                  <details className="mt-4 text-sm">
+                    <summary className="cursor-pointer font-medium">
+                      <Trans>Advanced</Trans>
+                    </summary>
+                    {acceptsKey && !isOpenAiCompatible && selected?.catalogProbe ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="mt-3"
+                          disabled={preflightTesting || apiKey.trim().length < 8}
+                          onClick={() => void testApiKeyConnection()}
+                        >
+                          {modelPreflightTestingLabel(
+                            preflightTesting && preflightTarget === "api-key",
+                            "api-key",
+                          )}
+                        </Button>
+                        {preflightTarget === "api-key" ? (
+                          <ModelPreflightFeedback
+                            success={preflightSuccess}
+                            failure={preflightFailure}
+                          />
+                        ) : null}
+                      </>
                     ) : null}
-                  </>
-                ) : null}
-                {/* The model is chosen once the account is connected; sign-in uses the default. */}
-                {!isOpenAiCompatible && acceptsKey && apiKey.trim() ? (
-                  <div className="mt-6 block text-sm text-foreground">
-                    <span className="font-medium">
-                      <Trans>Model</Trans>
-                    </span>
-                    <Select
-                      value={selected?.id ?? modelId}
-                      onValueChange={(value) => {
-                        if (typeof value !== "string" || !value) return;
-                        if (value === modelId) return;
-                        cancelOAuthAttempt();
-                        setModelId(value);
-                        setThinkingLevel(null);
-                        invalidatePreflight();
-                      }}
-                      items={modelItems}
-                    >
-                      <SelectTrigger aria-label={t`Model`} className="mt-2 w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {modelsForProvider.map((entry) => (
-                            <SelectItem key={`${entry.provider}:${entry.id}`} value={entry.id}>
-                              {entry.label}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    {/* The model is chosen once the account is connected; sign-in uses the default. */}
+                    {!isOpenAiCompatible && acceptsKey && apiKey.trim() ? (
+                      <div className="mt-6 block text-sm text-foreground">
+                        <span className="font-medium">
+                          <Trans>Model</Trans>
+                        </span>
+                        <Select
+                          value={selected?.id ?? modelId}
+                          onValueChange={(value) => {
+                            if (typeof value !== "string" || !value) return;
+                            if (value === modelId) return;
+                            cancelOAuthAttempt();
+                            setModelId(value);
+                            setThinkingLevel(null);
+                            invalidatePreflight();
+                          }}
+                          items={modelItems}
+                        >
+                          <SelectTrigger aria-label={t`Model`} className="mt-2 w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {modelsForProvider.map((entry) => (
+                                <SelectItem key={`${entry.provider}:${entry.id}`} value={entry.id}>
+                                  {entry.label}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : null}
+                  </details>
                 ) : null}
               </>
             ) : null}
@@ -979,13 +1002,15 @@ export function OnboardingPage() {
               </p>
             ) : null}
             {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
-            <Button
-              className="mt-6"
-              disabled={saving || (!credits && !canSaveModel)}
-              onClick={() => void (credits ? fundWithCredits() : saveModel())}
-            >
-              <Trans>Continue</Trans>
-            </Button>
+            {!subscriptionSignIn || credits ? (
+              <Button
+                className="mt-6"
+                disabled={saving || (!credits && !canSaveModel)}
+                onClick={() => void (credits ? fundWithCredits() : saveModel())}
+              >
+                {credits ? <Trans>Continue</Trans> : <Trans>Connect</Trans>}
+              </Button>
+            ) : null}
           </div>
         ) : null}
         {step === "bot" ? (

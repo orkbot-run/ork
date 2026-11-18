@@ -23,6 +23,8 @@ export const ServerAIAccountSchema = z.object({
   revision: z.number().int(),
   concurrencyLimit: z.number().int().min(1).max(128),
   monthlyBudgetMicros: AIBudgetSchema,
+  isDefault: z.boolean().optional(),
+  defaultModelId: z.string().nullable().optional(),
 });
 export const WorkspaceAIConfigurationSchema = z.object({
   enabled: z.boolean(),
@@ -49,6 +51,7 @@ export const ServerAIStatusSchema = z.object({
   workspaceMonthlyBudgetMicros: AIBudgetSchema,
   canManageServer: z.boolean(),
   canManageWorkspace: z.boolean(),
+  overridesModels: z.boolean().optional(),
   modelSetupMode: z.enum(["pending", "organization", "personal", "legacy"]).optional(),
   adminAccessReason: z.enum(["role_unavailable", "not_admin", "unverified"]).optional(),
   accounts: z.array(ServerAIAccountSchema),

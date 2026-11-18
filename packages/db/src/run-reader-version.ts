@@ -15,7 +15,8 @@ export const BACKGROUND_HELPER_READER_VERSION = 3;
 export const WORKSPACE_AUTHORITY_READER_VERSION = 4;
 /** Version 5 preserves the exact personal device admission of queued offline work. */
 export const PERSONAL_DEVICE_READER_VERSION = 5;
-export const SUPPORTED_RUN_READER_VERSION = PERSONAL_DEVICE_READER_VERSION;
+export const SERVER_OWNED_SPACE_READER_VERSION = 6;
+export const SUPPORTED_RUN_READER_VERSION = SERVER_OWNED_SPACE_READER_VERSION;
 
 /** Claim-local only: never let a pooled connection advertise a reader after the transaction. */
 export async function declareRunReaderVersion(tx: Pick<Prisma.TransactionClient, "$queryRaw">) {

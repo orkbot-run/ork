@@ -239,6 +239,96 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
   const settle = (claim: AIExecutionClaim, cost: number | null) =>
     claimOwners.get(claim)!.settle(claim, cost);
 
+  it("makes the first verified connection the server default without client assignment calls", async () => {
+    await system(() =>
+      prisma!.installationIdentity.update({
+        where: { id: "local" },
+        data: { modelSetupMode: "pending" },
+      }),
+    );
+    const first = await catalog.create(admin, input("First"));
+    const second = await catalog.create(admin, input("Second"));
+    expect(await catalog.setupMode(member)).toBe("organization");
+    expect(await catalog.choices(member)).toEqual([{ connectionId: first.id, modelId: "model-a" }]);
+    expect(await catalog.choices(adminB)).toEqual([{ connectionId: first.id, modelId: "model-a" }]);
+    expect((await catalog.list(admin)).find((row) => row.id === second.id)?.enabled).toBe(false);
+    const local = "ai-test-local";
+    await system(async () => {
+      await prisma!.space.create({
+        data: {
+          id: local,
+          organizationId: "ai-test-org",
+          name: "Local",
+          admissionWorkspaceId: scopeA,
+        },
+      });
+      await prisma!.spaceMember.create({
+        data: {
+          id: randomUUID(),
+          createdAt: new Date(),
+          spaceId: local,
+          userId: admin.userId,
+          organizationId: "ai-test-org",
+          role: "owner",
+        },
+      });
+    });
+    expect(await catalog.choices({ ...admin, spaceId: local })).toEqual([
+      { connectionId: first.id, modelId: "model-a" },
+    ]);
+    await expect(catalog.list({ ...member, spaceId: local })).rejects.toMatchObject({
+      code: "forbidden",
+    });
+    const localActor = { ...admin, spaceId: local };
+    const runtime = new ServerAIModels(authDeps());
+    expect(
+      await runtime.validateSelection(localActor, {
+        provider: "openai",
+        modelId: "model-a",
+        connectionId: first.id,
+      }),
+    ).toBe(true);
+    const execution = await claim(first.id, localActor);
+    await settle(execution, 0);
+  });
+
+  it("keeps a Space override independent of later server default changes and can restore inheritance", async () => {
+    const first = await catalog.create(admin, input("First"));
+    const second = await catalog.create(admin, input("Second"));
+    await catalog.configure(adminB, second.id, {
+      enabled: true,
+      allowedModels: ["model-b"],
+      defaultModelId: "model-b",
+      isDefault: true,
+      priority: 0,
+      monthlyBudgetMicros: 123,
+      scope: "space",
+    });
+    expect(await catalog.choices(adminB)).toEqual([
+      { connectionId: second.id, modelId: "model-b" },
+    ]);
+    expect(await catalog.choices(admin)).toEqual([{ connectionId: first.id, modelId: "model-a" }]);
+    await catalog.configure(admin, first.id, {
+      enabled: true,
+      allowedModels: ["model-a"],
+      defaultModelId: "model-a",
+      isDefault: true,
+      priority: 0,
+      monthlyBudgetMicros: null,
+    });
+    expect(await catalog.choices(adminB)).toEqual([
+      { connectionId: second.id, modelId: "model-b" },
+    ]);
+    expect(
+      (await catalog.list(adminB)).find((row) => row.id === second.id)?.monthlyBudgetMicros,
+    ).toBe(123);
+    expect(await catalog.overridesModels(adminB)).toBe(true);
+    await expect(catalog.resetWorkspaceModels(member)).rejects.toMatchObject({ code: "forbidden" });
+    await catalog.resetWorkspaceModels(adminB);
+    expect(await catalog.overridesModels(adminB)).toBe(false);
+    expect(await catalog.choices(adminB)).toEqual([{ connectionId: first.id, modelId: "model-a" }]);
+  });
+
   it("blocks personal models until an organization administrator chooses a setup", async () => {
     const runtime = new ServerAIModels(authDeps());
     await system(() =>

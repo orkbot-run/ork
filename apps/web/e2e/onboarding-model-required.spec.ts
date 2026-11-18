@@ -85,7 +85,7 @@ test("onboarding cannot continue with an empty or failed model catalog", async (
       await page.reload();
     }
     await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
     await expect(page.getByRole("heading", { name: "Create your first bot" })).toHaveCount(0);
     await expect(page.getByRole("combobox", { name: "Message Chief" })).toHaveCount(0);
   }
@@ -102,8 +102,9 @@ test("Ollama Cloud onboarding requires a key before continuing", async ({ page }
   await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
   await page.getByRole("combobox", { name: "Provider" }).click();
   await page.getByRole("option", { name: "Ollama Cloud", exact: true }).click();
+  await page.getByText("Advanced", { exact: true }).click();
   await page.getByLabel("Model id", { exact: true }).fill("test-model");
-  const continueButton = page.getByRole("button", { name: "Continue", exact: true });
+  const continueButton = page.getByRole("button", { name: "Connect", exact: true });
   await expect(continueButton).toBeDisabled();
   const apiKey = page.getByLabel("API key", { exact: true });
   await apiKey.fill("   ");
@@ -189,10 +190,9 @@ test("a member waits for the administrator's model choice", async ({ page }) => 
   await expect(page.getByRole("combobox", { name: "Provider" })).toHaveCount(0);
 });
 
-test("an administrator chooses personal models for a new organization", async ({
+test("an administrator starts directly with the current provider list", async ({
   page,
 }, testInfo) => {
-  let mode: "pending" | "personal" = "pending";
   await page.route("**/rpc/me", async (route) => {
     const response = await route.fetch();
     const body = (await response.json()) as { json: Record<string, unknown> };
@@ -205,8 +205,8 @@ test("an administrator chooses personal models for a new organization", async ({
           managed: true,
           canManage: false,
           policy: null,
-          personalModelsAllowed: mode === "personal",
-          modelSetupMode: mode,
+          personalModelsAllowed: false,
+          modelSetupMode: "pending",
         },
       },
     }),
@@ -222,24 +222,31 @@ test("an administrator chooses personal models for a new organization", async ({
           canManageWorkspace: true,
           accounts: [],
           connections: [],
-          modelSetupMode: mode,
+          modelSetupMode: "pending",
         },
       },
     }),
   );
-  await page.route("**/rpc/serverAI/chooseMode", (route) => {
-    expect(route.request().postDataJSON().json).toEqual({ mode: "personal" });
-    mode = "personal";
-    return route.fulfill({ json: { json: { ok: true } } });
-  });
+  await page.route("**/rpc/serverAI/catalog", (route) =>
+    route.fulfill({
+      json: {
+        json: [
+          {
+            provider: "fixture-provider",
+            providerName: "Fixture provider",
+            id: "fixture-model",
+            label: "Fixture model",
+            auth: "api-key",
+          },
+        ],
+      },
+    }),
+  );
   await signup(page, `model-mode-${Date.now()}@orkbot.test`, "password12", "Administrator");
-  await page.goto("/app");
-  await expect(page).toHaveURL(/\/onboarding\/model/);
-  await expect(page.getByRole("button", { name: "Connect organization models" })).toBeVisible();
-  await captureScreenshot(page, testInfo, "organization-model-setup-choice");
-  await page.getByRole("button", { name: "Let people connect their own models" }).click();
-  await expect(page.getByRole("combobox", { name: "Provider" })).toBeVisible();
-  await expect(page.getByText(/outside company servers/)).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Provider", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect organization models" })).toHaveCount(0);
+  await expect(page.getByLabel("API key", { exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "organization-model-provider-choice");
 });
 
 test("a member can connect a personal model when the organization has none", async ({ page }) => {
@@ -277,7 +284,7 @@ test("a member can connect a personal model when the organization has none", asy
   await expect(page.getByTestId("server-ai-ready")).toHaveCount(0);
 });
 
-test("managed onboarding connects server accounts and requires a workspace default", async ({
+test("managed onboarding connects a key and enters chat with the server default", async ({
   page,
 }, testInfo) => {
   const account = {
@@ -348,38 +355,25 @@ test("managed onboarding connects server accounts and requires a workspace defau
   );
   await page.route("**/rpc/serverAI/create", (route) => {
     const request = route.request().postDataJSON().json;
-    expect(request.models).toEqual(account.models);
+    expect(request.models).toEqual([account.models[0]]);
     expect(request.connection.provider).toBe(account.provider);
     expect(request.connection.apiKey).toBe("fake-test-key");
     status.accounts = [account];
-    return route.fulfill({ json: { json: account } });
-  });
-  await page.route("**/rpc/serverAI/offer", (route) => {
-    expect(route.request().postDataJSON().json).toEqual({
-      spaceId: status.spaceId,
-      connectionId: account.id,
-      available: true,
-    });
+    status.modelSetupMode = "organization";
     status.connections = [
       {
         ...account,
-        enabled: false,
-        allowedModels: account.models,
-        defaultModelId: null,
-        isDefault: false,
+        enabled: true,
+        allowedModels: [account.models[0]!],
+        defaultModelId: account.models[0]!,
+        isDefault: true,
         fallback: false,
         priority: 0,
         assignmentRevision: 1,
       },
     ];
-    return route.fulfill({ json: { json: { ok: true } } });
-  });
-  await page.route("**/rpc/serverAI/configure", (route) => {
-    const { connectionId, ...patch } = route.request().postDataJSON().json;
-    expect(connectionId).toBe(account.id);
-    Object.assign(status.connections[0]!, patch);
-    ready = status.connections[0]!.enabled && status.connections[0]!.isDefault;
-    return route.fulfill({ json: { json: { ok: true } } });
+    ready = true;
+    return route.fulfill({ json: { json: account } });
   });
   await signup(
     page,
@@ -388,38 +382,15 @@ test("managed onboarding connects server accounts and requires a workspace defau
     "Workspace administrator",
   );
   await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Enable a default model");
-  await page.getByRole("button", { name: "Add model connection", exact: true }).click();
-  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Fixture provider");
-  await expect(page.getByLabel("Models (one per line)", { exact: true })).toHaveValue(
-    account.models[0]!,
-  );
-  await page.getByRole("button", { name: "Models from server" }).click();
-  await page.getByRole("option", { name: "workspace-model-two" }).click();
-  await expect(page.getByLabel("Models (one per line)")).toHaveValue(account.models.join("\n"));
-  const authentication = page.getByRole("combobox", { name: "Authentication", exact: true });
-  await expect(authentication).toHaveValue("sign-in");
-  await expect(
-    page.getByRole("button", { name: "Sign in with fixture subscription", exact: true }),
-  ).toBeEnabled();
-  await expect(page.getByLabel("API key", { exact: true })).toHaveCount(0);
-  await captureScreenshot(page, testInfo, "managed-onboarding-subscription-choice");
-  await authentication.selectOption("key");
+  await page
+    .getByRole("combobox", { name: "Provider", exact: true })
+    .selectOption("fixture-provider:key");
   await expect(page.getByLabel("API key", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Sign in with fixture subscription", exact: true }),
-  ).toHaveCount(0);
-  await page.getByLabel("Name", { exact: true }).fill(account.label);
-  await captureScreenshot(page, testInfo, "managed-onboarding-server-account");
+  await expect(page.getByLabel("Models (one per line)", { exact: true })).toBeHidden();
   await page.getByLabel("API key", { exact: true }).fill("fake-test-key");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await page.getByRole("button", { name: "Make available to organization", exact: true }).click();
-  await page.getByRole("switch", { name: "Enabled", exact: true }).click();
-  await expect(page.getByRole("switch", { name: "Default", exact: true })).toBeEnabled();
-  await page.getByRole("switch", { name: "Default", exact: true }).click();
+  await captureScreenshot(page, testInfo, "managed-onboarding-server-key");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect.poll(() => ready).toBe(true);
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page).toHaveURL(/\/app(?:\/|$)/);
   expect(retired).toEqual([]);
 });

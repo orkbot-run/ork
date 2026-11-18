@@ -10,7 +10,7 @@ import {
   CannotDeleteLastSpaceError,
   CannotDeleteSpaceAsNonOwnerError,
   CannotRenameSpaceAsNonOwnerError,
-  CentralWorkspaceCreationRequiredError,
+  canCreateSpace,
   createExternalConversationRepos,
   createSpaceForMember,
   InvalidSpaceNameError,
@@ -25,6 +25,8 @@ import {
   SpaceNotFoundError,
   setSpaceSettingOverride,
   spaceSettingOverrides,
+  WorkspaceCreationForbiddenError,
+  workspaceAdmissionBinding,
   workspaceNavigationFilter,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
@@ -46,17 +48,14 @@ async function asMemberOf<T>(
   spaceId: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  if (spaceId !== actor.spaceId) {
-    const managed = await runAsSystem("check cross-workspace navigation", () =>
-      prisma.centralWorkspaceBinding.findFirst({
-        where: { spaceId: { in: [actor.spaceId, spaceId] } },
-        select: { id: true },
-      }),
-    );
-    if (managed) throw new ORPCError("NOT_FOUND", { message: new SpaceNotFoundError().message });
-  }
   const member = await prisma.spaceMember.findFirst({
-    where: { spaceId, userId: actor.userId },
+    where: {
+      spaceId,
+      userId: actor.userId,
+      ...(spaceId !== actor.spaceId
+        ? { space: await workspaceNavigationFilter(prisma, actor) }
+        : {}),
+    },
     select: { id: true },
   });
   if (!member) throw new ORPCError("NOT_FOUND", { message: new SpaceNotFoundError().message });
@@ -76,7 +75,7 @@ export function spacesRoutes(ctx: RouterContext) {
     },
     spaces: {
       list: authed.spaces.list.handler(async ({ context }) =>
-        spaceNavigationDto(deps, context.actor, repos, groupRepos),
+        spaceNavigationDto(deps, context.actor, repos, groupRepos, context.sessionId),
       ),
       // Seeds a Space whose id does not exist yet; the member limit is checked inside.
       create: authed.spaces.create.handler(({ context, input }) =>
@@ -89,11 +88,9 @@ export function spacesRoutes(ctx: RouterContext) {
               name: input.name,
             });
           } catch (error) {
-            if (
-              error instanceof CentralWorkspaceCreationRequiredError ||
-              error instanceof SpaceLimitError ||
-              error instanceof InvalidSpaceNameError
-            ) {
+            if (error instanceof WorkspaceCreationForbiddenError)
+              throw new ORPCError("FORBIDDEN", { message: error.message });
+            if (error instanceof SpaceLimitError || error instanceof InvalidSpaceNameError) {
               throw new ORPCError("BAD_REQUEST", { message: error.message });
             }
             if (error instanceof SpaceDeletionInProgressError) {
@@ -208,7 +205,7 @@ export function spacesRoutes(ctx: RouterContext) {
       // Profile synchronization assigns the saved account Ork before the roster is read.
       const me = await meDto(deps, actor);
       const [navigation, archivedBots, archivedGroups] = await Promise.all([
-        spaceNavigationDto(deps, actor, repos, groupRepos),
+        spaceNavigationDto(deps, actor, repos, groupRepos, context.sessionId),
         repos.listBots(actor, { archived: true }),
         groupRepos.listGroups(actor, { archived: true }),
       ]);
@@ -237,23 +234,92 @@ export function spacesRoutes(ctx: RouterContext) {
         thread,
         routines,
         spaces: navigation.spaces,
+        canCreateSpace: navigation.canCreateSpace,
         ...(botSpaceId ? { botSpaceId } : {}),
       };
     }),
   };
 }
 
-// Legacy navigation spans local memberships. Managed navigation stays inside the
-// exact workspace capability, including previews and execution status.
 function spaceNavigationDto(
   deps: RouterDeps,
   actor: Actor,
   repos: ReturnType<typeof createRepos>,
   groupRepos: ReturnType<typeof createGroupRepos>,
+  sessionId?: string,
 ): Promise<SpaceNavigation> {
   return runAsSystem("space navigation across the member's Spaces", () =>
-    memberSpaceNavigation(deps, actor, repos, groupRepos),
+    memberSpaceNavigation(deps, actor, repos, groupRepos, sessionId),
   );
+}
+
+/** Migrated Accounts mappings remain visible by name, with their data loaded only on entry. */
+async function legacyWorkspaceEntries(
+  deps: RouterDeps,
+  actor: Actor,
+  listed: string[],
+  sessionId?: string,
+) {
+  const { prisma, workspaceAuthority } = deps;
+  if (!sessionId || !workspaceAuthority) return [];
+  const binding = await workspaceAdmissionBinding(prisma, actor.spaceId);
+  if (!binding) return [];
+  const access = await prisma.centralWorkspaceAccess.findUnique({
+    where: { workspaceId_userId: { workspaceId: binding.id, userId: actor.userId } },
+    select: { centralSubject: true, active: true },
+  });
+  if (!access?.active) return [];
+  const peers = await prisma.centralWorkspaceBinding.findMany({
+    where: {
+      id: { not: binding.id },
+      localOrganizationId: binding.localOrganizationId,
+      centralOrganizationId: binding.centralOrganizationId,
+      serverId: binding.serverId,
+      bindingVersion: binding.bindingVersion,
+      state: "ready",
+      validUntil: { gt: new Date() },
+      accessEntries: {
+        some: { userId: actor.userId, centralSubject: access.centralSubject, active: true },
+      },
+    },
+    select: { id: true, spaceId: true },
+  });
+  const permitted = (
+    await Promise.all(
+      peers.map(async (peer) =>
+        (await workspaceAuthority.session(sessionId, actor.userId, peer.spaceId)) ? peer : null,
+      ),
+    )
+  ).filter((peer) => peer !== null);
+  if (!permitted.length) return [];
+  const memberships = await prisma.spaceMember.findMany({
+    where: {
+      userId: actor.userId,
+      organizationId: binding.localOrganizationId,
+      spaceId: { notIn: listed },
+      space: {
+        deletingAt: null,
+        OR: [
+          { id: { in: permitted.map((row) => row.spaceId) } },
+          { admissionWorkspaceId: { in: permitted.map((row) => row.id) }, centralBinding: null },
+        ],
+      },
+    },
+    select: { spaceId: true, space: { select: { name: true, isDefault: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  return memberships.map(({ spaceId, space }) => ({
+    id: spaceId,
+    name: space.name,
+    isDefault: space.isDefault,
+    hasContent: false,
+    canRename: false,
+    canDelete: false,
+    bots: [],
+    groups: [],
+    botSections: [],
+    externalConversations: [],
+  }));
 }
 
 async function memberSpaceNavigation(
@@ -261,13 +327,17 @@ async function memberSpaceNavigation(
   actor: Actor,
   repos: ReturnType<typeof createRepos>,
   groupRepos: ReturnType<typeof createGroupRepos>,
+  sessionId?: string,
 ): Promise<SpaceNavigation> {
   const currentSpace = await deps.prisma.space.findUnique({
     where: { id: actor.spaceId },
     select: { organizationId: true },
   });
   if (!currentSpace) throw new IsolationError();
-  const navigationScope = await workspaceNavigationFilter(deps.prisma, actor);
+  const [navigationScope, mayCreateSpace] = await Promise.all([
+    workspaceNavigationFilter(deps.prisma, actor),
+    canCreateSpace(deps.prisma, actor),
+  ]);
   const memberships = await deps.prisma.spaceMember.findMany({
     where: {
       userId: actor.userId,
@@ -327,8 +397,10 @@ async function memberSpaceNavigation(
   const groupsFor = (spaceId: string) => groupsBySpace.get(spaceId) ?? [];
   const sectionsFor = (spaceId: string) => sectionsBySpace.get(spaceId) ?? [];
   const staleClaimBefore = new Date(Date.now() - SPACE_DELETION_CLAIM_TIMEOUT_MS);
+  const peerSpaces = await legacyWorkspaceEntries(deps, actor, spaceIds, sessionId);
 
   return {
+    canCreateSpace: mayCreateSpace,
     current: {
       id: actor.spaceId,
       name: currentMembership.space.name,
@@ -339,59 +411,63 @@ async function memberSpaceNavigation(
       ),
       botSections: sectionsFor(actor.spaceId),
     },
-    spaces: memberships.map((membership) => {
-      const spaceBots = botsFor(membership.spaceId);
-      const spaceGroups = groupsFor(membership.spaceId);
-      return {
-        id: membership.spaceId,
-        name: membership.space.name,
-        isDefault: membership.space.isDefault,
-        hasContent: spacesWithContent.has(membership.spaceId),
-        botCount: botCounts.get(membership.spaceId) ?? 0,
-        canRename: membership.role === "owner" && membership.space.deletingAt === null,
-        canDelete:
-          membership.role === "owner" &&
-          !membership.space.isDefault &&
-          memberships.length > 1 &&
-          (membership.space.deletingAt === null || membership.space.deletingAt < staleClaimBefore),
-        bots: spaceBots.map((bot) => ({
-          id: bot.id,
-          parentBotId: bot.parentBotId,
-          spaceId: bot.spaceId,
-          name: bot.name,
-          title: "",
-          color: bot.color,
-          avatarSet: bot.avatarSet,
-          avatarSeed: bot.avatarSeed ?? null,
-          notifyOnFinish: bot.notifyOnFinish,
-          pinned: bot.pinned,
-          sectionId: bot.sectionId,
-          unread: bot.unread,
-          snoozedUntil: bot.snoozedUntil,
-          preview: bot.preview,
-          status: bot.status,
-          threadStatus: bot.threadStatus,
-          runErrorId: bot.runErrorId,
-          updatedAt: bot.updatedAt,
-        })),
-        groups: spaceGroups.map((group) => ({
-          id: group.id,
-          spaceId: group.spaceId,
-          name: group.name,
-          pinned: group.pinned,
-          sectionId: group.sectionId,
-          members: group.members,
-          preview: group.preview,
-          unread: group.unread,
-          snoozedUntil: group.snoozedUntil,
-          updatedAt: group.updatedAt,
-        })),
-        externalConversations: externalConversations.filter(
-          (conversation) => conversation.spaceId === membership.spaceId,
-        ),
-        botSections: sectionsFor(membership.spaceId),
-      };
-    }),
+    spaces: [
+      ...memberships.map((membership) => {
+        const spaceBots = botsFor(membership.spaceId);
+        const spaceGroups = groupsFor(membership.spaceId);
+        return {
+          id: membership.spaceId,
+          name: membership.space.name,
+          isDefault: membership.space.isDefault,
+          hasContent: spacesWithContent.has(membership.spaceId),
+          botCount: botCounts.get(membership.spaceId) ?? 0,
+          canRename: membership.role === "owner" && membership.space.deletingAt === null,
+          canDelete:
+            membership.role === "owner" &&
+            !membership.space.isDefault &&
+            memberships.length > 1 &&
+            (membership.space.deletingAt === null ||
+              membership.space.deletingAt < staleClaimBefore),
+          bots: spaceBots.map((bot) => ({
+            id: bot.id,
+            parentBotId: bot.parentBotId,
+            spaceId: bot.spaceId,
+            name: bot.name,
+            title: "",
+            color: bot.color,
+            avatarSet: bot.avatarSet,
+            avatarSeed: bot.avatarSeed ?? null,
+            notifyOnFinish: bot.notifyOnFinish,
+            pinned: bot.pinned,
+            sectionId: bot.sectionId,
+            unread: bot.unread,
+            snoozedUntil: bot.snoozedUntil,
+            preview: bot.preview,
+            status: bot.status,
+            threadStatus: bot.threadStatus,
+            runErrorId: bot.runErrorId,
+            updatedAt: bot.updatedAt,
+          })),
+          groups: spaceGroups.map((group) => ({
+            id: group.id,
+            spaceId: group.spaceId,
+            name: group.name,
+            pinned: group.pinned,
+            sectionId: group.sectionId,
+            members: group.members,
+            preview: group.preview,
+            unread: group.unread,
+            snoozedUntil: group.snoozedUntil,
+            updatedAt: group.updatedAt,
+          })),
+          externalConversations: externalConversations.filter(
+            (conversation) => conversation.spaceId === membership.spaceId,
+          ),
+          botSections: sectionsFor(membership.spaceId),
+        };
+      }),
+      ...peerSpaces,
+    ],
   };
 }
 

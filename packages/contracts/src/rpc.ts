@@ -546,9 +546,11 @@ export const appContract = {
           preserveBudget: z.boolean().optional(),
           expectedRevision: z.number().int().positive().optional(),
           preserveDefault: z.boolean().optional(),
+          scope: z.enum(["organization", "space"]).optional(),
         }),
       )
       .output(z.object({ ok: z.literal(true) })),
+    resetWorkspaceModels: oc.output(z.object({ ok: z.literal(true) })),
     workspaceBudget: oc
       .input(z.object({ monthlyBudgetMicros: AIBudgetSchema }))
       .output(z.object({ ok: z.literal(true) })),

@@ -41,11 +41,20 @@ type Startup = {
   kind?: Server["kind"];
   message?: string;
 };
-type Screen = "checking" | "welcome" | "accounts" | "servers" | "selfhost" | "local" | "opening";
+type Screen =
+  | "checking"
+  | "welcome"
+  | "accounts"
+  | "servers"
+  | "create-organization"
+  | "selfhost"
+  | "local"
+  | "opening";
 type Operation =
   | "session"
   | "signin"
   | "directory"
+  | "create-organization"
   | "pair"
   | "approve"
   | "connect"
@@ -71,6 +80,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   const shell = doc.querySelector<HTMLElement>(".shell");
   if (!shell) throw new Error("Setup shell missing");
   const input = element<HTMLInputElement>("server-url");
+  const organizationName = element<HTMLInputElement>("organization-name");
   const status = element("status");
   const output = element("output");
   const details = element<HTMLDetailsElement>("details");
@@ -112,11 +122,14 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   let workspaceEntries: Workspace[] = [];
   let selectedOrganizationId: string | null | undefined;
   let workspaceProbeGeneration = 0;
+  let activeWorkspaceProbe: { version: number; snapshot: string } | undefined;
   let directoryOwner: Account | null = null;
   let directoryPolling = false;
   let directorySnapshot = "";
   const cleanups: (() => void)[] = [];
   const current = (version: number) => !disposed && generation === version;
+  const selectedOrganization = () =>
+    workspaceCatalog?.organizations.find((row) => row.id === selectedOrganizationId);
 
   for (const node of doc.querySelectorAll<HTMLElement>("[data-copy]")) {
     node.textContent = t(node.dataset.copy ?? "");
@@ -176,19 +189,28 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     element("account-menu").hidden = !account;
     element("sign-out").hidden = !account;
     element("back").hidden =
-      !["accounts", "selfhost", "local"].includes(screen) &&
+      !["accounts", "create-organization", "selfhost", "local"].includes(screen) &&
       !(
         screen === "servers" &&
         (directoryStage === "location" || (directoryStage === "servers" && !!organizationCount))
       );
     element("organization-next").hidden =
       screen !== "servers" || directoryStage !== "organization" || !organizationCount;
-    element<HTMLButtonElement>("organization-next").disabled =
-      operation !== null || !selectedOrganizationId;
-    const choosingWorkspaces = directoryStage === "servers" && !!organizationCount;
-    element("add-server").hidden = directoryStage !== "servers" || choosingWorkspaces;
-    element("saved-servers").hidden = directoryStage !== "servers" || choosingWorkspaces;
-    element("server-choices").hidden = directoryStage !== "location";
+    const organization = selectedOrganization();
+    element<HTMLButtonElement>("organization-next").disabled = operation !== null || !organization;
+    element("new-organization").hidden =
+      !account ||
+      screen !== "servers" ||
+      (directoryStage !== "organization" &&
+        !(directoryStage === "servers" && organizationCount === 0));
+    organizationName.disabled = operation !== null;
+    const choosingCatalogServer = directoryStage === "servers" && !!organizationCount;
+    const emptyOrganization =
+      organization && !organization.servers.some((server) => server.state !== "disconnected");
+    const canInstall = choosingCatalogServer && emptyOrganization && organization.role === "admin";
+    element("add-server").hidden = directoryStage !== "servers" || choosingCatalogServer;
+    element("saved-servers").hidden = directoryStage !== "servers" || choosingCatalogServer;
+    element("server-choices").hidden = directoryStage !== "location" && !canInstall;
     element("workspaces-section").hidden = !organizationCount || directoryStage === "location";
     element("workspaces-error").hidden =
       organizationCount !== null || directoryStage === "location";
@@ -197,18 +219,18 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     element("directory-title").textContent = t(
       directoryStage === "organization"
         ? "Choose organization"
-        : directoryStage === "servers"
-          ? choosingWorkspaces
-            ? "Choose workspace"
-            : "Choose server"
+        : directoryStage === "servers" && !canInstall
+          ? "Choose server"
           : "Where will Ork live?",
     );
     element("directory-description").textContent = t(
       directoryStage === "organization"
         ? "Choose an organization to continue."
         : directoryStage === "servers"
-          ? choosingWorkspaces
-            ? "Choose a workspace to continue."
+          ? choosingCatalogServer
+            ? emptyOrganization
+              ? ""
+              : "Choose a server to continue."
             : "Choose a server or add a new one."
           : "Choose where to run Ork.",
     );
@@ -429,7 +451,13 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     */
   }
 
-  async function loadWorkspaces(version: number, owner: Account | null, refreshStatus = false) {
+  async function loadWorkspaces(
+    version: number,
+    owner: Account | null,
+    refreshStatus = false,
+    stillVisible: () => boolean = () => true,
+  ) {
+    const active = () => current(version) && account === owner && stillVisible();
     let timeout: number | undefined;
     try {
       const raw = await Promise.race([
@@ -438,13 +466,26 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
           timeout = win?.setTimeout(() => reject(new Error("Workspace directory timed out")), 4000);
         }),
       ]);
-      if (!current(version) || account !== owner) return;
+      if (!active()) return;
       const catalog = identityCatalogSchema.parse(raw);
+      const hadOrganizations = !!organizationCount;
+      const previousOrganization = selectedOrganization();
+      if (
+        directoryStage === "organization" &&
+        workspaces.querySelector('.organization-trigger[aria-expanded="true"]')
+      )
+        return;
       workspaceCatalog = catalog;
-      if (selectedOrganizationId === undefined)
+      if (selectedOrganizationId == null)
         selectedOrganizationId = initialCatalogOrganization(catalog)?.id ?? null;
       organizationCount = catalog.organizations.length;
       if (organizationCount === 0 && directoryStage === "organization") directoryStage = "servers";
+      if (
+        organizationCount &&
+        directoryStage === "servers" &&
+        (!hadOrganizations || (previousOrganization && !selectedOrganization()))
+      )
+        directoryStage = "organization";
       element("workspaces-error").hidden = true;
       element("workspaces-section").hidden = catalog.organizations.length === 0;
       const snapshot = JSON.stringify([catalog, selectedOrganizationId]);
@@ -455,10 +496,11 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       workspaceSnapshot = snapshot;
       renderWorkspaces(version, owner);
     } catch {
-      if (!current(version) || account !== owner) return;
+      if (!active() || workspaceCatalog) return;
       workspaceProbeGeneration++;
       organizationCount = null;
       workspaceSnapshot = "";
+      workspaceEntries = [];
       workspaces.replaceChildren();
       element("workspaces-section").hidden = true;
       element("workspaces-error").hidden = false;
@@ -475,6 +517,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     const snapshot = workspaceSnapshot;
     const active = () =>
       !disposed && accountEpoch === epoch && account === owner && workspaceSnapshot === snapshot;
+    const pickerFocused = doc.activeElement?.classList.contains("organization-trigger");
     const valid = renderWorkspacePicker({
       document: doc,
       container: workspaces,
@@ -508,6 +551,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     });
     workspaceEntries = valid;
     controls();
+    if (pickerFocused)
+      workspaces.querySelector<HTMLButtonElement>(".organization-trigger")?.focus();
     checkWorkspaces(valid, version, owner, workspaceSnapshot);
   }
 
@@ -515,6 +560,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     label: HTMLElement,
     state: "checking" | "online" | "offline" | "unknown",
   ) {
+    if (label.dataset.status === state) return;
     const details = {
       checking: ["Checking", "Checking server status"],
       online: ["Online", "Server online"],
@@ -533,6 +579,13 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     owner: Account | null,
     snapshot: string,
   ) {
+    if (
+      !entries.length ||
+      (activeWorkspaceProbe?.version === version && activeWorkspaceProbe.snapshot === snapshot)
+    )
+      return;
+    const request = { version, snapshot };
+    activeWorkspaceProbe = request;
     const probe = ++workspaceProbeGeneration;
     let index = 0;
     const active = () =>
@@ -548,7 +601,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
           (node) => node.dataset.workspaceId === entry.id,
         );
         if (!label) continue;
-        setWorkspaceStatus(label, "checking");
+        if (!label.dataset.status) setWorkspaceStatus(label, "checking");
         try {
           const online = await transport.invoke<boolean>("check_workspace", { id: entry.id });
           if (!active()) return;
@@ -562,17 +615,29 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         }
       }
     }
-    for (let i = 0; i < Math.min(entries.length, 3); i++) void worker();
+    void Promise.allSettled(
+      Array.from({ length: Math.min(entries.length, 3) }, () => worker()),
+    ).then(() => {
+      if (activeWorkspaceProbe === request) activeWorkspaceProbe = undefined;
+    });
   }
 
   async function loadServers(version: number): Promise<Server[]> {
     const owner = account;
     const request = loadWorkspaces(version, owner, true);
-    const entries = await transport.invoke<Server[]>("list_servers");
-    if (!current(version)) return [];
-    renderServers(entries);
+    const saved = transport.invoke<Server[]>("list_servers").then(
+      (entries) => {
+        if (current(version)) renderServers(entries);
+        return entries;
+      },
+      (error: unknown) => ({ error }),
+    );
     await request;
-    return current(version) ? entries : [];
+    if (!current(version) || organizationCount) return [];
+    const entries = await saved;
+    if (!current(version)) return [];
+    if ("error" in entries) throw entries.error;
+    return entries;
   }
 
   function renderServers(entries: Server[]) {
@@ -643,57 +708,57 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     const owner = account;
     const version = generation;
     const activeScreen = screen;
+    const stillVisible = () =>
+      !doc.hidden &&
+      !operation &&
+      screen === activeScreen &&
+      !pendingServer &&
+      !pendingInitialization &&
+      !pairingRequest;
     directoryPolling = true;
     let timeout: number | undefined;
     try {
-      const entries = await Promise.race([
-        transport.invoke<Server[]>("list_servers"),
-        new Promise<never>((_, reject) => {
-          timeout = win?.setTimeout(() => reject(new Error("Server directory timed out")), 4000);
-        }),
-      ]);
-      if (
-        !current(version) ||
-        account !== owner ||
-        operation ||
-        screen !== activeScreen ||
-        pendingServer ||
-        pendingInitialization ||
-        pairingRequest
-      )
-        return;
-      if (directoryOwner !== owner || JSON.stringify(entries) !== directorySnapshot)
-        renderServers(entries);
-      await loadWorkspaces(version, owner, true);
-      if (
-        activeScreen === "selfhost" &&
-        waitingServerIds &&
-        workspaceCatalog &&
-        current(version) &&
-        screen === "selfhost"
-      ) {
-        const newServer = workspaceCatalog.organizations
-          .find((organization) => organization.id === selectedOrganizationId)
-          ?.servers.some((server) => !waitingServerIds!.has(server.id));
-        const newWorkspace = workspaceEntries.some(
-          (workspace) => !waitingWorkspaceIds?.has(workspace.id),
+      const refreshCatalog = async () => {
+        await loadWorkspaces(version, owner, true, stillVisible);
+        if (
+          activeScreen !== "selfhost" ||
+          !waitingServerIds ||
+          !current(version) ||
+          !stillVisible()
+        )
+          return;
+        const previousServers = waitingServerIds;
+        const newServer = selectedOrganization()?.servers.some(
+          (server) => server.state === "ready" && !previousServers.has(server.id),
         );
-        if (newServer || newWorkspace) {
-          waitingServerIds = null;
-          waitingWorkspaceIds = null;
-          directoryStage = "servers";
-          show("servers");
+        const newWorkspace = workspaceEntries.some((entry) => !waitingWorkspaceIds?.has(entry.id));
+        if (!newServer && !newWorkspace) return;
+        waitingServerIds = null;
+        waitingWorkspaceIds = null;
+        directoryStage = "servers";
+        show("servers");
+      };
+      const refreshSaved = async () => {
+        if (organizationCount) return;
+        const entries = await Promise.race([
+          transport.invoke<Server[]>("list_servers"),
+          new Promise<never>((_, reject) => {
+            timeout = win?.setTimeout(() => reject(new Error("Server directory timed out")), 4000);
+          }),
+        ]);
+        if (!current(version) || account !== owner || !stillVisible()) return;
+        if (directoryOwner !== owner || JSON.stringify(entries) !== directorySnapshot) {
+          renderServers(entries);
         }
-      }
-    } catch {
-      // A directory outage does not interrupt the current setup screen.
+      };
+      await Promise.allSettled([refreshCatalog(), refreshSaved()]);
     } finally {
       win?.clearTimeout(timeout);
       directoryPolling = false;
     }
   }
 
-  const directoryTimer = win.setInterval(() => void refreshWaitingServers(), 15_000);
+  const directoryTimer = win.setInterval(() => void refreshWaitingServers(), 5_000);
   const refreshOnReturn = () => void refreshWaitingServers();
   win.addEventListener("focus", refreshOnReturn);
   doc.addEventListener("visibilitychange", refreshOnReturn);
@@ -950,6 +1015,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     if (!current(version)) return;
     account = value;
     accountEpoch++;
+    const name = value.userinfo.name ?? value.userinfo.email ?? "Account";
+    element("account").textContent = name.trim().charAt(0).toUpperCase() || "A";
     if (pendingWorkspace) {
       await openPendingWorkspace(version);
       return;
@@ -1014,12 +1081,13 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     if (!account) void signIn(true);
   });
   on("sign-in", "click", () => void signIn());
-  function chooseServer() {
+  function chooseServer(startAtOrganization = false) {
     if (disposed) return;
     discardPendingServer();
     generation++;
     operation = null;
     startup = { phase: "idle" };
+    if (startAtOrganization) directoryStage = "organization";
     show(account ? "servers" : "welcome");
     if (account)
       void run(
@@ -1056,18 +1124,13 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   });
   on("selfhost", "click", () => {
     if (account && !operation) {
-      const organization = workspaceCatalog?.organizations.find(
-        (row) => row.id === selectedOrganizationId,
-      );
+      const organization = selectedOrganization();
       command.value = organization
         ? `${SERVER_INSTALL_COMMAND} -s -- --organization ${organization.id} --auto-direct-route`
         : `${SERVER_INSTALL_COMMAND} -s -- --auto-direct-route`;
-      waitingServerIds = new Set(
-        workspaceCatalog?.organizations
-          .find((organization) => organization.id === selectedOrganizationId)
-          ?.servers.map((server) => server.id) ?? [],
-      );
+      waitingServerIds = new Set(organization?.servers.map((server) => server.id) ?? []);
       waitingWorkspaceIds = new Set(workspaceEntries.map((workspace) => workspace.id));
+      element("copy").textContent = t("Copy command");
       show("selfhost");
     }
   });
@@ -1096,9 +1159,42 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       void connect(failedServer.command, { id: failedServer.id }, failedServer.local);
   });
   on("organization-next", "click", () => {
-    if (!selectedOrganizationId || operation) return;
+    if (!selectedOrganization() || operation) return;
     directoryStage = "servers";
-    controls();
+    show("servers");
+  });
+  on("new-organization", "click", () => {
+    if (!account || operation) return;
+    show("create-organization");
+    organizationName.focus();
+  });
+  on("organization-name", "input", () => organizationName.setCustomValidity(""));
+  on("organization-form", "submit", (event) => {
+    event.preventDefault();
+    const owner = account;
+    if (!owner || operation || screen !== "create-organization") return;
+    const name = organizationName.value.trim();
+    if (!name || name.length > 100) {
+      organizationName.setCustomValidity(t("Enter an organization name of up to 100 characters."));
+      organizationName.reportValidity();
+      return;
+    }
+    void run(
+      "create-organization",
+      async (version) => {
+        await clearPendingWorkspace();
+        if (!current(version)) return;
+        const id = await transport.invoke<string>("create_organization", { name });
+        if (!current(version) || account !== owner) return;
+        selectedOrganizationId = workspaceLinkSchema.shape.organizationId.parse(id);
+        organizationName.value = "";
+        directoryStage = "organization";
+        failedServer = null;
+        show("servers");
+        await loadWorkspaces(version, owner);
+      },
+      "create-organization",
+    );
   });
   on("add-server", "click", () => {
     if (operation) return;
@@ -1128,6 +1224,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     operation = null;
     browserSignIn = false;
     input.value = "";
+    organizationName.value = "";
+    organizationName.setCustomValidity("");
     element("account").textContent = "";
     element<HTMLDetailsElement>("account-menu").open = false;
     servers.replaceChildren();
@@ -1276,7 +1374,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       }
       cleanups.push(stopStartup);
       const stopChooseServer = await transport.listen("desktop-change-server", () =>
-        chooseServer(),
+        chooseServer(true),
       );
       if (!current(version)) {
         stopChooseServer();

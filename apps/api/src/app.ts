@@ -957,6 +957,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   serverUpdates?.start();
 
   const router = createRouter({
+    workspaceAuthority,
     serverAI,
     serverAIOAuth,
     serverAIModels,

@@ -674,12 +674,18 @@ msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Advanced"
 msgstr "מתקדם"
+
+#: src/pages/SpaceSettingOverrides.tsx
+msgid "Advanced models"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
@@ -1449,6 +1455,7 @@ msgstr "בחירת מודל"
 msgid "Choose a new password"
 msgstr "בחירת סיסמה חדשה"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
@@ -1475,7 +1482,6 @@ msgstr "בחירת קובץ"
 msgid "Choose folder"
 msgstr "בחירת תיקייה"
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Choose how people in your organization will connect models."
 msgstr ""
@@ -1764,6 +1770,8 @@ msgstr "יש לוודא שאפשר להגיע לכתובת ה-URL מסשן הד�
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/model-settings/role-model-picker.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1815,7 +1823,6 @@ msgstr ""
 msgid "Connect OAuth"
 msgstr "חיבור OAuth"
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Connect organization models"
 msgstr ""
@@ -1901,7 +1908,6 @@ msgstr "מגבלת הקשר"
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Continue"
@@ -2464,10 +2470,6 @@ msgstr "לא ניתן לשמור את הבחירה הזו"
 msgid "Could not save your server."
 msgstr "לא ניתן לשמור את השרת שלך."
 
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Could not save. Try again."
-msgstr ""
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "לא ניתן לחפש בקטלוג"
@@ -2623,6 +2625,10 @@ msgstr "יצירת רוטינה"
 #: src/pages/shell/dialogs.tsx
 msgid "Create space"
 msgstr "יצירת מרחב"
+
+#: src/pages/shell/workspace-rail.tsx
+msgid "Create workspace"
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Create your Ork"
@@ -3896,7 +3902,6 @@ msgstr "יציאה"
 msgid "Let bots use this computer"
 msgstr ""
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Let people connect their own models"
 msgstr ""
@@ -5123,7 +5128,6 @@ msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Personal models may process workspace data outside company servers."
 msgstr ""
@@ -7291,6 +7295,10 @@ msgstr ""
 msgid "Use Protected input for passwords."
 msgstr "לסיסמאות יש להשתמש בקלט מוגן."
 
+#: src/pages/ServerAISettings.tsx
+msgid "Use server default"
+msgstr ""
+
 #: src/pages/model-settings/space-bots-model.tsx
 msgid "Use space default"
 msgstr ""
@@ -7397,7 +7405,6 @@ msgstr ""
 msgid "Wait a moment and test again."
 msgstr "יש להמתין רגע ולבדוק שוב."
 
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Waiting for an organization administrator to set up models."
@@ -7574,6 +7581,10 @@ msgstr ""
 msgid "Workspace monthly budget (USD)"
 msgstr "התקציב החודשי של סביבת העבודה (USD)"
 
+#: src/pages/shell/workspace-rail.tsx
+msgid "Workspaces"
+msgstr ""
+
 #: src/lib/billing.ts
 msgid "year"
 msgstr "שנה"
@@ -7671,10 +7682,6 @@ msgstr "OpenRouter"
 #: src/pages/Onboarding.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Your organization allows personal models."
-msgstr ""
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Your organization manages the models used in this workspace."
 msgstr ""
 
 #: src/pages/onboarding/managed-model-setup.tsx

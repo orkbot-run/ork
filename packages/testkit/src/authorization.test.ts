@@ -366,6 +366,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
         },
       ],
       ["serverAI/workspaceBudget", { monthlyBudgetMicros: null }],
+      ["serverAI/resetWorkspaceModels"],
       ["serverAI/disable", { connectionId: "missing" }],
       ["models/list"],
       ["models/workspacePolicy"],

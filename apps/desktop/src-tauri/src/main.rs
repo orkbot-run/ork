@@ -1697,6 +1697,26 @@ async fn set_default_organization<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+async fn create_organization<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    name: String,
+) -> Result<String, String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    require_account(&state, &authorization)?;
+    let id = server_directory::Directory::new()?
+        .create_organization(authorization.directory_bearer()?, &name)
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    Ok(id)
+}
+
+#[tauri::command]
 async fn check_workspace<R: tauri::Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, DesktopState>,
@@ -2556,7 +2576,6 @@ async fn start_local_server(
         token: authorization.directory_bearer()?,
         organization_id: &organization_id,
         device_id: device,
-        subject: authorization.account.identity().1,
     };
     let workspace = enrollment
         .connect(|| {
@@ -2781,8 +2800,20 @@ async fn open_server(
     let bundled = choice.workspace.is_some();
     let navigation_origin = target.origin();
     let navigation_app = app.clone();
+    let mut start_url = target.clone();
+    if choice.workspace.as_ref().is_some_and(|workspace| {
+        state.pending_workspace.lock().is_ok_and(|pending| {
+            pending.as_ref().is_some_and(|link| {
+                link.organization_id == workspace.organization_id
+                    && link.server_id == workspace.server_id
+                    && link.workspace_id == workspace.workspace_id
+            })
+        })
+    }) {
+        start_url.set_fragment(Some("ork-workspace-entry"));
+    }
     let builder = profile::configure(
-        WebviewWindowBuilder::new(app, &label, WebviewUrl::External(target.clone())),
+        WebviewWindowBuilder::new(app, &label, WebviewUrl::External(start_url)),
         &state.directory,
         &logical,
         authorization.account.identity(),
@@ -2800,6 +2831,13 @@ async fn open_server(
         .min_inner_size(640.0, 480.0)
         .visible(false)
         .disable_drag_drop_handler()
+        // An explicit legacy workspace link opens its verified entry instead of the last Space.
+        .initialization_script(
+            r##"if (window.top === window && location.hash === "#ork-workspace-entry") {
+                history.replaceState(history.state, "", location.pathname + location.search);
+                try { localStorage.removeItem("orkbot:space-id"); } catch {}
+            }"##,
+        )
         .initialization_script(auth::initialization_script(&target))
         .initialization_script(native::initialization_script_with_transport(
             &label,
@@ -3936,6 +3974,7 @@ fn main() {
             list_workspaces,
             workspace_catalog,
             set_default_organization,
+            create_organization,
             check_workspace,
             set_default_server,
             create_server_installation,
@@ -4746,6 +4785,7 @@ mod tests {
                 list_workspaces,
                 workspace_catalog,
                 set_default_organization,
+                create_organization,
                 clear_workspace_link,
                 check_workspace,
                 set_default_server,
@@ -4796,6 +4836,8 @@ mod tests {
                 )
             } else if command == "set_default_organization" {
                 tauri::ipc::InvokeBody::Json(serde_json::json!({ "organizationId": null }))
+            } else if command == "create_organization" {
+                tauri::ipc::InvokeBody::Json(serde_json::json!({ "name": "Team" }))
             } else if command == "clear_workspace_link" {
                 tauri::ipc::InvokeBody::Json(
                     serde_json::json!({ "target": { "organizationId": "00000000-0000-4000-8000-000000000001", "serverId": "00000000-0000-4000-8000-000000000001", "workspaceId": "00000000-0000-4000-8000-000000000001" } }),
@@ -4838,7 +4880,11 @@ mod tests {
                 serde_json::json!({"serverUrl": null, "mode": "existing", "startup": {"phase": "idle"}, "pendingServer": null}),
             ),
         );
-        for command in ["workspace_catalog", "set_default_organization"] {
+        for command in [
+            "workspace_catalog",
+            "set_default_organization",
+            "create_organization",
+        ] {
             let error = tauri::test::get_ipc_response(&setup, request(command, local)).unwrap_err();
             assert!(
                 [
@@ -4868,6 +4914,7 @@ mod tests {
                 "list_workspaces",
                 "workspace_catalog",
                 "set_default_organization",
+                "create_organization",
                 "clear_workspace_link",
                 "check_workspace",
                 "connect_workspace",

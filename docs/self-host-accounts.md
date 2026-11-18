@@ -54,9 +54,14 @@ Wait for `confirm` to return `{"ready":true}`. A pending approval returns false,
 so repeat `confirm` after approval or an interrupted acknowledgement. Keep using
 the same installation and volumes during recovery. Approval alone is insufficient.
 
-A personal organization has one owner, one server and one workspace. Create company workspaces under the connected server in Accounts. Clean
-installations provision local workspace IDs and acknowledge them to Accounts.
-Existing local data requires the explicit mapping described below.
+In the desktop app, choose **Install on your own server** to copy an install command
+for the selected organization. The desktop picker refreshes while you approve and
+start the server.
+
+Clean installations prepare an initial workspace and acknowledge it to Accounts.
+Accounts applies the organization's access policy to the new entry. After signing in
+to that server, create and switch workspaces from the left sidebar in Ork. Existing
+local data requires the explicit mapping described below.
 
 For a remotely hosted server, publish its reachable HTTPS origin. Create a JSON file
 inside the API container, for example `/tmp/ork-routes.json`, containing:
@@ -77,19 +82,16 @@ Device-local routes remain scoped to their registered device.
 
 ## Workspace access and AI administration
 
-Organization administrators and managers have administrator access to every
-workspace in the organization. Add regular members to each workspace they need
-in Accounts. Removing or changing an organization role updates its workspace access.
+Accounts controls admission to the chosen server, and Ork checks membership in each
+workspace. Previously assigned Accounts workspaces remain available to members with
+active access. Removing Accounts access also removes access to the associated spaces
+on Ork.
 
-Organization administrators configure AI through the connected app. Connections stay
-on the server where they are configured and apply to its organization's workspaces.
-On a new server, an organization administrator chooses whether to connect organization
-models or allow members to connect their own. Other members wait until that choice is
-made. Administrators can change the choice in **Organization models**. Personal
-providers may process workspace data outside the company's servers. Organization
-models do not silently fall back to personal connections if they become unavailable.
-During upgrades, servers with existing model connections retain their previous behavior;
-servers without connections ask for the initial choice.
+Organization administrators connect a model provider through the app. The first
+working connection is the server default for workspaces that inherit it. Administrators
+can change the default in **Organization models**. Workspace model settings can define
+a separate default and additional allowed connections. Existing workspace-specific
+model assignments are retained during upgrades.
 
 Update Accounts before updating the Ork server. Organization administration uses an
 opt-in signed role projection; an older Accounts deployment does not provide this role

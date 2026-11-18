@@ -674,12 +674,18 @@ msgstr "Nie udało się zweryfikować uprawnień administratora. Zaloguj się po
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Advanced"
 msgstr "Zaawansowane"
+
+#: src/pages/SpaceSettingOverrides.tsx
+msgid "Advanced models"
+msgstr "Zaawansowane ustawienia modeli"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
@@ -1449,6 +1455,7 @@ msgstr "Wybierz model"
 msgid "Choose a new password"
 msgstr "Wybierz nowe hasło"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
@@ -1475,7 +1482,6 @@ msgstr "Wybierz plik"
 msgid "Choose folder"
 msgstr "Wybierz folder"
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Choose how people in your organization will connect models."
 msgstr "Wybierz, jak osoby w organizacji będą łączyć modele."
@@ -1764,6 +1770,8 @@ msgstr "Sprawdź, czy adres URL jest dostępny w tej sesji przeglądarki, a pote
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/model-settings/role-model-picker.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/Onboarding.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/shell/message-cards.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -1815,7 +1823,6 @@ msgstr "Połącz własne"
 msgid "Connect OAuth"
 msgstr "Połącz przez OAuth"
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Connect organization models"
 msgstr "Podłącz modele organizacji"
@@ -1901,7 +1908,6 @@ msgstr "Limit kontekstu"
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Continue"
@@ -2464,10 +2470,6 @@ msgstr "Nie udało się zapisać tego wyboru"
 msgid "Could not save your server."
 msgstr "Nie udało się zapisać serwera."
 
-#: src/pages/onboarding/managed-model-setup.tsx
-msgid "Could not save. Try again."
-msgstr "Nie udało się zapisać. Spróbuj ponownie."
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "Nie udało się przeszukać katalogu"
@@ -2623,6 +2625,10 @@ msgstr "Utwórz rutynę"
 #: src/pages/shell/dialogs.tsx
 msgid "Create space"
 msgstr "Utwórz przestrzeń"
+
+#: src/pages/shell/workspace-rail.tsx
+msgid "Create workspace"
+msgstr "Utwórz workspace"
 
 #: src/pages/Auth.tsx
 msgid "Create your Ork"
@@ -3896,7 +3902,6 @@ msgstr "Opuść"
 msgid "Let bots use this computer"
 msgstr "Pozwól botom używać tego komputera"
 
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Let people connect their own models"
 msgstr "Pozwól każdemu podłączyć własny model"
@@ -5123,7 +5128,6 @@ msgstr "Modele osobiste"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Personal models may process workspace data outside company servers."
 msgstr "Osobiste modele mogą przetwarzać dane poza serwerami firmy."
@@ -7291,6 +7295,10 @@ msgstr "Użyj środków Ork"
 msgid "Use Protected input for passwords."
 msgstr "Do haseł używaj opcji Chronione wprowadzanie."
 
+#: src/pages/ServerAISettings.tsx
+msgid "Use server default"
+msgstr "Użyj domyślnego połączenia serwera"
+
 #: src/pages/model-settings/space-bots-model.tsx
 msgid "Use space default"
 msgstr "Użyj domyślnych przestrzeni"
@@ -7397,7 +7405,6 @@ msgstr "Upłynął czas żądania głosowego."
 msgid "Wait a moment and test again."
 msgstr "Poczekaj chwilę i ponów test."
 
-#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Waiting for an organization administrator to set up models."
@@ -7574,6 +7581,10 @@ msgstr "Model workspace’u"
 msgid "Workspace monthly budget (USD)"
 msgstr "Miesięczny budżet przestrzeni roboczej (USD)"
 
+#: src/pages/shell/workspace-rail.tsx
+msgid "Workspaces"
+msgstr "Workspace’y"
+
 #: src/lib/billing.ts
 msgid "year"
 msgstr "rok"
@@ -7672,10 +7683,6 @@ msgstr "Twój OpenRouter"
 #: src/pages/ServerAISettings.tsx
 msgid "Your organization allows personal models."
 msgstr "Organizacja zezwala na modele osobiste."
-
-#: src/pages/ModelSettingsOverlay.tsx
-msgid "Your organization manages the models used in this workspace."
-msgstr "Organizacja zarządza modelami używanymi w tej przestrzeni roboczej."
 
 #: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx

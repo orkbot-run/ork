@@ -17,6 +17,7 @@ export function BotsSidebarLayout({
   onCollapsedChange,
   onPreviewCollapsedChange,
   computerOpen,
+  workspaceRailWidth,
   children,
   ...props
 }: ComponentProps<typeof SidebarProvider> & {
@@ -25,6 +26,7 @@ export function BotsSidebarLayout({
   onCollapsedChange: (collapsed: boolean) => void;
   onPreviewCollapsedChange: (collapsed: boolean) => void;
   computerOpen: boolean;
+  workspaceRailWidth: number;
 }) {
   const { t } = useLingui();
   const { width, resizing, handleProps } = useSidebarResize({
@@ -33,14 +35,18 @@ export function BotsSidebarLayout({
     onCollapsedChange,
     onPreviewCollapsedChange,
   });
+  const navigationWidth = collapsed ? width + workspaceRailWidth : width;
   return (
-    <SidebarWidthContext value={width}>
+    <SidebarWidthContext value={navigationWidth}>
       <SidebarProvider
         {...props}
         open={!collapsed}
         onOpenChange={(open) => onCollapsedChange(!open)}
         style={
-          { "--sidebar-width": `${width}px`, "--sidebar-width-icon": `${width}px` } as CSSProperties
+          {
+            "--sidebar-width": `${navigationWidth}px`,
+            "--sidebar-width-icon": `${navigationWidth}px`,
+          } as CSSProperties
         }
         data-resizing-sidebar={resizing || undefined}
       >
@@ -51,7 +57,7 @@ export function BotsSidebarLayout({
             {...handleProps}
             data-testid="bots-sidebar-edge"
             aria-label={t`Resize bots sidebar`}
-            style={{ insetInlineStart: width - 4 }}
+            style={{ insetInlineStart: navigationWidth - 4 }}
             className={`absolute inset-y-0 z-50 m-0 hidden h-full w-2 border-0 cursor-col-resize touch-none select-none hover:bg-sidebar-border focus-visible:bg-sidebar-border focus-visible:outline-none md:block ${resizing ? "" : "transition-[inset-inline-start] duration-200 ease-out motion-reduce:transition-none"}`}
           />
         )}

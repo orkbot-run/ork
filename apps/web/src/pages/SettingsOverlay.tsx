@@ -423,6 +423,7 @@ export function SettingsOverlay({
                   ) : null}
                   {section === "space" && space ? (
                     <SpaceSettingsPanel
+                      managedModels={modelPolicy.data?.managed === true}
                       key={space.id}
                       space={space}
                       onRename={(name) => onRenameSpace?.(space.id, name) ?? Promise.resolve()}

@@ -43,7 +43,7 @@ import { ConnectionNameField, ProvidersSection } from "./model-settings/provider
 import type { ConnectableProvider } from "./model-settings/role-model-picker";
 import { SpaceBotsModelNotice } from "./model-settings/space-bots-model";
 import { useModelSettings } from "./model-settings/use-model-settings";
-import { AISettingsFrame } from "./ServerAISettings";
+import { AISettingsFrame, ServerAISettings } from "./ServerAISettings";
 import { WorkspaceModelPolicy } from "./WorkspaceModelPolicy";
 
 export function ModelSettingsOverlay(props: Parameters<typeof LegacyModelSettingsOverlay>[0]) {
@@ -67,15 +67,11 @@ export function ModelSettingsOverlay(props: Parameters<typeof LegacyModelSetting
     );
   if (policy.data.managed && !policy.data.personalModelsAllowed)
     return (
-      <AISettingsFrame embedded={props.embedded} onClose={props.onClose}>
-        <p className="text-sm text-muted-foreground">
-          {policy.data.modelSetupMode === "pending" ? (
-            <Trans>Waiting for an organization administrator to set up models.</Trans>
-          ) : (
-            <Trans>Your organization manages the models used in this workspace.</Trans>
-          )}
-        </p>
-      </AISettingsFrame>
+      <ServerAISettings
+        embedded={props.embedded}
+        scope={props.scope === "space" ? "space" : "organization"}
+        onClose={props.onClose}
+      />
     );
   return <LegacyModelSettingsOverlay {...props} />;
 }

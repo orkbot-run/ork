@@ -32,9 +32,11 @@ import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
 export function SpaceSettingOverrides({
   onClose,
   onBusyChange,
+  managedModels = false,
 }: {
   onClose: () => void;
   onBusyChange?: (busy: boolean) => void;
+  managedModels?: boolean;
 }) {
   const { t } = useLingui();
   const rpc = useSpaceRpc();
@@ -46,6 +48,7 @@ export function SpaceSettingOverrides({
   const [confirmingReset, setConfirmingReset] = useState<SpaceSetting | null>(null);
   // A credential still saving would land in the vault a reset is deleting.
   const [vaultBusy, setVaultBusy] = useState(false);
+  const [advancedModelsOpen, setAdvancedModelsOpen] = useState(false);
 
   const settings: {
     id: SpaceSetting;
@@ -124,42 +127,52 @@ export function SpaceSettingOverrides({
   return (
     <div className="space-y-3">
       <SettingsGroup data-testid="space-setting-overrides">
-        {settings.map(({ id, label, panel, resetConfirmation, busy }) => {
-          const custom = customized.includes(id);
-          return (
-            <div key={id} data-testid={`space-setting-${id}`}>
-              <SettingsRow
-                label={
-                  <>
-                    <p>{label}</p>
-                    {custom ? null : (
-                      <p className="text-[13px] text-muted-foreground">{t`Your defaults`}</p>
-                    )}
-                  </>
-                }
-                control={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-full"
-                    aria-label={custom ? t`Use defaults for ${label}` : t`Customize ${label}`}
-                    disabled={pending !== null || busy}
-                    onClick={() =>
-                      custom && resetConfirmation
-                        ? setConfirmingReset(id)
-                        : void setOverride(id, !custom)
-                    }
-                  >
-                    {custom ? t`Use defaults` : t`Customize`}
-                  </Button>
-                }
-              >
-                {custom ? <div className="pt-3">{panel()}</div> : null}
-              </SettingsRow>
-            </div>
-          );
-        })}
+        {settings
+          .filter(({ id }) => !managedModels || id !== "models")
+          .map(({ id, label, panel, resetConfirmation, busy }) => {
+            const custom = customized.includes(id);
+            return (
+              <div key={id} data-testid={`space-setting-${id}`}>
+                <SettingsRow
+                  label={
+                    <>
+                      <p>{label}</p>
+                      {custom ? null : (
+                        <p className="text-[13px] text-muted-foreground">{t`Your defaults`}</p>
+                      )}
+                    </>
+                  }
+                  control={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-full"
+                      aria-label={custom ? t`Use defaults for ${label}` : t`Customize ${label}`}
+                      disabled={pending !== null || busy}
+                      onClick={() =>
+                        custom && resetConfirmation
+                          ? setConfirmingReset(id)
+                          : void setOverride(id, !custom)
+                      }
+                    >
+                      {custom ? t`Use defaults` : t`Customize`}
+                    </Button>
+                  }
+                >
+                  {custom ? <div className="pt-3">{panel()}</div> : null}
+                </SettingsRow>
+              </div>
+            );
+          })}
       </SettingsGroup>
+      {managedModels ? (
+        <details onToggle={(event) => setAdvancedModelsOpen(event.currentTarget.open)}>
+          <summary className="cursor-pointer py-2 text-sm font-medium">{t`Advanced models`}</summary>
+          {advancedModelsOpen ? (
+            <ModelSettingsOverlay embedded scope="space" onClose={onClose} />
+          ) : null}
+        </details>
+      ) : null}
       {actionError ? (
         <p role="alert" className="text-[12.5px] text-destructive">
           {actionError}

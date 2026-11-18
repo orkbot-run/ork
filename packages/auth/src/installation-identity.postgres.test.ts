@@ -23,7 +23,14 @@ import {
   personalServerMessage,
   RELAY_SERVER_PURPOSE,
 } from "@orkbot/contracts";
-import { createDb, createSpaceForMember, runAsSystem, runAsTenant } from "@orkbot/db";
+import {
+  createDb,
+  createSpaceForMember,
+  crossSpaceCommunicationAllowed,
+  runAsSystem,
+  runAsTenant,
+  workspaceNavigationFilter,
+} from "@orkbot/db";
 import { createLocalJWKSet, SignJWT } from "jose";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuth } from "./index.js";
@@ -595,6 +602,9 @@ describe.skipIf(!enabled)(
             label: "Provider",
             provider: "fixture",
             models: ["model-a"],
+            isDefault: true,
+            defaultModelId: "model-a",
+            defaultAllowedModels: ["model-a"],
             secretId: "fixture",
             secretRef: "fixture",
           },
@@ -739,6 +749,87 @@ describe.skipIf(!enabled)(
         });
       });
     };
+    it("opens another legacy mapping on the same server only with an independent live grant", async () => {
+      await provision();
+      const projection = await authority!.synchronize();
+      const peerId = randomUUID();
+      const peerSpaceId = "identity-test-peer-space";
+      const peerRevision = randomUUID();
+      const peerMember = {
+        userId: "central-participant",
+        role: "member" as const,
+        accessVersion: peerRevision,
+      };
+      const peer = {
+        ...projection.workspaces[0]!,
+        id: peerId,
+        localWorkspaceId: peerSpaceId,
+        operationId: randomUUID(),
+        members: [peerMember],
+      };
+      const sessionId = "identity-test-session";
+      const userId = "identity-test-user";
+      const localOrganizationId = "identity-test-org";
+      await system(async () => {
+        const binding = await prisma!.centralWorkspaceBinding.findUniqueOrThrow({
+          where: { id: workspaceId },
+        });
+        await prisma!.space.create({
+          data: { id: peerSpaceId, organizationId: localOrganizationId, name: "Legacy team" },
+        });
+        await prisma!.spaceMember.create({
+          data: {
+            id: randomUUID(),
+            spaceId: peerSpaceId,
+            organizationId: localOrganizationId,
+            userId,
+            role: "member",
+            createdAt: new Date(),
+          },
+        });
+        await prisma!.centralWorkspaceBinding.create({
+          data: {
+            ...binding,
+            id: peerId,
+            spaceId: peerSpaceId,
+            operationId: peer.operationId,
+            members: [peerMember],
+          },
+        });
+        await prisma!.centralWorkspaceAccess.create({
+          data: {
+            workspaceId: peerId,
+            userId,
+            centralSubject: peerMember.userId,
+            role: peerMember.role,
+            membershipVersion: peerRevision,
+          },
+        });
+      });
+
+      expect(await authority!.session(sessionId, userId, peerSpaceId)).toBeNull();
+      authority!.window.apply(
+        { ...projection, workspaces: [...projection.workspaces, peer] },
+        performance.now(),
+      );
+      const access = await authority!.session(sessionId, userId, peerSpaceId);
+      expect(access).toMatchObject({
+        spaceId: peerSpaceId,
+        workspaceId: peerId,
+        revision: peerRevision,
+        entry: { workspaceId },
+      });
+      const watch = await authority!.watchSession(access!);
+      try {
+        expect(watch.signal.aborted).toBe(false);
+        authority!.invalidate(workspaceId);
+        expect(watch.signal.aborted).toBe(true);
+        expect(await authority!.session(sessionId, userId, peerSpaceId)).toBeNull();
+      } finally {
+        watch.dispose();
+      }
+    });
+
     it.each(["permission", "mapping"])(
       "rejects a same-binding same-iat stale %s before touching a newer personal watch",
       async (phase) => {
@@ -2483,7 +2574,7 @@ describe.skipIf(!enabled)(
       ).toBe(0);
     });
 
-    it("refuses local sibling workspaces in a centrally mapped organization", async () => {
+    it("restricts server-owned workspace creation to an administrator with admission", async () => {
       await provision();
       await expect(
         system(() =>
@@ -2493,10 +2584,126 @@ describe.skipIf(!enabled)(
             name: "Unregistered sibling",
           }),
         ),
-      ).rejects.toThrow("Create workspaces in Accounts");
+      ).rejects.toThrow("You do not have permission to create a workspace.");
       expect(
         await system(() => prisma!.space.count({ where: { organizationId: "identity-test-org" } })),
       ).toBe(1);
+    });
+
+    it("switches between locally created workspaces, isolates context, and revokes both with the server admission", async () => {
+      await provision();
+      const userId = "identity-test-user";
+      const sessionId = "identity-test-session";
+      const currentSpaceId = "identity-test-space";
+      await system(() =>
+        prisma!.centralWorkspaceAccess.update({
+          where: { workspaceId_userId: { workspaceId, userId } },
+          data: { role: "admin" },
+        }),
+      );
+      const [first, second] = await system(async () => [
+        await createSpaceForMember(prisma!, { currentSpaceId, userId, name: "Research" }),
+        await createSpaceForMember(prisma!, { currentSpaceId, userId, name: "Operations" }),
+      ]);
+      expect(await authority!.session(sessionId, userId, first.id)).toMatchObject({
+        spaceId: first.id,
+        workspaceId,
+      });
+      expect(await authority!.session(sessionId, userId, second.id)).toMatchObject({
+        spaceId: second.id,
+        workspaceId,
+      });
+      const filter = await workspaceNavigationFilter(prisma!, { spaceId: first.id });
+      const members = await system(() =>
+        prisma!.spaceMember.findMany({
+          where: { userId, space: filter },
+          select: { spaceId: true },
+        }),
+      );
+      expect(new Set(members.map(({ spaceId }) => spaceId))).toEqual(
+        new Set([currentSpaceId, first.id, second.id]),
+      );
+      const [alpha, beta] = await Promise.all(
+        [first.id, second.id].map((spaceId) =>
+          system(() =>
+            prisma!.bot.create({
+              data: {
+                spaceId,
+                userId,
+                name: "Assistant",
+                color: "blue",
+                crossSpaceCommunication: true,
+              },
+            }),
+          ),
+        ),
+      );
+      await system(() =>
+        prisma!.mcpServer.create({
+          data: {
+            spaceId: second.id,
+            userId,
+            slug: "operations",
+            name: "Operations tool",
+            transport: "http",
+            endpoint: "https://tools.example.test",
+            allSpaces: true,
+          },
+        }),
+      );
+      await runAsTenant({ spaceId: first.id, userId }, async () => {
+        expect(await prisma!.bot.count({ where: { id: beta!.id } })).toBe(0);
+        expect(await prisma!.memoryDocument.count({ where: { spaceId: second.id } })).toBe(0);
+        expect(await prisma!.mcpServer.count()).toBe(0);
+      });
+      expect(await system(() => crossSpaceCommunicationAllowed(prisma!, alpha!.id, beta!.id))).toBe(
+        false,
+      );
+      const queued = await system(async () => {
+        const thread = await prisma!.thread.create({
+          data: { spaceId: first.id, botId: alpha!.id, userId },
+        });
+        const task = await prisma!.task.create({
+          data: {
+            spaceId: first.id,
+            botId: alpha!.id,
+            userId,
+            threadId: thread.id,
+            prompt: "Fixture",
+            status: "queued",
+          },
+        });
+        return prisma!.run.create({
+          data: {
+            spaceId: first.id,
+            botId: alpha!.id,
+            userId,
+            threadId: thread.id,
+            taskId: task.id,
+            trigger: "user",
+            status: "queued",
+          },
+        });
+      });
+      expect(queued).toMatchObject({
+        centralWorkspaceId: workspaceId,
+        workspaceMembershipVersion: admission,
+        requiredReaderVersion: 6,
+      });
+      const permission = await authority!.execution({
+        spaceId: first.id,
+        userId,
+        workspaceId,
+        membershipVersion: admission,
+      });
+      expect(permission).toBeTruthy();
+      server.revoke();
+      await authority!.synchronize();
+      expect(permission!.signal.aborted).toBe(true);
+      expect(await authority!.session(sessionId, userId, first.id)).toBeNull();
+      expect(await authority!.session(sessionId, userId, second.id)).toBeNull();
+      expect(await runAsTenant({ spaceId: first.id, userId }, () => prisma!.bot.count())).toBe(0);
+      permission!.dispose();
     });
 
     it("requires fresh central verification after restart despite a valid database projection", async () => {

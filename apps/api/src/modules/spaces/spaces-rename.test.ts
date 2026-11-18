@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 rename tests are preserved. Ork adds admission lookup fixtures.
 
 import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
@@ -46,6 +47,7 @@ function renameHarness(target: TargetSpace, currentOrganizationId: string | null
     callback(tx),
   );
   const prisma = {
+    space: { findUnique: vi.fn(async () => null) },
     centralWorkspaceBinding: { findFirst: vi.fn(async () => null) },
     $transaction: transaction,
     // The router checks membership before scoping the database to the target Space.

@@ -5,7 +5,6 @@ import { createHash, randomUUID } from "node:crypto";
 import type { RealtimeFanout } from "@orkbot/adapter-kit";
 import type { WorkspaceProjection } from "@orkbot/contracts";
 import {
-  AIModelsSchema,
   IDENTITY_LOGIN_PURPOSE,
   IDENTITY_PROJECTION_PURPOSE,
   personalActivationMessage,
@@ -13,7 +12,7 @@ import {
   workspaceProjectionSchema,
 } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "@orkbot/db";
-import { runAsSystem } from "@orkbot/db";
+import { runAsSystem, workspaceAdmissionBinding } from "@orkbot/db";
 import type { InstallationClient, InstallationConfiguration } from "./installation-client.js";
 import { InstallationRequestError } from "./installation-client.js";
 import type { NativeLoginGrant, NativeLoginIdentity } from "./native-accounts-login.js";
@@ -25,50 +24,12 @@ import { WorkspaceAuthorityWindow } from "./workspace-authority-window.js";
 
 const refused = () => new Error("Workspace authority unavailable");
 
-async function inheritOrganizationModels(
-  tx: Prisma.TransactionClient,
-  configuration: InstallationConfiguration,
-  localOrganizationId: string,
-  spaceId: string,
-) {
-  const template = await tx.centralWorkspaceBinding.findFirst({
-    where: {
-      localOrganizationId,
-      serverId: configuration.serverId,
-      bindingVersion: configuration.bindingVersion,
-      state: "ready",
-      spaceId: { not: spaceId },
-    },
-    select: { spaceId: true },
-    orderBy: { spaceId: "asc" },
-  });
-  if (!template) return;
-  const models = await tx.workspaceAIConnection.findMany({
-    where: {
-      spaceId: template.spaceId,
-      available: true,
-      bindingVersion: configuration.bindingVersion,
-    },
-  });
-  for (const model of models)
-    await tx.workspaceAIConnection.upsert({
-      where: { spaceId_connectionId: { spaceId, connectionId: model.connectionId } },
-      create: {
-        spaceId,
-        connectionId: model.connectionId,
-        available: model.available,
-        enabled: model.enabled,
-        allowedModels: AIModelsSchema.parse(model.allowedModels),
-        defaultModelId: model.defaultModelId,
-        isDefault: model.isDefault,
-        fallback: model.fallback,
-        priority: model.priority,
-        monthlyBudgetMicros: model.monthlyBudgetMicros,
-        bindingVersion: configuration.bindingVersion,
-      },
-      update: {},
-    });
-}
+type WorkspaceAdmission = {
+  workspaceId: string;
+  subject: string;
+  revision: string;
+  personalDeviceId?: string | null;
+};
 
 /** Central projections control admission; local IDs, settings and data remain on this installation. */
 export class WorkspaceAuthority {
@@ -436,7 +397,6 @@ export class WorkspaceAuthority {
               validUntil: new Date(0),
             },
           });
-          await inheritOrganizationModels(tx, configuration, localOrganizationId, spaceId);
           return { localOrganizationId, spaceId };
         }),
     );
@@ -474,9 +434,14 @@ export class WorkspaceAuthority {
           throw refused();
         const space = await tx.space.findUnique({
           where: { id: spaceId },
-          select: { organizationId: true, deletingAt: true },
+          select: { organizationId: true, deletingAt: true, admissionWorkspaceId: true },
         });
-        if (!space || space.organizationId !== localOrganizationId || space.deletingAt)
+        if (
+          !space ||
+          space.organizationId !== localOrganizationId ||
+          space.deletingAt ||
+          space.admissionWorkspaceId
+        )
           throw refused();
         await tx.$queryRaw`SELECT id FROM organization WHERE id = ${localOrganizationId} FOR UPDATE`;
         const existing = await tx.centralWorkspaceBinding.findUnique({
@@ -508,11 +473,10 @@ export class WorkspaceAuthority {
           update: {},
         });
         if (!existing)
-          await inheritOrganizationModels(tx, configuration, localOrganizationId, spaceId);
-        await tx.installationIdentity.update({
-          where: { id: "local" },
-          data: { localOrganizationId },
-        });
+          await tx.installationIdentity.update({
+            where: { id: "local" },
+            data: { localOrganizationId },
+          });
       }),
     );
     const { response } = await this.installation.signedRequest("/workspaces/acknowledge", {
@@ -806,18 +770,14 @@ export class WorkspaceAuthority {
     revision: string;
     workspaceId: string;
     personalDeviceId: string | null;
+    entry?: WorkspaceAdmission;
   } | null> {
-    return runAsSystem("verify the exact workspace of a native session", async () => {
+    return runAsSystem("verify workspace access for a native session", async () => {
       const session = await this.prisma.centralSessionBinding.findUnique({
         where: { sessionId },
         include: { workspace: true, session: { select: { userId: true } } },
       });
-      if (
-        !session ||
-        session.session.userId !== userId ||
-        (requestedSpaceId && requestedSpaceId !== session.workspace.spaceId)
-      )
-        return null;
+      if (!session || session.session.userId !== userId) return null;
       const access = await this.prisma.centralWorkspaceAccess.findUnique({
         where: { workspaceId_userId: { workspaceId: session.workspaceId, userId } },
       });
@@ -845,22 +805,83 @@ export class WorkspaceAuthority {
         session.workspace.validUntil.getTime() <= Date.now()
       )
         return null;
-      return {
-        spaceId: session.workspace.spaceId,
+      const spaceId = requestedSpaceId || session.workspace.spaceId;
+      const entry = {
+        workspaceId: session.workspaceId,
         subject: session.centralSubject,
         revision: session.membershipVersion,
-        workspaceId: session.workspaceId,
         personalDeviceId: session.personalDeviceId,
+      };
+      if (spaceId === session.workspace.spaceId) return { spaceId, ...entry };
+      if (
+        !(await this.prisma.spaceMember.findFirst({
+          where: {
+            userId,
+            spaceId,
+            organizationId: session.workspace.localOrganizationId,
+            space: { deletingAt: null },
+          },
+          select: { id: true },
+        }))
+      )
+        return null;
+      const selected = await workspaceAdmissionBinding(this.prisma, spaceId);
+      if (!selected) return null;
+      if (selected.id === session.workspaceId) return { spaceId, ...entry };
+      // Older installations can have several Accounts mappings. Require a live,
+      // independently granted membership before entering one through this server.
+      if (
+        session.personalDeviceId ||
+        selected.state !== "ready" ||
+        selected.serverId !== session.workspace.serverId ||
+        selected.centralOrganizationId !== session.workspace.centralOrganizationId ||
+        selected.localOrganizationId !== session.workspace.localOrganizationId ||
+        selected.bindingVersion !== session.workspace.bindingVersion ||
+        selected.validUntil.getTime() <= Date.now()
+      )
+        return null;
+      const selectedAccess = await this.prisma.centralWorkspaceAccess.findUnique({
+        where: { workspaceId_userId: { workspaceId: selected.id, userId } },
+      });
+      if (
+        !selectedAccess?.active ||
+        selectedAccess.centralSubject !== session.centralSubject ||
+        !this.window.permits(
+          selected.id,
+          selectedAccess.centralSubject,
+          selectedAccess.membershipVersion,
+        )
+      )
+        return null;
+      return {
+        spaceId,
+        subject: session.centralSubject,
+        revision: selectedAccess.membershipVersion,
+        workspaceId: selected.id,
+        personalDeviceId: null,
+        entry,
       };
     });
   }
 
-  async watchSession(scope: {
-    workspaceId: string;
-    subject: string;
-    revision: string;
-    personalDeviceId?: string | null;
-  }): Promise<{ signal: AbortSignal; dispose(): void }> {
+  async watchSession(
+    scope: WorkspaceAdmission & { entry?: WorkspaceAdmission },
+  ): Promise<{ signal: AbortSignal; dispose(): void }> {
+    if (scope.entry) {
+      const active = this.window.watch(scope.workspaceId, scope.subject, scope.revision);
+      const entry = this.window.watch(
+        scope.entry.workspaceId,
+        scope.entry.subject,
+        scope.entry.revision,
+      );
+      return {
+        signal: AbortSignal.any([active.signal, entry.signal]),
+        dispose() {
+          active.dispose();
+          entry.dispose();
+        },
+      };
+    }
     if (scope.personalDeviceId) {
       const device = await this.personal.device(scope.personalDeviceId);
       if (
@@ -986,24 +1007,34 @@ export class WorkspaceAuthority {
     expectedWorkspaceId?: string,
     personalDeviceId?: string | null,
   ): Promise<{ signal: AbortSignal; dispose: () => void } | null> {
-    const access = await runAsSystem(
+    if (!expectedRevision) return null;
+    const admission = await runAsSystem(
       "check central admission immediately before workspace execution",
-      () =>
-        this.prisma.centralWorkspaceAccess.findFirst({
-          where: {
-            userId,
-            active: true,
-            workspace: { spaceId, state: "ready" },
-          },
-        }),
+      async () => {
+        const binding = await workspaceAdmissionBinding(this.prisma, spaceId);
+        if (
+          binding?.state !== "ready" ||
+          (expectedWorkspaceId && binding.id !== expectedWorkspaceId)
+        )
+          return null;
+        if (
+          spaceId !== binding.spaceId &&
+          !(await this.prisma.spaceMember.findFirst({
+            where: { spaceId, userId, space: { deletingAt: null } },
+            select: { id: true },
+          }))
+        )
+          return null;
+        const access = await this.prisma.centralWorkspaceAccess.findUnique({
+          where: { workspaceId_userId: { workspaceId: binding.id, userId } },
+        });
+        return access?.active && access.membershipVersion === expectedRevision
+          ? { binding, access }
+          : null;
+      },
     );
-    if (
-      !access ||
-      !expectedRevision ||
-      access.membershipVersion !== expectedRevision ||
-      (expectedWorkspaceId && access.workspaceId !== expectedWorkspaceId)
-    )
-      return null;
+    if (!admission) return null;
+    const { binding, access } = admission;
     const device =
       personalDeviceId === null
         ? null
@@ -1017,10 +1048,7 @@ export class WorkspaceAuthority {
     if (device) return this.personal.watch(device);
     if (!this.window.permits(access.workspaceId, access.centralSubject, access.membershipVersion))
       return null;
-    const binding = await runAsSystem("check workspace expiry before execution", () =>
-      this.prisma.centralWorkspaceBinding.findUnique({ where: { id: access.workspaceId } }),
-    );
-    if (!binding || binding.validUntil.getTime() <= Date.now()) return null;
+    if (binding.validUntil.getTime() <= Date.now()) return null;
     return this.window.watch(access.workspaceId, access.centralSubject, access.membershipVersion);
   }
 

@@ -70,7 +70,7 @@ export function lastChatKey(userId: string | null, spaceId: string | null) {
 
 /** The chat a cached space had selected, if the space still lists it. */
 export function lastChatOf(
-  seed: AppBootstrap | undefined,
+  seed: { bots: readonly { id: string }[]; groups: readonly { id: string }[] } | undefined,
   chat: ChatTarget | undefined,
 ): ChatTarget | undefined {
   if (!seed || !chat) return undefined;

@@ -39,7 +39,6 @@ pub struct LocalEnrollment<'a> {
     pub token: &'a str,
     pub organization_id: &'a str,
     pub device_id: &'a str,
-    pub subject: &'a str,
 }
 
 impl LocalEnrollment<'_> {
@@ -144,35 +143,10 @@ impl LocalEnrollment<'_> {
             target.binding_version,
             &target.key_fingerprint,
         )?;
-        let response: Value = self.directory.identity_request(self.token, Method::POST, &format!("/api/identity/v2/organizations/{}/workspaces", self.organization_id), json!({
-            "serverId": target.server_id, "operationId": operation.operation_id, "name": "This computer",
-        })).await?;
-        check()?;
-        target.workspace_id = response
-            .pointer("/workspace/id")
-            .and_then(Value::as_str)
-            .ok_or(ERROR)?
-            .to_owned();
-        target.validate()?;
-        if !operation.completed {
-            let _: Value = self
-                .directory
-                .identity_request(
-                    self.token,
-                    Method::PUT,
-                    &format!(
-                        "/api/identity/v2/organizations/{}/workspaces/{}/members",
-                        self.organization_id, target.workspace_id
-                    ),
-                    json!({
-                        "userId": self.subject, "role": "admin",
-                    }),
-                )
-                .await?;
-            check()?;
-        }
         let catalog = self.directory.catalog(self.token).await?;
         check()?;
+        target.workspace_id = catalog.local_enrollment_workspace(&target)?;
+        target.validate()?;
         let routes =
             catalog.local_installation_routes(&target, &self.stack.web_url(), self.device_id)?;
         let completed = self.stack.installation(json!({

@@ -91,19 +91,18 @@ it("keeps organizations without servers in the chooser and waits for a choice", 
   container.querySelector<HTMLButtonElement>('[role="option"]')!.click();
   expect(chooseOrganization).toHaveBeenCalledWith(id(1));
   const personal = render(catalog(), id(1));
-  expect(personal.container.textContent).toContain("No workspaces available");
+  expect(personal.container.textContent).toContain("No servers connected");
   expect(personal.entries).toEqual([]);
 });
 
-it("hides workspaces without access and shows assigned workspaces that are still preparing", () => {
+it("lists each server once and leaves workspace names inside the server", () => {
   const { container, entries, open, setDefaultOrganization } = render(catalog(), id(2));
-  expect(container.textContent).not.toContain("Research server");
+  expect(container.textContent).toContain("Research server");
   expect(entries.map((row) => row.id)).toEqual([id(5)]);
   const buttons = [...container.querySelectorAll<HTMLButtonElement>(".workspace-choice")];
-  expect(buttons.map((button) => button.disabled)).toEqual([false, true]);
+  expect(buttons.map((button) => button.disabled)).toEqual([false]);
   expect(container.textContent).not.toContain("Restricted");
-  expect(buttons[1]!.textContent).toContain("Preparing workspace");
-  buttons[1]!.click();
+  expect(container.textContent).not.toContain("Preparing");
   expect(open).not.toHaveBeenCalled();
   buttons[0]!.click();
   expect(open).toHaveBeenCalledWith(id(5));

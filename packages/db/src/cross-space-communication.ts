@@ -20,8 +20,11 @@ export async function crossSpaceCommunicationAllowed(
     }>
   >`
     SELECT bot.id, bot."spaceId", bot."crossSpaceCommunication", bot."archivedAt",
-      EXISTS (SELECT 1 FROM public.central_workspace_bindings binding WHERE binding."spaceId" = bot."spaceId") AS centralized
-    FROM bots bot WHERE bot.id = ${senderBotId} OR bot.id = ${targetBotId}
+      (space."admissionWorkspaceId" IS NOT NULL OR EXISTS (
+        SELECT 1 FROM public.central_workspace_bindings binding WHERE binding."spaceId" = bot."spaceId"
+      )) AS centralized
+    FROM bots bot JOIN spaces space ON space.id = bot."spaceId"
+    WHERE bot.id = ${senderBotId} OR bot.id = ${targetBotId}
     ORDER BY bot.id FOR NO KEY UPDATE OF bot
   `;
   if (bots.length !== 2 || bots.some((bot) => bot.archivedAt)) return false;

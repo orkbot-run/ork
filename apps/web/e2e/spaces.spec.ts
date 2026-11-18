@@ -14,7 +14,10 @@ test("a new space creates its own bot, is renamed, and is deleted with its bots"
   const { spaceId: personalSpaceId } = await rpc<{ spaceId: string }>(page, "me", {});
 
   const sidebar = page.locator("aside").first();
-  await openNewSpace(page);
+  await page
+    .getByRole("navigation", { name: "Workspaces" })
+    .getByRole("button", { name: "Create workspace" })
+    .click();
   const dialog = page.getByRole("dialog", { name: "New space" });
   const name = dialog.getByLabel("Name");
   await name.fill("Typo space");
@@ -46,7 +49,7 @@ test("a new space creates its own bot, is renamed, and is deleted with its bots"
     "aria-current",
     "page",
   );
-  await expect(sidebar.getByRole("button", { name: /^Chief/ })).toHaveCount(2);
+  await expect(sidebar.getByRole("button", { name: /^Chief/ })).toHaveCount(1);
   await captureScreenshot(page, testInfo, "new-space-after-onboarding");
 
   // The space menu's Settings opens the Space section, where it is renamed in place.

@@ -4,7 +4,7 @@
 import type { SecretStore } from "@orkbot/adapter-kit";
 import type { ModelRoleChoice } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
-import { runAsSystem } from "@orkbot/db";
+import { runAsSystem, workspaceAdmissionBinding } from "@orkbot/db";
 import type { AIActor, ServerAICatalog } from "./server-ai-catalog.js";
 import { AIConnectionError } from "./server-ai-catalog.js";
 import { serverAIModel } from "./server-ai-model.js";
@@ -29,10 +29,16 @@ export class ServerAIModels {
 
   async actor(scope: InstallationModelScope): Promise<AIActor | null> {
     return runAsSystem("resolve the workspace's exact installation AI admission", async () => {
-      const binding = await this.deps.prisma.centralWorkspaceBinding.findUnique({
-        where: { spaceId: scope.spaceId },
-      });
+      const binding = await workspaceAdmissionBinding(this.deps.prisma, scope.spaceId);
       if (!binding) return null;
+      if (
+        binding.spaceId !== scope.spaceId &&
+        !(await this.deps.prisma.spaceMember.findUnique({
+          where: { spaceId_userId: { spaceId: scope.spaceId, userId: scope.userId } },
+          select: { userId: true },
+        }))
+      )
+        throw new AIConnectionError("forbidden");
       const access = await this.deps.prisma.centralWorkspaceAccess.findUnique({
         where: { workspaceId_userId: { workspaceId: binding.id, userId: scope.userId } },
       });

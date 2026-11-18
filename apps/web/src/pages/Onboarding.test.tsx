@@ -301,7 +301,7 @@ it("uses the selected standard protocol for discovery and save, then rechecks au
   vi.mocked(rpc.me).mockResolvedValueOnce({ needsModel: false, needsSignupSurvey: false } as never);
   await act(async () =>
     [...document.querySelectorAll("button")]
-      .find((button) => button.textContent === "Continue")!
+      .find((button) => button.textContent === "Connect")!
       .click(),
   );
   expect(rpc.models.connect).toHaveBeenCalledExactlyOnceWith(
@@ -316,7 +316,7 @@ it("uses the selected standard protocol for discovery and save, then rechecks au
   expect(host.querySelector('[data-testid="ready-app"]')).not.toBeNull();
 });
 
-it("uses defaults without exposing advanced settings during setup", async () => {
+it("keeps endpoint options under a closed advanced disclosure during setup", async () => {
   await act(async () =>
     root.render(
       <MemoryRouter initialEntries={["/onboarding/model"]}>
@@ -338,6 +338,7 @@ it("uses defaults without exposing advanced settings during setup", async () => 
     option.click();
   });
   expect(document.querySelector("select")).not.toBeNull();
+  expect(document.querySelector("details")?.open).toBe(false);
   expect(
     [...document.querySelectorAll("button")].some((button) => button.textContent === "Advanced"),
   ).toBe(false);
@@ -396,12 +397,12 @@ it("uses the shared API-key readiness check instead of enabling an incomplete sa
     });
   await update("x");
   expect(
-    [...document.querySelectorAll("button")].find((button) => button.textContent === "Continue")!
+    [...document.querySelectorAll("button")].find((button) => button.textContent === "Connect")!
       .disabled,
   ).toBe(true);
   await update("fixture-key");
   expect(
-    [...document.querySelectorAll("button")].find((button) => button.textContent === "Continue")!
+    [...document.querySelectorAll("button")].find((button) => button.textContent === "Connect")!
       .disabled,
   ).toBe(false);
   expect(rpc.models.connect).not.toHaveBeenCalled();

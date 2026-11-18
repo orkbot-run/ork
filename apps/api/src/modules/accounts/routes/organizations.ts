@@ -14,6 +14,7 @@ import {
   runAsSystem,
   SharedOrganizationError,
   SpaceDeletionInProgressError,
+  workspaceAdmissionBinding,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
 import type { RouterContext } from "#modules/platform/routes/context";
@@ -24,12 +25,13 @@ async function requireLocalOrganizationManagement(
   spaceId: string,
   organizationId?: string,
 ) {
-  const managed = await ctx.deps.prisma.centralWorkspaceBinding.findFirst({
-    where: {
-      OR: [{ spaceId }, ...(organizationId ? [{ localOrganizationId: organizationId }] : [])],
-    },
-    select: { id: true },
-  });
+  const managed =
+    (await workspaceAdmissionBinding(ctx.deps.prisma, spaceId)) ||
+    (organizationId &&
+      (await ctx.deps.prisma.centralWorkspaceBinding.findFirst({
+        where: { localOrganizationId: organizationId },
+        select: { id: true },
+      })));
   if (managed) throw new ORPCError("FORBIDDEN");
 }
 

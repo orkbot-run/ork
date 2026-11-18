@@ -406,6 +406,7 @@ export const SpaceSchema = z.object({
 export type Space = z.infer<typeof SpaceSchema>;
 
 export const SpaceNavigationSchema = z.object({
+  canCreateSpace: z.boolean().optional(),
   current: z.object({
     id: Id,
     name: z.string(),
@@ -2317,6 +2318,7 @@ export function byokTierChangeOffered(status: BillingStatus): boolean {
 }
 
 export const AppBootstrapSchema = z.object({
+  canCreateSpace: z.boolean().optional(),
   me: MeSchema,
   bots: z.array(BotSchema),
   groups: z.array(GroupSchema),

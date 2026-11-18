@@ -457,6 +457,7 @@ model Space {
   aiPolicy AIWorkspacePolicy?
   aiUsageReservations AIUsageReservation[]
   centralBinding             CentralWorkspaceBinding?
+  admissionWorkspaceId       String?
   aiDataConsents              AiDataConsent[]
   id                          String                       @id
   organizationId              String
@@ -516,6 +517,7 @@ model Space {
   capabilityInstallSpaces     CapabilityInstallSpace[]
 
   @@unique([id, organizationId])
+  @@index([admissionWorkspaceId])
   @@index([organizationId, createdAt])
   @@index([createdByUserId])
   @@map("spaces")
@@ -2631,6 +2633,9 @@ model ServerAIConnection {
   blockedUntil DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  isDefault Boolean @default(false)
+  defaultModelId String?
+  defaultAllowedModels Json?
   workspaces WorkspaceAIConnection[]
   reservations AIUsageReservation[]
   @@index([localOrganizationId, state])
@@ -2660,6 +2665,7 @@ model WorkspaceAIConnection {
 }
 
 model AIWorkspacePolicy {
+  overridesModels Boolean @default(false)
   spaceId String @id
   space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   monthlyBudgetMicros BigInt?

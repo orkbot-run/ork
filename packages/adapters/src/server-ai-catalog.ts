@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { RealtimeFanout, SecretStore } from "@orkbot/adapter-kit";
 import { AIBudgetSchema, AIModelsSchema } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "@orkbot/db";
-import { runAsSystem } from "@orkbot/db";
+import { runAsSystem, workspaceAdmissionBinding } from "@orkbot/db";
 import { z } from "zod";
 import { withOAuthRefreshLock } from "./oauth-refresh-lock.js";
 import { oauthCredentialAccountId, parseModelSecret } from "./pi-oauth.js";
@@ -106,10 +106,15 @@ export class ServerAICatalog {
   }
 
   private async workspace(tx: Prisma.TransactionClient, actor: AIActor, administration = false) {
-    const binding = await tx.centralWorkspaceBinding.findUnique({
-      where: { spaceId: actor.spaceId },
-    });
+    const binding = await workspaceAdmissionBinding(tx, actor.spaceId);
     if (binding) {
+      if (binding.spaceId !== actor.spaceId) {
+        const member = await tx.spaceMember.findUnique({
+          where: { spaceId_userId: { spaceId: actor.spaceId, userId: actor.userId } },
+        });
+        if (!member || (administration && !["owner", "admin"].includes(member.role)))
+          return deny("forbidden");
+      }
       const access = await tx.centralWorkspaceAccess.findUnique({
         where: { workspaceId_userId: { workspaceId: binding.id, userId: actor.userId } },
       });
@@ -176,6 +181,35 @@ export class ServerAICatalog {
     };
   }
 
+  private async organizationWorkspaces(
+    tx: Prisma.TransactionClient,
+    admin: { organizationId: string; serverId: string; bindingVersion: number },
+  ) {
+    const bindings = await tx.centralWorkspaceBinding.findMany({
+      where: {
+        localOrganizationId: admin.organizationId,
+        serverId: admin.serverId,
+        bindingVersion: admin.bindingVersion,
+        state: { in: ["ready", "provisioning"] },
+        space: { deletingAt: null },
+      },
+      select: { id: true, spaceId: true, bindingVersion: true },
+    });
+    const local = await tx.space.findMany({
+      where: {
+        organizationId: admin.organizationId,
+        deletingAt: null,
+        centralBinding: null,
+        admissionWorkspaceId: { in: bindings.map((binding) => binding.id) },
+      },
+      select: { id: true },
+    });
+    return [
+      ...bindings.map(({ spaceId, bindingVersion }) => ({ spaceId, bindingVersion })),
+      ...local.map(({ id }) => ({ spaceId: id, bindingVersion: admin.bindingVersion })),
+    ].sort((a, b) => a.spaceId.localeCompare(b.spaceId));
+  }
+
   private metadata(connection: {
     id: string;
     provider: string;
@@ -185,6 +219,8 @@ export class ServerAICatalog {
     revision: number;
     concurrencyLimit: number;
     monthlyBudgetMicros: bigint | null;
+    isDefault?: boolean;
+    defaultModelId?: string | null;
   }) {
     return {
       id: connection.id,
@@ -194,6 +230,9 @@ export class ServerAICatalog {
       models: modelsSchema.parse(connection.models),
       revision: connection.revision,
       concurrencyLimit: connection.concurrencyLimit,
+      ...(connection.isDefault !== undefined
+        ? { isDefault: connection.isDefault, defaultModelId: connection.defaultModelId ?? null }
+        : {}),
       monthlyBudgetMicros:
         connection.monthlyBudgetMicros === null ? null : Number(connection.monthlyBudgetMicros),
     };
@@ -509,19 +548,64 @@ export class ServerAICatalog {
         { recordId: id },
       );
       try {
-        const row = await this.deps.prisma.serverAIConnection.create({
-          data: {
-            id,
-            localOrganizationId: admin.organizationId,
-            label: data.label,
-            provider: data.provider,
-            models: data.models,
-            secretId: stored.id,
-            secretRef: stored.ref,
-            concurrencyLimit: data.concurrencyLimit,
-            monthlyBudgetMicros:
-              data.monthlyBudgetMicros === null ? null : BigInt(data.monthlyBudgetMicros),
-          },
+        const row = await this.deps.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT id FROM organization WHERE id = ${admin.organizationId} FOR UPDATE`;
+          const existingDefault = await tx.serverAIConnection.findFirst({
+            where: { localOrganizationId: admin.organizationId, isDefault: true },
+            select: { id: true },
+          });
+          const first = !existingDefault;
+          const account = await tx.serverAIConnection.create({
+            data: {
+              id,
+              isDefault: first,
+              defaultModelId: first ? data.models[0] : null,
+              defaultAllowedModels: first ? data.models : undefined,
+              localOrganizationId: admin.organizationId,
+              label: data.label,
+              provider: data.provider,
+              models: data.models,
+              secretId: stored.id,
+              secretRef: stored.ref,
+              concurrencyLimit: data.concurrencyLimit,
+              monthlyBudgetMicros:
+                data.monthlyBudgetMicros === null ? null : BigInt(data.monthlyBudgetMicros),
+            },
+          });
+          const workspaces = await this.organizationWorkspaces(tx, admin);
+          for (const workspace of workspaces) {
+            const existing = await tx.workspaceAIConnection.findFirst({
+              where: {
+                spaceId: workspace.spaceId,
+                available: true,
+                enabled: true,
+                isDefault: true,
+              },
+              select: { connectionId: true },
+            });
+            await tx.workspaceAIConnection.create({
+              data: {
+                spaceId: workspace.spaceId,
+                connectionId: id,
+                bindingVersion: workspace.bindingVersion,
+                allowedModels: data.models,
+                defaultModelId: data.models[0],
+                enabled: first && !existing,
+                isDefault: first && !existing,
+              },
+            });
+          }
+          if (first)
+            await tx.installationIdentity.updateMany({
+              where: {
+                id: "local",
+                modelSetupMode: "pending",
+                localOrganizationId: admin.organizationId,
+                bindingVersion: admin.bindingVersion,
+              },
+              data: { modelSetupMode: "organization" },
+            });
+          return account;
         });
         return this.metadata(row);
       } catch (error) {
@@ -559,17 +643,7 @@ export class ServerAICatalog {
           space.organizationId !== admin.organizationId
         )
           return deny("forbidden");
-        const workspaces = await tx.centralWorkspaceBinding.findMany({
-          where: {
-            localOrganizationId: admin.organizationId,
-            serverId: admin.serverId,
-            bindingVersion: admin.bindingVersion,
-            state: { in: ["ready", "provisioning"] },
-            space: { deletingAt: null },
-          },
-          select: { spaceId: true, bindingVersion: true },
-          orderBy: { spaceId: "asc" },
-        });
+        const workspaces = await this.organizationWorkspaces(tx, admin);
         if (!workspaces.some((workspace) => workspace.spaceId === spaceId))
           return deny("forbidden");
         for (const workspace of workspaces) {
@@ -620,6 +694,7 @@ export class ServerAICatalog {
       preserveBudget?: boolean;
       expectedRevision?: number;
       preserveDefault?: boolean;
+      scope?: "organization" | "space";
     },
   ) {
     const data = z
@@ -634,6 +709,7 @@ export class ServerAICatalog {
         preserveBudget: z.boolean().optional(),
         expectedRevision: z.number().int().positive().optional(),
         preserveDefault: z.boolean().optional(),
+        scope: z.enum(["organization", "space"]).optional(),
       })
       .strict()
       .parse(input);
@@ -682,19 +758,54 @@ export class ServerAICatalog {
           });
           if (otherDefault) return deny("conflict");
         }
-        const workspaces = await tx.centralWorkspaceBinding.findMany({
-          where: {
-            localOrganizationId: admin.organizationId,
-            serverId: admin.serverId,
-            bindingVersion: admin.bindingVersion,
-            state: { in: ["ready", "provisioning"] },
-            space: { deletingAt: null },
-          },
-          select: { spaceId: true, bindingVersion: true },
-          orderBy: { spaceId: "asc" },
-        });
-        const workspaceIds = workspaces.map((item) => item.spaceId);
-        if (!workspaceIds.includes(actor.spaceId)) return deny("forbidden");
+        const workspaces = await this.organizationWorkspaces(tx, admin);
+        if (!workspaces.some((item) => item.spaceId === actor.spaceId)) return deny("forbidden");
+        if (data.scope === "space") {
+          await tx.aIWorkspacePolicy.update({
+            where: { spaceId: actor.spaceId },
+            data: { overridesModels: true },
+          });
+        }
+        const overrides =
+          data.scope === "space"
+            ? []
+            : await tx.aIWorkspacePolicy.findMany({
+                where: {
+                  spaceId: { in: workspaces.map((item) => item.spaceId) },
+                  overridesModels: true,
+                },
+                select: { spaceId: true },
+              });
+        const targets = workspaces.filter((item) =>
+          data.scope === "space"
+            ? item.spaceId === actor.spaceId
+            : !overrides.some((override) => override.spaceId === item.spaceId),
+        );
+        const workspaceIds = targets.map((item) => item.spaceId);
+        if (data.scope !== "space" && !data.preserveDefault && (!data.enabled || !isDefault)) {
+          await tx.serverAIConnection.updateMany({
+            where: { id: connectionId, isDefault: true },
+            data: { isDefault: false },
+          });
+        }
+        if (data.scope !== "space" && data.enabled && isDefault && !data.preserveDefault) {
+          await tx.serverAIConnection.updateMany({
+            where: {
+              localOrganizationId: admin.organizationId,
+              isDefault: true,
+              id: { not: connectionId },
+            },
+            data: { isDefault: false },
+          });
+          await tx.serverAIConnection.update({
+            where: { id: connectionId },
+            data: {
+              isDefault: true,
+              defaultModelId: data.defaultModelId,
+              defaultAllowedModels: data.allowedModels,
+            },
+          });
+        }
         if (data.enabled && isDefault && !data.preserveDefault)
           await tx.workspaceAIConnection.updateMany({
             where: {
@@ -709,9 +820,10 @@ export class ServerAICatalog {
           preserveBudget,
           preserveDefault: _preserveDefault,
           expectedRevision: _expectedRevision,
+          scope: _scope,
           ...configuration
         } = data;
-        for (const target of workspaces)
+        for (const target of targets)
           await tx.workspaceAIConnection.upsert({
             where: { spaceId_connectionId: { spaceId: target.spaceId, connectionId } },
             create: {
@@ -749,6 +861,65 @@ export class ServerAICatalog {
     });
     for (const target of targets)
       await this.deps.realtime.publish(workspaceTopic(target), JSON.stringify({ connectionId }));
+  }
+
+  async overridesModels(actor: AIActor): Promise<boolean> {
+    return runAsSystem("read workspace model override", () =>
+      this.deps.prisma.$transaction(async (tx) => {
+        await this.workspace(tx, actor);
+        return (
+          (await tx.aIWorkspacePolicy.findUnique({ where: { spaceId: actor.spaceId } }))
+            ?.overridesModels ?? false
+        );
+      }),
+    );
+  }
+
+  async resetWorkspaceModels(actor: AIActor): Promise<void> {
+    await runAsSystem("restore the server model default", async () => {
+      const admin = await this.serverAdmin(actor);
+      await this.deps.prisma.$transaction(async (tx) => {
+        await this.workspace(tx, actor, true);
+        await tx.$queryRaw`SELECT id FROM organization WHERE id = ${admin.organizationId} FOR UPDATE`;
+        const account = await tx.serverAIConnection.findFirst({
+          where: { localOrganizationId: admin.organizationId, isDefault: true },
+        });
+        if (!account?.defaultModelId || account.state !== "active") return deny("unavailable");
+        await tx.workspaceAIConnection.updateMany({
+          where: { spaceId: actor.spaceId },
+          data: { enabled: false, isDefault: false, revision: { increment: 1 } },
+        });
+        const workspace = await this.workspace(tx, actor);
+        const models = modelsSchema.parse(account.defaultAllowedModels ?? account.models);
+        await tx.workspaceAIConnection.upsert({
+          where: { spaceId_connectionId: { spaceId: actor.spaceId, connectionId: account.id } },
+          create: {
+            spaceId: actor.spaceId,
+            connectionId: account.id,
+            bindingVersion: workspace.version,
+            enabled: true,
+            isDefault: true,
+            allowedModels: models,
+            defaultModelId: account.defaultModelId,
+          },
+          update: {
+            available: true,
+            enabled: true,
+            isDefault: true,
+            allowedModels: models,
+            defaultModelId: account.defaultModelId,
+            bindingVersion: workspace.version,
+            revision: { increment: 1 },
+          },
+        });
+        await tx.aIWorkspacePolicy.upsert({
+          where: { spaceId: actor.spaceId },
+          create: { spaceId: actor.spaceId },
+          update: { overridesModels: false, revision: { increment: 1 } },
+        });
+      });
+    });
+    await this.deps.realtime.publish(workspaceTopic(actor.spaceId), "changed");
   }
 
   async workspaceBudget(actor: AIActor): Promise<number | null> {

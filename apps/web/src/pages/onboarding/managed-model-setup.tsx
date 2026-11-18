@@ -22,8 +22,6 @@ export function ManagedModelSetup({
 }) {
   const queries = useSpaceQueries();
   const [owner] = useState(() => captureRpcContext());
-  const [choosing, setChoosing] = useState(false);
-  const [choiceError, setChoiceError] = useState(false);
   const handledPersonal = useRef(false);
   const handledReady = useRef<string | null>(null);
   const status = useQuery({
@@ -43,11 +41,7 @@ export function ManagedModelSetup({
     if (permissions?.modelSetupMode === "personal" && !handledPersonal.current) {
       handledPersonal.current = true;
       onModeChanged();
-    } else if (
-      permissions?.modelSetupMode === "organization" &&
-      !permissions.canManageServer &&
-      !saving
-    ) {
+    } else if (permissions?.modelSetupMode === "organization" && !saving) {
       const ready = permissions.connections.find(
         (row) => row.enabled && row.isDefault && row.state === "active" && row.defaultModelId,
       );
@@ -58,60 +52,19 @@ export function ManagedModelSetup({
       }
     }
   }, [permissions, saving, onModeChanged, onContinue]);
-  async function choose(mode: "organization" | "personal") {
-    if (choosing || !owner.isCurrent()) return;
-    setChoosing(true);
-    setChoiceError(false);
-    try {
-      await owner.client.serverAI.chooseMode({ mode });
-      await status.refetch();
-      if (owner.isCurrent()) onModeChanged();
-    } catch {
-      if (owner.isCurrent()) setChoiceError(true);
-    } finally {
-      if (owner.isCurrent()) setChoosing(false);
-    }
-  }
   return (
     <div className="grid gap-6">
       <h1 className="text-[32px] font-medium text-foreground">
         <Trans>Connect a model</Trans>
       </h1>
-      {permissions?.modelSetupMode === "pending" ? (
-        permissions.canManageServer ? (
-          <div className="grid gap-3">
-            <p className="text-sm text-muted-foreground">
-              <Trans>Choose how people in your organization will connect models.</Trans>
-            </p>
-            <Button disabled={choosing} onClick={() => void choose("organization")}>
-              <Trans>Connect organization models</Trans>
-            </Button>
-            <Button variant="outline" disabled={choosing} onClick={() => void choose("personal")}>
-              <Trans>Let people connect their own models</Trans>
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              <Trans>Personal models may process workspace data outside company servers.</Trans>
-            </p>
-            {choiceError ? (
-              <p role="alert">
-                <Trans>Could not save. Try again.</Trans>
-              </p>
-            ) : null}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            <Trans>Waiting for an organization administrator to set up models.</Trans>
-          </p>
-        )
-      ) : permissions && !permissions.canManageServer ? (
+      {permissions?.canManageServer ? (
+        <ServerAISettings embedded onboarding onClose={() => undefined} />
+      ) : permissions?.available ? (
         <p className="text-sm text-muted-foreground">
           <Trans>Waiting for an organization administrator to set up models.</Trans>
         </p>
       ) : null}
-      {permissions?.modelSetupMode !== "pending" ? (
-        <ServerAISettings embedded onboarding onClose={() => undefined} />
-      ) : null}
-      {permissions?.available === false ? (
+      {status.isError || permissions?.available === false ? (
         <div className="grid gap-3">
           <p role="alert" className="text-sm text-destructive">
             <Trans>Could not load model settings</Trans>
@@ -146,13 +99,9 @@ export function ManagedModelSetup({
           {error}
         </p>
       ) : null}
-      {permissions?.modelSetupMode !== "pending" &&
-      (permissions?.canManageServer || permissions?.modelSetupMode !== "organization") ? (
-        <Button
-          disabled={saving || status.isPending || status.isError || !permissions?.available}
-          onClick={onContinue}
-        >
-          <Trans>Continue</Trans>
+      {error ? (
+        <Button disabled={saving} onClick={onContinue}>
+          <Trans>Retry</Trans>
         </Button>
       ) : null}
     </div>

@@ -67,6 +67,7 @@ fn main() {
             "list_workspaces",
             "workspace_catalog",
             "set_default_organization",
+            "create_organization",
             "clear_workspace_link",
             "check_workspace",
             "set_default_server",

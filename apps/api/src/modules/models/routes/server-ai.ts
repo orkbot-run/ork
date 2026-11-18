@@ -121,6 +121,7 @@ export function serverAIRoutes(ctx: RouterContext) {
             ...(permissions.canManageServer
               ? {}
               : { adminAccessReason: await deps.serverAI.adminAccessReason(scoped) }),
+            overridesModels: await deps.serverAI.overridesModels(scoped),
             connections: await deps.serverAI.list(scoped),
             accounts: permissions.canManageServer ? await deps.serverAI.accounts(scoped) : [],
           };
@@ -175,6 +176,12 @@ export function serverAIRoutes(ctx: RouterContext) {
         safe(async () => {
           const { connectionId, ...settings } = input;
           await deps.serverAI!.configure(await actorOf(context), connectionId, settings);
+          return { ok: true as const };
+        }),
+      ),
+      resetWorkspaceModels: authed.serverAI.resetWorkspaceModels.handler(({ context }) =>
+        safe(async () => {
+          await deps.serverAI!.resetWorkspaceModels(await actorOf(context));
           return { ok: true as const };
         }),
       ),
