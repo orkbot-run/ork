@@ -37,16 +37,18 @@ export function ModelSetupGate() {
           () => context.client.me(),
         )
       : context.client.me();
-    void Promise.all([me, context.client.models.workspacePolicy()])
-      .then(([me, policy]) => {
+    void me
+      .then(async (identity) => {
+        if (!active || !context.isCurrent()) return;
+        let needsSetup = identity.managedModelSetupRequired;
+        if (needsSetup === undefined) {
+          // Older deployments still carry the managed setup decision on this RPC.
+          const policy = await context.client.models.workspacePolicy();
+          needsSetup =
+            policy.managed && (policy.modelSetupMode === "pending" || identity.needsModel);
+        }
         if (active && context.isCurrent())
-          setState(
-            policy.managed &&
-              (policy.modelSetupMode === "pending" || me.needsModel) &&
-              !modelSetupDeferred(me)
-              ? "setup"
-              : "open",
-          );
+          setState(needsSetup && !modelSetupDeferred(identity) ? "setup" : "open");
       })
       .catch(() => {
         if (active && context.isCurrent()) setState("error");

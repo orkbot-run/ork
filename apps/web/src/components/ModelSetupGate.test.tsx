@@ -77,20 +77,20 @@ it("keeps the app closed after a failed check and retries", async () => {
   expect(host.textContent).toContain("App content");
 });
 
-it("shares the initial bootstrap identity while starting the policy request immediately", async () => {
-  let resolve!: (bootstrap: { me: { needsModel: boolean } }) => void;
+it("uses the bootstrap decision without opening another RPC channel", async () => {
+  let resolve!: (bootstrap: { me: { managedModelSetupRequired: boolean } }) => void;
   api.bootstrap.mockReturnValue(
     new Promise((complete) => {
       resolve = complete;
     }),
   );
-  api.policy.mockResolvedValue({ managed: true, modelSetupMode: "organization" });
   await render();
   expect(api.me).not.toHaveBeenCalled();
-  expect(api.policy).toHaveBeenCalledOnce();
+  expect(api.policy).not.toHaveBeenCalled();
   expect(host.textContent).not.toContain("App content");
-  await act(async () => resolve({ me: { needsModel: false } }));
+  await act(async () => resolve({ me: { managedModelSetupRequired: false } }));
   expect(host.textContent).toContain("App content");
+  expect(api.policy).not.toHaveBeenCalled();
 });
 
 it("falls back to a fresh identity when the initial bootstrap fails", async () => {

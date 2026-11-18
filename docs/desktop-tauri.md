@@ -62,8 +62,8 @@ filesystem or shell plugin permissions.
 Managed workspaces start from static markup bundled with the app. The server supplies
 no executable page. On Windows, Tauri serves the document through its `orkrenderer`
 resource protocol, which WebView2 exposes at `http://orkrenderer.localhost`. macOS and
-Linux use a bounded loopback listener with a saved port. Both paths serve only
-application documents. Separate account and workspace profiles keep browser storage
+Linux use a bounded loopback listener with a saved port. Both serve the app document
+and its bundled renderer assets. Separate account and workspace profiles keep browser storage
 apart. Every request belongs to its document. Retiring it cancels pending work, and
 delayed callbacks are refused.
 

@@ -68,8 +68,8 @@ function Harness({ extras }: { extras?: Record<string, unknown> }) {
     rpc: rpc as unknown as ReturnType<typeof createSpaceRpc>,
     pageSession,
     activeId: activeChat,
-    inGroup: false,
-    groupId: undefined,
+    inGroup: extras?.inGroup === true,
+    groupId: extras?.groupId as string | undefined,
     activeBotId,
     activeGroupId,
     botsRef,
@@ -177,6 +177,7 @@ it("keeps an attachment added while a send is in flight", async () => {
   act(() => {
     sent = latest.sendMessage("", [], "nonce-1");
   });
+  expect(latest.activeOutgoingMessages).toMatchObject([{ attachments: ["a.txt"], sending: true }]);
   await flush();
   act(() => void latest.onAttachmentPick([fileB]));
   finishSend();
@@ -600,3 +601,151 @@ it.each([false, true])(
       });
   },
 );
+
+it("renders outgoing text immediately and reconciles an SSE nonce before the RPC completes", async () => {
+  let finish!: (value: unknown) => void;
+  rpc.threads.send.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  let sent!: Promise<boolean>;
+  act(() => {
+    sent = latest.sendMessage("optimistic hello", [], "optimistic-nonce");
+  });
+  expect(latest.activeOutgoingMessages).toMatchObject([
+    { text: "optimistic hello", sending: true },
+  ]);
+  activeSnapshot = {
+    botId: "bot-1",
+    messages: [
+      {
+        ...replyCandidate("saved"),
+        role: "user",
+        clientNonce: "optimistic-nonce",
+      },
+    ],
+  } as ThreadSnapshot;
+  act(() => root.render(<Harness />));
+  expect(latest.activeOutgoingMessages).toEqual([]);
+  await act(async () => {
+    finish({ runId: "run", taskId: "task", seq: 10 });
+    await sent;
+  });
+  expect(latest.activeOutgoingMessages).toEqual([]);
+});
+
+it("keeps an accepted outgoing message until its receipt seq arrives from an older server", async () => {
+  rpc.threads.send.mockResolvedValue({ runId: "run", taskId: "task", seq: 10 });
+  await act(async () => {
+    expect(await latest.sendMessage("hello", [], "nonce")).toBe(true);
+  });
+  expect(latest.activeOutgoingMessages).toMatchObject([{ text: "hello", sending: false }]);
+  activeSnapshot = {
+    botId: "bot-1",
+    messages: [{ ...replyCandidate("saved"), role: "user", seq: 10 }],
+  } as ThreadSnapshot;
+  act(() => root.render(<Harness />));
+  expect(latest.activeOutgoingMessages).toEqual([]);
+});
+
+it("removes a rejected outgoing row and reuses its nonce on an unchanged retry", async () => {
+  rpc.threads.send.mockRejectedValueOnce(new Error("offline"));
+  await act(async () => {
+    expect(await latest.sendMessage("retry me", [], "nonce")).toBe(false);
+  });
+  expect(latest.activeOutgoingMessages).toEqual([]);
+  expect(latest.sendError).toContain("offline");
+  let finish!: (value: unknown) => void;
+  rpc.threads.send.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  let sent!: Promise<boolean>;
+  act(() => {
+    sent = latest.sendMessage("retry me", [], "nonce");
+  });
+  expect(latest.activeOutgoingMessages).toHaveLength(1);
+  expect(latest.activeOutgoingMessages[0]?.clientNonce).toBe("nonce");
+  await act(async () => {
+    finish({ runId: "run", taskId: "task", seq: 1 });
+    await sent;
+  });
+});
+
+it("isolates outgoing rows by chat and workspace identity", async () => {
+  let finish!: (value: unknown) => void;
+  rpc.threads.send.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  let sent!: Promise<boolean>;
+  act(() => {
+    sent = latest.sendMessage("private draft", [], "nonce");
+  });
+  switchChat("bot-2");
+  expect(latest.activeOutgoingMessages).toEqual([]);
+  switchChat("bot-1");
+  expect(latest.activeOutgoingMessages).toHaveLength(1);
+  me = { spaceId: "different-space", userId: "different-user" } as Me;
+  act(() => root.render(<Harness />));
+  expect(latest.activeOutgoingMessages).toEqual([]);
+  await act(async () => {
+    finish({ runId: "run", taskId: "task", seq: 1 });
+    await sent;
+  });
+});
+
+it("shows rerouted outgoing text in the origin while sending and keeps it in the target afterwards", async () => {
+  const team = { kind: "group" as const, id: "group-2", name: "Team" };
+  let finish!: (value: unknown) => void;
+  rpc.threads.send.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  let sent!: Promise<boolean>;
+  act(() => {
+    sent = latest.sendMessage("@Team hello", [team], "nonce");
+  });
+  expect(latest.activeOutgoingMessages).toMatchObject([
+    { threadKey: "group-2", originThreadKey: "bot-1", sending: true },
+  ]);
+  await act(async () => {
+    finish({ runId: "run", taskId: "task", seq: 1 });
+    await sent;
+  });
+  expect(latest.activeOutgoingMessages).toEqual([]);
+  expect(navigate).toHaveBeenCalledWith("/app/g/group-2");
+  activeGroupId.current = "group-2";
+  act(() => root.render(<Harness extras={{ inGroup: true, groupId: "group-2" }} />));
+  expect(latest.activeOutgoingMessages).toMatchObject([{ threadKey: "group-2", sending: false }]);
+});
+
+it("does not revive a receipt-reconciled row when its saved message leaves the loaded page", async () => {
+  let finish!: (value: unknown) => void;
+  rpc.threads.send.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  let sent!: Promise<boolean>;
+  act(() => {
+    sent = latest.sendMessage("hello", [], "nonce");
+  });
+  activeSnapshot = {
+    botId: "bot-1",
+    messages: [{ ...replyCandidate("saved"), role: "user", seq: 10 }],
+  } as ThreadSnapshot;
+  act(() => root.render(<Harness />));
+  await act(async () => {
+    finish({ runId: "run", taskId: "task", seq: 10 });
+    await sent;
+  });
+  expect(latest.activeOutgoingMessages).toEqual([]);
+  activeSnapshot = { botId: "bot-1", messages: [] } as unknown as ThreadSnapshot;
+  act(() => root.render(<Harness />));
+  expect(latest.activeOutgoingMessages).toEqual([]);
+});

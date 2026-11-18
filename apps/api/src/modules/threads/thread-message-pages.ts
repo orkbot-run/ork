@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited message loading remains Apache-2.0. Ork adds pending-send reconciliation.
 
 import type { MessageBlock, ThreadMessage, ThreadMessagePage } from "@orkbot/contracts";
-import { MessageBlock as MessageBlockSchema } from "@orkbot/contracts";
+import { MessageBlock as MessageBlockSchema, ThreadMessageClientNonce } from "@orkbot/contracts";
 import {
   BACKGROUND_RUN_TRIGGERS,
   callIdFromClientNonce,
@@ -276,6 +277,8 @@ function toThreadMessage(row: {
   createdAt: Date;
 }): ThreadMessage {
   const parent = row.replyTo?.threadId === row.threadId ? row.replyTo : null;
+  const clientNonce =
+    row.role === "user" ? ThreadMessageClientNonce.safeParse(row.clientNonce).data : undefined;
   const parsed = parent ? MessageBlockSchema.array().safeParse(parent.blocks) : undefined;
   const replyPreview =
     parent && parsed?.success
@@ -298,6 +301,7 @@ function toThreadMessage(row: {
     replyQuote: row.replyQuote ?? undefined,
     replyPreview,
     runId: row.runId ?? undefined,
+    ...(clientNonce ? { clientNonce } : {}),
     callId: callIdFromClientNonce(row.clientNonce),
     createdAt: row.createdAt.toISOString(),
   };

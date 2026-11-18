@@ -329,15 +329,15 @@ async function memberSpaceNavigation(
   groupRepos: ReturnType<typeof createGroupRepos>,
   sessionId?: string,
 ): Promise<SpaceNavigation> {
-  const currentSpace = await deps.prisma.space.findUnique({
-    where: { id: actor.spaceId },
-    select: { organizationId: true },
-  });
-  if (!currentSpace) throw new IsolationError();
-  const [navigationScope, mayCreateSpace] = await Promise.all([
+  const [currentSpace, navigationScope, mayCreateSpace] = await Promise.all([
+    deps.prisma.space.findUnique({
+      where: { id: actor.spaceId },
+      select: { organizationId: true },
+    }),
     workspaceNavigationFilter(deps.prisma, actor),
     canCreateSpace(deps.prisma, actor),
   ]);
+  if (!currentSpace) throw new IsolationError();
   const memberships = await deps.prisma.spaceMember.findMany({
     where: {
       userId: actor.userId,
@@ -351,6 +351,8 @@ async function memberSpaceNavigation(
     },
     orderBy: { createdAt: "asc" },
   });
+  const currentMembership = memberships.find((membership) => membership.spaceId === actor.spaceId);
+  if (!currentMembership) throw new IsolationError();
   const spaceIds = memberships.map((membership) => membership.spaceId);
   const inactiveSpaceIds = spaceIds.filter((spaceId) => spaceId !== actor.spaceId);
   const [
@@ -362,6 +364,7 @@ async function memberSpaceNavigation(
     externalConversations,
     contentBots,
     contentGroups,
+    peerSpaces,
   ] = await Promise.all([
     repos.listBots(actor),
     groupRepos.listGroups(actor),
@@ -382,14 +385,13 @@ async function memberSpaceNavigation(
       select: { spaceId: true },
       distinct: ["spaceId"],
     }),
+    legacyWorkspaceEntries(deps, actor, spaceIds, sessionId),
   ]);
   const botCounts = new Map(contentBots.map((row) => [row.spaceId, row._count._all]));
   const spacesWithContent = new Set([
     ...contentBots.map((row) => row.spaceId),
     ...contentGroups.map((row) => row.spaceId),
   ]);
-  const currentMembership = memberships.find((membership) => membership.spaceId === actor.spaceId);
-  if (!currentMembership) throw new IsolationError();
   const botsBySpace = partitionBySpace([...currentBots, ...inactiveBots]);
   const groupsBySpace = partitionBySpace([...currentGroups, ...inactiveGroups]);
   const sectionsBySpace = partitionBySpace(botSections);
@@ -397,7 +399,6 @@ async function memberSpaceNavigation(
   const groupsFor = (spaceId: string) => groupsBySpace.get(spaceId) ?? [];
   const sectionsFor = (spaceId: string) => sectionsBySpace.get(spaceId) ?? [];
   const staleClaimBefore = new Date(Date.now() - SPACE_DELETION_CLAIM_TIMEOUT_MS);
-  const peerSpaces = await legacyWorkspaceEntries(deps, actor, spaceIds, sessionId);
 
   return {
     canCreateSpace: mayCreateSpace,

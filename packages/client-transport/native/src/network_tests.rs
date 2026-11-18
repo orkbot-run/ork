@@ -25,6 +25,7 @@ impl tokio_tungstenite::tungstenite::handshake::server::Callback for RelayHeader
     > {
         if let Some(ticket) = self.0 {
             assert_eq!(request.uri().path(), "/api/relay/v1/channels");
+            assert!(!request.headers().contains_key("x-ork-installation-channel"));
             assert_eq!(
                 request.headers()["authorization"],
                 format!("Bearer {ticket}")
@@ -32,6 +33,10 @@ impl tokio_tungstenite::tungstenite::handshake::server::Callback for RelayHeader
         } else {
             assert_eq!(request.uri().path(), "/api/installation-transport/v1");
             assert!(!request.headers().contains_key("authorization"));
+            assert_eq!(
+                request.headers()["x-ork-installation-channel"],
+                "sequential-v1"
+            );
         }
         assert!(!format!("{:?}", request.headers()).contains("private-test-token"));
         Ok(response)
@@ -138,7 +143,7 @@ async fn invalid_http_metadata_is_refused_before_opening_the_outer_channel() {
 
 #[tokio::test]
 async fn relay_capability_stays_outside_pinned_http_and_logical_origin_stays_inside() {
-    for use_relay in [false, true] {
+    for (use_relay, offer_reuse) in [(false, false), (true, false), (false, true)] {
         let (cert, key, fingerprint) = crate::tests::identity(false);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let origin = format!("https://{}", listener.local_addr().unwrap());
@@ -168,12 +173,15 @@ async fn relay_capability_stays_outside_pinned_http_and_logical_origin_stays_ins
             .address
             .set_scheme("ws")
             .unwrap();
+        if !use_relay {
+            client.enable_sequential_reuse();
+        }
         let server = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let mut socket = tokio_tungstenite::accept_hdr_async(stream, RelayHeaders(ticket))
                 .await
                 .unwrap();
-            socket.send(Message::Text(json!({ "protocol": "ork-installation-tls-v1", "serverId": SERVER,
+            socket.send(Message::Text(json!({ "protocol": if offer_reuse { "ork-installation-tls-sequential-v1" } else { "ork-installation-tls-v1" }, "serverId": SERVER,
             "bindingVersion": 1, "keyFingerprint": fingerprint, "certificate": STANDARD.encode(&cert),
             "origin": "http://127.0.0.1:5173" }).to_string().into())).await.unwrap();
             let (mut writer, mut reader) = socket.split();
@@ -186,6 +194,7 @@ async fn relay_capability_stays_outside_pinned_http_and_logical_origin_stays_ins
                         break;
                     }
                 }
+                let _ = outgoing.shutdown().await;
             });
             let output = tokio::spawn(async move {
                 let mut bytes = [0; 8192];
@@ -215,6 +224,11 @@ async fn relay_capability_stays_outside_pinned_http_and_logical_origin_stays_ins
                                 "Bearer private-test-token"
                             );
                             assert_eq!(request.uri().path(), "/private");
+                            let body = http_body_util::BodyExt::collect(request.into_body())
+                                .await
+                                .unwrap()
+                                .to_bytes();
+                            assert!(body.is_empty() || body == "{}");
                             Ok::<_, std::convert::Infallible>(hyper::Response::new(
                                 http_body_util::Full::new(bytes::Bytes::from_static(
                                     b"private-response",
@@ -227,17 +241,47 @@ async fn relay_capability_stays_outside_pinned_http_and_logical_origin_stays_ins
             input.abort();
             output.abort();
         });
-        client.start_request(request()).await.unwrap();
+        let mut first = request();
+        if offer_reuse {
+            first.method = "POST".into();
+            first.has_body = true;
+        }
+        client.start_request(first).await.unwrap();
+        if offer_reuse {
+            client.write_body(b"{}".to_vec()).await.unwrap();
+            client.finish_body().await.unwrap();
+        }
         assert_eq!(client.response_head().await.unwrap().status, 200);
         assert_eq!(
             client.read_body().await.unwrap().unwrap(),
             b"private-response"
         );
         assert!(client.read_body().await.unwrap().is_none());
+        if offer_reuse {
+            for _ in 1..16 {
+                assert!(client.release_for_reuse());
+                let mut next = request();
+                next.method = "POST".into();
+                next.has_body = true;
+                client.start_request(next).await.unwrap();
+                client.write_body(b"{}".to_vec()).await.unwrap();
+                client.finish_body().await.unwrap();
+                assert!(!client.release_for_reuse());
+                assert_eq!(client.response_head().await.unwrap().status, 200);
+                assert_eq!(
+                    client.read_body().await.unwrap().unwrap(),
+                    b"private-response"
+                );
+                assert!(client.read_body().await.unwrap().is_none());
+            }
+        }
+        assert!(!client.release_for_reuse());
         client.cancel();
         tokio::time::timeout(Duration::from_secs(2), server)
             .await
-            .unwrap()
+            .unwrap_or_else(|_| {
+                panic!("shutdown timed out: relay={use_relay}, reuse={offer_reuse}")
+            })
             .unwrap();
     }
 }

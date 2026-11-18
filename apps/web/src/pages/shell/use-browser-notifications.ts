@@ -3,7 +3,7 @@
 // Inherited Apache material is preserved; notification ownership changes follow LICENSE.md.
 
 import type { Bot, ChatAlert, ProductEvent } from "@orkbot/contracts";
-import { isRetryableError, retryDelayMs } from "@orkbot/core";
+import { createRefreshCoalescer, isRetryableError, retryDelayMs } from "@orkbot/core";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
@@ -27,6 +27,7 @@ type ChatAlertOptions = {
   activeGroupId: RefObject<string | undefined>;
   openChat: (alert: ChatAlert) => void;
   isSnoozed?: (botId: string, groupId?: string) => boolean;
+  refreshRoster?: () => Promise<void>;
 };
 
 /**
@@ -36,13 +37,15 @@ type ChatAlertOptions = {
 export function useBrowserNotifications(
   bots: Bot[],
   botsRef: RefObject<Bot[]>,
-  { rpc, activeBotId, activeGroupId, openChat, isSnoozed }: ChatAlertOptions,
+  { rpc, activeBotId, activeGroupId, openChat, isSnoozed, refreshRoster }: ChatAlertOptions,
 ) {
   useEffect(() => prepareNotificationIcons(bots), [bots]);
   const openChatRef = useRef(openChat);
   openChatRef.current = openChat;
   const snoozedRef = useRef(isSnoozed);
   snoozedRef.current = isSnoozed;
+  const refreshRosterRef = useRef(refreshRoster);
+  refreshRosterRef.current = refreshRoster;
   const source = useMemo(() => ({ ...captureRpcContext(), rpc }), [rpc]);
   type Lifetime = {
     source: typeof source;
@@ -134,12 +137,16 @@ export function useBrowserNotifications(
     let controller: AbortController | undefined;
     let cancelRetry: (() => void) | undefined;
     const current = () => active && currentLifetime() === owner;
+    const rosterRefresh = createRefreshCoalescer(async () => {
+      if (current()) await refreshRosterRef.current?.();
+    });
     const show = (alert: ChatAlert) => {
-      if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-      if (alert.kind === "completion" && snoozedRef.current?.(alert.botId, alert.groupId)) return;
       const isOpen = alert.groupId
         ? alert.groupId === activeGroupId.current
         : !activeGroupId.current && alert.botId === activeBotId.current;
+      if (!isOpen) void rosterRefresh.invalidate().catch(() => undefined);
+      if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+      if (alert.kind === "completion" && snoozedRef.current?.(alert.botId, alert.groupId)) return;
       // The open chat's own stream alerts for its replies and failures; only a takeover is missed.
       if (
         isOpen &&
@@ -187,10 +194,11 @@ export function useBrowserNotifications(
     })();
     return () => {
       active = false;
+      rosterRefresh.dispose();
       controller?.abort();
       cancelRetry?.();
     };
-  }, [source, currentLifetime, showNotification]);
+  }, [source, currentLifetime, showNotification, activeBotId, activeGroupId]);
   const deliverBrowserNotification = useCallback(
     (pending: PendingBrowserNotification): boolean => {
       const owner = currentLifetime();

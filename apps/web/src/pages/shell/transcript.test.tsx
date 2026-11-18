@@ -9,6 +9,7 @@ import { act } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { markAfterPaint } from "../../lib/performance";
 import { rpc } from "../../lib/rpc";
 import { Transcript } from "./transcript";
 
@@ -26,12 +27,14 @@ vi.mock("@lingui/core/macro", () => ({
 }));
 
 vi.mock("../../lib/rpc", () => ({ rpc: {} }));
+vi.mock("../../lib/performance", () => ({ markAfterPaint: vi.fn() }));
 
 let container: HTMLDivElement;
 let root: Root;
 let scrollRef: RefObject<HTMLDivElement | null>;
 
 beforeEach(() => {
+  vi.mocked(markAfterPaint).mockClear();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   window.matchMedia ??= ((query: string) => ({
     matches: false,
@@ -224,4 +227,53 @@ it("drops the quote pill when an edit removes only one end of the selection", as
 
   expect(window.getSelection()!.getRangeAt(0).collapsed).toBe(false);
   expect(document.querySelector("[data-quote-selection]")).toBeNull();
+});
+
+it("shows the outgoing bubble and attachment names with a sending state", () => {
+  render({
+    ...baseProps([]),
+    outgoingMessages: [
+      {
+        clientNonce: "nonce",
+        threadKey: "bot",
+        spaceId: undefined,
+        userId: undefined,
+        text: "A message in flight",
+        attachments: ["notes.txt"],
+        sending: true,
+      },
+    ],
+  });
+  const bubble = container.querySelector('[data-testid="outgoing-message"]');
+  expect(bubble?.textContent).toContain("A message in flight");
+  expect(bubble?.textContent).toContain("notes.txt");
+  expect(bubble?.textContent).toContain("Sending…");
+  expect(bubble?.querySelector("button")).toBeNull();
+});
+
+it("marks local outgoing paint and new agent output without counting loaded history", () => {
+  const old = textMessage("history", "bot", "Old reply");
+  const props = baseProps([old]);
+  render(props);
+  expect(markAfterPaint).not.toHaveBeenCalled();
+  const outgoingMessages = [
+    {
+      clientNonce: "nonce",
+      threadKey: "bot",
+      spaceId: undefined,
+      userId: undefined,
+      text: "New question",
+      attachments: [],
+      sending: true,
+    },
+  ];
+  render({ ...props, followRequest: 1, outgoingMessages });
+  expect(markAfterPaint).toHaveBeenCalledWith("ork.chat.outgoing-painted");
+  expect(markAfterPaint).not.toHaveBeenCalledWith("ork.chat.agent-output-painted");
+  render({
+    ...baseProps([old, textMessage("new", "bot", "New reply")]),
+    followRequest: 1,
+    outgoingMessages: [],
+  });
+  expect(markAfterPaint).toHaveBeenCalledWith("ork.chat.agent-output-painted");
 });

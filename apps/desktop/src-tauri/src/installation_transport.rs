@@ -256,6 +256,7 @@ impl Selection {
 struct Request {
     connection: Arc<InstallationConnection>,
     input: Option<HttpRequest>,
+    pooled: bool,
 }
 
 struct Context {
@@ -265,10 +266,14 @@ struct Context {
     blocked: bool,
     authenticating: bool,
     requests: HashMap<String, Request>,
+    idle: Vec<(std::time::Instant, Arc<InstallationConnection>)>,
 }
 
 impl Context {
     fn cancel(&mut self) {
+        for (_, connection) in self.idle.drain(..) {
+            connection.cancel();
+        }
         for (_, request) in self.requests.drain() {
             request.connection.cancel();
         }
@@ -368,6 +373,7 @@ impl Transport {
                 blocked: false,
                 authenticating: false,
                 requests: HashMap::new(),
+                idle: Vec::new(),
             },
         );
         Ok(())
@@ -470,6 +476,9 @@ impl Transport {
             return Err(ERROR.into());
         }
         self.with(label, document, |context| {
+            if context.token.as_deref() != Some(&token) {
+                context.cancel();
+            }
             context.token = Some(token);
             Ok(())
         })
@@ -523,7 +532,45 @@ impl Transport {
                     value: format!("Bearer {token}"),
                 });
             }
-            let connection = context.selection.connection(ticket)?;
+            // oRPC uses POST for reads as well as writes. Restrict pooling to these
+            // audited paths; file transfers and event streams retain dedicated channels.
+            let read = (input.method == "POST" || (input.method == "GET" && !input.has_body))
+                && matches!(
+                    input.path.as_str(),
+                    "/rpc/health"
+                        | "/rpc/bootstrap"
+                        | "/rpc/me"
+                        | "/rpc/spaces/list"
+                        | "/rpc/threads/get"
+                        | "/rpc/routines/list"
+                        | "/rpc/skills/list"
+                        | "/rpc/models/workspacePolicy"
+                );
+            let pooled = ticket.is_none()
+                && !context.selection.uses_relay()
+                && read
+                && !input.path.contains("stream")
+                && !headers.iter().any(|h| {
+                    h.name.eq_ignore_ascii_case("accept") && h.value.contains("text/event-stream")
+                });
+            context.idle.retain(|(at, connection)| {
+                if at.elapsed() < Duration::from_secs(5) {
+                    true
+                } else {
+                    connection.cancel();
+                    false
+                }
+            });
+            let connection = if pooled {
+                context.idle.pop().map(|(_, connection)| connection)
+            } else {
+                None
+            }
+            .map(Ok)
+            .unwrap_or_else(|| context.selection.connection(ticket))?;
+            if pooled {
+                connection.enable_sequential_reuse();
+            }
             let input = HttpRequest {
                 method: input.method,
                 path: input.path,
@@ -536,6 +583,7 @@ impl Transport {
                 Request {
                     connection,
                     input: Some(input),
+                    pooled,
                 },
             );
             Ok(())
@@ -625,7 +673,20 @@ impl Transport {
             .map_err(|_| ERROR)?;
         self.request(label, document, id)?;
         if bytes.is_none() {
-            self.cancel(label, document, id);
+            self.with(label, document, |context| {
+                let request = context.requests.remove(id).ok_or(ERROR)?;
+                if request.pooled
+                    && context.idle.len() < 4
+                    && request.connection.release_for_reuse()
+                {
+                    context
+                        .idle
+                        .push((std::time::Instant::now(), request.connection));
+                } else {
+                    request.connection.cancel();
+                }
+                Ok(())
+            })?;
         }
         Ok(bytes.map(|bytes| STANDARD.encode(bytes)))
     }
@@ -663,6 +724,7 @@ impl Transport {
                 Request {
                     connection: connection.clone(),
                     input: None,
+                    pooled: false,
                 },
             );
             Ok(())
@@ -780,6 +842,50 @@ mod tests {
     const ID: &str = "44444444-4444-4444-8444-444444444444";
     fn input() -> String {
         json!({ "method": "POST", "path": "/rpc/me", "headers": [], "hasBody": false }).to_string()
+    }
+
+    #[test]
+    fn only_read_posts_are_eligible_and_bearer_changes_retire_idle_channels() {
+        let transport = Transport::default();
+        transport.select("one", selection()).unwrap();
+        transport.document("one", "doc");
+        for (path, expected) in [
+            ("/rpc/bootstrap", true),
+            ("/rpc/me", true),
+            ("/rpc/models/workspacePolicy", true),
+            ("/rpc/threads/send", false),
+            ("/rpc/skills/start", false),
+            ("/rpc/threads/stream", false),
+        ] {
+            let input = json!({ "method": "POST", "path": path, "headers": [], "hasBody": true })
+                .to_string();
+            transport.open("one", "doc", ID, &input, None).unwrap();
+            transport
+                .with("one", "doc", |context| {
+                    assert_eq!(context.requests[ID].pooled, expected, "{path}");
+                    Ok(())
+                })
+                .unwrap();
+            transport.cancel("one", "doc", ID);
+        }
+        let held = transport
+            .with("one", "doc", |context| {
+                let channel = context.selection.connection(None)?;
+                context
+                    .idle
+                    .push((std::time::Instant::now(), channel.clone()));
+                Ok(channel)
+            })
+            .unwrap();
+        transport.token("one", "doc", "new-bearer".into()).unwrap();
+        transport
+            .with("one", "doc", |context| {
+                assert!(context.idle.is_empty());
+                Ok(())
+            })
+            .unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        assert!(runtime.block_on(held.response_head()).is_err());
     }
 
     #[tokio::test]

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 material is preserved. Empty-space onboarding changes follow LICENSE.md.
+// Ork keeps a periodic fallback for sidebar changes that have no live notification.
 
 import { useLingui } from "@lingui/react/macro";
 import type {
@@ -453,12 +454,12 @@ export function useSpaceBootstrap({
     };
     window.addEventListener("focus", refreshVisibleBots);
     document.addEventListener("visibilitychange", refreshVisibleBots);
-    // Poll skips while a refresh is in flight; focus/visibility and event-driven
-    // callers still bump botsRefreshEpoch so only the latest response applies.
+    // Thread and alert streams trigger live refreshes. The slower fallback
+    // catches external changes that never produced an event in this window.
     const poll = window.setInterval(() => {
       if (botsRefreshInFlight.current > 0) return;
       refreshVisibleBots();
-    }, 3_000);
+    }, 15_000);
     return () => {
       cancelled = true;
       window.clearTimeout(refreshTimer);

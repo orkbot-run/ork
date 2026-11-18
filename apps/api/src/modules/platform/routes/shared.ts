@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache material is preserved; Ork changes consolidate database error matching.
 // Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
+// Ork includes the managed model setup decision in the identity returned by bootstrap.
 
 import {
   deploymentModelRole,
@@ -80,6 +81,7 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
     isDeploymentOwner: false,
     isAdmin: admin,
     needsModel: setup.needsModel,
+    managedModelSetupRequired: setup.managed && setup.needsModel,
     defaultProvider: canonicalPiProviderId(setup.model?.provider ?? deps.env.defaultProvider),
     defaultModel: setup.model?.modelId ?? deps.env.defaultModel,
     // Set only while the active default is the deployment's own, running on host credentials.
@@ -137,6 +139,7 @@ export async function modelSetup(deps: RouterDeps, actor: Actor) {
       );
       const connected = main?.credential ? main : null;
       return {
+        managed: true,
         main: connected,
         workspaceModel: null,
         model: connected ?? { provider: "", modelId: "" },
@@ -157,6 +160,7 @@ export async function modelSetup(deps: RouterDeps, actor: Actor) {
         ? { provider: account.provider, modelId: primary.modelId }
         : { provider: "", modelId: "" };
     return {
+      managed: true,
       main: null,
       workspaceModel: model,
       model,
@@ -188,6 +192,7 @@ export async function modelSetup(deps: RouterDeps, actor: Actor) {
     Boolean(deps.env.deploymentModelConfigured) &&
     (!funding?.creditPurchasesEnabled || creditsAvailable);
   return {
+    managed: false,
     main,
     workspaceModel,
     model:

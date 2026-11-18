@@ -332,7 +332,11 @@ pub fn initialization_script_with_transport(
     format!(
         "(() => {{ const config = {config}; {}\n{} }})();",
         include_str!("../../build/tauri-ui/native-bridge.js"),
-        include_str!("../../build/tauri-renderer/renderer-init.js")
+        if transport {
+            ""
+        } else {
+            include_str!("../../build/tauri-renderer/renderer-init.js")
+        },
     )
 }
 

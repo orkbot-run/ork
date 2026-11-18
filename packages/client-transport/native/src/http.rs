@@ -152,7 +152,7 @@ impl State {
     }
 }
 
-/// One request per encrypted channel. Platform sockets carry bytes without seeing HTTP content.
+/// A pinned HTTP channel; sequential reuse requires explicit direct-route negotiation.
 #[derive(uniffi::Object)]
 pub struct InstallationHttp {
     config: Arc<ClientConfig>,
@@ -163,6 +163,9 @@ pub struct InstallationHttp {
     outgoing: Mutex<ReadHalf<DuplexStream>>,
     incoming: Mutex<WriteHalf<DuplexStream>>,
     state: Arc<State>,
+    reusable: AtomicBool,
+    completed: AtomicBool,
+    sender: Arc<Mutex<Option<hyper::client::conn::http1::SendRequest<Upload>>>>,
 }
 
 impl Drop for InstallationHttp {
@@ -233,6 +236,23 @@ fn request(
         .map_err(|_| TransportError::InvalidRequest)
 }
 
+impl InstallationHttp {
+    pub(crate) fn enable_reuse(&self) {
+        self.reusable.store(true, Ordering::SeqCst);
+    }
+    pub(crate) fn reusable_ready(&self) -> bool {
+        self.reusable.load(Ordering::SeqCst)
+            && self.completed.load(Ordering::SeqCst)
+            && !self.state.canceled.is_cancelled()
+            && self
+                .state
+                .upload
+                .try_lock()
+                .map(|upload| upload.is_none())
+                .unwrap_or(false)
+    }
+}
+
 #[uniffi::export(async_runtime = "tokio")]
 impl InstallationHttp {
     #[uniffi::constructor]
@@ -264,6 +284,9 @@ impl InstallationHttp {
             outgoing: Mutex::new(outgoing),
             incoming: Mutex::new(incoming),
             state: Arc::new(State::default()),
+            reusable: AtomicBool::new(false),
+            completed: AtomicBool::new(false),
+            sender: Arc::new(Mutex::new(None)),
         }))
     }
 
@@ -274,12 +297,16 @@ impl InstallationHttp {
         let (sender, receiver) = mpsc::channel(2);
         let has_body = input.has_body;
         let request = request(&self.authority, input, Upload { receiver })?;
-        let socket = self
-            .socket
-            .lock()
-            .await
-            .take()
-            .ok_or(TransportError::AlreadyStarted)?;
+        let socket = self.socket.lock().await.take();
+        if socket.is_none() {
+            if !self.reusable.load(Ordering::SeqCst)
+                || !self.completed.swap(false, Ordering::SeqCst)
+            {
+                return Err(TransportError::AlreadyStarted);
+            }
+            *self.state.head.lock().await = None;
+            *self.state.body.lock().await = ResponseBody::default();
+        }
         if has_body {
             *self.state.upload.lock().await = Some(sender);
         } else {
@@ -290,10 +317,27 @@ impl InstallationHttp {
         let config = self.config.clone();
         let name = self.name.clone();
         let fingerprint = self.fingerprint.clone();
+        let channel = self.sender.clone();
+        let reusable = self.reusable.load(Ordering::SeqCst);
         let task = tokio::spawn(async move {
-            if let Err(error) =
-                execute(socket, config, name, fingerprint, request, state.clone()).await
-            {
+            let result = if let Some(socket) = socket {
+                execute(
+                    socket,
+                    config,
+                    name,
+                    fingerprint,
+                    request,
+                    state.clone(),
+                    channel.clone(),
+                )
+                .await
+            } else {
+                send(request, state.clone(), channel.clone()).await
+            };
+            if !reusable {
+                channel.lock().await.take();
+            }
+            if let Err(error) = result {
                 state.fail(error).await;
             }
         });
@@ -422,7 +466,10 @@ impl InstallationHttp {
                         None => {
                             response.finished = true;
                             response.body = None;
-                            self.state.stop_drivers();
+                            self.completed.store(true, Ordering::SeqCst);
+                            if !self.reusable.load(Ordering::SeqCst) {
+                                self.state.stop_drivers();
+                            }
                             return Ok(None);
                         }
                         Some(Err(_)) => {
@@ -439,6 +486,9 @@ impl InstallationHttp {
 
     pub fn cancel(&self) {
         self.state.cancel();
+        if let Ok(mut sender) = self.sender.try_lock() {
+            sender.take();
+        }
     }
 }
 
@@ -449,6 +499,7 @@ async fn execute(
     fingerprint: String,
     request: Request<Upload>,
     state: Arc<State>,
+    channel: Arc<Mutex<Option<hyper::client::conn::http1::SendRequest<Upload>>>>,
 ) -> Result<(), TransportError> {
     let connector = TlsConnector::from(config);
     let stream = tokio::time::timeout(
@@ -461,7 +512,7 @@ async fn execute(
     .map_err(|_| TransportError::TlsRefused)?
     .map_err(|_| TransportError::TlsRefused)?;
     verify_peer(stream.get_ref().1, &fingerprint)?;
-    let (mut sender, connection) = hyper::client::conn::http1::Builder::new()
+    let (sender, connection) = hyper::client::conn::http1::Builder::new()
         .max_headers(64)
         .max_buf_size(32 * 1024)
         .handshake(TokioIo::new(stream))
@@ -471,10 +522,26 @@ async fn execute(
         let _ = connection.await;
     });
     state.register(driver.abort_handle());
+    *channel.lock().await = Some(sender);
+    send(request, state, channel).await
+}
+
+async fn send(
+    request: Request<Upload>,
+    state: Arc<State>,
+    channel: Arc<Mutex<Option<hyper::client::conn::http1::SendRequest<Upload>>>>,
+) -> Result<(), TransportError> {
+    // A failed write is ambiguous: never reconnect or replay this request.
+    let mut sender = channel.lock().await.take().ok_or(TransportError::Closed)?;
+    sender
+        .ready()
+        .await
+        .map_err(|_| TransportError::HttpRefused)?;
     let response = sender
         .send_request(request)
         .await
         .map_err(|_| TransportError::HttpRefused)?;
+    *channel.lock().await = Some(sender);
     let head = HttpResponseHead {
         status: response.status().as_u16(),
         headers: response

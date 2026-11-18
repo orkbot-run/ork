@@ -3,7 +3,7 @@
 
 use std::io;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -119,7 +119,11 @@ impl AsyncWrite for BootstrapStream {
 
 type Socket = WebSocketStream<BootstrapStream>;
 
-async fn socket(address: &Url, ticket: Option<&str>) -> Result<Socket, TransportError> {
+async fn socket(
+    address: &Url,
+    ticket: Option<&str>,
+    reuse: bool,
+) -> Result<Socket, TransportError> {
     let host = address.host_str().ok_or(TransportError::InvalidRequest)?;
     let host = host.trim_start_matches('[').trim_end_matches(']');
     let tcp = TcpStream::connect((
@@ -161,6 +165,12 @@ async fn socket(address: &Url, ticket: Option<&str>) -> Result<Socket, Transport
     request
         .headers_mut()
         .insert("origin", HeaderValue::from_static("orkbot://"));
+    if ticket.is_none() && reuse {
+        request.headers_mut().insert(
+            "x-ork-installation-channel",
+            HeaderValue::from_static("sequential-v1"),
+        );
+    }
     if let Some(ticket) = ticket {
         request.headers_mut().insert(
             "authorization",
@@ -198,6 +208,8 @@ pub struct InstallationConnection {
     fingerprint: String,
     relay_ticket: Option<String>,
     started: AtomicBool,
+    requests: AtomicUsize,
+    allow_reuse: AtomicBool,
     canceled: CancellationToken,
     inner: Mutex<Option<Arc<InstallationHttp>>>,
     drivers: Mutex<Vec<AbortHandle>>,
@@ -242,7 +254,12 @@ impl InstallationConnection {
             .ok_or(TransportError::NotStarted)
     }
     async fn connect(&self) -> Result<Socket, TransportError> {
-        let mut socket = socket(&self.address, self.relay_ticket.as_deref()).await?;
+        let mut socket = socket(
+            &self.address,
+            self.relay_ticket.as_deref(),
+            self.allow_reuse.load(Ordering::SeqCst),
+        )
+        .await?;
         let message = socket
             .next()
             .await
@@ -256,7 +273,10 @@ impl InstallationConnection {
         }
         let identity: Identity =
             serde_json::from_str(&text).map_err(|_| TransportError::InvalidIdentity)?;
-        if identity.protocol != "ork-installation-tls-v1"
+        let reusable = self.allow_reuse.load(Ordering::SeqCst)
+            && self.relay_ticket.is_none()
+            && identity.protocol == "ork-installation-tls-sequential-v1";
+        if !(identity.protocol == "ork-installation-tls-v1" || reusable)
             || identity.server_id != self.server_id
             || identity.binding_version != self.binding_version
             || identity.key_fingerprint != self.fingerprint
@@ -277,6 +297,9 @@ impl InstallationConnection {
         }
         let operation =
             InstallationHttp::new(certificate, self.fingerprint.clone(), logical_origin)?;
+        if reusable {
+            operation.enable_reuse();
+        }
         if self.canceled.is_cancelled() {
             operation.cancel();
             return Err(TransportError::Canceled);
@@ -333,6 +356,8 @@ impl InstallationConnection {
             fingerprint: key_fingerprint,
             relay_ticket: None,
             started: AtomicBool::new(false),
+            requests: AtomicUsize::new(0),
+            allow_reuse: AtomicBool::new(false),
             canceled: CancellationToken::new(),
             inner: Mutex::new(None),
             drivers: Mutex::new(Vec::new()),
@@ -387,6 +412,14 @@ impl InstallationConnection {
         request.validate()?;
         if self.started.swap(true, Ordering::SeqCst) {
             return Err(TransportError::AlreadyStarted);
+        }
+        self.requests.fetch_add(1, Ordering::SeqCst);
+        if let Ok(operation) = self.operation() {
+            if let Err(error) = operation.start_request(request).await {
+                self.cancel();
+                return Err(error);
+            }
+            return Ok(());
         }
         let connected = tokio::select! {
             biased;
@@ -484,11 +517,34 @@ impl InstallationConnection {
     }
     pub async fn read_body(&self) -> Result<Option<Vec<u8>>, TransportError> {
         let result = self.operation()?.read_body().await;
-        if !matches!(result, Ok(Some(_))) {
+        if !matches!(result, Ok(Some(_))) && !self.operation()?.reusable_ready() {
             self.stop_drivers();
         }
         result
     }
+    /// Opt in before starting; dedicated streams and relay connections stay on v1.
+    pub fn enable_sequential_reuse(&self) {
+        if !self.started.load(Ordering::SeqCst) && self.relay_ticket.is_none() {
+            self.allow_reuse.store(true, Ordering::SeqCst);
+        }
+    }
+
+    /// Only a fully consumed, negotiated channel may return to its owning document's pool.
+    pub fn release_for_reuse(&self) -> bool {
+        if self.requests.load(Ordering::SeqCst) < 16
+            && self
+                .operation()
+                .map(|op| op.reusable_ready())
+                .unwrap_or(false)
+        {
+            self.started
+                .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+        } else {
+            false
+        }
+    }
+
     pub fn cancel(&self) {
         self.canceled.cancel();
         if let Ok(operation) = self.inner.lock() {

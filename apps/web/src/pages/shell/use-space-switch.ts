@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { discardPrimedBootstrap, primeSpaceBootstrap } from "../../lib/bootstrap";
 import { initialBootstrapTarget } from "../../lib/bootstrap-target";
 import { getSnapshot as getCallSnapshot } from "../../lib/call-session";
@@ -30,9 +30,26 @@ export function useOpenSpaceChat({
   closeMobileSidebar: () => void;
 }) {
   const spaceSwitchRequest = useRef(0);
+  const [pendingSpace, setPendingSpace] = useState<{
+    id: string;
+    request: number;
+    navigation: number;
+    index: unknown;
+  } | null>(null);
+  // Navigation refs change before this shell renders, including same-path navigation.
+  useEffect(() => {
+    if (
+      pendingSpace &&
+      (pendingSpace.request !== spaceSwitchRequest.current ||
+        pendingSpace.navigation !== navigationRevision.current ||
+        pendingSpace.index !== window.history.state?.idx)
+    )
+      setPendingSpace(null);
+  });
   useEffect(() => {
     const onPopState = () => {
       spaceSwitchRequest.current += 1;
+      setPendingSpace(null);
     };
     window.addEventListener("popstate", onPopState);
     return () => {
@@ -42,10 +59,11 @@ export function useOpenSpaceChat({
       window.removeEventListener("popstate", onPopState);
     };
   }, []);
-  return useCallback(
+  const openSpaceChat = useCallback(
     (spaceId: string, path: string) => {
       closeMobileSidebar();
       const request = ++spaceSwitchRequest.current;
+      setPendingSpace(null);
       const startedNavigation = navigationRevision.current;
       const startedOverlay = overlayRevision.current;
       const startedIndex = window.history.state?.idx;
@@ -85,11 +103,17 @@ export function useOpenSpaceChat({
         );
       const current = () => decision() !== "abandon";
       // A space visited before opens at once with what it showed then, refreshing behind it.
+      const settlePending = () => {
+        if (request === spaceSwitchRequest.current) {
+          setPendingSpace((current) => (current?.request === request ? null : current));
+        }
+      };
       const cached = queryClient.getQueryData(spaceSeedKey(userId ?? null, spaceId));
       const primed = primeSpaceBootstrap(spaceId, target.botId, cached);
       const remount = () =>
         remountShellForSpace(() => {
           const action = decision();
+          settlePending();
           if (action !== "commit") {
             discardPrimedBootstrap(primed);
             if (action === "reload") {
@@ -114,14 +138,17 @@ export function useOpenSpaceChat({
         remount();
         return;
       }
+      setPendingSpace({ id: spaceId, request, navigation: startedNavigation, index: startedIndex });
       primed.then(
         () => {
           if (!current()) {
+            settlePending();
             discardPrimedBootstrap(primed);
             return;
           }
           // A call started while the bootstrap loaded belongs to this space.
           if (getCallSnapshot()) {
+            settlePending();
             discardPrimedBootstrap(primed);
             reload();
             return;
@@ -129,6 +156,7 @@ export function useOpenSpaceChat({
           remount();
         },
         () => {
+          settlePending();
           discardPrimedBootstrap(primed);
           if (current()) reload();
         },
@@ -136,4 +164,5 @@ export function useOpenSpaceChat({
     },
     [bootstrapSpaceId, navigate, navigationRevision, overlayRevision, userId],
   );
+  return { openSpaceChat, pendingSpaceId: pendingSpace?.id ?? null };
 }

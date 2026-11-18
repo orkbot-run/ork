@@ -45,6 +45,18 @@ import { errorText } from "../../lib/user-error";
 import type { PendingAttachment } from "./chat-shared";
 import type { useShellNavigation } from "./use-shell-navigation";
 
+export type OutgoingMessage = {
+  clientNonce: string;
+  threadKey: string | undefined;
+  originThreadKey?: string;
+  spaceId: string | undefined;
+  userId: string | undefined;
+  text: string;
+  attachments: string[];
+  sending: boolean;
+  receiptSeq?: number;
+};
+
 type ThreadRefresh = RefObject<(id: string) => Promise<ThreadSnapshot>>;
 
 /**
@@ -104,6 +116,7 @@ export function useComposerActions({
   const [replyTarget, setReplyTarget] = useState<ThreadMessage | null>(null);
   const [replyQuote, setReplyQuote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [outgoingMessages, setOutgoingMessages] = useState<OutgoingMessage[]>([]);
   const [sentCount, setSentCount] = useState(0);
   useEffect(() => {
     setComposerUnsavedWork({ sending, attachments: pendingAttachments.length > 0 });
@@ -157,6 +170,50 @@ export function useComposerActions({
       setReplyQuote(null);
     }
   }, []);
+  const activeOutgoingMessages = useMemo(
+    () =>
+      outgoingMessages.filter(
+        (message) =>
+          (message.threadKey === (inGroup ? groupId : activeId) ||
+            (message.sending &&
+              message.originThreadKey !== undefined &&
+              message.originThreadKey === (inGroup ? groupId : activeId))) &&
+          message.spaceId === bootstrapMe?.spaceId &&
+          message.userId === bootstrapMe?.userId &&
+          !activeSnapshot?.messages.some(
+            (saved) =>
+              saved.role === "user" &&
+              (saved.clientNonce === message.clientNonce ||
+                (message.receiptSeq !== undefined && saved.seq === message.receiptSeq)),
+          ),
+      ),
+    [
+      outgoingMessages,
+      inGroup,
+      groupId,
+      activeId,
+      bootstrapMe?.spaceId,
+      bootstrapMe?.userId,
+      activeSnapshot?.messages,
+    ],
+  );
+  useEffect(() => {
+    if (!activeSnapshot || !outgoingMessages.length) return;
+    const threadKey = activeSnapshot.groupId ?? activeSnapshot.botId;
+    setOutgoingMessages((current) => {
+      const next = current.filter(
+        (message) =>
+          message.threadKey !== threadKey ||
+          !activeSnapshot.messages.some(
+            (saved) =>
+              saved.role === "user" &&
+              (saved.clientNonce === message.clientNonce ||
+                (message.receiptSeq !== undefined && saved.seq === message.receiptSeq)),
+          ),
+      );
+      return next.length === current.length ? current : next;
+    });
+  }, [activeSnapshot, outgoingMessages]);
   const runError = threadRunError(activeSnapshot, dismissedRunErrorIds);
   const displayedRunError = !sendError ? runError : null;
   const displayedRunErrorId = displayedRunError ? (activeSnapshot?.run?.id ?? null) : null;
@@ -350,7 +407,7 @@ export function useComposerActions({
     ) => {
       const initialBotTarget = activeBotId.current;
       const initialGroupTarget = activeGroupId.current;
-      if ((!initialBotTarget && !initialGroupTarget) || sending) return false;
+      if ((!initialBotTarget && !initialGroupTarget) || sendingRef.current) return false;
       const editsAtSend = draftEdits.current;
       // The reply this send carries, read from the ref so a callback that outlived
       // a re-pick of the same message still carries the armed one; a reply picked
@@ -388,6 +445,21 @@ export function useComposerActions({
       setSendError(null);
       clearReadBoundary();
       setSentCount((count) => count + 1);
+      if (plan.shouldSend) {
+        setOutgoingMessages((current) => [
+          ...current.filter((message) => message.clientNonce !== clientNonce),
+          {
+            clientNonce,
+            threadKey: groupTarget ?? botTarget,
+            originThreadKey: reroutedToGroup ? originThreadKey : undefined,
+            spaceId: bootstrapMe?.spaceId,
+            userId: bootstrapMe?.userId,
+            text: trimmed,
+            attachments: attachments.map((attachment) => attachment.file.name),
+            sending: true,
+          },
+        ]);
+      }
       const dropDelayedSetup = () => {
         // Only after successful engagement so a failed upload/send keeps the setup card.
         if (initialBotTarget && focusPromptBotIdRef.current === initialBotTarget) {
@@ -483,6 +555,13 @@ export function useComposerActions({
           ? (await rpc.threads.sendWithRoutines({ ...payload, routineIds: plan.routineIds })).send
           : await rpc.threads.send(payload);
         accepted = true;
+        setOutgoingMessages((current) =>
+          current.map((message) =>
+            message.clientNonce === clientNonce
+              ? { ...message, sending: false, receiptSeq: sent?.seq }
+              : message,
+          ),
+        );
         if (sent && botTarget && activeBotId.current === botTarget) {
           updateSnapshot((current) =>
             applyThreadSendReceipt(
@@ -516,6 +595,10 @@ export function useComposerActions({
         else if (botTarget) void refreshThreadRef.current(botTarget).catch(() => undefined);
         return true;
       } catch (error) {
+        if (!accepted)
+          setOutgoingMessages((current) =>
+            current.filter((message) => message.clientNonce !== clientNonce),
+          );
         const isConfirmation = isImageInputConfirmation(error);
         // Offer the file resend only for the unchanged draft this send carried.
         const confirmation = isConfirmation && draftEdits.current === editsAtSend;
@@ -543,6 +626,8 @@ export function useComposerActions({
     },
     [
       activeSnapshot?.messages,
+      bootstrapMe?.spaceId,
+      bootstrapMe?.userId,
       pageSession,
       clearSentReply,
       flushPendingBrowserNotifications,
@@ -620,6 +705,7 @@ export function useComposerActions({
 
   return {
     activePendingAttachments,
+    activeOutgoingMessages,
     attachmentNotice,
     fileInputRef,
     onAttachmentPick,

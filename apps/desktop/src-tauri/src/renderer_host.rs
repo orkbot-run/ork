@@ -27,20 +27,17 @@ fn protocol_response(request: tauri::http::Request<Vec<u8>>) -> tauri::http::Res
         && authority == Some("localhost")
         && host.is_none_or(|host| host == "orkrenderer.localhost")
         && request.method() == tauri::http::Method::GET
-        && request.body().is_empty()
-        && application_path(uri.path());
+        && request.body().is_empty();
+    let resource = allowed.then(|| renderer_resource(uri.path())).flatten();
+    let (mime, body) = resource.unwrap_or(("text/plain; charset=utf-8", b""));
     tauri::http::Response::builder()
-        .status(if allowed { 200 } else { 404 })
-        .header("content-type", "text/html; charset=utf-8")
+        .status(if resource.is_some() { 200 } else { 404 })
+        .header("content-type", mime)
         .header("cache-control", "no-store")
         .header("content-security-policy", CSP)
         .header("x-content-type-options", "nosniff")
         .header("referrer-policy", "no-referrer")
-        .body(if allowed {
-            DOCUMENT.as_bytes().to_vec()
-        } else {
-            vec![]
-        })
+        .body(body.to_vec())
         .expect("static renderer protocol headers are valid")
 }
 
@@ -59,7 +56,17 @@ fn application_path(path: &str) -> bool {
         .any(|prefix| path == *prefix || path.starts_with(&format!("{prefix}/")))
 }
 
-const DOCUMENT: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"orkbot-native-renderer\" content=\"bundled-v1\"><title>Ork</title></head><body><div id=\"root\"></div></body></html>";
+fn renderer_resource(path: &str) -> Option<(&'static str, &'static [u8])> {
+    if application_path(path) {
+        Some(("text/html; charset=utf-8", DOCUMENT.as_bytes()))
+    } else {
+        managed_asset(path)
+    }
+}
+
+include!("../../build/tauri-renderer/managed-assets.rs");
+
+const DOCUMENT: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"orkbot-native-renderer\" content=\"bundled-v1\"><title>Ork</title><link rel=\"stylesheet\" href=\"/__ork_renderer/renderer.css\"><script type=\"module\" src=\"/__ork_renderer/renderer.js\"></script></head><body><div id=\"root\"></div></body></html>";
 const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: data:; font-src 'self' data:; connect-src ipc: http://ipc.localhost; frame-src 'self' blob:; frame-ancestors 'none'; form-action 'none'; base-uri 'none'";
 
 #[cfg(windows)]
@@ -85,7 +92,7 @@ mod loopback;
 mod protocol_tests {
     use super::*;
     #[test]
-    fn resource_protocol_serves_only_the_static_document_at_its_exact_authority() {
+    fn resource_protocol_serves_only_bundled_resources_at_its_exact_authority() {
         for path in ["/", "/app", "/app/conversation", "/sign-in"] {
             let request = tauri::http::Request::builder()
                 .uri(format!("orkrenderer://localhost{path}"))
@@ -94,15 +101,31 @@ mod protocol_tests {
             let response = protocol_response(request);
             assert_eq!(response.status(), 200);
             assert!(String::from_utf8_lossy(response.body()).contains("bundled-v1"));
+            assert!(
+                String::from_utf8_lossy(response.body()).contains("/__ork_renderer/renderer.js")
+            );
             assert!(response.headers()["content-security-policy"]
                 .to_str()
                 .unwrap()
                 .contains("connect-src ipc:"));
         }
+        let script = protocol_response(
+            tauri::http::Request::builder()
+                .uri("orkrenderer://localhost/__ork_renderer/renderer.js")
+                .body(vec![])
+                .unwrap(),
+        );
+        assert_eq!(script.status(), 200);
+        assert_eq!(
+            script.headers()["content-type"],
+            "text/javascript; charset=utf-8"
+        );
+        assert!(!script.body().is_empty());
         for uri in [
             "orkrenderer://localhost/api/auth/get-session",
             "orkrenderer://localhost/rpc/me",
             "orkrenderer://localhost/assets/untrusted.js",
+            "orkrenderer://localhost/__ork_renderer/untrusted.js",
             "orkrenderer://foreign/app",
             "orkrenderer://localhost:80/app",
             "http://orkrenderer.localhost/app",

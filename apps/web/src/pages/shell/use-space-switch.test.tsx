@@ -39,7 +39,8 @@ vi.mock("../../lib/space-switch", async (importOriginal) => ({
 }));
 
 let root: Root;
-let open: ReturnType<typeof useOpenSpaceChat>;
+let open: ReturnType<typeof useOpenSpaceChat>["openSpaceChat"];
+let pendingSpaceId: string | null;
 let pending: Array<() => void>;
 let commits: Array<() => boolean>;
 let navigationRevision: { current: number };
@@ -47,14 +48,14 @@ let overlayRevision: { current: number };
 let navigate: ReturnType<typeof vi.fn>;
 
 function Harness() {
-  open = useOpenSpaceChat({
+  ({ openSpaceChat: open, pendingSpaceId } = useOpenSpaceChat({
     bootstrapSpaceId: "old-space",
     userId: "user",
     navigate: navigate as NavigateFunction,
     navigationRevision,
     overlayRevision,
     closeMobileSidebar: () => {},
-  });
+  }));
   return null;
 }
 
@@ -94,12 +95,12 @@ describe("pending space switches", () => {
     function NavigationHarness() {
       const navigation = useShellNavigation();
       redirect = navigation.redirectKeepingOverlay;
-      open = useOpenSpaceChat({
+      ({ openSpaceChat: open, pendingSpaceId } = useOpenSpaceChat({
         ...navigation,
         bootstrapSpaceId: "old-space",
         userId: "user",
         closeMobileSidebar: () => {},
-      });
+      }));
       return null;
     }
     act(() =>
@@ -201,4 +202,71 @@ describe("pending space switches", () => {
     expect(state.discard).toHaveBeenCalledOnce();
     root = createRoot(document.createElement("div"));
   });
+});
+
+it("shows uncached workspace progress immediately and clears it when the switch commits", async () => {
+  act(() => open("new-space", "/app/new"));
+  expect(pendingSpaceId).toBe("new-space");
+  expect(state.select).not.toHaveBeenCalled();
+  await ready();
+  expect(pendingSpaceId).toBe("new-space");
+  act(() => {
+    expect(commits[0]!()).toBe(true);
+  });
+  expect(pendingSpaceId).toBeNull();
+});
+
+it("opens a cached workspace without showing uncached loading progress", () => {
+  state.cached.mockReturnValue({ bots: [] });
+  act(() => open("new-space", "/app/new"));
+  expect(pendingSpaceId).toBeNull();
+  expect(commits).toHaveLength(1);
+});
+
+it("clears workspace progress on browser history cancellation before bootstrap settles", async () => {
+  act(() => open("new-space", "/app/new"));
+  act(() => window.dispatchEvent(new PopStateEvent("popstate")));
+  expect(pendingSpaceId).toBeNull();
+  await ready();
+  expect(commits).toHaveLength(0);
+});
+
+it("clears workspace progress when same-path navigation supersedes it", async () => {
+  act(() => open("new-space", "/app/new"));
+  navigationRevision.current++;
+  act(() => root.render(<Harness />));
+  expect(pendingSpaceId).toBeNull();
+  await ready();
+  expect(commits).toHaveLength(0);
+});
+
+it("keeps newer workspace progress when an abandoned request resolves", async () => {
+  act(() => open("first-space", "/app/first"));
+  act(() => open("second-space", "/app/second"));
+  await ready(0);
+  expect(pendingSpaceId).toBe("second-space");
+  await ready(1);
+  act(() => {
+    expect(commits[0]!()).toBe(true);
+  });
+  expect(pendingSpaceId).toBeNull();
+});
+
+it("clears workspace progress before falling back after a bootstrap failure", async () => {
+  let reject!: (error: Error) => void;
+  state.prime.mockImplementation(
+    () =>
+      new Promise<void>((_, fail) => {
+        reject = fail;
+      }),
+  );
+  state.select.mockReturnValue(false);
+  act(() => open("new-space", "/app/new"));
+  expect(pendingSpaceId).toBe("new-space");
+  await act(async () => {
+    reject(new Error("bootstrap unavailable"));
+    await Promise.resolve();
+  });
+  expect(pendingSpaceId).toBeNull();
+  expect(state.remount).not.toHaveBeenCalled();
 });

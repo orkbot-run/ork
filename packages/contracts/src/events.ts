@@ -474,6 +474,8 @@ export const ReplyPreviewSchema = z.object({
 });
 export type ReplyPreview = z.infer<typeof ReplyPreviewSchema>;
 
+export const ThreadMessageClientNonce = z.uuidv4();
+
 export const ThreadMessageSchema = z.object({
   id: Id,
   threadId: Id,
@@ -485,6 +487,8 @@ export const ThreadMessageSchema = z.object({
   replyQuote: z.string().optional(),
   replyPreview: ReplyPreviewSchema.nullable().optional(),
   runId: Id.optional(),
+  /** Composer-generated identifier for reconciling a locally pending send. */
+  clientNonce: ThreadMessageClientNonce.optional(),
   /** Set when the message was sent from a live voice call; groups one call's transcript. */
   callId: z.string().optional(),
   createdAt: z.string(),

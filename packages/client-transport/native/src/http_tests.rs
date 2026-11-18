@@ -574,3 +574,39 @@ async fn validates_origins_request_headers_and_buffer_bounds() {
         Err(TransportError::NotStarted)
     ));
 }
+
+#[tokio::test]
+async fn a_closed_reused_channel_never_replays_a_post() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = calls.clone();
+    let relay = local(move |_request| {
+        observed.fetch_add(1, Ordering::SeqCst);
+        async move {
+            let mut reply = response(b"done");
+            reply
+                .headers_mut()
+                .insert("connection", HeaderValue::from_static("close"));
+            reply
+        }
+    })
+    .await;
+    relay.client.enable_reuse();
+    relay
+        .client
+        .start_request(get("/rpc/health"))
+        .await
+        .unwrap();
+    relay.client.response_head().await.unwrap();
+    while relay.client.read_body().await.unwrap().is_some() {}
+    assert!(relay.client.reusable_ready());
+    let mut post = get("/rpc/me");
+    post.method = "POST".into();
+    relay.client.start_request(post).await.unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(1), relay.client.response_head())
+            .await
+            .unwrap()
+            .is_err()
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}

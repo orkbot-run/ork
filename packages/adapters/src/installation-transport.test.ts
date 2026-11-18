@@ -21,7 +21,7 @@ afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
 });
 
-async function fixture(options: { unavailable?: boolean } = {}) {
+async function fixture(options: { unavailable?: boolean; bindingVersion?: number } = {}) {
   const keys = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
   const fingerprint = createHash("sha256")
     .update(keys.publicKey.export({ format: "der", type: "spki" }))
@@ -45,7 +45,7 @@ async function fixture(options: { unavailable?: boolean } = {}) {
     origin: "https://server.example",
     identity: async () => {
       if (options.unavailable) throw new Error("not paired");
-      return identity;
+      return { ...identity, bindingVersion: options.bindingVersion ?? identity.bindingVersion };
     },
     listener: async (req, res) => {
       res.once("close", () => events.emit("responseClosed"));
@@ -95,10 +95,11 @@ async function fixture(options: { unavailable?: boolean } = {}) {
 
 async function channel(
   f: Awaited<ReturnType<typeof fixture>>,
-  options: { wrongPin?: boolean; tls12?: boolean } = {},
+  options: { wrongPin?: boolean; tls12?: boolean; reuse?: boolean } = {},
 ) {
   const ws = new WebSocket(f.address, {
     origin: "orkbot://",
+    headers: options.reuse ? { "x-ork-installation-channel": "sequential-v1" } : {},
     perMessageDeflate: false,
     maxPayload: 256 * 1024,
   });
@@ -108,8 +109,14 @@ async function channel(
   });
   const [message, binary] = await once(ws, "message");
   expect(binary).toBe(false);
-  const envelope = installationTransportIdentitySchema.parse(JSON.parse(message.toString()));
-  expect(envelope.protocol).toBe("ork-installation-tls-v1");
+  const raw = JSON.parse(message.toString());
+  expect(raw.protocol).toBe(
+    options.reuse ? "ork-installation-tls-sequential-v1" : "ork-installation-tls-v1",
+  );
+  const envelope = installationTransportIdentitySchema.parse({
+    ...raw,
+    protocol: "ork-installation-tls-v1",
+  });
   expect(envelope.serverId).toBe(f.identity.serverId);
   expect(envelope.bindingVersion).toBe(1);
   const certificate = new X509Certificate(Buffer.from(envelope.certificate, "base64"));
@@ -139,8 +146,9 @@ async function openResponse(
   headers: Record<string, string> = {},
   body?: Buffer,
   path = "/api/private",
+  keepAliveAgent?: Agent,
 ) {
-  const agent = new Agent();
+  const agent = keepAliveAgent ?? new Agent();
   agent.createConnection = () => socket;
   cleanup.push(() => {
     agent.destroy();
@@ -190,6 +198,75 @@ async function send(
 }
 
 describe("installation transport", () => {
+  it("negotiates sequential direct reuse and authenticates every request on one TLS channel", async () => {
+    const options = { bindingVersion: 1 };
+    const f = await fixture(options);
+    const socket = await channel(f, { reuse: true });
+    await once(socket, "secureConnect");
+    const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+    for (let index = 0; index < 3; index++) {
+      const response = await openResponse(
+        socket,
+        index === 1 ? { authorization: "Bearer revoked" } : {},
+        undefined,
+        "/api/private",
+        agent,
+      );
+      for await (const _part of response) {
+        /* consume before releasing */
+      }
+      expect(response.statusCode).toBe(index === 1 ? 401 : 200);
+      expect(response.headers.connection).toBe("keep-alive");
+    }
+    expect(f.clients).toHaveLength(1);
+    expect(f.calls).toHaveLength(3);
+    // An existing channel cannot carry requests after the paired binding changes.
+    options.bindingVersion = 2;
+    await expect(openResponse(socket, {}, undefined, "/api/private", agent)).rejects.toThrow();
+    expect(f.calls).toHaveLength(3);
+  });
+
+  it("bounds a sequential channel to sixteen requests", async () => {
+    const f = await fixture();
+    const socket = await channel(f, { reuse: true });
+    await once(socket, "secureConnect");
+    const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+    for (let index = 0; index < 16; index++) {
+      const response = await openResponse(socket, {}, undefined, "/api/private", agent);
+      for await (const _part of response) {
+        /* bounded sequential consumption */
+      }
+      expect(response.statusCode).toBe(200);
+      expect(response.headers.connection).toBe(index === 15 ? "close" : "keep-alive");
+    }
+    expect(f.calls).toHaveLength(16);
+  });
+
+  it("closes idle negotiated channels within the keepalive bound", async () => {
+    const f = await fixture();
+    const socket = await channel(f, { reuse: true });
+    await once(socket, "secureConnect");
+    const agent = new Agent({ keepAlive: true });
+    const response = await openResponse(socket, {}, undefined, "/api/private", agent);
+    for await (const _part of response) {
+      /* finish before idle starts */
+    }
+    await once(f.clients[0]!, "close", { signal: AbortSignal.timeout(13_000) });
+    expect(f.calls).toHaveLength(1);
+  }, 15_000);
+
+  it("refuses pipelining on negotiated sequential channels", async () => {
+    const f = await fixture();
+    const socket = await channel(f, { reuse: true });
+    await once(socket, "secureConnect");
+    const closed = once(f.clients[0]!, "close", { signal: AbortSignal.timeout(2_000) });
+    const raw =
+      "GET /api/private HTTP/1.1\r\nHost: server.example\r\nAuthorization: Bearer test-product-token\r\n\r\n";
+    socket.write(raw + raw);
+    await closed;
+    expect(f.calls.length).toBeLessThanOrEqual(1);
+  });
+
   it("serves normal authenticated HTTP over TLS 1.3 and opaque WebSocket bytes", async () => {
     const f = await fixture();
     const socket = await channel(f);

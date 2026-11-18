@@ -42,6 +42,7 @@ import { ActiveBotGlyph } from "../../components/ai/CollaborationMarker";
 import { VoiceChatCard } from "../../components/call/VoiceChatCard";
 import type { ArtifactTarget } from "../../lib/artifact-open";
 import { projectPageCards } from "../../lib/page-cards";
+import { markAfterPaint } from "../../lib/performance";
 import {
   isDetachedRange,
   lastSelectedText,
@@ -55,6 +56,7 @@ import { TimeSeparator, UnreadDivider } from "./chat-context";
 import type { ImportSetupTarget } from "./import-setup-card";
 import { MessageView } from "./message-view";
 import { QuoteSelectionButton } from "./quote-selection-button";
+import type { OutgoingMessage } from "./use-composer-actions";
 
 /** Bubbles stop at a readable line length instead of stretching with wide windows. */
 export function bubbleFrameWidth(role: ThreadMessage["role"]) {
@@ -70,6 +72,7 @@ export const Transcript = memo(function Transcript({
   followRequest,
   artifactTarget,
   transcript,
+  outgoingMessages = [],
   showToolActivity,
   olderCursor,
   unreadAfterSeq,
@@ -110,6 +113,7 @@ export const Transcript = memo(function Transcript({
   followRequest: number;
   artifactTarget: ArtifactTarget;
   transcript: FoldedTranscript<ThreadMessage>;
+  outgoingMessages?: OutgoingMessage[];
   showToolActivity: boolean;
   olderCursor: number | null;
   /** The seq read up to when this chat opened; null when nothing was unread. */
@@ -177,6 +181,25 @@ export const Transcript = memo(function Transcript({
     () => expandPeerReplies(transcript, expandedPeerMarkers),
     [transcript, expandedPeerMarkers],
   );
+  const outputBaseline = useRef<{ request: number; visibleIds: Set<string> } | null>(null);
+  useEffect(() => {
+    if (outgoingMessages.length) markAfterPaint("ork.chat.outgoing-painted");
+    const botMessages = messages.filter(
+      (message) =>
+        message.role === "bot" && messageHasVisibleBlocks(message.blocks, showToolActivity),
+    );
+    if (!outputBaseline.current || outputBaseline.current.request !== followRequest) {
+      outputBaseline.current = {
+        request: followRequest,
+        visibleIds: new Set(botMessages.map((message) => message.id)),
+      };
+    } else if (
+      followRequest > 0 &&
+      botMessages.some((message) => !outputBaseline.current?.visibleIds.has(message.id))
+    ) {
+      markAfterPaint("ork.chat.agent-output-painted");
+    }
+  }, [messages, outgoingMessages.length, followRequest, showToolActivity]);
   const messageById = useMemo(
     () => new Map(messages.map((message) => [message.id, message])),
     [messages],
@@ -663,6 +686,36 @@ export const Transcript = memo(function Transcript({
             </Fragment>
           );
         })}
+        {outgoingMessages.map((message) => (
+          <div
+            key={message.clientNonce}
+            data-testid="outgoing-message"
+            className="flex flex-col items-end gap-1"
+          >
+            <div
+              className={cn(
+                bubbleFrameWidth("user"),
+                "rounded-[20px] bg-chat-user px-[18px] py-3 text-body1 text-chat-user-foreground",
+              )}
+            >
+              {message.text ? (
+                <p className="whitespace-pre-wrap break-words">{message.text}</p>
+              ) : null}
+              {message.attachments.map((name, index) => (
+                <p key={index} className="text-sm">
+                  {name}
+                </p>
+              ))}
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {message.sending
+                ? message.originThreadKey
+                  ? t`Sending to group…`
+                  : t`Sending…`
+                : t`Sent`}
+            </span>
+          </div>
+        ))}
         {running &&
         !messages.some(
           (message) => message.id.startsWith("progress:") && liveMessageComposing(message.blocks),

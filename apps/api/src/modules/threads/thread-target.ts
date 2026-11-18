@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 behavior is preserved. Personal Ork, Space work admission and consent locking changes follow LICENSE.md.
+// Ork adds per-message reconciliation identifiers for pending sends.
 
 import type { JobPublisher, ProductAnalytics, SandboxProvider } from "@orkbot/adapter-kit";
 import { runContinueJob } from "@orkbot/adapter-kit";
@@ -18,6 +19,7 @@ import {
   GROUP_MEMBER_MIN,
   MessageBlock as MessageBlockSchema,
   resolveBotAvatarSet,
+  ThreadMessageClientNonce,
 } from "@orkbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
@@ -843,6 +845,7 @@ export async function sendThreadMessage(
   // Live events carry the call id so a spoken turn joins the call card on first
   // paint; without it the bubble shows loose until a refetch reads the nonce.
   const callId = callIdFromClientNonce(input.clientNonce);
+  const messageClientNonce = ThreadMessageClientNonce.safeParse(input.clientNonce).data;
   const requestedReplyQuote = input.replyQuote?.trim() || undefined;
   if (requestedReplyQuote && !input.replyToMessageId) {
     throw new ORPCError("BAD_REQUEST", { message: "replyQuote requires replyToMessageId." });
@@ -1019,6 +1022,7 @@ export async function sendThreadMessage(
               role: "user",
               blocks,
               callId,
+              clientNonce: messageClientNonce,
               runIds: answered.map((run) => run.id),
               replyToMessageId,
               replyQuote,
@@ -1057,6 +1061,7 @@ export async function sendThreadMessage(
               role: "user",
               blocks,
               callId,
+              clientNonce: messageClientNonce,
               replyToMessageId,
               replyQuote,
               replyPreview,
@@ -1109,6 +1114,7 @@ export async function sendThreadMessage(
             role: "user",
             blocks,
             callId,
+            clientNonce: messageClientNonce,
             runIds: [run.id],
             replyToMessageId,
             replyQuote,
@@ -1309,6 +1315,7 @@ export async function sendThreadMessage(
           role: "user",
           blocks,
           callId,
+          clientNonce: messageClientNonce,
           runIds: runs.map((run) => run.id),
           replyToMessageId,
           replyQuote,

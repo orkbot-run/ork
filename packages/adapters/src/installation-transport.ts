@@ -58,6 +58,15 @@ export class InstallationTransport {
   private readonly pending = new Set<Duplex>();
   private readonly relaySockets = new Set<WebSocket>();
   private closed = false;
+  private readonly handshakes = new WeakMap<TLSSocket, ReturnType<typeof setTimeout>>();
+  private readonly reusable = new WeakMap<
+    TLSSocket,
+    {
+      identity: InstallationTlsIdentity;
+      requests: number;
+      busy: boolean;
+    }
+  >();
   private readonly http;
   private readonly authority: string;
 
@@ -95,6 +104,10 @@ export class InstallationTransport {
           response.writeHead(421).end();
           return;
         }
+        // A validated HTTP request proves the TLS handshake succeeded. Node's native
+        // HTTP parser may consume decrypted bytes without emitting a JS data event.
+        clearTimeout(this.handshakes.get(socket));
+        this.handshakes.delete(socket);
         // The outer proxy and relay cannot supply an authenticated client IP or host.
         const untrusted = (name: string) =>
           name === "forwarded" || name.startsWith("x-forwarded-") || name === "x-real-ip";
@@ -103,11 +116,44 @@ export class InstallationTransport {
         request.rawHeaders = request.rawHeaders.flatMap((value, index, values) =>
           index % 2 === 0 && !untrusted(value.toLowerCase()) ? [value, values[index + 1]!] : [],
         );
-        response.shouldKeepAlive = false;
-        options.listener(request, response);
+        const session = this.reusable.get(socket);
+        if (!session) {
+          response.shouldKeepAlive = false;
+          options.listener(request, response);
+          return;
+        }
+        // No pipelining: one bounded upload/response at a time on an opted-in channel.
+        if (session.busy || ++session.requests > 16) {
+          socket.destroy();
+          return;
+        }
+        session.busy = true;
+        response.shouldKeepAlive = session.requests < 16;
+        response.once("finish", () => {
+          session.busy = false;
+        });
+        // Revalidate the installation binding before every request, including pooled channels.
+        void options
+          .identity()
+          .then((current) => {
+            const prior = session.identity;
+            if (
+              this.closed ||
+              socket.destroyed ||
+              current.serverId !== prior.serverId ||
+              current.bindingVersion !== prior.bindingVersion ||
+              current.keyFingerprint !== prior.keyFingerprint
+            ) {
+              socket.destroy();
+              return;
+            }
+            options.listener(request, response);
+          })
+          .catch(() => socket.destroy());
       },
     );
-    this.http.maxRequestsPerSocket = 1;
+    this.http.keepAliveTimeout = 10_000;
+    this.http.maxRequestsPerSocket = 16;
     this.http.on("clientError", (_error, socket) => socket.destroy());
     this.http.on("upgrade", (_request, socket) => socket.destroy());
     this.http.on("connect", (_request, socket) => socket.destroy());
@@ -143,7 +189,11 @@ export class InstallationTransport {
         if (this.closed || socket.destroyed) return socket.destroy();
         this.wss.handleUpgrade(request, socket, head, (ws) => {
           socket.off("error", onError);
-          this.attachIdentity(ws, identity);
+          this.attachIdentity(
+            ws,
+            identity,
+            request.headers["x-ork-installation-channel"] === "sequential-v1",
+          );
         });
       })
       .catch(() => {
@@ -174,14 +224,14 @@ export class InstallationTransport {
     }
   }
 
-  private attachIdentity(ws: WebSocket, identity: InstallationTlsIdentity) {
+  private attachIdentity(ws: WebSocket, identity: InstallationTlsIdentity, reuse = false) {
     ws.on("error", () => ws.terminate());
     ws.on("message", (_bytes, binary) => {
       if (!binary) ws.terminate();
     });
     ws.send(
       JSON.stringify({
-        protocol: "ork-installation-tls-v1",
+        protocol: reuse ? "ork-installation-tls-sequential-v1" : "ork-installation-tls-v1",
         serverId: identity.serverId,
         bindingVersion: identity.bindingVersion,
         keyFingerprint: identity.keyFingerprint,
@@ -197,15 +247,23 @@ export class InstallationTransport {
       requestCert: false,
     });
     this.sockets.add(tls);
+    if (reuse) this.reusable.set(tls, { identity, requests: 0, busy: false });
+    // Bound unused and long-lived pooled channels; dedicated streams remain unaffected.
+    const lifetime = reuse ? setTimeout(() => tls.destroy(), 60_000) : undefined;
+    lifetime?.unref();
     const handshake = setTimeout(() => tls.destroy(), 8_000);
     handshake.unref();
-    const stopHandshake = () => clearTimeout(handshake);
-    // Decrypted data appears only after Node's TLS handshake succeeds.
+    this.handshakes.set(tls, handshake);
+    const stopHandshake = () => {
+      clearTimeout(handshake);
+      this.handshakes.delete(tls);
+    };
     tls.once("data", stopHandshake);
     tls.on("error", () => tls.destroy());
     encrypted.on("error", () => tls.destroy());
     tls.once("close", () => {
       stopHandshake();
+      if (lifetime) clearTimeout(lifetime);
       this.sockets.delete(tls);
       encrypted.destroy();
       ws.terminate();

@@ -460,6 +460,7 @@ function SpaceShell() {
       rpc,
       activeBotId,
       activeGroupId,
+      refreshRoster: refreshBots,
       isSnoozed: (botId, targetGroupId) =>
         threadSnoozeState(
           targetGroupId
@@ -632,7 +633,7 @@ function SpaceShell() {
     [sidebarSpaces],
   );
   useDesktopBadge(userId ? unreadChatCount : 0);
-  const openSpaceChat = useOpenSpaceChat({
+  const { openSpaceChat, pendingSpaceId } = useOpenSpaceChat({
     bootstrapSpaceId: bootstrapMe?.spaceId,
     userId,
     navigate,
@@ -1241,6 +1242,15 @@ function SpaceShell() {
               callBot(bot);
             }}
           />
+          {pendingSpaceId ? (
+            <div className="absolute inset-x-4 top-20 z-30 flex items-center gap-3 rounded-xl border border-border bg-background px-4 py-3 shadow-sm md:inset-x-8">
+              <progress aria-label={t`Opening workspace…`} className="h-1 w-16" />
+              <span className="text-sm">{t`Opening workspace…`}</span>
+              <span className="truncate text-sm text-muted-foreground">
+                {allSidebarSpaces.find((space) => space.id === pendingSpaceId)?.name}
+              </span>
+            </div>
+          ) : null}
           {!active && !activeGroup && initialBotsLoaded ? (
             <div className="grid flex-1 place-items-center">
               {bootstrapMe?.needsModel && managedWorkspace ? (
@@ -1272,6 +1282,7 @@ function SpaceShell() {
               artifactTarget={transcriptArtifactTarget}
               markedUnreadMessageId={read.markedUnreadMessageId}
               transcript={transcript}
+              outgoingMessages={composer.activeOutgoingMessages}
               showToolActivity={showToolActivity}
               olderCursor={activeSnapshot?.olderCursor ?? null}
               unreadAfterSeq={read.unreadAfterSeq}

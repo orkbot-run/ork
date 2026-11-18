@@ -12,7 +12,7 @@ import type {
   ThreadMessage,
   ThreadSnapshot,
 } from "@orkbot/contracts";
-import { RUN_TRIGGERS } from "@orkbot/contracts";
+import { RUN_TRIGGERS, ThreadMessageClientNonce } from "@orkbot/contracts";
 import {
   isRunTerminalEvent,
   progressMessageId,
@@ -669,6 +669,11 @@ export function reduceThreadSnapshot(
     const blocks = (event.payload?.blocks as ClientThreadMessage["blocks"]) ?? [];
     const id = String(event.payload?.messageId ?? event.id ?? `msg:${event.seq ?? 0}`);
     const known = prev.messages.find((message) => message.id === id);
+    const clientNonce =
+      role === "user"
+        ? (ThreadMessageClientNonce.safeParse(event.payload?.clientNonce).data ??
+          known?.clientNonce)
+        : undefined;
     const next: ClientThreadMessage = {
       id,
       threadId: event.threadId ?? prev.threadId,
@@ -677,6 +682,7 @@ export function reduceThreadSnapshot(
       blocks,
       botId: event.botId,
       runId: event.runId,
+      ...(clientNonce ? { clientNonce } : {}),
       callId: typeof event.payload?.callId === "string" ? event.payload?.callId : known?.callId,
       ...replyMetadata(event.payload ?? {}, known),
       createdAt: known?.createdAt ?? event.createdAt,

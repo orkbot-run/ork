@@ -4941,6 +4941,10 @@ msgstr "OpenClaw 或 Hermes"
 msgid "Opening sign-in…"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Opening workspace…"
+msgstr ""
+
 #: src/components/pages/DownloadPdfButton.tsx
 msgid "Opens your browser's print dialog. Choose Save as PDF as the destination."
 msgstr "打开浏览器的打印对话框。目标请选择“另存为 PDF”。"
@@ -6151,14 +6155,20 @@ msgstr "发送重置链接"
 msgid "Send with Enter"
 msgstr "按 Enter 发送"
 
+#: src/pages/shell/transcript.tsx
+msgid "Sending to group…"
+msgstr ""
+
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/VaultItemEditor.tsx
+#: src/pages/shell/transcript.tsx
 msgid "Sending…"
 msgstr "正在发送…"
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/pages/shell/transcript.tsx
 msgid "Sent"
 msgstr "已发送"
 

@@ -4941,6 +4941,10 @@ msgstr "OpenClaw lub Hermes"
 msgid "Opening sign-in…"
 msgstr "Otwieranie strony logowania…"
 
+#: src/pages/Shell.tsx
+msgid "Opening workspace…"
+msgstr "Otwieranie przestrzeni roboczej…"
+
 #: src/components/pages/DownloadPdfButton.tsx
 msgid "Opens your browser's print dialog. Choose Save as PDF as the destination."
 msgstr "Otwiera okno drukowania przeglądarki. Jako drukarkę wybierz Zapisz jako PDF."
@@ -6151,14 +6155,20 @@ msgstr "Wyślij link do resetowania"
 msgid "Send with Enter"
 msgstr "Wysyłaj klawiszem Enter"
 
+#: src/pages/shell/transcript.tsx
+msgid "Sending to group…"
+msgstr "Wysyłanie do grupy…"
+
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/VaultItemEditor.tsx
+#: src/pages/shell/transcript.tsx
 msgid "Sending…"
 msgstr "Wysyłanie…"
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/pages/shell/transcript.tsx
 msgid "Sent"
 msgstr "Wysłano"
 

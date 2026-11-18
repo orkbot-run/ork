@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-use super::{application_path, CSP, DOCUMENT};
+use super::{renderer_resource, CSP};
 use std::{convert::Infallible, path::Path, time::Duration};
 
 use http_body_util::Full;
@@ -13,8 +13,8 @@ use url::Url;
 
 const ERROR: &str = "Could not open the local application document. Restart Ork and try again.";
 
-/// This loopback listener serves public compiled document markup only. It never proxies an API,
-/// accepts credentials, or executes server-provided HTML. Native IPC owns all authenticated IO.
+/// This loopback listener serves the locally bundled document and resources.
+/// Native IPC owns all authenticated IO.
 pub struct RendererHost {
     pub origin: Url,
     task: tokio::task::JoinHandle<()>,
@@ -119,9 +119,7 @@ async fn serve(
     host: &str,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     let path = request.uri().path();
-    let application = application_path(path);
     let allowed = request.method() == hyper::Method::GET
-        && application
         && request
             .headers()
             .get("host")
@@ -129,22 +127,20 @@ async fn serve(
             == Some(host)
         && request.uri().scheme().is_none()
         && request.uri().authority().is_none();
+    let resource = allowed.then(|| renderer_resource(path)).flatten();
+    let (mime, body) = resource.unwrap_or(("text/plain; charset=utf-8", b""));
     let response = Response::builder()
-        .status(if allowed {
+        .status(if resource.is_some() {
             StatusCode::OK
         } else {
             StatusCode::NOT_FOUND
         })
-        .header("content-type", "text/html; charset=utf-8")
+        .header("content-type", mime)
         .header("cache-control", "no-store")
         .header("content-security-policy", CSP)
         .header("x-content-type-options", "nosniff")
         .header("referrer-policy", "no-referrer")
-        .body(Full::new(Bytes::from_static(if allowed {
-            DOCUMENT.as_bytes()
-        } else {
-            b""
-        })))
+        .body(Full::new(Bytes::from_static(body)))
         .expect("static document response headers are valid");
     Ok(response)
 }
@@ -169,8 +165,26 @@ mod tests {
             .to_str()
             .unwrap()
             .contains("connect-src ipc:"));
-        assert!(response.text().await.unwrap().contains("bundled-v1"));
-        for path in ["/api/auth/get-session", "/rpc/me", "/assets/untrusted.js"] {
+        let document = response.text().await.unwrap();
+        assert!(document.contains("bundled-v1"));
+        assert!(document.contains("/__ork_renderer/renderer.js"));
+        let script = client
+            .get(origin.join("/__ork_renderer/renderer.js").unwrap())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(script.status(), 200);
+        assert_eq!(
+            script.headers()["content-type"],
+            "text/javascript; charset=utf-8"
+        );
+        assert!(!script.bytes().await.unwrap().is_empty());
+        for path in [
+            "/api/auth/get-session",
+            "/rpc/me",
+            "/assets/untrusted.js",
+            "/__ork_renderer/untrusted.js",
+        ] {
             assert_eq!(
                 client
                     .get(origin.join(path).unwrap())
