@@ -35,7 +35,10 @@ export function WorkspaceRail({
       className="flex h-full shrink-0 flex-col items-center gap-2 border-e border-sidebar-border bg-sidebar px-1.5 pb-3 pt-12"
       style={{ width: WORKSPACE_RAIL_WIDTH }}
     >
-      <div className="rk-scroll flex w-full min-h-0 flex-1 flex-col items-center gap-2 overflow-y-auto p-0.5">
+      <div
+        data-testid="workspace-rail-list"
+        className="rk-scroll flex w-full min-h-0 flex-1 flex-col items-center gap-2 overflow-x-hidden overflow-y-auto p-px"
+      >
         {orderedSpaces.map((space) => {
           const active = space.id === activeId;
           const initials = Array.from(space.name.trim()).slice(0, 2).join("").toLocaleUpperCase();
