@@ -395,6 +395,60 @@ test("managed onboarding connects a key and enters chat with the server default"
   expect(retired).toEqual([]);
 });
 
+test("a workspace administrator can defer model setup and reopen the workspace", async ({
+  page,
+}, testInfo) => {
+  for (const method of ["me", "bootstrap"]) {
+    await page.route(`**/rpc/${method}`, async (route) => {
+      try {
+        const response = await route.fetch();
+        const body = (await response.json()) as {
+          json: Record<string, unknown> & { me?: Record<string, unknown> };
+        };
+        const json =
+          method === "me"
+            ? { ...body.json, needsModel: true }
+            : { ...body.json, me: { ...body.json.me, needsModel: true } };
+        await route.fulfill({ response, json: { json } });
+      } catch {
+        await route.abort().catch(() => {});
+      }
+    });
+  }
+  await page.route("**/rpc/models/workspacePolicy", (route) =>
+    route.fulfill({
+      json: { json: { managed: true, canManage: false, policy: null, modelSetupMode: "pending" } },
+    }),
+  );
+  const status: RpcOutput<"serverAI/status"> = {
+    available: true,
+    spaceId: "workspace-fixture",
+    workspaceMonthlyBudgetMicros: null,
+    canManageServer: true,
+    canManageWorkspace: true,
+    accounts: [],
+    connections: [],
+    modelSetupMode: "pending",
+  };
+  await page.route("**/rpc/serverAI/status", (route) => route.fulfill({ json: { json: status } }));
+  await page.route("**/rpc/serverAI/catalog", (route) => route.fulfill({ json: { json: [] } }));
+  await signup(
+    page,
+    `deferred-model-${Date.now()}@orkbot.test`,
+    "password12",
+    "Workspace administrator",
+  );
+  await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
+  await captureScreenshot(page, testInfo, "managed-onboarding-skip-model");
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole("button", { name: "Connect a model", exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.getByRole("button", { name: "Connect a model", exact: true }).click();
+  await expect(page.getByTestId("server-ai-ready")).toBeVisible();
+});
+
 test("managed onboarding asks the workspace administrator instead of collecting personal keys", async ({
   page,
 }, testInfo) => {

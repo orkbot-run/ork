@@ -52,6 +52,7 @@ vi.mock("@lingui/react/macro", () => ({
     value === 1 ? one : other,
 }));
 
+import { modelSetupDeferred } from "../lib/model-setup-preference";
 import { OnboardingPage } from "./Onboarding";
 
 const connection = {
@@ -339,8 +340,137 @@ it("starts subscription authorization when its provider is selected", async () =
   );
   expect(host.querySelector('input[type="password"]')).toBeNull();
   expect(host.textContent).toContain("FIXTURE");
+  expect(host.textContent).toContain("enter this code on the provider’s page");
+  expect(host.querySelector('[role="status"]')?.textContent).toContain(
+    "Waiting for you to confirm the code",
+  );
   await click("Cancel");
   vi.restoreAllMocks();
+});
+
+it("continues after the device code is approved on a legacy server", async () => {
+  const browser = vi.spyOn(window, "open").mockReturnValue(null);
+  const before = {
+    canManageServer: true,
+    canManageWorkspace: true,
+    modelSetupMode: "legacy" as const,
+  };
+  api.serverAI.status.mockResolvedValue(status(before));
+  api.serverAI.catalog.mockResolvedValue([
+    {
+      provider: "fixture-provider",
+      providerName: "Fixture subscription",
+      id: "model-a",
+      label: "Model A",
+      auth: "oauth",
+    },
+  ]);
+  api.serverAI.beginOAuth.mockResolvedValue({
+    loginId: "legacy-attempt",
+    provider: "fixture-provider",
+    mode: "device-code",
+    verificationUri: "https://fixture.example/activate",
+    userCode: "FIXTURE",
+    expiresInSeconds: 600,
+  });
+  api.serverAI.completeOAuth.mockResolvedValue({ status: "ready" });
+  api.serverAI.finishOAuth.mockImplementation(async () => {
+    api.serverAI.status.mockResolvedValue(
+      status({ ...before, connections: [{ ...assignment, enabled: true }] }),
+    );
+    api.me.mockResolvedValue({ needsModel: false });
+    return { id: connection.id };
+  });
+  try {
+    await render();
+    await field("Provider", "fixture-provider:sign-in");
+    await vi.waitFor(() => expect(host.querySelector('[data-testid="ready-app"]')).not.toBeNull());
+    expect(api.serverAI.finishOAuth).toHaveBeenCalledOnce();
+  } finally {
+    browser.mockRestore();
+  }
+});
+
+it("uses the desktop browser and retries activation without repeating subscription sign-in", async () => {
+  const browser = vi.spyOn(window, "open").mockReturnValue(null);
+  const open = vi.fn(async () => undefined);
+  vi.stubGlobal("orkbotDesktop", { oauth: { open } });
+  const before = {
+    canManageServer: true,
+    canManageWorkspace: true,
+    modelSetupMode: "organization" as const,
+  };
+  api.serverAI.status.mockResolvedValue(status(before));
+  api.serverAI.catalog.mockResolvedValue([
+    {
+      provider: "fixture-provider",
+      id: "model-a",
+      label: "Model A",
+      auth: "oauth",
+    },
+  ]);
+  api.serverAI.beginOAuth.mockResolvedValue({
+    loginId: "device-attempt",
+    provider: "fixture-provider",
+    mode: "device-code",
+    verificationUri: "https://fixture.example/activate",
+    userCode: "FIXTURE",
+    expiresInSeconds: 600,
+  });
+  api.serverAI.completeOAuth.mockResolvedValue({ status: "ready" });
+  api.serverAI.finishOAuth.mockImplementation(async () => {
+    api.serverAI.status.mockResolvedValue(
+      status({ ...before, connections: [{ ...assignment, isDefault: false }] }),
+    );
+    return { id: connection.id };
+  });
+  api.serverAI.configure
+    .mockRejectedValueOnce(new Error("Temporary configure failure"))
+    .mockImplementationOnce(async () => {
+      api.serverAI.status.mockResolvedValue(
+        status({ ...before, connections: [{ ...assignment, enabled: true }] }),
+      );
+      api.me.mockResolvedValue({ needsModel: false });
+      return { ok: true };
+    });
+  await render();
+  await field("Provider", "fixture-provider:sign-in");
+  expect(open).toHaveBeenCalledWith("https://fixture.example/activate");
+  expect(browser).not.toHaveBeenCalled();
+  await vi.waitFor(() =>
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("could not activate"),
+  );
+  await click("Retry");
+  await vi.waitFor(() => expect(host.querySelector('[data-testid="ready-app"]')).not.toBeNull());
+  expect(api.serverAI.beginOAuth).toHaveBeenCalledOnce();
+  expect(api.serverAI.finishOAuth).toHaveBeenCalledOnce();
+  expect(api.serverAI.configure).toHaveBeenCalledWith(
+    expect.objectContaining({
+      connectionId: connection.id,
+      enabled: true,
+      defaultModelId: "model-a",
+      isDefault: true,
+      scope: "space",
+      expectedRevision: 1,
+    }),
+    { signal: expect.any(AbortSignal) },
+  );
+});
+
+it("lets an administrator defer setup for this workspace and enter the app without creating a model", async () => {
+  const identity = { userId: "skip-member", spaceId: "workspace-a" };
+  api.me.mockResolvedValue({ ...identity, needsModel: true });
+  api.serverAI.status.mockResolvedValue(
+    status({ canManageServer: true, modelSetupMode: "pending" }),
+  );
+  await render();
+  await click("Skip for now");
+  expect(host.querySelector('[data-testid="ready-app"]')).not.toBeNull();
+  expect(modelSetupDeferred(identity)).toBe(true);
+  expect(modelSetupDeferred({ ...identity, spaceId: "workspace-b" })).toBe(false);
+  expect(api.serverAI.chooseMode).not.toHaveBeenCalled();
+  expect(api.serverAI.create).not.toHaveBeenCalled();
+  expect(api.onboarding.ensureFirstBot).not.toHaveBeenCalled();
 });
 
 it("skips model setup on a direct onboarding link when the server is configured", async () => {

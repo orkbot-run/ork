@@ -498,6 +498,10 @@ msgstr "Actions for {0}"
 msgid "Actions for space"
 msgstr "Actions for space"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Activating the default model…"
+msgstr "Activating the default model…"
+
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
@@ -690,6 +694,10 @@ msgstr "Advanced models"
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
 msgstr "Advanced..."
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "After signing in, enter this code on the provider’s page."
+msgstr "After signing in, enter this code on the provider’s page."
 
 #: src/components/AccountDataSettings.tsx
 msgid "Agent from another app"
@@ -1788,6 +1796,7 @@ msgstr "Connect a chat app"
 
 #: src/pages/Onboarding.tsx
 #: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/composer-error.tsx
 msgid "Connect a model"
 msgstr "Connect a model"
@@ -1851,6 +1860,10 @@ msgstr "Connected"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected {0}."
 msgstr "Connected {0}."
+
+#: src/pages/ServerAISettings.tsx
+msgid "Connected, but could not activate the model in this workspace."
+msgstr "Connected, but could not activate the model in this workspace."
 
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Connected, but could not refresh."
@@ -1938,6 +1951,7 @@ msgstr "Conversations"
 #: src/components/markdown-copy.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Copied"
@@ -1945,6 +1959,7 @@ msgstr "Copied"
 
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Copy"
@@ -2092,6 +2107,10 @@ msgstr "Could not connect to the computer screen"
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "Could not continue"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not copy. Select the code and copy it manually."
+msgstr "Could not copy. Select the code and copy it manually."
 
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/create-bot-dialog.tsx
@@ -4913,6 +4932,10 @@ msgstr "OpenAI-compatible server URL"
 msgid "OpenClaw or Hermes"
 msgstr "OpenClaw or Hermes"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Opening sign-in…"
+msgstr "Opening sign-in…"
+
 #: src/components/pages/DownloadPdfButton.tsx
 msgid "Opens your browser's print dialog. Choose Save as PDF as the destination."
 msgstr "Opens your browser's print dialog. Choose Save as PDF as the destination."
@@ -6336,6 +6359,11 @@ msgstr "Skills join the library all your bots share."
 msgid "Skip"
 msgstr "Skip"
 
+#: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Skip for now"
+msgstr "Skip for now"
+
 #: src/lib/localized-provider-hint.ts
 msgid "Skip or deploy key"
 msgstr "Skip or deploy key"
@@ -7413,6 +7441,10 @@ msgstr "Waiting for an organization administrator to set up models."
 #: src/components/ServerUpdates.tsx
 msgid "Waiting for update status…"
 msgstr "Waiting for update status…"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Waiting for you to confirm the code."
+msgstr "Waiting for you to confirm the code."
 
 #: src/lib/roster-status.ts
 msgid "Waiting in line…"

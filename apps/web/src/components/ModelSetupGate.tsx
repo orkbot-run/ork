@@ -5,6 +5,7 @@ import { Trans } from "@lingui/react/macro";
 import { Button } from "@orkbot/ui-web";
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
+import { modelSetupDeferred } from "../lib/model-setup-preference";
 import { captureRpcContext, SPACE_SELECTED_EVENT } from "../lib/rpc";
 import { PageLoading } from "./PageLoading";
 
@@ -30,7 +31,9 @@ export function ModelSetupGate() {
       .then(([me, policy]) => {
         if (active && context.isCurrent())
           setState(
-            policy.managed && (policy.modelSetupMode === "pending" || me.needsModel)
+            policy.managed &&
+              (policy.modelSetupMode === "pending" || me.needsModel) &&
+              !modelSetupDeferred(me)
               ? "setup"
               : "open",
           );

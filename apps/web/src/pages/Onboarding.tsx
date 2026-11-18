@@ -58,6 +58,7 @@ import {
   runModelConnectionPreflight,
   unavailableSelectedModel,
 } from "../lib/model-connection-preflight";
+import { deferModelSetup } from "../lib/model-setup-preference";
 import { captureRpcContext } from "../lib/rpc";
 import { useSignOut } from "../lib/sign-out";
 import { useModelOAuthSignIn } from "../lib/use-model-oauth-signin";
@@ -88,6 +89,10 @@ export function OnboardingPage() {
   const linkedStep = routeStep === "model" ? routeStep : undefined;
   const [creatingBot, setCreatingBot] = useState(false);
   const [managed, setManaged] = useState<boolean | null>(null);
+  const [modelSetupIdentity, setModelSetupIdentity] = useState<{
+    userId: string;
+    spaceId: string;
+  } | null>(null);
   const [personalOrganizationModel, setPersonalOrganizationModel] = useState(false);
   const [loadRevision, setLoadRevision] = useState(0);
   const step = managed === null ? "loading" : creatingBot ? "bot" : (linkedStep ?? "loading");
@@ -170,6 +175,7 @@ export function OnboardingPage() {
         const models = useOrganizationModels ? [] : await rpc.models.list().catch(() => []);
         if (!active || !form.isSelected()) return;
         setManaged(Boolean(useOrganizationModels));
+        setModelSetupIdentity({ userId: me.userId, spaceId: me.spaceId });
         setPersonalOrganizationModel(Boolean(policy.managed && !useOrganizationModels));
         setBillingEnabled(!policy.managed && me.billingEnabled);
         setCatalog(models);
@@ -443,6 +449,12 @@ export function OnboardingPage() {
     }
   }
 
+  function skipModelSetup() {
+    if (!modelSetupIdentity || !owner.isCurrent()) return;
+    deferModelSetup(modelSetupIdentity);
+    navigate("/app", { replace: true });
+  }
+
   async function saveModel() {
     if (!canSaveModel || saving) return;
     const form = formState.capture();
@@ -553,6 +565,7 @@ export function OnboardingPage() {
             saving={saving}
             error={error}
             onContinue={() => void continueManagedModel()}
+            onSkip={skipModelSetup}
             onModeChanged={() => {
               setManaged(null);
               setLoadRevision((value) => value + 1);
@@ -1009,6 +1022,11 @@ export function OnboardingPage() {
                 onClick={() => void (credits ? fundWithCredits() : saveModel())}
               >
                 {credits ? <Trans>Continue</Trans> : <Trans>Connect</Trans>}
+              </Button>
+            ) : null}
+            {personalOrganizationModel ? (
+              <Button className="mt-6" variant="ghost" onClick={skipModelSetup}>
+                <Trans>Skip for now</Trans>
               </Button>
             ) : null}
           </div>

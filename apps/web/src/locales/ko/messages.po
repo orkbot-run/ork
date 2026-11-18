@@ -498,6 +498,10 @@ msgstr "{0} 작업 메뉴"
 msgid "Actions for space"
 msgstr ""
 
+#: src/pages/ServerAISettings.tsx
+msgid "Activating the default model…"
+msgstr ""
+
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
@@ -690,6 +694,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
 msgstr "고급..."
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "After signing in, enter this code on the provider’s page."
+msgstr ""
 
 #: src/components/AccountDataSettings.tsx
 msgid "Agent from another app"
@@ -1788,6 +1796,7 @@ msgstr "채팅 앱 연결"
 
 #: src/pages/Onboarding.tsx
 #: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/composer-error.tsx
 msgid "Connect a model"
 msgstr "AI 모델 연결"
@@ -1851,6 +1860,10 @@ msgstr "연결됨"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected {0}."
 msgstr "{0}에 연결했습니다."
+
+#: src/pages/ServerAISettings.tsx
+msgid "Connected, but could not activate the model in this workspace."
+msgstr ""
 
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Connected, but could not refresh."
@@ -1938,6 +1951,7 @@ msgstr ""
 #: src/components/markdown-copy.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Copied"
@@ -1945,6 +1959,7 @@ msgstr "복사됨"
 
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Copy"
@@ -2092,6 +2107,10 @@ msgstr ""
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "계속 진행하지 못했습니다."
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not copy. Select the code and copy it manually."
+msgstr ""
 
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/create-bot-dialog.tsx
@@ -4913,6 +4932,10 @@ msgstr "OpenAI 호환 서버 주소"
 msgid "OpenClaw or Hermes"
 msgstr "OpenClaw 또는 Hermes"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Opening sign-in…"
+msgstr ""
+
 #: src/components/pages/DownloadPdfButton.tsx
 msgid "Opens your browser's print dialog. Choose Save as PDF as the destination."
 msgstr "브라우저의 인쇄 대화상자를 엽니다. 대상으로 PDF로 저장을 선택하세요."
@@ -6336,6 +6359,11 @@ msgstr "스킬은 모든 봇이 공유하는 라이브러리에 추가됩니다.
 msgid "Skip"
 msgstr "건너뛰기"
 
+#: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Skip for now"
+msgstr ""
+
 #: src/lib/localized-provider-hint.ts
 msgid "Skip or deploy key"
 msgstr "건너뛰거나 배포 키"
@@ -7412,6 +7440,10 @@ msgstr ""
 
 #: src/components/ServerUpdates.tsx
 msgid "Waiting for update status…"
+msgstr ""
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Waiting for you to confirm the code."
 msgstr ""
 
 #: src/lib/roster-status.ts

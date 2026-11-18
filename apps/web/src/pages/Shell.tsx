@@ -1243,10 +1243,24 @@ function SpaceShell() {
           />
           {!active && !activeGroup && initialBotsLoaded ? (
             <div className="grid flex-1 place-items-center">
-              <Button onClick={() => dialogs.setCreateBotOpen(true)}>
-                <Plus size={16} aria-hidden="true" />
-                <Trans>New bot</Trans>
-              </Button>
+              {bootstrapMe?.needsModel && managedWorkspace ? (
+                <Button
+                  onClick={() =>
+                    openSettings(
+                      modelPolicy.data?.modelSetupMode === "personal"
+                        ? "models"
+                        : "organization-models",
+                    )
+                  }
+                >
+                  <Trans>Connect a model</Trans>
+                </Button>
+              ) : (
+                <Button onClick={() => dialogs.setCreateBotOpen(true)}>
+                  <Plus size={16} aria-hidden="true" />
+                  <Trans>New bot</Trans>
+                </Button>
+              )}
             </div>
           ) : (
             <Transcript

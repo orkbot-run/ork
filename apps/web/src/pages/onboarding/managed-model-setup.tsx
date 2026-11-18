@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 
 import { Trans } from "@lingui/react/macro";
+import { workspaceAIReady } from "@orkbot/core";
 import { Button } from "@orkbot/ui-web";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
@@ -14,11 +15,13 @@ export function ManagedModelSetup({
   error,
   onContinue,
   onModeChanged,
+  onSkip,
 }: {
   saving: boolean;
   error: string | null;
   onContinue(): void;
   onModeChanged(): void;
+  onSkip(): void;
 }) {
   const queries = useSpaceQueries();
   const [owner] = useState(() => captureRpcContext());
@@ -31,20 +34,21 @@ export function ManagedModelSetup({
     refetchInterval: (query) => {
       const current = query.state.data;
       return current?.modelSetupMode === "pending" ||
-        (current?.modelSetupMode === "organization" && !current.canManageServer)
+        ((current?.modelSetupMode === "organization" || current?.modelSetupMode === "legacy") &&
+          !current.canManageServer)
         ? 5_000
         : false;
     },
   });
   const permissions = status.data;
   useEffect(() => {
-    if (permissions?.modelSetupMode === "personal" && !handledPersonal.current) {
-      handledPersonal.current = true;
-      onModeChanged();
-    } else if (permissions?.modelSetupMode === "organization" && !saving) {
-      const ready = permissions.connections.find(
-        (row) => row.enabled && row.isDefault && row.state === "active" && row.defaultModelId,
-      );
+    if (permissions?.modelSetupMode === "personal") {
+      if (!handledPersonal.current) {
+        handledPersonal.current = true;
+        onModeChanged();
+      }
+    } else if (permissions && permissions.modelSetupMode !== "pending" && !saving) {
+      const ready = permissions.connections.find(workspaceAIReady);
       const revision = ready && `${ready.id}:${ready.assignmentRevision}`;
       if (revision && handledReady.current !== revision) {
         handledReady.current = revision;
@@ -58,7 +62,12 @@ export function ManagedModelSetup({
         <Trans>Connect a model</Trans>
       </h1>
       {permissions?.canManageServer ? (
-        <ServerAISettings embedded onboarding onClose={() => undefined} />
+        <>
+          <ServerAISettings embedded onboarding onClose={() => undefined} />
+          <Button type="button" variant="ghost" className="justify-self-start" onClick={onSkip}>
+            <Trans>Skip for now</Trans>
+          </Button>
+        </>
       ) : permissions?.available ? (
         <p className="text-sm text-muted-foreground">
           <Trans>Waiting for an organization administrator to set up models.</Trans>

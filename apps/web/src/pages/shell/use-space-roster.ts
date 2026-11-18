@@ -20,6 +20,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { takeInitialBootstrap } from "../../lib/bootstrap";
 import { linkedBotRoute } from "../../lib/bootstrap-target";
 import { localTimezone } from "../../lib/local-timezone";
+import { modelSetupDeferred } from "../../lib/model-setup-preference";
 import { markOnce } from "../../lib/performance";
 import type { ChatTarget } from "../../lib/query";
 import { lastChatKey, queryClient, seedOnLeave, spaceSeedKey } from "../../lib/query";
@@ -400,7 +401,7 @@ export function useSpaceBootstrap({
           !bootstrap.spaces.some((space) => space.hasContent)
         ) {
           if (bootstrap.me.needsModel) {
-            navigate("/onboarding", { replace: true });
+            if (!modelSetupDeferred(bootstrap.me)) navigate("/onboarding", { replace: true });
             return;
           }
           // The server decides whether this Space can receive an onboarding bot.
