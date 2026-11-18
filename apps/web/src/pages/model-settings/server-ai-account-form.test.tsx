@@ -70,11 +70,12 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-async function render(catalog = [xai]) {
+async function render(catalog = [xai], setup = false) {
   await act(async () =>
     root.render(
       <ServerAIAccountForm
         catalog={catalog}
+        setup={setup}
         client={{ serverAI } as unknown as RpcClient}
         isCurrent={() => current}
         onSaved={saved}
@@ -223,4 +224,43 @@ it("leaves a compatible placeholder model explicit instead of authorizing a samp
   expect(
     [...host.querySelectorAll("button")].find((button) => button.textContent === "Save")!.disabled,
   ).toBe(true);
+});
+
+it("preserves catalog endpoint presets and protocols in the compact provider choice", async () => {
+  const endpoint = "https://models.example.test/v1";
+  await render(
+    [
+      {
+        provider: "openai-compatible",
+        providerName: "Compatible",
+        id: "",
+        label: "Custom",
+        billing: "Fixture API key",
+        placeholder: true,
+        auth: "api-key",
+        connection: {
+          presets: [{ label: "Remote fixture", baseUrl: endpoint, apiProtocol: "responses" }],
+        },
+      },
+    ],
+    true,
+  );
+  expect(control("Provider").textContent).toContain("Remote fixture");
+  await value("Provider", JSON.stringify(["openai-compatible", endpoint]));
+  expect(control("API URL").value).toBe(endpoint);
+  expect(host.querySelector("details")?.open).toBe(false);
+  await value("Models (one per line)", "fixture-model");
+  await value("API key", "fixture-private-key");
+  await click("Connect");
+  expect(serverAI.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      label: "Remote fixture",
+      connection: expect.objectContaining({
+        baseUrl: endpoint,
+        apiProtocol: "responses",
+        modelId: "fixture-model",
+      }),
+    }),
+    { signal: expect.any(AbortSignal) },
+  );
 });

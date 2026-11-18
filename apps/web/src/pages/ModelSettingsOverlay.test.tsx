@@ -1891,6 +1891,7 @@ it("changes the managed default with one captured-server request and preserves t
     expect(serverAI.configure).toHaveBeenCalledExactlyOnceWith(
       {
         connectionId: row.id,
+        scope: "organization",
         enabled: true,
         allowedModels: ["model-b"],
         defaultModelId: "model-b",

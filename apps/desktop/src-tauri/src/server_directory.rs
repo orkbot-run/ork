@@ -328,10 +328,42 @@ impl WorkspaceCatalog {
                 (id.is_none() && self.organizations.len() == 1).then(|| &self.organizations[0])
             });
         let organization = organization.ok_or("Choose organization")?;
-        if !matches!(organization.role.as_str(), "admin" | "manager") {
+        if organization.role != "admin" {
             return Err("Workspace unavailable".into());
         }
         Ok(organization.id.clone())
+    }
+
+    /// Resolve the entry created during enrollment before any routes have been published.
+    pub fn local_enrollment_workspace(&self, target: &WorkspaceTarget) -> Result<String, String> {
+        let organization = self
+            .organizations
+            .iter()
+            .find(|row| row.id == target.organization_id && row.role == "admin")
+            .ok_or(ERROR)?;
+        let server = organization
+            .servers
+            .iter()
+            .find(|row| {
+                row.id == target.server_id
+                    && row.state == "ready"
+                    && row.binding_version == target.binding_version
+                    && row.key_fingerprint.as_deref() == Some(&target.key_fingerprint)
+            })
+            .ok_or(ERROR)?;
+        server
+            .workspaces
+            .iter()
+            .find(|row| row.state == "ready" && row.can_open)
+            .or_else(|| {
+                server.workspaces.iter().find(|row| {
+                    row.state == "provisioning"
+                        && (row.role.as_deref() == Some("admin") || organization.kind == "personal")
+                })
+            })
+            .filter(|row| uuid(&row.id))
+            .map(|row| row.id.clone())
+            .ok_or_else(|| "Workspace unavailable".into())
     }
 
     pub fn has_organizations(&self) -> bool {
@@ -934,6 +966,35 @@ impl Directory {
     #[cfg(test)]
     pub async fn workspaces(&self, token: &str) -> Result<Vec<Workspace>, String> {
         self.catalog(token).await?.workspaces()
+    }
+
+    pub async fn create_organization(&self, token: &str, name: &str) -> Result<String, String> {
+        let name = name.trim();
+        if name.is_empty()
+            || name.encode_utf16().count() > 100
+            || name.chars().any(char::is_control)
+        {
+            return Err("Enter an organization name of up to 100 characters.".into());
+        }
+        let endpoint = self
+            .endpoint
+            .join("/api/organizations")
+            .map_err(|_| ERROR)?;
+        let value: serde_json::Value = json(
+            self.send(
+                Method::POST,
+                endpoint,
+                token,
+                Some(serde_json::json!({ "name": name })),
+            )
+            .await?,
+        )
+        .await?;
+        value["organization"]["id"]
+            .as_str()
+            .filter(|id| uuid(id))
+            .map(str::to_owned)
+            .ok_or_else(|| "Could not create the organization. Try again.".into())
     }
 
     pub async fn workspaces_for_device(
@@ -1618,6 +1679,45 @@ mod tests {
             .discovery_servers()
             .unwrap()
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn creates_an_organization_with_the_native_bearer_and_validates_its_id() {
+        let (directory, wire) = response(
+            "201 Created",
+            serde_json::json!({ "organization": { "id": DEVICE, "name": "New team" } }).to_string(),
+            "",
+        )
+        .await;
+        assert_eq!(
+            directory
+                .create_organization(CENTRAL_BEARER, " New team ")
+                .await
+                .unwrap(),
+            DEVICE
+        );
+        let request = wire.await.unwrap();
+        assert!(request.starts_with("POST /api/organizations HTTP/1.1\r\n"));
+        assert!(request.to_lowercase().contains(&format!(
+            "authorization: bearer {}",
+            CENTRAL_BEARER.to_lowercase()
+        )));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(request.split_once("\r\n\r\n").unwrap().1)
+                .unwrap(),
+            serde_json::json!({ "name": "New team" })
+        );
+        let (directory, wire) = response(
+            "201 Created",
+            r#"{"organization":{"id":"invalid"}}"#.into(),
+            "",
+        )
+        .await;
+        assert!(directory
+            .create_organization(CENTRAL_BEARER, "New team")
+            .await
+            .is_err());
+        wire.await.unwrap();
     }
 
     #[tokio::test]

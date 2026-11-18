@@ -2,9 +2,14 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { ModelCatalogEntry, RpcOutput } from "@orkbot/contracts";
+import type { ModelApiProtocol, ModelCatalogEntry, RpcOutput } from "@orkbot/contracts";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
-import { formatAIBudget, parseAIBudget, ServerAIOAuthAttempt } from "@orkbot/core";
+import {
+  formatAIBudget,
+  modelConnectionOptions,
+  parseAIBudget,
+  ServerAIOAuthAttempt,
+} from "@orkbot/core";
 import { Button, Input, Label, NativeSelect, NativeSelectOption, Textarea } from "@orkbot/ui-web";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { FoundModelPicker } from "../../components/FoundModelPicker";
@@ -20,6 +25,7 @@ function defaultModel(catalog: ModelCatalogEntry[], provider: string) {
 export function ServerAIAccountForm({
   account,
   hideBudget,
+  setup = false,
   catalog,
   client,
   isCurrent,
@@ -28,6 +34,7 @@ export function ServerAIAccountForm({
 }: {
   account?: RpcOutput<"serverAI/status">["accounts"][number];
   hideBudget?: boolean;
+  setup?: boolean;
   catalog: ModelCatalogEntry[];
   client: RpcClient;
   isCurrent(): boolean;
@@ -42,7 +49,11 @@ export function ServerAIAccountForm({
       providersById.set(row.provider, row);
   }
   const providers = [...providersById.values()];
-  const initialProvider = account?.provider ?? providers[0]?.provider ?? "";
+  const presets = modelConnectionOptions(catalog).filter(
+    (option) => option.baseUrl && providersById.has(option.id),
+  );
+  const [setupChoice, setSetupChoice] = useState("");
+  const initialProvider = account?.provider ?? (setup ? "" : (providers[0]?.provider ?? ""));
   const [provider, setProvider] = useState(initialProvider);
   const [label, setLabel] = useState(
     account?.label ?? providers[0]?.providerName ?? initialProvider,
@@ -56,6 +67,7 @@ export function ServerAIAccountForm({
   });
   const [key, setKey] = useState("");
   const [url, setUrl] = useState("");
+  const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>("chat-completions");
   const [budget, setBudget] = useState(formatAIBudget(account?.monthlyBudgetMicros ?? null));
   const [concurrency, setConcurrency] = useState(String(account?.concurrencyLimit ?? 8));
   const [routing, setRouting] = useState<Record<string, string>>({});
@@ -115,19 +127,19 @@ export function ServerAIAccountForm({
   const selected = providers.find((row) => row.provider === provider);
   const supportsOAuth = selected?.auth === "oauth" || selected?.auth === "both";
   const subscriptionSignIn = supportsOAuth && authentication === "sign-in";
-  const acceptsKey = selected?.auth !== "oauth" && authentication === "key";
-  async function signIn() {
-    if (pending.current || oauth.active || !subscriptionSignIn || !isCurrent()) return;
+  const acceptsKey = !!selected && selected.auth !== "oauth" && authentication === "key";
+  async function signIn(choice?: { provider: string; label: string; models: string[] }) {
+    if (pending.current || oauth.active || (!choice && !subscriptionSignIn) || !isCurrent()) return;
     setError(null);
     try {
       const limit = Number(concurrency);
       if (!/^\d+$/.test(concurrency) || !Number.isInteger(limit) || limit < 1 || limit > 128)
         throw new Error("Invalid concurrency limit");
       await oauth.start({
-        provider,
+        provider: choice?.provider ?? provider,
         connectionId: account?.id ?? null,
-        label: label.trim(),
-        models: [
+        label: choice?.label ?? label.trim(),
+        models: choice?.models ?? [
           ...new Set(
             models
               .split(/\r?\n/)
@@ -178,7 +190,7 @@ export function ServerAIAccountForm({
         apiKey: key.trim(),
         credentialId: null,
         ...(provider === OPENAI_COMPATIBLE_PROVIDER_ID
-          ? { baseUrl: url.trim(), enabledModelIds: allowed }
+          ? { baseUrl: url.trim(), enabledModelIds: allowed, apiProtocol }
           : {}),
         ...(fields.length ? { routing } : {}),
       };
@@ -213,47 +225,108 @@ export function ServerAIAccountForm({
         void save();
       }}
     >
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-name`}>
-          <Trans>Name</Trans>
-        </Label>
-        <Input
-          id={`${id}-name`}
-          value={label}
-          onChange={(event) => setLabel(event.target.value)}
-          disabled={locked}
-        />
-      </div>
+      {setup ? null : (
+        <div className="grid gap-2">
+          <Label htmlFor={`${id}-name`}>
+            <Trans>Name</Trans>
+          </Label>
+          <Input
+            id={`${id}-name`}
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+            disabled={locked}
+          />
+        </div>
+      )}
       <div className="grid gap-2">
         <Label htmlFor={`${id}-provider`}>
           <Trans>Provider</Trans>
         </Label>
         <NativeSelect
           id={`${id}-provider`}
-          value={provider}
+          value={setup ? setupChoice : provider}
           disabled={locked || !!account}
           onChange={(event) => {
-            const next = providers.find((row) => row.provider === event.target.value);
-            setProvider(event.target.value);
-            setModels(defaultModel(catalog, event.target.value));
-            setAuthentication(next?.auth === "oauth" || next?.auth === "both" ? "sign-in" : "key");
+            const preset = presets.find(
+              (option) => JSON.stringify([option.id, option.baseUrl]) === event.target.value,
+            );
+            const [nextProvider, nextAuth] = preset
+              ? [preset.id, "key"]
+              : setup
+                ? event.target.value.split(":")
+                : [event.target.value];
+            if (setup) setSetupChoice(event.target.value);
+            setUrl(preset?.baseUrl ?? "");
+            setApiProtocol(preset?.apiProtocol ?? "chat-completions");
+            const next = providers.find((row) => row.provider === nextProvider);
+            const auth =
+              nextAuth === "key"
+                ? "key"
+                : next?.auth === "oauth" || next?.auth === "both"
+                  ? "sign-in"
+                  : "key";
+            const model = defaultModel(catalog, nextProvider!);
+            setProvider(nextProvider!);
+            setModels(model);
+            setAuthentication(auth);
             if (!label.trim() || label === (selected?.providerName ?? provider))
               setLabel(next?.providerName ?? event.target.value);
             setKey("");
             setRouting({});
+            if (setup && next) {
+              setLabel(preset?.name ?? next.providerName ?? next.provider);
+              if (auth === "sign-in")
+                void signIn({
+                  provider: next.provider,
+                  label: next.providerName ?? next.provider,
+                  models: [model],
+                });
+            }
           }}
         >
-          {providers.map((row) => (
-            <NativeSelectOption key={row.provider} value={row.provider}>
-              {row.providerName ?? row.provider}
-            </NativeSelectOption>
-          ))}
+          {setup ? <NativeSelectOption value="">{t`Choose a provider`}</NativeSelectOption> : null}
+          {setup
+            ? providers.flatMap((row) => [
+                ...(row.auth === "oauth" || row.auth === "both"
+                  ? [
+                      <NativeSelectOption
+                        key={`${row.provider}:sign-in`}
+                        value={`${row.provider}:sign-in`}
+                      >
+                        {row.oauthLabel ?? row.providerName ?? row.provider}
+                      </NativeSelectOption>,
+                    ]
+                  : []),
+                ...(row.auth !== "oauth"
+                  ? [
+                      <NativeSelectOption key={`${row.provider}:key`} value={`${row.provider}:key`}>
+                        {row.providerName ?? row.provider}
+                        {row.auth === "both" ? ` · ${t`API key`}` : ""}
+                      </NativeSelectOption>,
+                    ]
+                  : []),
+              ])
+            : providers.map((row) => (
+                <NativeSelectOption key={row.provider} value={row.provider}>
+                  {row.providerName ?? row.provider}
+                </NativeSelectOption>
+              ))}
+          {setup
+            ? presets.map((option) => (
+                <NativeSelectOption
+                  key={JSON.stringify([option.id, option.baseUrl])}
+                  value={JSON.stringify([option.id, option.baseUrl])}
+                >
+                  {option.name}
+                </NativeSelectOption>
+              ))
+            : null}
         </NativeSelect>
-        {selected?.authHint ? (
+        {!setup && selected?.authHint ? (
           <p className="text-sm text-muted-foreground">{selected.authHint}</p>
         ) : null}
       </div>
-      {selected?.auth === "both" ? (
+      {!setup && selected?.auth === "both" ? (
         <div className="grid gap-2">
           <Label htmlFor={`${id}-authentication`}>
             <Trans>Authentication</Trans>
@@ -276,66 +349,6 @@ export function ServerAIAccountForm({
           </NativeSelect>
         </div>
       ) : null}
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-models`}>
-          <Trans>Models (one per line)</Trans>
-        </Label>
-        {availableModels.length > 0 && !locked ? (
-          <FoundModelPicker
-            models={availableModels}
-            value={t`Browse models`}
-            otherValue="__custom_model__"
-            onChange={(model) => {
-              if (model === "__custom_model__") {
-                document.getElementById(`${id}-models`)?.focus();
-                return;
-              }
-              setModels((current) => {
-                const entries = current
-                  .split(/\r?\n/)
-                  .map((entry) => entry.trim())
-                  .filter(Boolean);
-                return entries.includes(model) ? current : [...entries, model].join("\n");
-              });
-            }}
-          />
-        ) : null}
-        <Textarea
-          id={`${id}-models`}
-          value={models}
-          onChange={(event) => setModels(event.target.value)}
-          disabled={locked}
-          autoCapitalize="none"
-          autoCorrect="off"
-        />
-      </div>
-      {acceptsKey && provider === OPENAI_COMPATIBLE_PROVIDER_ID ? (
-        <div className="grid gap-2">
-          <Label htmlFor={`${id}-url`}>
-            <Trans>API URL</Trans>
-          </Label>
-          <Input
-            id={`${id}-url`}
-            type="url"
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            disabled={locked}
-          />
-        </div>
-      ) : null}
-      {(acceptsKey ? fields : []).map((field) => (
-        <div className="grid gap-2" key={field.key}>
-          <Label htmlFor={`${id}-${field.key}`}>{field.label}</Label>
-          <Input
-            id={`${id}-${field.key}`}
-            value={routing[field.key] ?? ""}
-            onChange={(event) =>
-              setRouting((previous) => ({ ...previous, [field.key]: event.target.value }))
-            }
-            disabled={locked}
-          />
-        </div>
-      ))}
       {acceptsKey ? (
         <div className="grid gap-2">
           <Label htmlFor={`${id}-key`}>
@@ -351,35 +364,101 @@ export function ServerAIAccountForm({
           />
         </div>
       ) : null}
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-concurrency`}>
-          <Trans>Concurrent requests</Trans>
-        </Label>
-        <Input
-          id={`${id}-concurrency`}
-          type="number"
-          min={1}
-          max={128}
-          value={concurrency}
-          onChange={(event) => setConcurrency(event.target.value)}
-          disabled={locked}
-        />
-      </div>
-      {!hideBudget ? (
-        <div className="grid gap-2">
-          <Label htmlFor={`${id}-budget`}>
-            <Trans>Monthly budget (USD)</Trans>
-          </Label>
-          <Input
-            id={`${id}-budget`}
-            value={budget}
-            onChange={(event) => setBudget(event.target.value)}
-            disabled={locked}
-            inputMode="decimal"
-            placeholder={t`Unlimited`}
-          />
+      <details open={!setup || undefined} hidden={setup && !provider}>
+        {setup ? <summary className="cursor-pointer text-sm">{t`Advanced`}</summary> : null}
+        <div className="grid gap-4">
+          {" "}
+          <div className="grid gap-2">
+            <Label htmlFor={`${id}-models`}>
+              <Trans>Models (one per line)</Trans>
+            </Label>
+            {availableModels.length > 0 && !locked ? (
+              <FoundModelPicker
+                models={availableModels}
+                value={t`Browse models`}
+                otherValue="__custom_model__"
+                onChange={(model) => {
+                  if (model === "__custom_model__") {
+                    document.getElementById(`${id}-models`)?.focus();
+                    return;
+                  }
+                  setModels((current) => {
+                    const entries = current
+                      .split(/\r?\n/)
+                      .map((entry) => entry.trim())
+                      .filter(Boolean);
+                    return entries.includes(model) ? current : [...entries, model].join("\n");
+                  });
+                }}
+              />
+            ) : null}
+            <Textarea
+              id={`${id}-models`}
+              value={models}
+              onChange={(event) => setModels(event.target.value)}
+              disabled={locked}
+              autoCapitalize="none"
+              autoCorrect="off"
+            />
+          </div>
+          {acceptsKey && provider === OPENAI_COMPATIBLE_PROVIDER_ID ? (
+            <div className="grid gap-2">
+              <Label htmlFor={`${id}-url`}>
+                <Trans>API URL</Trans>
+              </Label>
+              <Input
+                id={`${id}-url`}
+                type="url"
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                disabled={locked}
+              />
+            </div>
+          ) : null}
+          {(acceptsKey ? fields : []).map((field) => (
+            <div className="grid gap-2" key={field.key}>
+              <Label htmlFor={`${id}-${field.key}`}>{field.label}</Label>
+              <Input
+                id={`${id}-${field.key}`}
+                value={routing[field.key] ?? ""}
+                onChange={(event) =>
+                  setRouting((previous) => ({ ...previous, [field.key]: event.target.value }))
+                }
+                disabled={locked}
+              />
+            </div>
+          ))}
+          <div className="grid gap-2">
+            <Label htmlFor={`${id}-concurrency`}>
+              <Trans>Concurrent requests</Trans>
+            </Label>
+            <Input
+              id={`${id}-concurrency`}
+              type="number"
+              min={1}
+              max={128}
+              value={concurrency}
+              onChange={(event) => setConcurrency(event.target.value)}
+              disabled={locked}
+            />
+          </div>
+          {!hideBudget ? (
+            <div className="grid gap-2">
+              <Label htmlFor={`${id}-budget`}>
+                <Trans>Monthly budget (USD)</Trans>
+              </Label>
+              <Input
+                id={`${id}-budget`}
+                value={budget}
+                onChange={(event) => setBudget(event.target.value)}
+                disabled={locked}
+                inputMode="decimal"
+                placeholder={t`Unlimited`}
+              />
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </details>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -427,9 +506,14 @@ export function ServerAIAccountForm({
             {selected?.oauthLabel ?? t`Sign in`}
           </Button>
         ) : null}
-        {account || acceptsKey ? (
-          <Button type="submit" disabled={locked || !label.trim() || !models.trim() || !provider}>
-            <Trans>Save</Trans>
+        {account || (acceptsKey && provider) ? (
+          <Button
+            type="submit"
+            disabled={
+              locked || !label.trim() || !models.trim() || !provider || (setup && !key.trim())
+            }
+          >
+            {setup ? <Trans>Connect</Trans> : <Trans>Save</Trans>}
           </Button>
         ) : null}
         <Button

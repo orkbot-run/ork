@@ -65,6 +65,7 @@ export function ShellSidebar({
   navigate,
   setNewSpaceOpen,
   setCreateBotOpen,
+  workspaceRail,
   roster,
   archived,
   snoozed,
@@ -94,8 +95,9 @@ export function ShellSidebar({
   toggleSidebarSection: (key: string) => void;
   setPanel: (panel: Panel) => void;
   navigate: (path: string) => void;
-  setNewSpaceOpen: (open: boolean) => void;
+  setNewSpaceOpen?: (open: boolean) => void;
   setCreateBotOpen: (open: boolean) => void;
+  workspaceRail?: ReactNode;
   roster: ReactNode;
   archived: ReactNode;
   snoozed: ReactNode;
@@ -157,146 +159,152 @@ export function ShellSidebar({
             : "h-full overflow-hidden border-sidebar-border"
         }
       >
-        <SidebarHeader
-          mini={mini}
-          createMenuOpen={createMenuOpen}
-          setCreateMenuOpen={setCreateMenuOpen}
-          activityMode={activityMode}
-          toggleActivityMode={() => {
-            if (mini) setCollapsedPref(false);
-            toggleActivityMode();
-          }}
-          searchOpen={searchOpen && !mini}
-          onSearch={() => {
-            if (searchOpen && !mini) {
-              if (activityMode) setActivityFilters({ ...activityFilters, query: "" });
-              else setQuery("");
-              setSearchOpen(false);
-              return;
-            }
-            if (mini) setCollapsedPref(false);
-            setSearchOpen(true);
-            focusSidebarSearch();
-          }}
-          setBotsSidebarCollapsedPref={setCollapsedPref}
-          bots={bots}
-          setMobileSidebarOpen={setMobileOpen}
-          setPanel={setPanel}
-          navigate={navigate}
-          setNewSpaceOpen={setNewSpaceOpen}
-          setCreateBotOpen={setCreateBotOpen}
-        />
-        {mini ||
-        !(
-          searchOpen ||
-          query ||
-          (activityMode && (activityFilterCount > 0 || activityFiltersExpanded))
-        ) ? null : (
-          <InputGroup
-            data-testid="sidebar-search"
-            className="mx-2.5 mb-3 w-auto rounded-xl bg-card dark:bg-input border border-border text-muted-foreground focus-within:border-ring"
-          >
-            <InputGroupAddon>
-              <Search size={16} strokeWidth={1.8} aria-hidden="true" />
-            </InputGroupAddon>
-            <InputGroupInput
-              value={activityMode ? activityFilters.query : query}
-              onChange={(e) => {
-                if (activityMode) setActivityFilters({ ...activityFilters, query: e.target.value });
-                else setQuery(e.target.value);
+        <div className="flex min-h-0 flex-1">
+          {workspaceRail}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <SidebarHeader
+              mini={mini}
+              createMenuOpen={createMenuOpen}
+              setCreateMenuOpen={setCreateMenuOpen}
+              activityMode={activityMode}
+              toggleActivityMode={() => {
+                if (mini) setCollapsedPref(false);
+                toggleActivityMode();
               }}
-              onKeyDown={(event) => {
-                if (
-                  event.key !== "Escape" ||
-                  event.nativeEvent.isComposing ||
-                  event.keyCode === 229
-                )
+              searchOpen={searchOpen && !mini}
+              onSearch={() => {
+                if (searchOpen && !mini) {
+                  if (activityMode) setActivityFilters({ ...activityFilters, query: "" });
+                  else setQuery("");
+                  setSearchOpen(false);
                   return;
-                if (activityMode) setActivityFilters({ ...activityFilters, query: "" });
-                else setQuery("");
-                setSearchOpen(false);
+                }
+                if (mini) setCollapsedPref(false);
+                setSearchOpen(true);
+                focusSidebarSearch();
               }}
-              placeholder={activityMode ? t`Search runs` : t`Search`}
-              aria-label={activityMode ? t`Search runs` : t`Search`}
-              autoComplete="off"
-              name="sidebar-search"
+              setBotsSidebarCollapsedPref={setCollapsedPref}
+              bots={bots}
+              setMobileSidebarOpen={setMobileOpen}
+              setPanel={setPanel}
+              navigate={navigate}
+              setNewSpaceOpen={setNewSpaceOpen}
+              setCreateBotOpen={setCreateBotOpen}
             />
-            {activityMode ? (
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton
-                  size="icon-sm"
-                  aria-label={t`Filters`}
-                  aria-expanded={activityFiltersExpanded}
-                  aria-controls={activityFiltersId}
-                  onClick={() => setActivityFiltersExpanded((expanded) => !expanded)}
-                  className="relative rounded-lg"
-                >
-                  <SlidersHorizontal size={16} aria-hidden="true" />
-                  {activityFilterCount > 0 ? (
-                    <span
-                      data-testid="activity-filter-indicator"
-                      aria-hidden="true"
-                      className="absolute end-1 top-1 size-1.5 rounded-full bg-primary"
+            {mini ||
+            !(
+              searchOpen ||
+              query ||
+              (activityMode && (activityFilterCount > 0 || activityFiltersExpanded))
+            ) ? null : (
+              <InputGroup
+                data-testid="sidebar-search"
+                className="mx-2.5 mb-3 w-auto rounded-xl bg-card dark:bg-input border border-border text-muted-foreground focus-within:border-ring"
+              >
+                <InputGroupAddon>
+                  <Search size={16} strokeWidth={1.8} aria-hidden="true" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  value={activityMode ? activityFilters.query : query}
+                  onChange={(e) => {
+                    if (activityMode)
+                      setActivityFilters({ ...activityFilters, query: e.target.value });
+                    else setQuery(e.target.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (
+                      event.key !== "Escape" ||
+                      event.nativeEvent.isComposing ||
+                      event.keyCode === 229
+                    )
+                      return;
+                    if (activityMode) setActivityFilters({ ...activityFilters, query: "" });
+                    else setQuery("");
+                    setSearchOpen(false);
+                  }}
+                  placeholder={activityMode ? t`Search runs` : t`Search`}
+                  aria-label={activityMode ? t`Search runs` : t`Search`}
+                  autoComplete="off"
+                  name="sidebar-search"
+                />
+                {activityMode ? (
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      size="icon-sm"
+                      aria-label={t`Filters`}
+                      aria-expanded={activityFiltersExpanded}
+                      aria-controls={activityFiltersId}
+                      onClick={() => setActivityFiltersExpanded((expanded) => !expanded)}
+                      className="relative rounded-lg"
+                    >
+                      <SlidersHorizontal size={16} aria-hidden="true" />
+                      {activityFilterCount > 0 ? (
+                        <span
+                          data-testid="activity-filter-indicator"
+                          aria-hidden="true"
+                          className="absolute end-1 top-1 size-1.5 rounded-full bg-primary"
+                        />
+                      ) : null}
+                    </InputGroupButton>
+                  </InputGroupAddon>
+                ) : null}
+              </InputGroup>
+            )}
+            <div className="rk-scroll scroll-fade-y scroll-fade-12 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-2.5">
+              {showSpaceSearch && !mini ? (
+                <SpaceSearchResults
+                  hits={searchHits}
+                  loading={searchLoading}
+                  error={searchError}
+                  onRetry={retrySearch}
+                  onSelect={(hit) => jumpToSearchHit(hit)}
+                />
+              ) : (
+                <>
+                  {activityMode && !mini ? (
+                    <ActivityList
+                      bots={bots}
+                      groups={groups}
+                      snoozedChats={snoozedChats}
+                      toggledSections={collapsedSidebarSections}
+                      onToggleSection={toggleSidebarSection}
+                      filters={activityFilters}
+                      onFiltersChange={setActivityFilters}
+                      filtersExpanded={activityFiltersExpanded}
+                      filtersId={activityFiltersId}
+                      onOpenRun={(run) => {
+                        setMobileOpen(false);
+                        if (run.groupId) navigate(`/app/g/${run.groupId}`);
+                        else navigate(`/app/${run.botId}`);
+                      }}
                     />
                   ) : null}
-                </InputGroupButton>
-              </InputGroupAddon>
-            ) : null}
-          </InputGroup>
-        )}
-        <div className="rk-scroll scroll-fade-y scroll-fade-12 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-2.5">
-          {showSpaceSearch && !mini ? (
-            <SpaceSearchResults
-              hits={searchHits}
-              loading={searchLoading}
-              error={searchError}
-              onRetry={retrySearch}
-              onSelect={(hit) => jumpToSearchHit(hit)}
+                  {roster}
+                </>
+              )}
+              <div className={mini ? "hidden" : "contents"}>
+                {snoozed}
+                {archived}
+              </div>
+            </div>
+            <div className={mini ? "hidden" : "contents"}>
+              <PasskeyOffer />
+            </div>
+            <ShellSidebarFooter
+              mini={mini}
+              logos={footerLogos}
+              user={user}
+              ticketBoardEnabled={ticketBoardEnabled}
+              navLinks={navLinks}
+              closeMobileSidebar={() => setMobileOpen(false)}
+              navigate={navigate}
+              openSettings={openSettings}
+              openIntegrations={openIntegrations}
+              openSkills={openSkills}
+              openSpaceChat={openSpaceChat}
             />
-          ) : (
-            <>
-              {activityMode && !mini ? (
-                <ActivityList
-                  bots={bots}
-                  groups={groups}
-                  snoozedChats={snoozedChats}
-                  toggledSections={collapsedSidebarSections}
-                  onToggleSection={toggleSidebarSection}
-                  filters={activityFilters}
-                  onFiltersChange={setActivityFilters}
-                  filtersExpanded={activityFiltersExpanded}
-                  filtersId={activityFiltersId}
-                  onOpenRun={(run) => {
-                    setMobileOpen(false);
-                    if (run.groupId) navigate(`/app/g/${run.groupId}`);
-                    else navigate(`/app/${run.botId}`);
-                  }}
-                />
-              ) : null}
-              {roster}
-            </>
-          )}
-          <div className={mini ? "hidden" : "contents"}>
-            {snoozed}
-            {archived}
           </div>
         </div>
-        <div className={mini ? "hidden" : "contents"}>
-          <PasskeyOffer />
-        </div>
-        <ShellSidebarFooter
-          mini={mini}
-          logos={footerLogos}
-          user={user}
-          ticketBoardEnabled={ticketBoardEnabled}
-          navLinks={navLinks}
-          closeMobileSidebar={() => setMobileOpen(false)}
-          navigate={navigate}
-          openSettings={openSettings}
-          openIntegrations={openIntegrations}
-          openSkills={openSkills}
-          openSpaceChat={openSpaceChat}
-        />
       </Sidebar>
     </>
   );

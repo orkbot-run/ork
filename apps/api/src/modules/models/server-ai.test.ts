@@ -41,6 +41,7 @@ function fixture(canManageServer = true) {
     permissions: vi.fn(async () => ({ canManageServer, canManageWorkspace: false })),
     list: vi.fn(async () => []),
     workspaceBudget: vi.fn(async () => null),
+    overridesModels: vi.fn(async () => false),
     accounts: vi.fn(async () => [account]),
     create: vi.fn(async () => account),
     hasConfiguredModel: vi.fn(async () => true),

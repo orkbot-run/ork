@@ -564,7 +564,7 @@ export function SidebarRoster({
                     >
                       {mini ? (
                         <IconTooltip
-                          side="inline-end"
+                          side={document.documentElement.dir === "rtl" ? "left" : "right"}
                           label={
                             compactStatusLabel
                               ? `${item.chat.name}: ${compactStatusLabel}`

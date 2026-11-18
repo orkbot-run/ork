@@ -643,6 +643,18 @@ h1 {
   grid-column: 2;
   justify-self: end;
 }
+#new-organization {
+  margin-top: 16px;
+}
+#organization-form {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+#organization-form button {
+  justify-self: start;
+  margin-top: 8px;
+}
 #add-server {
   margin-top: 10px;
 }

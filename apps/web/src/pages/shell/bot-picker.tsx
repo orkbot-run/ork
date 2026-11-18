@@ -28,7 +28,7 @@ export function BotCreatePicker({
   onCreateBot: () => void;
   onOpenBot: (botId: string) => void;
   onCreateGroup: () => void;
-  onCreateSpace: () => void;
+  onCreateSpace?: () => void;
 }) {
   const { t } = useLingui();
   const [query, setQuery] = useState("");
@@ -89,23 +89,25 @@ export function BotCreatePicker({
               </span>
               <Trans>New group chat</Trans>
             </CommandItem>
-            <CommandItem
-              value="create-space"
-              data-testid="create-new-space"
-              onSelect={() => onCreateSpace()}
-              className="gap-2"
-            >
-              <span className="flex size-[22px] shrink-0 items-center justify-center">
-                <Lock size={16} strokeWidth={1.8} aria-hidden="true" />
-              </span>
-              <span className="min-w-0 flex-1 truncate">
-                <Trans>New private space</Trans>
-              </span>
-              <PickerInfo
-                testId="picker-info-space"
-                label={t`Private workspace with its own bots and groups.`}
-              />
-            </CommandItem>
+            {onCreateSpace ? (
+              <CommandItem
+                value="create-space"
+                data-testid="create-new-space"
+                onSelect={() => onCreateSpace()}
+                className="gap-2"
+              >
+                <span className="flex size-[22px] shrink-0 items-center justify-center">
+                  <Lock size={16} strokeWidth={1.8} aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1 truncate">
+                  <Trans>New private space</Trans>
+                </span>
+                <PickerInfo
+                  testId="picker-info-space"
+                  label={t`Private workspace with its own bots and groups.`}
+                />
+              </CommandItem>
+            ) : null}
           </CommandGroup>
           <CommandSeparator className="shrink-0" />
           <CommandGroup className="min-h-0 max-h-60 overflow-y-auto">

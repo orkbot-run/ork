@@ -36,7 +36,7 @@ import type {
   TicketChangeNotifier,
   verifyModelServesAgents,
 } from "@orkbot/adapters";
-import type { Auth } from "@orkbot/auth";
+import type { Auth, WorkspaceAuthority } from "@orkbot/auth";
 import type { NavLink } from "@orkbot/contracts";
 import type { BoardEvents, PrismaClient, ThreadEvents } from "@orkbot/db";
 import { accountRoutes } from "#modules/accounts/routes/account";
@@ -70,6 +70,7 @@ export { callMarkerClientNonce } from "#modules/threads/routes/threads";
 export { HEARTBEAT_MS, SESSION_RECHECK_MS } from "./routes/shared.js";
 
 export interface RouterDeps {
+  workspaceAuthority?: Pick<WorkspaceAuthority, "session">;
   serverAI?: ServerAICatalog;
   serverAIModels?: ServerAIModels;
   serverUpdates?: ServerUpdatesService;

@@ -125,6 +125,7 @@ import { useRosterDrop, useSpaceBootstrap, useSpaceRoster } from "./shell/use-sp
 import { useOpenSpaceChat } from "./shell/use-space-switch";
 import { useThreadState } from "./shell/use-thread-state";
 import { useThreadSync } from "./shell/use-thread-sync";
+import { WORKSPACE_RAIL_WIDTH, WorkspaceRail } from "./shell/workspace-rail";
 import type { SettingsSection } from "./shell-overlay";
 
 const NO_AGENT_SKILLS: AgentSkillCatalogEntry[] = [];
@@ -176,6 +177,7 @@ function SpaceShell() {
     botsRef,
     botSections,
     spaces,
+    canCreateSpace,
     setSpaces,
     archivedBots,
     archivedGroups,
@@ -219,6 +221,8 @@ function SpaceShell() {
   } | null>("peerConversation", null);
   const agentSkillsQuery = useQuery(queries.agentSkills.list.queryOptions());
   const modelPolicy = useQuery(queries.models.workspacePolicy.queryOptions());
+  const managedWorkspace = modelPolicy.data?.managed === true;
+  const createWorkspaceAllowed = canCreateSpace ?? modelPolicy.data?.managed === false;
   const agentSkills = agentSkillsQuery.data ?? NO_AGENT_SKILLS;
   const setAgentSkills = useCallback(
     (skills: AgentSkillCatalogEntry[]) =>
@@ -590,35 +594,37 @@ function SpaceShell() {
   );
   const snoozedChats = useMemo(
     () =>
-      allSidebarSpaces.flatMap((space) => [
-        ...space.bots
-          .filter((bot) => threadSnoozeState(bot.snoozedUntil, snoozeNow) === "snoozed")
-          .map((bot) => ({
-            kind: "bot" as const,
-            id: bot.id,
-            name: bot.name,
-            spaceId: space.id,
-            until: bot.snoozedUntil!,
-          })),
-        ...space.groups
-          .filter((group) => threadSnoozeState(group.snoozedUntil, snoozeNow) === "snoozed")
-          .map((group) => ({
-            kind: "group" as const,
-            id: group.id,
-            name: group.name,
-            spaceId: space.id,
-            until: group.snoozedUntil!,
-          })),
-      ]),
-    [allSidebarSpaces, snoozeNow],
+      allSidebarSpaces
+        .filter((space) => space.id === bootstrapMe?.spaceId)
+        .flatMap((space) => [
+          ...space.bots
+            .filter((bot) => threadSnoozeState(bot.snoozedUntil, snoozeNow) === "snoozed")
+            .map((bot) => ({
+              kind: "bot" as const,
+              id: bot.id,
+              name: bot.name,
+              spaceId: space.id,
+              until: bot.snoozedUntil!,
+            })),
+          ...space.groups
+            .filter((group) => threadSnoozeState(group.snoozedUntil, snoozeNow) === "snoozed")
+            .map((group) => ({
+              kind: "group" as const,
+              id: group.id,
+              name: group.name,
+              spaceId: space.id,
+              until: group.snoozedUntil!,
+            })),
+        ]),
+    [allSidebarSpaces, bootstrapMe?.spaceId, snoozeNow],
   );
   const sidebarGroups = useMemo(
     () =>
       sidebarGroupsForSpaces(sidebarSpaces, miniSidebar ? "" : search.query, {
         pinned: t`Pinned`,
         unassigned: t`Unassigned`,
-      }),
-    [sidebarSpaces, search.query, miniSidebar, t],
+      }).filter((group) => group.spaceId === bootstrapMe?.spaceId),
+    [sidebarSpaces, search.query, miniSidebar, t, bootstrapMe?.spaceId],
   );
   // The Dock badge ignores the roster search box: a filter must not hide unread chats.
   const unreadChatCount = useMemo(
@@ -637,6 +643,27 @@ function SpaceShell() {
   useLayoutEffect(() => {
     openSpaceChatRef.current = openSpaceChat;
   }, [openSpaceChat]);
+  function openWorkspace(spaceId: string) {
+    const space = allSidebarSpaces.find((row) => row.id === spaceId);
+    if (!space) return;
+    // Older Accounts mappings return only navigation data until the Space is opened.
+    const seed =
+      space.bots.length || space.groups.length
+        ? space
+        : queryClient.getQueryData(spaceSeedKey(userId ?? null, spaceId));
+    const lastChat = lastChatOf(
+      seed,
+      queryClient.getQueryData(lastChatKey(userId ?? null, spaceId)),
+    );
+    openSpaceChat(
+      spaceId,
+      lastChat?.groupId
+        ? `/app/g/${lastChat.groupId}`
+        : lastChat?.botId
+          ? `/app/${lastChat.botId}`
+          : "/app",
+    );
+  }
 
   const activeSnapshot = inGroup
     ? snapshot?.groupId === groupId
@@ -936,12 +963,16 @@ function SpaceShell() {
       icon: Users,
       onSelect: () => setPanel("create-group"),
     },
-    {
-      id: "new-space",
-      label: t`New private space`,
-      icon: Lock,
-      onSelect: () => dialogs.setNewSpaceOpen(true),
-    },
+    ...(createWorkspaceAllowed
+      ? [
+          {
+            id: "new-space",
+            label: t`New private space`,
+            icon: Lock,
+            onSelect: () => dialogs.setNewSpaceOpen(true),
+          },
+        ]
+      : []),
     {
       id: "integrations",
       label: t`Connect apps`,
@@ -1053,6 +1084,7 @@ function SpaceShell() {
       onCollapsedChange={setBotsSidebarCollapsedPref}
       onPreviewCollapsedChange={setBotsSidebarCollapsed}
       computerOpen={computerOpen}
+      workspaceRailWidth={allSidebarSpaces.length ? WORKSPACE_RAIL_WIDTH : 0}
       data-testid="shell-root"
       data-ready={shellReady}
       className="relative flex h-full min-h-0 min-w-0 overflow-hidden bg-background text-foreground/90 [&[data-resizing-sidebar]_*[data-slot=sidebar-gap]]:transition-none [&[data-resizing-sidebar]_*[data-slot=sidebar-container]]:transition-none"
@@ -1084,8 +1116,25 @@ function SpaceShell() {
         toggleSidebarSection={toggleSidebarSection}
         setPanel={setPanel}
         navigate={navigate}
-        setNewSpaceOpen={dialogs.setNewSpaceOpen}
+        setNewSpaceOpen={createWorkspaceAllowed ? dialogs.setNewSpaceOpen : undefined}
         setCreateBotOpen={dialogs.setCreateBotOpen}
+        workspaceRail={
+          allSidebarSpaces.length ? (
+            <WorkspaceRail
+              spaces={allSidebarSpaces}
+              activeId={bootstrapMe?.spaceId ?? shellSpaceId ?? undefined}
+              onOpen={openWorkspace}
+              onCreate={
+                createWorkspaceAllowed
+                  ? () => {
+                      setMobileSidebarOpen(false);
+                      dialogs.setNewSpaceOpen(true);
+                    }
+                  : undefined
+              }
+            />
+          ) : undefined
+        }
         roster={
           <SidebarRoster
             mini={miniSidebar}
@@ -1421,6 +1470,8 @@ function SpaceShell() {
       <Suspense fallback={null}>
         <ShellDialogs
           dialogs={dialogs}
+          managedWorkspace={managedWorkspace}
+          openSpaceChat={openSpaceChat}
           rpc={rpc}
           spaces={spaces}
           bots={bots}

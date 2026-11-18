@@ -147,8 +147,8 @@ test("managed workspace settings show organization models and administration", a
   await captureScreenshot(page, testInfo, "installation-ai-workspace-limits");
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("button", { name: "Add model connection", exact: true }).click();
-  await expect(page.getByLabel("Concurrent requests", { exact: true })).toHaveValue("8");
-  await page.getByRole("button", { name: "Save", exact: true }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole("combobox", { name: "Provider", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Concurrent requests", { exact: true })).toBeHidden();
   await captureScreenshot(page, testInfo, "installation-ai-add-account");
 });
 
@@ -417,13 +417,14 @@ test("connects, lists, and uses an OpenAI-compatible endpoint", async ({ page },
       ).toBeVisible();
       await page.getByRole("combobox", { name: "Provider", exact: true }).click();
       await page.getByRole("option", { name: "OpenAI-compatible", exact: true }).click();
+      await page.getByText("Advanced", { exact: true }).click();
       await page.getByLabel("OpenAI-compatible server URL").fill(baseUrl);
       await page.getByRole("button", { name: "Find models", exact: true }).click();
       await expect(page.getByRole("button", { name: "Models from server" })).toHaveText(
         LOCAL_MODEL_ID,
       );
       await captureScreenshot(page, testInfo, "openai-compatible-onboarding");
-      await page.getByRole("button", { name: "Continue", exact: true }).click();
+      await page.getByRole("button", { name: "Connect", exact: true }).click();
     }
     await completeOnboarding(page);
     if (pi) {

@@ -12,14 +12,15 @@ import { deletePageShareSecrets } from "./page-shares.js";
 import { runAsSystemInTransaction } from "./row-security.js";
 import { IsolationError } from "./scope.js";
 import { withTransactionRetry } from "./transaction-retry.js";
+import { workspaceAdmissionBinding } from "./workspace-navigation.js";
 
 /** Per member, per organization: one person cannot fan out unbounded boundaries. */
 const MAX_SPACES_PER_MEMBER = 32;
 
-export class CentralWorkspaceCreationRequiredError extends Error {
+export class WorkspaceCreationForbiddenError extends Error {
   constructor() {
-    super("Create workspaces in Accounts.");
-    this.name = "CentralWorkspaceCreationRequiredError";
+    super("You do not have permission to create a workspace.");
+    this.name = "WorkspaceCreationForbiddenError";
   }
 }
 
@@ -93,6 +94,7 @@ interface CreateSpaceInput {
   userId: string;
   name: string;
   createdAt: Date;
+  admissionWorkspaceId?: string;
 }
 
 async function createSpace(prisma: SpaceClient, input: CreateSpaceInput): Promise<void> {
@@ -101,6 +103,7 @@ async function createSpace(prisma: SpaceClient, input: CreateSpaceInput): Promis
       id: input.spaceId,
       organizationId: input.organizationId,
       name: input.name,
+      admissionWorkspaceId: input.admissionWorkspaceId,
       createdByUserId: input.userId,
       createdAt: input.createdAt,
     },
@@ -144,6 +147,60 @@ export function normalizeSpaceName(name: string): string {
   return trimmed;
 }
 
+type WorkspaceCreationClient = Pick<
+  PrismaClient,
+  "space" | "centralWorkspaceBinding" | "centralWorkspaceAccess" | "$queryRaw"
+>;
+
+/** Creating a server-owned Space inherits admission, while local membership controls its contents. */
+async function workspaceCreationAdmission(
+  prisma: WorkspaceCreationClient,
+  actor: { spaceId: string; userId: string },
+): Promise<string | null> {
+  const binding = await workspaceAdmissionBinding(prisma, actor.spaceId);
+  if (!binding) {
+    const space = await prisma.space.findUnique({
+      where: { id: actor.spaceId },
+      select: { admissionWorkspaceId: true, organizationId: true },
+    });
+    if (!space || space.admissionWorkspaceId) throw new WorkspaceCreationForbiddenError();
+    if (
+      await prisma.centralWorkspaceBinding.findFirst({
+        where: { localOrganizationId: space.organizationId },
+        select: { id: true },
+      })
+    )
+      throw new WorkspaceCreationForbiddenError();
+    return null;
+  }
+  const access = await prisma.centralWorkspaceAccess.findUnique({
+    where: { workspaceId_userId: { workspaceId: binding.id, userId: actor.userId } },
+    select: { active: true, role: true },
+  });
+  if (binding.state !== "ready" || !access?.active || access.role !== "admin")
+    throw new WorkspaceCreationForbiddenError();
+  if (binding.validUntil.getTime() <= Date.now()) {
+    const [personal] = await prisma.$queryRaw<Array<{ allowed: boolean }>>`
+      SELECT app_personal_workspace_access(${binding.id}, ${actor.userId}) AS allowed
+    `;
+    if (!personal?.allowed) throw new WorkspaceCreationForbiddenError();
+  }
+  return binding.id;
+}
+
+export async function canCreateSpace(
+  prisma: WorkspaceCreationClient,
+  actor: { spaceId: string; userId: string },
+): Promise<boolean> {
+  try {
+    await workspaceCreationAdmission(prisma, actor);
+    return true;
+  } catch (error) {
+    if (error instanceof WorkspaceCreationForbiddenError) return false;
+    throw error;
+  }
+}
+
 /** Create a sibling privacy boundary for a member of the active organization. */
 export async function createSpaceForMember(
   prisma: PrismaClient,
@@ -172,16 +229,12 @@ export async function createSpaceForMember(
         });
         if (!currentMembership) throw new IsolationError();
         await lockOrganizationSpaces(tx, currentMembership.organizationId);
-        const central = await runAsSystemInTransaction(
+        const admission = await runAsSystemInTransaction(
           tx,
-          "check whether Accounts manages workspace creation",
+          "authorize server workspace creation",
           () =>
-            tx.centralWorkspaceBinding.findFirst({
-              where: { localOrganizationId: currentMembership.organizationId },
-              select: { id: true },
-            }),
+            workspaceCreationAdmission(tx, { spaceId: input.currentSpaceId, userId: input.userId }),
         );
-        if (central) throw new CentralWorkspaceCreationRequiredError();
         const deleting = await tx.space.count({
           where: {
             organizationId: currentMembership.organizationId,
@@ -203,6 +256,7 @@ export async function createSpaceForMember(
           organizationId: currentMembership.organizationId,
           userId: input.userId,
           name,
+          ...(admission ? { admissionWorkspaceId: admission } : {}),
           createdAt,
         });
         await createSpaceDefaults(tx, {

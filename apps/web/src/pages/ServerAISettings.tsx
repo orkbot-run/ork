@@ -67,10 +67,12 @@ type Assignment = RpcOutput<"serverAI/status">["connections"][number];
 export function ServerAISettings({
   embedded,
   onboarding,
+  scope = "organization",
   onClose,
 }: {
   embedded?: boolean;
   onboarding?: boolean;
+  scope?: "organization" | "space";
   onClose(): void;
 }) {
   const { t } = useLingui();
@@ -142,6 +144,7 @@ export function ServerAISettings({
       await owner.client.serverAI.configure(
         {
           ...workspaceAIUpdate(row, patch),
+          scope,
           ...(onboarding
             ? {
                 preserveBudget: true,
@@ -154,6 +157,28 @@ export function ServerAISettings({
       );
     }, onboarding);
   const value = status.data;
+  if (onboarding && value?.canManageServer)
+    return (
+      <AISettingsFrame embedded={embedded} onClose={onClose}>
+        {catalog.data ? (
+          <ServerAIAccountForm
+            setup
+            hideBudget
+            catalog={catalog.data}
+            client={owner.client}
+            isCurrent={owner.isCurrent}
+            onSaved={refresh}
+            onCancel={onClose}
+          />
+        ) : catalog.isError ? (
+          <Button onClick={() => void catalog.refetch()}>
+            <Trans>Retry</Trans>
+          </Button>
+        ) : (
+          <Spinner />
+        )}
+      </AISettingsFrame>
+    );
   return (
     <AISettingsFrame embedded={embedded} onClose={onClose}>
       <div className="grid gap-5" data-testid={value ? "server-ai-ready" : undefined}>
@@ -164,6 +189,15 @@ export function ServerAISettings({
               responsible for them.
             </Trans>
           </p>
+        ) : null}
+        {scope === "space" && value?.canManageWorkspace && value.overridesModels ? (
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => void action(() => owner.client.serverAI.resetWorkspaceModels())}
+          >
+            <Trans>Use server default</Trans>
+          </Button>
         ) : null}
         {status.isPending ? <Spinner /> : null}
         {error || status.isError ? (
@@ -214,6 +248,7 @@ export function ServerAISettings({
           )
         ) : null}
         {value?.canManageServer &&
+        scope !== "space" &&
         !onboarding &&
         (value.modelSetupMode === "organization" || value.modelSetupMode === "personal") ? (
           <Button
@@ -353,6 +388,7 @@ export function ServerAISettings({
           </p>
         ) : null}
         {value?.canManageServer &&
+        scope !== "space" &&
         value.modelSetupMode !== "personal" &&
         value.modelSetupMode !== "pending" ? (
           <>
@@ -363,6 +399,12 @@ export function ServerAISettings({
               {value.accounts.map((row) => (
                 <div className="grid gap-2 border-b border-border pb-3" key={row.id}>
                   <span className="text-sm font-medium">{row.label}</span>
+                  {row.isDefault ? (
+                    <span className="text-sm text-muted-foreground">
+                      <Trans>Default</Trans>
+                      {row.defaultModelId ? ` · ${row.defaultModelId}` : ""}
+                    </span>
+                  ) : null}
                   {!onboarding && row.monthlyBudgetMicros !== null ? (
                     <Button
                       variant="outline"
@@ -468,6 +510,7 @@ export function ServerAISettings({
             ) : null}
             {adding && catalog.data ? (
               <ServerAIAccountForm
+                setup
                 catalog={catalog.data}
                 hideBudget
                 client={owner.client}

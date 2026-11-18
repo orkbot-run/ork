@@ -92,6 +92,8 @@ export type ShellDialogsState = ReturnType<typeof useShellDialogs>;
 /** The shell's confirmation dialogs, the space menu, and the command palette. */
 export function ShellDialogs({
   dialogs,
+  managedWorkspace,
+  openSpaceChat,
   rpc,
   spaces,
   bots,
@@ -112,6 +114,8 @@ export function ShellDialogs({
   paletteActions,
 }: {
   dialogs: ShellDialogsState;
+  managedWorkspace: boolean;
+  openSpaceChat: (spaceId: string, path: string) => void;
   rpc: ReturnType<typeof createSpaceRpc>;
   spaces: Space[];
   bots: Bot[];
@@ -351,7 +355,7 @@ export function ShellDialogs({
         <NewSpaceDialog
           onCancel={() => setNewSpaceOpen(false)}
           onCreate={async (name) => (await rpc.spaces.create({ name })).id}
-          loadItems={() => rpc.availability.items()}
+          loadItems={() => (managedWorkspace ? Promise.resolve([]) : rpc.availability.items())}
           chooseItems={async (spaceId, items) => {
             await rpc.availability.chooseForSpace({
               spaceId,
@@ -360,6 +364,11 @@ export function ShellDialogs({
           }}
           onDone={(spaceId) => {
             if (!alive.current) return;
+            if (managedWorkspace) {
+              setNewSpaceOpen(false);
+              openSpaceChat(spaceId, "/app");
+              return;
+            }
             if (!selectSpace(spaceId)) {
               setNewSpaceOpen(false);
               void refreshBots();

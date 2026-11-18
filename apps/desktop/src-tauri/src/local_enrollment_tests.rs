@@ -21,8 +21,7 @@ struct Observed {
     wrong_fingerprint: bool,
     changed_after_approval: bool,
     fail_complete: bool,
-    operations: Vec<String>,
-    grants: usize,
+    revoked: bool,
     completions: Vec<bool>,
     central_requests: usize,
     approval_requests: usize,
@@ -47,7 +46,6 @@ impl Fixture {
             token: TOKEN,
             organization_id: ORG,
             device_id: DEVICE,
-            subject: "fixture-subject",
         }
     }
 }
@@ -172,20 +170,9 @@ async fn fixture() -> Fixture {
                                 "id":ORG,"name":"Fixture organization","type":"personal","role":"admin","servers":[{
                                     "id":SERVER,"name":"This computer","bindingVersion":1,"keyFingerprint":"a".repeat(64),"state":"ready",
                                     "routes": if observed.ready { json!([{"id":DEVICE,"kind":"local","address":address,"deviceId":DEVICE}]) } else { json!([]) },
-                                    "workspaces":[{"id":WORKSPACE,"name":"This computer","state":if observed.ready {"ready"} else {"provisioning"},"canOpen":true,"role":"admin"}]
+                                    "workspaces":[{"id":WORKSPACE,"name":"This computer","state":if observed.ready {"ready"} else {"provisioning"},"canOpen":observed.ready && !observed.revoked,"role":if observed.ready && !observed.revoked { json!("admin") } else { Value::Null }}]
                                 }]
                             }]})
-                        }
-                        value if value.ends_with("/members") => {
-                            observed.grants += 1;
-                            assert_eq!(body["userId"], "fixture-subject");
-                            json!({"ok":true})
-                        }
-                        value if value.ends_with("/workspaces") => {
-                            observed
-                                .operations
-                                .push(body["operationId"].as_str().unwrap().to_owned());
-                            json!({"workspace":{"id":WORKSPACE,"state":"provisioning"}})
                         }
                         _ => panic!("Unexpected request: {path}"),
                     };
@@ -236,16 +223,11 @@ async fn actual_native_http_setup_resumes_without_duplicate_workspaces_or_restor
     assert!(f.enrollment().connect(|| Ok(())).await.is_err());
     let workspace = f.enrollment().connect(|| Ok(())).await.unwrap();
     assert_eq!(workspace.target.unwrap().workspace_id, WORKSPACE);
-    let grants_before = f.observed.lock().unwrap().grants;
     f.enrollment().connect(|| Ok(())).await.unwrap();
+    f.observed.lock().unwrap().revoked = true;
+    assert!(f.enrollment().connect(|| Ok(())).await.is_err());
     let observed = f.observed.lock().unwrap();
     assert_eq!(observed.approval_requests, 1);
-    assert_eq!(observed.operations.len(), 3);
-    assert!(observed
-        .operations
-        .iter()
-        .all(|id| id == &observed.operations[0]));
-    assert_eq!(observed.grants, grants_before);
     assert_eq!(observed.completions, [true, true, false]);
 }
 
@@ -258,7 +240,7 @@ async fn a_different_central_fingerprint_is_never_approved() {
         "Installation identity changed"
     );
     assert_eq!(f.observed.lock().unwrap().approval_requests, 0);
-    assert!(f.observed.lock().unwrap().operations.is_empty());
+    assert_eq!(f.observed.lock().unwrap().central_requests, 1);
 }
 
 #[tokio::test]
@@ -271,8 +253,7 @@ async fn changing_the_local_key_after_approval_cannot_create_a_workspace_or_assi
     );
     let observed = f.observed.lock().unwrap();
     assert_eq!(observed.approval_requests, 1);
-    assert!(observed.operations.is_empty());
-    assert_eq!(observed.grants, 0);
+    assert_eq!(observed.central_requests, 2);
 }
 
 #[tokio::test]

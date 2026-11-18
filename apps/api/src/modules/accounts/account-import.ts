@@ -31,7 +31,6 @@ import {
 } from "@orkbot/contracts";
 import { organicAvatarFamily, withAbort } from "@orkbot/core";
 import {
-  CentralWorkspaceCreationRequiredError,
   createRepos,
   createSpaceForMember,
   InvalidSpaceNameError,
@@ -40,6 +39,7 @@ import {
   runAsSystem,
   runAsTenant,
   SpaceLimitError,
+  WorkspaceCreationForbiddenError,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { pageViewerCode } from "@orkbot/page-kit/compile";
@@ -444,7 +444,7 @@ class AccountImporter implements ArchiveSink {
         });
       } catch (error) {
         if (
-          error instanceof CentralWorkspaceCreationRequiredError ||
+          error instanceof WorkspaceCreationForbiddenError ||
           error instanceof SpaceLimitError ||
           error instanceof InvalidSpaceNameError
         )

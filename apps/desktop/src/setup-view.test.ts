@@ -55,7 +55,7 @@ function catalogFixture(workspaces: { id: string; name: string; url: string }[])
             role: "member",
             servers: workspaces.map((workspace) => ({
               id: workspace.id,
-              name: "Server",
+              name: workspace.name,
               state: "ready",
               bindingVersion: 1,
               keyFingerprint: "a".repeat(64),
@@ -308,18 +308,28 @@ describe("bundled desktop setup", () => {
 
   it("shows wizard stages and detects a server added during self-hosted setup", async () => {
     vi.useFakeTimers();
-    let entries = [
+    const connected = catalogFixture([
       {
         id: "11111111-1111-4111-8111-111111111111",
-        name: "Studio",
+        name: "Studio server",
         url: "https://studio.example.com",
       },
-    ];
+    ]);
+    let catalog = {
+      ...connected,
+      organizations: connected.organizations.map((org) => ({
+        ...org,
+        name: "Personal",
+        type: "personal",
+        role: "admin",
+        servers: [],
+      })),
+    } as typeof connected;
     await setup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [];
-        if (name === "workspace_catalog") return entries;
+        if (name === "workspace_catalog") return catalog;
         return undefined;
       },
     });
@@ -328,23 +338,106 @@ describe("bundled desktop setup", () => {
     );
     node("organization-next").click();
     expect(document.querySelector<HTMLElement>(".shell")?.dataset.directoryStage).toBe("servers");
-    node("add-server").click();
-    expect(document.querySelector<HTMLElement>(".shell")?.dataset.directoryStage).toBe("location");
+    expect(node("selfhost").closest("[hidden]")).toBeNull();
+    expect(node("local").closest("[hidden]")).toBeNull();
     node("selfhost").click();
     expect(screen()).toBe("selfhost");
-    entries = [
-      ...entries,
-      {
-        id: "22222222-2222-4222-8222-222222222222",
-        name: "New workspace",
-        url: "https://new.example.com",
-      },
-    ];
-    await vi.advanceTimersByTimeAsync(15_000);
+    const organizationId = connected.organizations[0]!.id;
+    expect(node<HTMLTextAreaElement>("install-command").value).toContain(
+      `--organization ${organizationId} --auto-direct-route`,
+    );
+    catalog = {
+      ...catalog,
+      organizations: [
+        { ...catalog.organizations[0]!, servers: connected.organizations[0]!.servers },
+      ],
+    };
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(screen()).toBe("selfhost");
+    await vi.advanceTimersByTimeAsync(1);
     await flush();
     expect(screen()).toBe("servers");
     expect(document.querySelector<HTMLElement>(".shell")?.dataset.directoryStage).toBe("servers");
-    expect(node("workspaces").textContent).toContain("New workspace");
+    expect(node("workspaces").textContent).toContain("Studio server");
+    expect(node("selfhost").closest("[hidden]")).not.toBeNull();
+  });
+
+  it("creates and selects an organization directly from the chooser", async () => {
+    const ready = catalogFixture([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "Studio server",
+        url: "https://studio.example.com",
+      },
+    ]);
+    const createdId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [];
+        if (name === "workspace_catalog") return ready;
+        if (name === "create_organization") {
+          ready.organizations.push({
+            id: createdId,
+            type: "shared",
+            role: "admin",
+            name: "New team",
+            servers: [],
+          });
+          return createdId;
+        }
+        return undefined;
+      },
+    });
+    expect(node("new-organization").closest("[hidden]")).toBeNull();
+    node("new-organization").click();
+    expect(screen()).toBe("create-organization");
+    const name = node<HTMLInputElement>("organization-name");
+    expect(document.activeElement).toBe(name);
+    name.value = "  New team  ";
+    node<HTMLFormElement>("organization-form").requestSubmit();
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("create_organization", { name: "New team" });
+    expect(screen()).toBe("servers");
+    expect(document.querySelector(".organization-trigger")?.textContent).toBe("New team");
+    node("organization-next").click();
+    expect(node("selfhost").closest("[hidden]")).toBeNull();
+  });
+
+  it("shows the first organization after a background refresh even when legacy discovery stalls", async () => {
+    vi.useFakeTimers();
+    let load = 0;
+    const legacyRequest = deferred<unknown>();
+    const connected = catalogFixture([
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        name: "Studio server",
+        url: "https://studio.example.com",
+      },
+    ]);
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return load <= 1 ? [] : legacyRequest.promise;
+        if (name === "workspace_catalog") {
+          load += 1;
+          if (load === 1) return catalogFixture([]);
+          if (load === 2) return connected;
+          throw new Error("Offline");
+        }
+        return undefined;
+      },
+    });
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(node("organization-next").closest("[hidden]")).toBeNull();
+    expect(document.querySelector(".organization-trigger")?.textContent).toBe("Organization");
+    node("organization-next").click();
+    const choice = document.querySelector(".workspace-choice");
+    expect(choice?.textContent).toContain("Studio server");
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(invoke.mock.calls.filter(([name]) => name === "workspace_catalog")).toHaveLength(3);
+    expect(document.querySelector(".workspace-choice")).toBe(choice);
+    expect(node("workspaces-error").hidden).toBe(true);
   });
 
   it("discards a personal server link and presents the available workspaces", async () => {
@@ -401,7 +494,7 @@ describe("bundled desktop setup", () => {
     node("organization-next").click();
     expect(node("saved-servers").hidden).toBe(true);
     expect(node("add-server").hidden).toBe(true);
-    expect(node("directory-title").textContent).toBe("Choose workspace");
+    expect(node("directory-title").textContent).toBe("Choose server");
     expect(node("workspaces").textContent).toContain("Studio");
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
   });
@@ -900,6 +993,7 @@ describe("bundled desktop setup", () => {
       },
     ]);
     const organizationId = catalog.organizations[0]!.id;
+    Object.assign(catalog.organizations[0]!, { type: "personal", role: "admin", servers: [] });
     const { invoke } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
@@ -909,6 +1003,8 @@ describe("bundled desktop setup", () => {
         return undefined;
       },
     });
+    node("organization-next").click();
+    expect(node("local").closest("[hidden]")).toBeNull();
     node("local").click();
     await flush();
     node("retry-local").click();
@@ -1189,26 +1285,6 @@ describe("bundled desktop setup", () => {
     expect(node<HTMLTextAreaElement>("install-command").selectionEnd).toBe(value.length);
   });
 
-  it("includes the selected organization in the self-host installer command", async () => {
-    const workspace = {
-      id: "11111111-1111-4111-8111-111111111111",
-      name: "Workspace",
-      url: "https://server.example.com",
-    };
-    await continueSetup({
-      invoke: async (name) => {
-        if (name === "setup_accounts_session") return account;
-        if (name === "workspace_catalog") return catalogFixture([workspace]);
-        if (name === "list_servers") return saved;
-        return undefined;
-      },
-    });
-    node("selfhost").click();
-    expect(node<HTMLTextAreaElement>("install-command").value).toBe(
-      "curl -fsSL https://install.ork.run | sudo -H sh -s -- --organization aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa --auto-direct-route",
-    );
-  });
-
   it("shows a newly authorized server while waiting on the install instructions", async () => {
     vi.useFakeTimers();
     vi.spyOn(document, "hidden", "get").mockReturnValue(false);
@@ -1247,6 +1323,7 @@ describe("bundled desktop setup", () => {
         ...catalog,
         organizations: catalog.organizations.map((organization) => ({
           ...organization,
+          role: "admin",
           servers: [],
         })),
       };
@@ -1258,6 +1335,8 @@ describe("bundled desktop setup", () => {
           return undefined;
         },
       });
+      node("organization-next").click();
+      expect(node("selfhost").closest("[hidden]")).toBeNull();
       node("selfhost").click();
       expect(screen()).toBe("selfhost");
       currentCatalog = catalog;

@@ -6,12 +6,13 @@ import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contrac
 import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
 
-test("opening a bot in another space switches in place, without a page reload", async ({
+test("workspace icons switch the roster and restore the previous chat without reloading", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
   await signup(page, `space-switch-${stamp}@orkbot.test`, "password12", "Space Switcher");
   await completeOnboarding(page);
+  const firstBot = activeBotId(page);
   const otherSpace = await page.request.post("/rpc/spaces/create", {
     headers: { [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) },
     data: { json: { name: "Second space" } },
@@ -33,8 +34,26 @@ test("opening a bot in another space switches in place, without a page reload", 
   });
   expect(created.ok()).toBe(true);
   const { json: scout } = (await created.json()) as { json: { id: string } };
+  const createdTelescope = await page.request.post("/rpc/bots/create", {
+    headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      "x-orkbot-space-id": space.id,
+    },
+    data: {
+      json: { name: "Telescope", description: "", notifyOnFinish: true, computerMode: "team" },
+    },
+  });
+  expect(createdTelescope.ok()).toBe(true);
+  const { json: telescope } = (await createdTelescope.json()) as { json: { id: string } };
   await page.reload();
-  await expect(page.getByRole("button", { name: /Scout/ }).first()).toBeVisible();
+  const rail = page.getByRole("navigation", { name: "Workspaces" });
+  const firstSpace = await rail.locator('[aria-current="true"]').getAttribute("aria-label");
+  expect(firstSpace).toBeTruthy();
+  const secondSpace = rail.getByRole("button", { name: "Second space" });
+  await expect(secondSpace).toBeVisible();
+  await expect(page.getByTestId("bots-sidebar").getByRole("button", { name: /Scout/ })).toHaveCount(
+    0,
+  );
 
   // A reload would drop this marker; an in-place switch keeps it. The observer
   // records any moment the sidebar lost its bots while the screen was not being
@@ -46,12 +65,18 @@ test("opening a bot in another space switches in place, without a page reload", 
     new MutationObserver(() => {
       const sidebar = document.querySelector('[data-testid="bots-sidebar"]');
       const held = document.documentElement.classList.contains("rk-space-switching");
-      if (!sidebar?.textContent?.includes("Scout") && !held) w.visibleBlanks! += 1;
+      const hasRoster =
+        sidebar?.textContent?.includes("Scout") || sidebar?.textContent?.includes("Chief");
+      if (!hasRoster && !held) w.visibleBlanks! += 1;
     }).observe(document.body, { childList: true, subtree: true, characterData: true });
   });
-  await page.getByRole("button", { name: /Scout/ }).first().click();
+  await secondSpace.click();
   await page.waitForURL(`**/app/${scout.id}`);
   await expect(page.getByPlaceholder("Message Scout")).toBeVisible();
+  await expect(secondSpace).toHaveAttribute("aria-current", "true");
+  await expect(
+    page.getByTestId("bots-sidebar").getByRole("button", { name: /^Chief/ }),
+  ).toHaveCount(0);
   expect(
     await page.evaluate(
       () => (window as unknown as { spaceSwitchMarker?: boolean }).spaceSwitchMarker,
@@ -61,7 +86,19 @@ test("opening a bot in another space switches in place, without a page reload", 
     await page.evaluate(() => (window as unknown as { visibleBlanks?: number }).visibleBlanks),
   ).toBe(0);
   expect(await page.evaluate(() => window.localStorage.getItem("orkbot:space-id"))).toBe(space.id);
+  await page.mouse.move(500, 90);
   await captureScreenshot(page, testInfo, "space-switch-in-place");
+  await page.locator(`[data-roster-bot-id="${telescope.id}"]`).click();
+  await page.waitForURL(`**/app/${telescope.id}`);
+  await expect(page.getByPlaceholder("Message Telescope")).toBeVisible();
+  await rail.getByRole("button", { name: firstSpace!, exact: true }).click();
+  await page.waitForURL(`**/app/${firstBot}`);
+  await expect(page.getByTestId("bots-sidebar").getByRole("button", { name: /Scout/ })).toHaveCount(
+    0,
+  );
+  await secondSpace.click();
+  await page.waitForURL(`**/app/${telescope.id}`);
+  await expect(page.getByPlaceholder("Message Telescope")).toBeVisible();
 });
 
 test("workspace drafts retain their own file bytes after switching and reopening the renderer", async ({

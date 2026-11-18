@@ -13,12 +13,14 @@ export function SpaceSettingsPanel({
   onDelete,
   onClose,
   onBusyChange,
+  managedModels,
 }: {
   space: SettingsSpace;
   onRename: (name: string) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
   onBusyChange?: (busy: boolean) => void;
+  managedModels?: boolean;
 }) {
   const { t } = useLingui();
   const nameId = useId();
@@ -101,7 +103,11 @@ export function SpaceSettingsPanel({
           </SettingsRow>
         </SettingsGroup>
       ) : null}
-      <SpaceSettingOverrides onClose={onClose} onBusyChange={setOverridesBusy} />
+      <SpaceSettingOverrides
+        onClose={onClose}
+        onBusyChange={setOverridesBusy}
+        managedModels={managedModels}
+      />
       {space.canDelete ? (
         <Button
           variant="destructive"

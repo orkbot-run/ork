@@ -53,7 +53,6 @@ vi.mock("@lingui/react/macro", () => ({
 }));
 
 import { OnboardingPage } from "./Onboarding";
-import { ServerAISettings } from "./ServerAISettings";
 
 const connection = {
   id: "account-a",
@@ -105,6 +104,7 @@ beforeEach(() => {
     },
   ]);
   api.serverAI.create.mockResolvedValue(connection);
+  api.serverAI.cancelOAuth.mockResolvedValue({ ok: true });
   api.serverAI.update.mockResolvedValue({ ok: true });
   api.serverAI.configure.mockResolvedValue({ ok: true });
   api.serverAI.offer.mockResolvedValue({ ok: true });
@@ -137,7 +137,7 @@ async function render() {
     ),
   );
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 15));
   });
 }
 async function click(text: string) {
@@ -149,15 +149,22 @@ async function field(label: string, value: string) {
   const id = [...host.querySelectorAll("label")].find(
     (node) => node.textContent === label,
   )?.htmlFor;
-  const input = document.getElementById(id!) as HTMLInputElement | HTMLTextAreaElement;
+  const input = document.getElementById(id!) as
+    | HTMLInputElement
+    | HTMLTextAreaElement
+    | HTMLSelectElement;
   expect(input, label).not.toBeNull();
   await act(async () => {
     const proto =
-      input instanceof HTMLTextAreaElement
-        ? HTMLTextAreaElement.prototype
-        : HTMLInputElement.prototype;
+      input instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : input instanceof HTMLTextAreaElement
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(
+      new Event(input instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }),
+    );
   });
 }
 function noLegacyCredentials() {
@@ -165,17 +172,6 @@ function noLegacyCredentials() {
   expect(api.models.connect).not.toHaveBeenCalled();
   expect(api.models.beginOAuth).not.toHaveBeenCalled();
 }
-
-it("keeps a managed participant out of provider secrets and explains the required workspace assignment", async () => {
-  await render();
-  expect(host.textContent).toContain("Waiting for an organization administrator");
-  expect(host.querySelector('input[type="password"]')).toBeNull();
-  expect(api.serverAI.catalog).not.toHaveBeenCalled();
-  noLegacyCredentials();
-  await click("Continue");
-  expect(api.onboarding.ensureFirstBot).not.toHaveBeenCalled();
-  expect(host.querySelector('[role="alert"]')).not.toBeNull();
-});
 
 it("waits for the organization administrator to make the initial model choice", async () => {
   api.models.workspacePolicy.mockResolvedValue({
@@ -239,452 +235,6 @@ it("opens personal model setup when an administrator makes that choice", async (
   expect(host.textContent).toContain("outside company servers");
 });
 
-it("lets the organization administrator allow personal models during setup", async () => {
-  api.models.workspacePolicy.mockResolvedValue({
-    managed: true,
-    canManage: false,
-    policy: null,
-    personalModelsAllowed: false,
-    modelSetupMode: "pending",
-  });
-  api.serverAI.status.mockResolvedValue(
-    status({ canManageServer: true, canManageWorkspace: true, modelSetupMode: "pending" }),
-  );
-  api.serverAI.chooseMode.mockImplementation(async () => {
-    api.models.workspacePolicy.mockResolvedValue({
-      managed: true,
-      canManage: false,
-      policy: null,
-      personalModelsAllowed: true,
-      modelSetupMode: "personal",
-    });
-  });
-  await render();
-  await vi.waitFor(() => expect(host.textContent).toContain("Let people connect their own models"));
-  await click("Let people connect their own models");
-  await vi.waitFor(() => expect(api.models.list).toHaveBeenCalledOnce());
-  expect(api.serverAI.chooseMode).toHaveBeenCalledWith({ mode: "personal" });
-  expect(host.textContent).toContain("outside company servers");
-});
-
-it("lets a member connect a personal model when the organization permits it", async () => {
-  api.models.workspacePolicy.mockResolvedValue({
-    managed: true,
-    canManage: false,
-    policy: null,
-    personalModelsAllowed: true,
-  });
-  await render();
-  expect(api.models.list).toHaveBeenCalledOnce();
-  expect(host.querySelector('[data-testid="server-ai-ready"]')).toBeNull();
-  expect(host.textContent).toContain("Connect a model");
-  expect(host.textContent).toContain("outside company servers");
-  expect(host.textContent).not.toContain("Waiting for an organization administrator");
-});
-
-it("does not expose personal setup if the organization permission check fails", async () => {
-  api.models.workspacePolicy.mockResolvedValue({
-    managed: true,
-    canManage: false,
-    policy: null,
-    personalModelsAllowed: true,
-  });
-  api.serverAI.status.mockRejectedValue(new Error("Permissions unavailable"));
-  await render();
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Permissions unavailable");
-  expect(api.models.list).not.toHaveBeenCalled();
-});
-
-it("keeps organization model setup available to administrators when personal models are allowed", async () => {
-  api.models.workspacePolicy.mockResolvedValue({
-    managed: true,
-    canManage: false,
-    policy: null,
-    personalModelsAllowed: true,
-  });
-  api.serverAI.status.mockResolvedValue(
-    status({ canManageServer: true, canManageWorkspace: true }),
-  );
-  await render();
-  await vi.waitFor(() => expect(host.textContent).toContain("Add model connection"));
-  expect(api.models.list).not.toHaveBeenCalled();
-});
-
-it("creates an unlimited account and offers it to the workspace during onboarding", async () => {
-  let created = false;
-  let offered = false;
-  let enabled = false;
-  let revision = 1;
-  api.serverAI.status.mockImplementation(async () =>
-    status({
-      canManageServer: true,
-      canManageWorkspace: true,
-      accounts: created ? [connection] : [],
-      connections: offered
-        ? [
-            {
-              ...assignment,
-              enabled,
-              isDefault: false,
-              defaultModelId: enabled ? "model-a" : null,
-              assignmentRevision: revision,
-            },
-          ]
-        : [],
-    }),
-  );
-  api.serverAI.create.mockImplementation(async () => {
-    created = true;
-    return connection;
-  });
-  api.serverAI.offer.mockImplementation(async () => {
-    offered = true;
-    return { ok: true };
-  });
-  api.serverAI.configure.mockImplementation(async (input) => {
-    enabled = input.enabled;
-    revision += 1;
-    return { ok: true };
-  });
-  await render();
-  expect(host.textContent).not.toContain("budget");
-  await click("Add model connection");
-  expect(host.textContent).not.toContain("budget");
-  await field("Name", "Fixture server account");
-  await field("Models (one per line)", "model-a");
-  await field("API key", "fake-non-secret-key");
-  await click("Save");
-  expect(api.serverAI.create).toHaveBeenCalledWith(
-    expect.objectContaining({
-      label: "Fixture server account",
-      monthlyBudgetMicros: null,
-      connection: expect.objectContaining({ apiKey: "fake-non-secret-key" }),
-    }),
-    { signal: expect.any(AbortSignal) },
-  );
-  await vi.waitFor(() => expect(host.textContent).toContain("Make available to organization"));
-  await click("Make available to organization");
-  expect(api.serverAI.offer).toHaveBeenCalledExactlyOnceWith(
-    { spaceId: "workspace-a", connectionId: "account-a", available: true },
-    { signal: expect.any(AbortSignal) },
-  );
-  await vi.waitFor(() => expect(host.querySelector('[role="switch"]')).not.toBeNull());
-  let switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
-  await act(async () => switches[0]!.click());
-  expect(api.serverAI.configure).toHaveBeenCalledWith(
-    expect.objectContaining({
-      connectionId: "account-a",
-      enabled: true,
-      preserveBudget: true,
-      preserveDefault: true,
-      expectedRevision: assignment.assignmentRevision,
-    }),
-    { signal: expect.any(AbortSignal) },
-  );
-  await vi.waitFor(() => {
-    switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
-    expect(switches[0]?.getAttribute("aria-checked")).toBe("true");
-  });
-  await act(async () => switches[1]!.click());
-  expect(api.serverAI.configure).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      connectionId: "account-a",
-      enabled: true,
-      isDefault: true,
-      preserveBudget: true,
-      expectedRevision: 2,
-    }),
-    { signal: expect.any(AbortSignal) },
-  );
-  noLegacyCredentials();
-});
-
-it("hides account editing and preserves assignment limits during onboarding", async () => {
-  const limited = { ...connection, monthlyBudgetMicros: 1_234_567 };
-  const limitedAssignment = { ...assignment, monthlyBudgetMicros: 7_654_321 };
-  api.serverAI.status.mockResolvedValue(
-    status({
-      canManageServer: true,
-      canManageWorkspace: true,
-      accounts: [limited],
-      connections: [limitedAssignment],
-      workspaceMonthlyBudgetMicros: 9_876_543,
-    }),
-  );
-  await render();
-  expect(host.textContent).not.toContain("budget");
-  expect(host.textContent).not.toContain("Edit model connection");
-  expect(api.serverAI.update).not.toHaveBeenCalled();
-  await click("Models");
-  expect(host.textContent).not.toContain("budget");
-  await click("Save");
-  expect(api.serverAI.configure).toHaveBeenCalledWith(
-    expect.objectContaining({
-      connectionId: limited.id,
-      monthlyBudgetMicros: 7_654_321,
-      preserveBudget: true,
-      expectedRevision: limitedAssignment.assignmentRevision,
-    }),
-    { signal: expect.any(AbortSignal) },
-  );
-  expect(api.serverAI.workspaceBudget).not.toHaveBeenCalled();
-});
-
-it("adds an unlimited subscription and explicitly enables it as the default model", async () => {
-  let signedIn = false;
-  let offered = false;
-  let enabled = false;
-  let revision = 1;
-  const subscription = { ...connection, id: "subscription-account" };
-  api.serverAI.status.mockImplementation(async () =>
-    status({
-      canManageServer: true,
-      canManageWorkspace: true,
-      accounts: signedIn ? [subscription] : [],
-      connections: offered
-        ? [
-            {
-              ...assignment,
-              ...subscription,
-              enabled,
-              isDefault: false,
-              assignmentRevision: revision,
-            },
-          ]
-        : [],
-    }),
-  );
-  api.serverAI.catalog.mockResolvedValue([
-    {
-      provider: "fixture-provider",
-      providerName: "Fixture provider",
-      id: "model-a",
-      label: "Model A",
-      auth: "oauth",
-    },
-  ]);
-  api.serverAI.beginOAuth.mockResolvedValue({
-    loginId: "fixture-login",
-    provider: "fixture-provider",
-    mode: "auth-url",
-    verificationUri: "https://example.test/authorize",
-    expiresInSeconds: 600,
-  });
-  api.serverAI.submitOAuthCode.mockResolvedValue({ ok: true });
-  api.serverAI.completeOAuth.mockResolvedValue({ status: "ready" });
-  api.serverAI.finishOAuth.mockImplementation(async () => {
-    signedIn = true;
-    return { id: subscription.id };
-  });
-  api.serverAI.offer.mockImplementation(async () => {
-    offered = true;
-    return { ok: true };
-  });
-  api.serverAI.configure.mockImplementation(async (input) => {
-    enabled = input.enabled;
-    revision += 1;
-    return { ok: true };
-  });
-  vi.stubGlobal("open", vi.fn());
-  await render();
-  await vi.waitFor(() => {
-    expect(
-      [...host.querySelectorAll("button")].find(
-        (node) => node.textContent === "Add model connection",
-      )?.disabled,
-    ).toBe(false);
-  });
-  await click("Add model connection");
-  expect(host.textContent).not.toContain("budget");
-  await click("Sign in");
-  expect(api.serverAI.beginOAuth).toHaveBeenCalledWith(
-    expect.objectContaining({ monthlyBudgetMicros: null, codePage: true }),
-    { signal: expect.any(AbortSignal) },
-  );
-  await field("Verification code", "fixture-code");
-  await click("Complete sign-in");
-  await vi.waitFor(() => expect(host.textContent).toContain("Make available to organization"));
-  await click("Make available to organization");
-  expect(api.serverAI.offer).toHaveBeenCalledWith(
-    { spaceId: "workspace-a", connectionId: subscription.id, available: true },
-    { signal: expect.any(AbortSignal) },
-  );
-  await vi.waitFor(() => expect(host.querySelector('[role="switch"]')).not.toBeNull());
-  let switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
-  await act(async () => switches[0]!.click());
-  expect(api.serverAI.configure).toHaveBeenCalledWith(
-    expect.objectContaining({
-      connectionId: subscription.id,
-      enabled: true,
-      preserveBudget: true,
-      preserveDefault: true,
-      expectedRevision: 1,
-    }),
-    { signal: expect.any(AbortSignal) },
-  );
-  await vi.waitFor(() => {
-    switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
-    expect(switches.length, host.textContent ?? "").toBeGreaterThan(1);
-    expect(switches[0]?.getAttribute("aria-checked")).toBe("true");
-  });
-  await act(async () => switches[1]!.click());
-  expect(api.serverAI.configure).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      connectionId: subscription.id,
-      enabled: true,
-      isDefault: true,
-      preserveBudget: true,
-      expectedRevision: 2,
-    }),
-    { signal: expect.any(AbortSignal) },
-  );
-});
-
-it("does not offer budget fields in embedded settings", async () => {
-  api.serverAI.status.mockResolvedValue(
-    status({
-      canManageWorkspace: true,
-      canManageServer: true,
-      accounts: [connection],
-      connections: [assignment],
-    }),
-  );
-  await act(async () =>
-    root.render(
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
-          <ServerAISettings embedded onClose={() => undefined} />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    ),
-  );
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-  expect(host.textContent).not.toContain("Workspace monthly budget (USD)");
-  expect(host.textContent).toContain("Edit model connection");
-  const enabled = host.querySelector<HTMLButtonElement>('[role="switch"]')!;
-  await act(async () => enabled.click());
-  expect(api.serverAI.configure).toHaveBeenCalledOnce();
-  expect(api.serverAI.configure.mock.calls[0]![0]).not.toHaveProperty("preserveBudget");
-  expect(api.serverAI.configure.mock.calls[0]![0]).not.toHaveProperty("expectedRevision");
-  expect(api.serverAI.configure.mock.calls[0]![0]).not.toHaveProperty("preserveDefault");
-});
-
-it("lets a workspace administrator enable an offered model and continues only after fresh server readiness", async () => {
-  api.serverAI.status.mockResolvedValue(
-    status({ canManageWorkspace: true, connections: [assignment] }),
-  );
-  await render();
-  expect(api.serverAI.catalog).not.toHaveBeenCalled();
-  expect(host.querySelector('input[type="password"]')).toBeNull();
-  const enabled = host.querySelector<HTMLButtonElement>('[role="switch"]')!;
-  await act(async () => enabled.click());
-  expect(api.serverAI.configure).toHaveBeenCalledWith(
-    expect.objectContaining({
-      connectionId: "account-a",
-      enabled: true,
-      defaultModelId: "model-a",
-      preserveBudget: true,
-      expectedRevision: assignment.assignmentRevision,
-      preserveDefault: true,
-    }),
-    { signal: expect.any(AbortSignal) },
-  );
-  expect(api.serverAI.create).not.toHaveBeenCalled();
-  api.me.mockResolvedValue({ needsModel: false, needsSignupSurvey: false });
-  await click("Continue");
-  expect(host.querySelector('[data-testid="ready-app"]')).not.toBeNull();
-  noLegacyCredentials();
-});
-
-it("keeps the default on fallback changes but allows an explicit default change", async () => {
-  api.serverAI.status.mockResolvedValue(
-    status({ canManageWorkspace: true, connections: [{ ...assignment, enabled: true }] }),
-  );
-  await render();
-  let switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
-  await act(async () => switches[2]!.click());
-  expect(api.serverAI.configure.mock.calls[0]![0]).toEqual(
-    expect.objectContaining({ preserveDefault: true, expectedRevision: 1, fallback: true }),
-  );
-  switches = host.querySelectorAll<HTMLButtonElement>('[role="switch"]');
-  await act(async () => switches[1]!.click());
-  expect(api.serverAI.configure.mock.calls[1]![0]).toEqual(
-    expect.objectContaining({ expectedRevision: 1, isDefault: false }),
-  );
-  expect(api.serverAI.configure.mock.calls[1]![0]).not.toHaveProperty("preserveDefault");
-});
-
-it("reports an assignment conflict without overwriting a newer change", async () => {
-  let revision = assignment.assignmentRevision;
-  api.serverAI.status.mockImplementation(async () =>
-    status({
-      canManageWorkspace: true,
-      connections: [{ ...assignment, assignmentRevision: revision }],
-    }),
-  );
-  api.serverAI.configure.mockImplementationOnce(async () => {
-    revision += 1;
-    throw new Error("Assignment changed");
-  });
-  await render();
-  const statusCalls = api.serverAI.status.mock.calls.length;
-  const enabled = host.querySelector<HTMLButtonElement>('[role="switch"]')!;
-  await act(async () => enabled.click());
-  expect(api.serverAI.configure).toHaveBeenCalledExactlyOnceWith(
-    expect.objectContaining({
-      connectionId: assignment.id,
-      expectedRevision: assignment.assignmentRevision,
-      preserveBudget: true,
-    }),
-    { signal: expect.any(AbortSignal) },
-  );
-  expect(api.serverAI.status.mock.calls.length).toBeGreaterThan(statusCalls);
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Could not save");
-  expect(api.serverAI.configure).toHaveBeenCalledOnce();
-  const currentEnabled = host.querySelector<HTMLButtonElement>('[role="switch"]')!;
-  await act(async () => currentEnabled.click());
-  expect(api.serverAI.configure).toHaveBeenCalledTimes(2);
-  expect(api.serverAI.configure).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      connectionId: assignment.id,
-      expectedRevision: revision,
-      preserveBudget: true,
-    }),
-    { signal: expect.any(AbortSignal) },
-  );
-});
-
-it("fails closed on policy discovery errors and retries without exposing the unmanaged form", async () => {
-  api.models.workspacePolicy.mockRejectedValueOnce(new Error("Policy unavailable"));
-  await render();
-  expect(host.querySelector('[role="alert"]')).not.toBeNull();
-  noLegacyCredentials();
-  await click("Retry");
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-  expect(host.textContent).toContain("No model connections available");
-  noLegacyCredentials();
-});
-
-it("does not continue onboarding from a readiness response owned by an old account", async () => {
-  await render();
-  let resolve!: (value: unknown) => void;
-  api.me.mockReturnValueOnce(
-    new Promise((done) => {
-      resolve = done;
-    }),
-  );
-  await click("Continue");
-  context.generation += 1;
-  expect(api.me).toHaveBeenCalledTimes(2);
-  await act(async () => resolve({ needsModel: false, needsSignupSurvey: false }));
-  expect(api.onboarding.ensureFirstBot).not.toHaveBeenCalled();
-  expect(host.querySelector('[data-testid="ready-app"]')).toBeNull();
-});
-
 it("never exposes a credential form while workspace management policy is unresolved", async () => {
   let resolve!: (value: unknown) => void;
   api.models.workspacePolicy.mockReturnValueOnce(
@@ -710,84 +260,131 @@ it("tells a workspace administrator how to obtain an account without exposing se
   noLegacyCredentials();
 });
 
-it("refreshes model permissions after returning to the app", async () => {
-  api.serverAI.status.mockResolvedValue(status({ canManageWorkspace: true }));
-  await render();
-  expect(host.textContent).not.toContain("Add model connection");
-  await act(async () => focusManager.setFocused(false));
+it("opens the provider choice directly for an administrator with no model", async () => {
   api.serverAI.status.mockResolvedValue(
-    status({ canManageWorkspace: true, canManageServer: true }),
+    status({ canManageServer: true, canManageWorkspace: true, modelSetupMode: "pending" }),
   );
-  await act(async () => focusManager.setFocused(true));
-  await vi.waitFor(() => expect(host.textContent).toContain("Add model connection"));
+  await render();
+  expect(host.querySelector("select")).not.toBeNull();
+  expect(host.querySelector('input[type="password"]')).toBeNull();
+  expect(host.textContent).not.toContain("Connect organization models");
+  expect(host.textContent).not.toContain("Continue");
+  noLegacyCredentials();
 });
 
-it("preserves the account form while permissions refresh on focus", async () => {
-  api.serverAI.status.mockResolvedValue(
-    status({ canManageWorkspace: true, canManageServer: true }),
+it("connects a key with provider defaults and enters chat after fresh server readiness", async () => {
+  let connected = false;
+  api.serverAI.status.mockImplementation(async () =>
+    status({
+      canManageServer: true,
+      canManageWorkspace: true,
+      modelSetupMode: connected ? "organization" : "pending",
+      accounts: connected ? [connection] : [],
+      connections: connected ? [{ ...assignment, enabled: true }] : [],
+    }),
   );
-  await render();
-  await vi.waitFor(() => {
-    expect(
-      [...host.querySelectorAll("button")].find(
-        (node) => node.textContent === "Add model connection",
-      )?.disabled,
-    ).toBe(false);
+  api.serverAI.create.mockImplementation(async () => {
+    connected = true;
+    api.me.mockResolvedValue({ needsModel: false });
+    return connection;
   });
-  await click("Add model connection");
-  await field("Name", "Unfinished account");
-  const callsBeforeFocus = api.serverAI.status.mock.calls.length;
-  await act(async () => focusManager.setFocused(false));
-  await act(async () => focusManager.setFocused(true));
-  await vi.waitFor(() =>
-    expect(api.serverAI.status.mock.calls.length).toBeGreaterThan(callsBeforeFocus),
+  await render();
+  await field("Provider", "fixture-provider:key");
+  expect(host.querySelector("details")?.open).toBe(false);
+  await field("API key", "fixture-private-key");
+  await click("Connect");
+  await vi.waitFor(() => expect(api.onboarding.ensureFirstBot).toHaveBeenCalledOnce());
+  expect(api.serverAI.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      label: "Fixture provider",
+      models: ["model-a"],
+      monthlyBudgetMicros: null,
+      connection: expect.objectContaining({ apiKey: "fixture-private-key" }),
+    }),
+    { signal: expect.any(AbortSignal) },
   );
-  const id = [...host.querySelectorAll("label")].find(
-    (node) => node.textContent === "Name",
-  )?.htmlFor;
-  expect((document.getElementById(id!) as HTMLInputElement).value).toBe("Unfinished account");
+  expect(api.serverAI.offer).not.toHaveBeenCalled();
+  expect(api.serverAI.configure).not.toHaveBeenCalled();
+  noLegacyCredentials();
 });
 
-it("keeps server status failures retryable and prevents a readiness bypass", async () => {
-  api.serverAI.status.mockRejectedValue(new Error("Status unavailable"));
+it("starts subscription authorization when its provider is selected", async () => {
+  vi.spyOn(window, "open").mockReturnValue(null);
+  api.serverAI.status.mockResolvedValue(
+    status({ canManageServer: true, canManageWorkspace: true, modelSetupMode: "pending" }),
+  );
+  api.serverAI.catalog.mockResolvedValue([
+    {
+      provider: "fixture-provider",
+      providerName: "Fixture subscription",
+      id: "model-a",
+      label: "Model A",
+      auth: "oauth",
+    },
+  ]);
+  api.serverAI.beginOAuth.mockResolvedValue({
+    loginId: "attempt",
+    provider: "fixture-provider",
+    mode: "device-code",
+    verificationUri: "https://fixture.example/activate",
+    userCode: "FIXTURE",
+    expiresInSeconds: 600,
+  });
+  api.serverAI.completeOAuth.mockImplementation(() => new Promise(() => undefined));
+  await render();
+  await field("Provider", "fixture-provider:sign-in");
+  expect(api.serverAI.beginOAuth).toHaveBeenCalledWith(
+    expect.objectContaining({ provider: "fixture-provider", models: ["model-a"] }),
+    { signal: expect.any(AbortSignal) },
+  );
+  expect(host.querySelector('input[type="password"]')).toBeNull();
+  expect(host.textContent).toContain("FIXTURE");
+  await click("Cancel");
+  vi.restoreAllMocks();
+});
+
+it("skips model setup on a direct onboarding link when the server is configured", async () => {
+  api.me.mockResolvedValue({ needsModel: false, needsSignupSurvey: false });
+  await render();
+  await vi.waitFor(() => expect(api.onboarding.ensureFirstBot).toHaveBeenCalledOnce());
+  expect(host.querySelector("select")).toBeNull();
+});
+
+it("retries failed server status without exposing credentials or a continue bypass", async () => {
+  api.serverAI.status.mockRejectedValue(new Error("Unavailable"));
   await render();
   expect(host.querySelector('[role="alert"]')).not.toBeNull();
-  expect(
-    [...host.querySelectorAll("button")].find((node) => node.textContent === "Continue")?.disabled,
-  ).toBe(true);
-  expect(api.me).toHaveBeenCalledTimes(1);
+  expect(host.textContent).not.toContain("Continue");
   api.serverAI.status.mockResolvedValue(status());
   await click("Retry");
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-  expect(host.textContent).toContain("No model connections available");
-  noLegacyCredentials();
-});
-
-it("does not mistake an unavailable fresh readiness check for completed onboarding", async () => {
-  await render();
-  api.me.mockRejectedValueOnce(new Error("Readiness unavailable"));
-  await click("Continue");
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain("Readiness unavailable");
-  expect(api.onboarding.ensureFirstBot).not.toHaveBeenCalled();
-  expect(host.querySelector('[data-testid="ready-app"]')).toBeNull();
-});
-
-it("keeps a temporarily unavailable managed AI service on a retryable managed screen", async () => {
-  api.serverAI.status.mockResolvedValue(status({ available: false }));
-  await render();
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain(
-    "Could not load model settings",
+  await vi.waitFor(() =>
+    expect(host.textContent).toContain("Waiting for an organization administrator"),
   );
-  expect(
-    [...host.querySelectorAll("button")].find((node) => node.textContent === "Continue")?.disabled,
-  ).toBe(true);
-  api.serverAI.status.mockResolvedValue(status());
-  await click("Retry");
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-  expect(host.querySelector('[role="alert"]')).toBeNull();
   noLegacyCredentials();
+});
+
+it("ignores a ready status after the current account changes", async () => {
+  await render();
+  context.generation += 1;
+  api.serverAI.status.mockResolvedValue(
+    status({ modelSetupMode: "organization", connections: [{ ...assignment, enabled: true }] }),
+  );
+  await act(async () => queryClient.invalidateQueries());
+  expect(api.onboarding.ensureFirstBot).not.toHaveBeenCalled();
+});
+
+it("preserves an unfinished key when permissions refresh on focus", async () => {
+  api.serverAI.status.mockResolvedValue(
+    status({ canManageServer: true, canManageWorkspace: true, modelSetupMode: "pending" }),
+  );
+  await render();
+  await field("Provider", "fixture-provider:key");
+  await field("API key", "unfinished-fixture-key");
+  const calls = api.serverAI.status.mock.calls.length;
+  await act(async () => focusManager.setFocused(false));
+  await act(async () => focusManager.setFocused(true));
+  await vi.waitFor(() => expect(api.serverAI.status.mock.calls.length).toBeGreaterThan(calls));
+  expect(host.querySelector<HTMLInputElement>('input[type="password"]')?.value).toBe(
+    "unfinished-fixture-key",
+  );
 });
