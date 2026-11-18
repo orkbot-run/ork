@@ -19,7 +19,7 @@ describe("native identity protocol guard", () => {
   it("lets the server page read workspace status on a registered server", async () => {
     const response = await fixture(true).request("/api/auth/native/workspace-status");
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ accepted: true });
+    expect(await response.json()).toEqual({ status: "unknown" });
   });
 
   it("continues to reject legacy endpoints and non-GET status requests", async () => {
@@ -35,7 +35,9 @@ describe("native identity protocol guard", () => {
     }
   });
 
-  it("keeps current workspace endpoints and unregistered servers available", async () => {
+  it("preserves legacy status and login on unregistered servers", async () => {
+    const status = await fixture(false).request("/api/auth/native/workspace-status");
+    expect(await status.json()).toEqual({ accepted: true });
     expect((await fixture(true).request("/api/auth/native/workspace/connect")).status).toBe(200);
     expect((await fixture(false).request("/api/auth/native/pair", { method: "POST" })).status).toBe(
       200,
