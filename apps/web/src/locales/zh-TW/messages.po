@@ -2942,6 +2942,7 @@ msgid "Disable connection"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Disabled"
 msgstr "已停用"
 
@@ -3098,6 +3099,10 @@ msgstr "先編輯"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Edit model connection"
+msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "Edit models"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -7138,6 +7143,10 @@ msgstr "輸入你的回答"
 #: src/pages/Shell.tsx
 msgid "Unassigned"
 msgstr "未分配"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Unavailable"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Undo"
