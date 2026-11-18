@@ -21,6 +21,7 @@ vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts[0] }),
 }));
 
+import { deferModelSetup } from "../lib/model-setup-preference";
 import { ModelSetupGate } from "./ModelSetupGate";
 
 let host: HTMLDivElement;
@@ -81,6 +82,18 @@ it("checks again when the selected workspace changes", async () => {
   await render();
   expect(host.textContent).toContain("App content");
   api.policy.mockResolvedValueOnce({ managed: true, modelSetupMode: "pending" });
+  await act(async () => window.dispatchEvent(new Event("space-selected")));
+  expect(host.textContent).toContain("Model setup");
+});
+
+it("opens the deferred workspace and still requires setup for a different workspace", async () => {
+  const identity = { userId: "workspace-owner", spaceId: "deferred-space" };
+  deferModelSetup(identity);
+  api.me.mockResolvedValue({ ...identity, needsModel: true });
+  api.policy.mockResolvedValue({ managed: true, modelSetupMode: "pending" });
+  await render();
+  expect(host.textContent).toContain("App content");
+  api.me.mockResolvedValue({ ...identity, spaceId: "other-space", needsModel: true });
   await act(async () => window.dispatchEvent(new Event("space-selected")));
   expect(host.textContent).toContain("Model setup");
 });

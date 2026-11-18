@@ -3,7 +3,7 @@
 
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { RpcInput, RpcOutput } from "@orkbot/contracts";
-import { workspaceAIUpdate } from "@orkbot/core";
+import { workspaceAIReady, workspaceAIUpdate } from "@orkbot/core";
 import {
   Button,
   Dialog,
@@ -96,6 +96,7 @@ export function ServerAISettings({
     enabled: status.data?.canManageServer === true,
   });
   const [adding, setAdding] = useState(false);
+  const [savedOnboardingConnection, setSavedOnboardingConnection] = useState<string | null>(null);
   const [editingAccount, setEditingAccount] = useState<string | null>(null);
   const [editingAssignment, setEditingAssignment] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -103,6 +104,7 @@ export function ServerAISettings({
   const operation = useRef<AbortController | null>(null);
   useEffect(() => {
     setAdding(false);
+    setSavedOnboardingConnection(null);
     setEditingAccount(null);
     setEditingAssignment(null);
     setBusy(false);
@@ -113,10 +115,11 @@ export function ServerAISettings({
     };
   }, [owner]);
   const refresh = async () => {
-    await status.refetch();
+    const latest = await status.refetch({ throwOnError: onboarding });
     await policy.refetch();
     if (owner.isCurrent())
       await queryClient.invalidateQueries({ queryKey: queries.me.queryOptions().queryKey });
+    return latest.data;
   };
   async function action(work: (signal: AbortSignal) => Promise<unknown>, refreshOnError = false) {
     if (operation.current || !owner.isCurrent()) return false;
@@ -126,7 +129,17 @@ export function ServerAISettings({
     setError(null);
     try {
       await work(controller.signal);
-      if (owner.isCurrent() && !controller.signal.aborted) await refresh();
+      if (owner.isCurrent() && !controller.signal.aborted) {
+        const latest = await refresh();
+        if (
+          onboarding &&
+          latest?.modelSetupMode !== "personal" &&
+          (!latest ||
+            latest.modelSetupMode === "pending" ||
+            !latest.connections.some(workspaceAIReady))
+        )
+          throw new Error("Workspace model is not ready");
+      }
       return !controller.signal.aborted && owner.isCurrent();
     } catch {
       if (owner.isCurrent() && !controller.signal.aborted) {
@@ -156,18 +169,68 @@ export function ServerAISettings({
         { signal },
       );
     }, onboarding);
+
+  async function activateOnboardingConnection(connectionId: string) {
+    await action(async (signal) => {
+      const { data: latest } = await status.refetch({ throwOnError: true });
+      if (!owner.isCurrent() || signal.aborted) return;
+      if (!latest?.canManageWorkspace) throw new Error("Workspace model setup is unavailable");
+      if (latest.modelSetupMode === "personal") return;
+      if (!latest.connections.some(workspaceAIReady)) {
+        const saved = latest.connections.find((row) => row.id === connectionId);
+        if (saved?.state !== "active") throw new Error("Saved model is unavailable");
+        await owner.client.serverAI.configure(
+          workspaceAIUpdate(saved, {
+            scope: "space",
+            enabled: true,
+            isDefault: true,
+            expectedRevision: saved.assignmentRevision,
+            preserveBudget: true,
+          }),
+          { signal },
+        );
+      }
+      if (latest.modelSetupMode === "pending" && owner.isCurrent() && !signal.aborted) {
+        await owner.client.serverAI.chooseMode({ mode: "organization" }, { signal });
+      }
+    }, true);
+  }
+
   const value = status.data;
   if (onboarding && value?.canManageServer)
     return (
       <AISettingsFrame embedded={embedded} onClose={onClose}>
-        {catalog.data ? (
+        {savedOnboardingConnection ? (
+          error ? (
+            <div className="grid gap-3">
+              <p role="alert" className="text-sm text-destructive">
+                <Trans>Connected, but could not activate the model in this workspace.</Trans>
+              </p>
+              <Button
+                variant="outline"
+                className="justify-self-start"
+                onClick={() => void activateOnboardingConnection(savedOnboardingConnection)}
+              >
+                <Trans>Retry</Trans>
+              </Button>
+            </div>
+          ) : (
+            <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner aria-hidden="true" className="motion-reduce:animate-none" />
+              <Trans>Activating the default model…</Trans>
+            </p>
+          )
+        ) : catalog.data ? (
           <ServerAIAccountForm
             setup
             hideBudget
             catalog={catalog.data}
             client={owner.client}
             isCurrent={owner.isCurrent}
-            onSaved={refresh}
+            onSaved={async (connectionId) => {
+              setSavedOnboardingConnection(connectionId);
+              await activateOnboardingConnection(connectionId);
+            }}
             onCancel={onClose}
           />
         ) : catalog.isError ? (

@@ -499,6 +499,10 @@ msgstr "{0} 的操作"
 msgid "Actions for space"
 msgstr "空間操作"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Activating the default model…"
+msgstr ""
+
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
@@ -691,6 +695,10 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
 msgstr "進階..."
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "After signing in, enter this code on the provider’s page."
+msgstr ""
 
 #: src/components/AccountDataSettings.tsx
 msgid "Agent from another app"
@@ -1789,6 +1797,7 @@ msgstr "連結聊天應用程式"
 
 #: src/pages/Onboarding.tsx
 #: src/pages/onboarding/managed-model-setup.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/composer-error.tsx
 msgid "Connect a model"
 msgstr "連線模型"
@@ -1852,6 +1861,10 @@ msgstr "已連線"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected {0}."
 msgstr "已連線 {0}。"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Connected, but could not activate the model in this workspace."
+msgstr ""
 
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Connected, but could not refresh."
@@ -1939,6 +1952,7 @@ msgstr "對話"
 #: src/components/markdown-copy.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Copied"
@@ -1946,6 +1960,7 @@ msgstr "已複製"
 
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Copy"
@@ -2093,6 +2108,10 @@ msgstr "無法連線至電腦螢幕"
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "無法繼續"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not copy. Select the code and copy it manually."
+msgstr ""
 
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/create-bot-dialog.tsx
@@ -4914,6 +4933,10 @@ msgstr "OpenAI 相容伺服器 URL"
 msgid "OpenClaw or Hermes"
 msgstr "OpenClaw 或 Hermes"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Opening sign-in…"
+msgstr ""
+
 #: src/components/pages/DownloadPdfButton.tsx
 msgid "Opens your browser's print dialog. Choose Save as PDF as the destination."
 msgstr "開啟瀏覽器的列印對話框。目的地請選擇「另存為 PDF」。"
@@ -6337,6 +6360,11 @@ msgstr "技能會加入所有機器人共用的技能庫。"
 msgid "Skip"
 msgstr "跳過"
 
+#: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Skip for now"
+msgstr ""
+
 #: src/lib/localized-provider-hint.ts
 msgid "Skip or deploy key"
 msgstr "跳過或使用部署金鑰"
@@ -7413,6 +7441,10 @@ msgstr ""
 
 #: src/components/ServerUpdates.tsx
 msgid "Waiting for update status…"
+msgstr ""
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Waiting for you to confirm the code."
 msgstr ""
 
 #: src/lib/roster-status.ts

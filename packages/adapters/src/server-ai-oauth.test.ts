@@ -4,7 +4,7 @@
 import type { SecretStore } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PiOAuthLogins } from "./pi-oauth.js";
+import { CHATGPT_OAUTH_PROVIDER, PiOAuthLogins, XAI_OAUTH_PROVIDER } from "./pi-oauth.js";
 import type { AIActor, ServerAICatalog } from "./server-ai-catalog.js";
 import { ServerAIOAuth } from "./server-ai-oauth.js";
 
@@ -25,8 +25,9 @@ const input = {
 const services: ServerAIOAuth[] = [];
 afterEach(() => {
   for (const service of services.splice(0)) service.dispose();
+  vi.unstubAllGlobals();
 });
-function fixture() {
+function fixture(loginOverride?: PiOAuthLogins) {
   const account = {
     id: "account",
     provider: "anthropic",
@@ -67,7 +68,7 @@ function fixture() {
       secrets: {} as SecretStore,
       catalog: catalog as unknown as ServerAICatalog,
     },
-    logins,
+    loginOverride ?? logins,
   );
   services.push(service);
   return { service, catalog, account };
@@ -80,6 +81,119 @@ async function ready(service: ServerAIOAuth, loginId: string) {
 }
 
 describe("installation AI sign-in", () => {
+  it("finishes the managed device sign-in after provider approval without a browser callback", async () => {
+    let approve!: () => void;
+    const approval = new Promise<void>((resolve) => {
+      approve = resolve;
+    });
+    const access = `header.${Buffer.from(
+      JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "fixture-account" } }),
+    ).toString("base64url")}.signature`;
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://auth.openai.com/api/accounts/deviceauth/usercode") {
+        return Response.json({
+          device_auth_id: "fixture-device",
+          user_code: "ABCD-1234",
+          interval: "1",
+        });
+      }
+      if (url === "https://auth.openai.com/api/accounts/deviceauth/token") {
+        await approval;
+        return Response.json({
+          authorization_code: "fixture-code",
+          code_verifier: "fixture-verifier",
+        });
+      }
+      if (url === "https://auth.openai.com/oauth/token") {
+        expect(new URLSearchParams(init?.body as URLSearchParams).get("redirect_uri")).toBe(
+          "https://auth.openai.com/deviceauth/callback",
+        );
+        return Response.json({
+          access_token: access,
+          refresh_token: "fixture-refresh",
+          expires_in: 3600,
+        });
+      }
+      throw new Error("Unexpected sign-in request");
+    });
+    vi.stubGlobal("fetch", fetch);
+    const { service, catalog } = fixture(new PiOAuthLogins(undefined, undefined, "server-ai"));
+    const started = await service.begin(actor, { ...input, provider: CHATGPT_OAUTH_PROVIDER });
+    expect(started).toMatchObject({
+      mode: "device-code",
+      userCode: "ABCD-1234",
+      verificationUri: "https://auth.openai.com/codex/device",
+    });
+    expect(await service.complete(actor, started.loginId)).toEqual({ status: "pending" });
+    expect(catalog.create).not.toHaveBeenCalled();
+    approve();
+    await vi.waitFor(async () =>
+      expect(await service.complete(actor, started.loginId)).toEqual({ status: "ready" }),
+    );
+    await service.finish(actor, started.loginId);
+    expect(catalog.create).toHaveBeenCalledWith(
+      actor,
+      expect.objectContaining({
+        provider: CHATGPT_OAUTH_PROVIDER,
+        plaintext: expect.stringContaining(access),
+      }),
+    );
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("finishes SuperGrok device sign-in after the prefilled browser request is approved", async () => {
+    let approve!: () => void;
+    const approval = new Promise<void>((resolve) => {
+      approve = resolve;
+    });
+    const verificationUri = "https://auth.x.ai/activate?user_code=FIXTURE";
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "https://auth.x.ai/oauth2/device/code") {
+        return Response.json({
+          device_code: "fixture-device",
+          user_code: "FIXTURE",
+          verification_uri: "https://auth.x.ai/activate",
+          verification_uri_complete: verificationUri,
+          expires_in: 900,
+          interval: 1,
+        });
+      }
+      if (url === "https://auth.x.ai/oauth2/token") {
+        expect(new URLSearchParams(init?.body as URLSearchParams).get("device_code")).toBe(
+          "fixture-device",
+        );
+        await approval;
+        return Response.json({
+          access_token: "fixture-xai-access",
+          refresh_token: "fixture-xai-refresh",
+          expires_in: 3600,
+        });
+      }
+      throw new Error("Unexpected sign-in request");
+    });
+    vi.stubGlobal("fetch", fetch);
+    const { service, catalog } = fixture(new PiOAuthLogins(undefined, undefined, "server-ai"));
+    const started = await service.begin(actor, { ...input, provider: XAI_OAUTH_PROVIDER });
+    expect(started).toMatchObject({ mode: "device-code", verificationUri, userCode: "FIXTURE" });
+    expect(await service.complete(actor, started.loginId)).toEqual({ status: "pending" });
+    expect(catalog.create).not.toHaveBeenCalled();
+    approve();
+    await vi.waitFor(
+      async () =>
+        expect(await service.complete(actor, started.loginId)).toEqual({ status: "ready" }),
+      { timeout: 3000 },
+    );
+    await service.finish(actor, started.loginId);
+    expect(catalog.create).toHaveBeenCalledWith(
+      actor,
+      expect.objectContaining({
+        provider: XAI_OAUTH_PROVIDER,
+        plaintext: expect.stringContaining("fixture-xai-access"),
+      }),
+    );
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps provider credentials on the installation and consumes an attempt once", async () => {
     const { service, catalog } = fixture();
     const started = await service.begin(actor, input);

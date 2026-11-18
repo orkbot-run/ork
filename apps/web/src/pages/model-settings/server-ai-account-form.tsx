@@ -10,9 +10,19 @@ import {
   parseAIBudget,
   ServerAIOAuthAttempt,
 } from "@orkbot/core";
-import { Button, Input, Label, NativeSelect, NativeSelectOption, Textarea } from "@orkbot/ui-web";
+import {
+  Button,
+  Input,
+  Label,
+  NativeSelect,
+  NativeSelectOption,
+  Spinner,
+  Textarea,
+} from "@orkbot/ui-web";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { FoundModelPicker } from "../../components/FoundModelPicker";
+import { useCopyText } from "../../lib/copy-text";
+import { desktopBridge } from "../../lib/desktop";
 import type { RpcClient } from "../../lib/rpc";
 
 function defaultModel(catalog: ModelCatalogEntry[], provider: string) {
@@ -38,7 +48,7 @@ export function ServerAIAccountForm({
   catalog: ModelCatalogEntry[];
   client: RpcClient;
   isCurrent(): boolean;
-  onSaved(): Promise<unknown>;
+  onSaved(connectionId: string): Promise<unknown>;
   onCancel(): void;
 }) {
   const { t } = useLingui();
@@ -78,6 +88,7 @@ export function ServerAIAccountForm({
   const [oauthLogin, setOAuthLogin] = useState<RpcOutput<"serverAI/beginOAuth"> | null>(null);
   const [oauthPending, setOAuthPending] = useState(false);
   const [code, setCode] = useState("");
+  const [codeCopied, copyCode, copyFailed] = useCopyText();
   const callbacks = useRef({ onSaved, isCurrent });
   callbacks.current = { onSaved, isCurrent };
   const oauth = useMemo(
@@ -86,7 +97,13 @@ export function ServerAIAccountForm({
         api: client.serverAI,
         isCurrent: () => callbacks.current.isCurrent(),
         open: async (url) => {
-          window.open(url, "_blank", "noopener,noreferrer");
+          try {
+            const browser = desktopBridge()?.oauth;
+            if (browser?.open) await browser.open(url);
+            else window.open(url, "_blank", "noopener,noreferrer");
+          } catch {
+            // Keep polling this attempt. The on-screen link can still open the same request.
+          }
         },
         onState: (login, pending) => {
           setOAuthLogin(login);
@@ -99,9 +116,9 @@ export function ServerAIAccountForm({
               ? t`Connected, but could not refresh.`
               : t`Could not complete provider sign-in.`,
           ),
-        onSaved: async () => {
+        onSaved: async (connectionId) => {
           setKey("");
-          await callbacks.current.onSaved();
+          await callbacks.current.onSaved(connectionId);
         },
       }),
     [client, isCurrent],
@@ -194,6 +211,7 @@ export function ServerAIAccountForm({
           : {}),
         ...(fields.length ? { routing } : {}),
       };
+      let connectionId: string;
       if (account) {
         if (key.trim() || (provider === OPENAI_COMPATIBLE_PROVIDER_ID && url.trim()))
           await client.serverAI.reconnect(
@@ -205,11 +223,17 @@ export function ServerAIAccountForm({
           { connectionId: account.id, ...settings },
           { signal: controller.signal },
         );
-      } else
-        await client.serverAI.create({ ...settings, connection }, { signal: controller.signal });
+        connectionId = account.id;
+      } else {
+        const saved = await client.serverAI.create(
+          { ...settings, connection },
+          { signal: controller.signal },
+        );
+        connectionId = saved.id;
+      }
       if (!isCurrent() || controller.signal.aborted) return;
       setKey("");
-      await onSaved();
+      await onSaved(connectionId);
     } catch {
       if (isCurrent() && !controller.signal.aborted) setError(t`Could not save`);
     } finally {
@@ -475,7 +499,29 @@ export function ServerAIAccountForm({
             <Trans>Open sign-in page</Trans>
           </a>
           {oauthLogin.mode !== "auth-url" ? (
-            <p className="select-all font-mono">{oauthLogin.userCode}</p>
+            <>
+              <p className="text-sm text-muted-foreground">
+                <Trans>After signing in, enter this code on the provider’s page.</Trans>
+              </p>
+              <div className="flex flex-wrap items-center gap-3 rounded-md bg-muted p-3">
+                <p className="flex-1 select-all font-mono text-lg font-medium">
+                  {oauthLogin.userCode}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyCode(oauthLogin.userCode)}
+                >
+                  {codeCopied ? <Trans>Copied</Trans> : <Trans>Copy</Trans>}
+                </Button>
+              </div>
+              {copyFailed ? (
+                <p role="alert" className="text-sm text-destructive">
+                  <Trans>Could not copy. Select the code and copy it manually.</Trans>
+                </p>
+              ) : null}
+            </>
           ) : null}
           {oauthLogin.mode === "auth-url" ? (
             <>
@@ -495,6 +541,16 @@ export function ServerAIAccountForm({
             </>
           ) : null}
         </div>
+      ) : null}
+      {oauthPending && oauthLogin?.mode !== "auth-url" ? (
+        <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner aria-hidden="true" className="motion-reduce:animate-none" />
+          {oauthLogin ? (
+            <Trans>Waiting for you to confirm the code.</Trans>
+          ) : (
+            <Trans>Opening sign-in…</Trans>
+          )}
+        </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
         {subscriptionSignIn && !oauthPending ? (
@@ -516,17 +572,19 @@ export function ServerAIAccountForm({
             {setup ? <Trans>Connect</Trans> : <Trans>Save</Trans>}
           </Button>
         ) : null}
-        <Button
-          type="button"
-          variant="ghost"
-          disabled={busy}
-          onClick={() => {
-            oauth.cancel();
-            onCancel();
-          }}
-        >
-          <Trans>Cancel</Trans>
-        </Button>
+        {!setup || oauthPending ? (
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => {
+              oauth.cancel();
+              if (!setup) onCancel();
+            }}
+          >
+            <Trans>Cancel</Trans>
+          </Button>
+        ) : null}
       </div>
     </form>
   );

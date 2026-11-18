@@ -3,6 +3,17 @@
 
 import type { RpcInput, RpcOutput } from "@orkbot/contracts";
 
+export function workspaceAIReady(row: RpcOutput<"serverAI/status">["connections"][number]) {
+  return (
+    row.enabled &&
+    row.state === "active" &&
+    (row.isDefault || row.fallback) &&
+    row.defaultModelId !== null &&
+    row.allowedModels.includes(row.defaultModelId) &&
+    row.models.includes(row.defaultModelId)
+  );
+}
+
 export function workspaceAIUpdate(
   row: RpcOutput<"serverAI/status">["connections"][number],
   patch: Partial<Omit<RpcInput<"serverAI/configure">, "connectionId">>,
