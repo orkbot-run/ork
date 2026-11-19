@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Workspace cleanup is an Ork addition.
+
 import type { Hash } from "node:crypto";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readdir, stat } from "node:fs/promises";

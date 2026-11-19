@@ -1,5 +1,6 @@
 <!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
-<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Inherited Apache-2.0 documentation is preserved. Lifecycle documentation is an Ork addition. -->
 
 # Spaces
 
