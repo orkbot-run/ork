@@ -50,7 +50,7 @@ use std::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{
     webview::NewWindowResponse, Emitter, Manager, State, WebviewUrl, WebviewWindow,
@@ -2758,6 +2758,7 @@ async fn open_server(
     authorization: &accounts::Authorization,
     verified_catalog: Option<&server_directory::WorkspaceCatalog>,
 ) -> Result<(), String> {
+    let started = Instant::now();
     let intent = state.restore_intent.load(Ordering::SeqCst);
     let accounts_generation = state
         .accounts_started
@@ -2803,6 +2804,7 @@ async fn open_server(
         server::require_accounts_only(&choice.server_url).await?;
         None
     };
+    report_startup_stage("server_probed", started);
     require_setup(window)?;
     require_native_account(state, authorization)?;
     let local = if choice.mode == settings::InstanceMode::New {
@@ -2986,6 +2988,7 @@ async fn open_server(
         }
     };
 
+    let document_started = Instant::now();
     if let Err(error) = document::wait_for_document(&next, Duration::from_secs(20))
         .await
         .and_then(|()| require_setup(window))
@@ -3009,6 +3012,7 @@ async fn open_server(
         let _ = next.destroy();
         return Err(error);
     }
+    report_startup_stage("renderer_ready", document_started);
     choice.account = Some(settings::account_key(authorization.account.identity()));
     if let Err(error) = settings::save(&state.directory, &choice) {
         cancel_native_document(app, &label);
@@ -3047,6 +3051,7 @@ async fn open_server(
             "Could not show that server or restore the previous choice.".into()
         });
     }
+    report_startup_stage("server_window_visible", started);
     if let Some(workspace) = &choice.workspace {
         if server_directory::remember_workspace(
             &state.directory,
@@ -3713,6 +3718,7 @@ async fn restore_saved_server(
     if !state.accounts_have_started() || state.restore_intent.load(Ordering::SeqCst) != intent {
         return Ok(false);
     }
+    let authorization_started = Instant::now();
     let authorization = match state
         .accounts
         .authorization(&server_directory::origin())
@@ -3721,11 +3727,13 @@ async fn restore_saved_server(
         Ok(authorization) => authorization,
         Err(_) => return restore_personal_server(app, window, intent).await,
     };
+    report_startup_stage("account_authorized", authorization_started);
     if state.restore_intent.load(Ordering::SeqCst) != intent {
         return Ok(false);
     }
     let device = server_directory::device_id(&state.directory)?;
     let directory = server_directory::Directory::new()?;
+    let catalog_started = Instant::now();
     let catalog = match directory
         .catalog_for_device(authorization.directory_bearer()?, &device)
         .await
@@ -3739,6 +3747,7 @@ async fn restore_saved_server(
             }
         }
     };
+    report_startup_stage("workspace_catalog", catalog_started);
     require_account(&state, &authorization)?;
     if catalog.has_organizations() {
         let identity = authorization.account.identity();
@@ -3758,6 +3767,7 @@ async fn restore_saved_server(
             return Ok(false);
         }
         let original = server::normalize_server_url(&workspace.url)?;
+        let route_started = Instant::now();
         let (target, mode) = prepare_authorized_workspace_route(
             window,
             app,
@@ -3768,6 +3778,7 @@ async fn restore_saved_server(
             intent,
         )
         .await?;
+        report_startup_stage("workspace_route_ready", route_started);
         require_account(&state, &authorization)?;
         update_startup(
             app,
@@ -3918,7 +3929,18 @@ async fn finish_restore(
 ) -> Result<bool, String> {
     let state = app.state::<DesktopState>();
     update_startup(app, Startup::checking());
+    if state.restore_intent.load(Ordering::SeqCst) == intent
+        && state
+            .active_window
+            .lock()
+            .is_ok_and(|active| active.is_none())
+        && !window.is_visible().unwrap_or(false)
+    {
+        let _ = show_setup(app);
+    }
+    let started = Instant::now();
     let restored = restore_saved_server(app, window, intent).await;
+    report_startup_stage("restore_finished", started);
     state.restoring.store(false, Ordering::SeqCst);
     if state.restore_intent.load(Ordering::SeqCst) != intent {
         // A late activation may have hidden the picker requested by Change Server or logout.
@@ -3942,6 +3964,15 @@ async fn finish_restore(
         let _ = show_setup(app);
     }
     restored
+}
+
+fn report_startup_stage(stage: &str, started: Instant) {
+    if std::env::var_os("ORKBOT_STARTUP_TIMING").as_deref() == Some(std::ffi::OsStr::new("1")) {
+        eprintln!(
+            "ork.startup {stage} elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
+    }
 }
 
 fn menu_event(app: &tauri::AppHandle, action: menu::MenuAction) {

@@ -7,7 +7,11 @@
 // Ork overlaps independent chat-send preflight reads.
 
 import { runContinueJob, runJobKey } from "@orkbot/adapter-kit";
-import { settleCallRequest } from "@orkbot/adapters";
+import {
+  listAgentSkillCatalog,
+  loadReferencedAgentSkills,
+  settleCallRequest,
+} from "@orkbot/adapters";
 import type { Actor, ProductEvent } from "@orkbot/contracts";
 import {
   AttachmentValidationError,
@@ -107,7 +111,7 @@ export function takeoverReleaser(deps: RouterDeps, actor: Actor, target: ThreadT
 }
 
 export function threadsRoutes(ctx: RouterContext) {
-  const { deps, authed, callsEnabled, codexCatalog, repos, agentSkills } = ctx;
+  const { deps, authed, callsEnabled, codexCatalog, repos } = ctx;
   /** The bot a reaction can wake: the thread's bot, or in a group the bot that wrote the message. */
   const reactedBotId = async (target: ThreadTarget, messageId: string) =>
     target.kind === "bot"
@@ -239,15 +243,20 @@ export function threadsRoutes(ctx: RouterContext) {
             routineTestTarget(deps.prisma, repos, actor, routineId),
           ),
         );
-        const skillRecords = await agentSkills.listWithContent(actor);
-        const routines = targets.map((target) => ({
-          target,
-          prompt: expandSkillReferencesInPrompt(target.routine.prompt, skillRecords),
-          nonce: routineTestRunNonce(
-            actor,
-            `routine-mention:${input.clientNonce}:${target.routine.id}`,
-          ),
-        }));
+        const catalog = await listAgentSkillCatalog(deps.prisma, actor);
+        const routines = await Promise.all(
+          targets.map(async (target) => ({
+            target,
+            prompt: expandSkillReferencesInPrompt(
+              target.routine.prompt,
+              await loadReferencedAgentSkills(deps.prisma, actor, target.routine.prompt, catalog),
+            ),
+            nonce: routineTestRunNonce(
+              actor,
+              `routine-mention:${input.clientNonce}:${target.routine.id}`,
+            ),
+          })),
+        );
         const nonces = routines.map((routine) => routine.nonce);
         const savedRuns = (db: Pick<Prisma.TransactionClient, "run">) =>
           db.run.findMany({

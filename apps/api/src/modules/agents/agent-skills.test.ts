@@ -72,16 +72,17 @@ describe("built-in skill precedence in the API", () => {
   it.each(["interrogate", " Interrogate "])(
     "keeps %j listed, readable and mutable",
     async (name) => {
-      const { service } = setup([savedSkill(name)]);
+      const { service, agentSkill } = setup([savedSkill(name)]);
       expect(interrogates(await service.list(actor))).toEqual([
         expect.objectContaining({ id: "saved-1", name, readOnly: false }),
       ]);
-      expect(interrogates(await service.listWithContent(actor))).toEqual([
-        expect.objectContaining({ id: "saved-1", content: expect.stringContaining("Saved steps") }),
-      ]);
+      expect(agentSkill.findMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({ omit: { files: true, content: true } }),
+      );
       await expect(service.get(actor, { name: " INTERROGATE " })).resolves.toMatchObject({
         id: "saved-1",
         source: "user",
+        content: expect.stringContaining("Saved steps"),
       });
       await expect(service.get(actor, { skillId: "saved-1" })).resolves.toMatchObject({ name });
       await expect(

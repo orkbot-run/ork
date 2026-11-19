@@ -140,3 +140,35 @@ it("shares the bot-wide group routine projection with schedule_list", async () =
     orderBy: { createdAt: "desc" },
   });
 });
+
+it("pages metadata discovery beyond the prompt budget without reading bodies", async () => {
+  const findMany = vi.fn(async () =>
+    Array.from({ length: 100 }, (_, i) => ({
+      id: `s${i}`,
+      name: `Recipe ${String(i).padStart(3, "0")}`,
+      description: "Recipe details",
+      source: "user",
+    })),
+  );
+  const deps = {
+    prisma: {
+      scratchpadItem: { findMany: vi.fn(async () => []) },
+      routine: { findMany: vi.fn(async () => []) },
+      taughtSkill: { findMany: vi.fn(async () => []) },
+      agentSkill: { findMany },
+    },
+  } as unknown as Parameters<typeof taskCatalogFromTool>[0];
+  const input = { spaceId: "space", botId: "bot", userId: "user", tools: [], skillQuery: "recipe" };
+  const first = await taskCatalogFromTool(deps, input);
+  const second = await taskCatalogFromTool(deps, { ...input, skillOffset: first.skillNextOffset! });
+  expect(first.skills).toHaveLength(40);
+  expect(second.skills[0]?.name).toBe("Recipe 040");
+  expect(findMany).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      where: expect.objectContaining({ userId: "user", OR: expect.any(Array) }),
+      select: { id: true, name: true, description: true, source: true },
+    }),
+  );
+  const exact = await taskCatalogFromTool(deps, { ...input, skillQuery: "Recipe 099" });
+  expect(exact.skills.map((skill) => skill.name)).toEqual(["Recipe 099"]);
+});

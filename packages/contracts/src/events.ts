@@ -234,6 +234,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("meta"), text: z.string() }),
   z.object({
     kind: z.literal("progress"),
+    streaming: z.literal(true).optional(),
     text: z.string(),
     /** Provider-generated tool status rather than assistant-authored narration. */
     activity: z.literal(true).optional(),

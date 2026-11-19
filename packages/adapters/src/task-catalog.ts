@@ -2,7 +2,7 @@ import type { ConnectorTool } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { listSchedulesFromTool } from "./schedule-tools.js";
 import { listScratchpadItems } from "./scratchpad-tools.js";
-import { listAgentSkillRecords } from "./skill-tools.js";
+import { listAgentSkillCatalog } from "./skill-tools.js";
 
 export type TaskCatalogToolDeps = {
   prisma: PrismaClient;
@@ -13,6 +13,8 @@ type TaskCatalogInput = {
   botId: string;
   userId: string;
   threadId?: string;
+  skillQuery?: string;
+  skillOffset?: number;
   tools: readonly Pick<ConnectorTool, "name" | "description" | "readOnly">[];
 };
 
@@ -50,7 +52,7 @@ export async function taskCatalogFromTool(deps: TaskCatalogToolDeps, input: Task
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       select: { id: true, name: true, goal: true, status: true },
     }),
-    listAgentSkillRecords(deps.prisma, {
+    listAgentSkillCatalog(deps.prisma, {
       spaceId: input.spaceId,
       userId: input.userId,
     }),
@@ -69,7 +71,19 @@ export async function taskCatalogFromTool(deps: TaskCatalogToolDeps, input: Task
     ];
   });
 
+  const query = input.skillQuery?.trim().toLowerCase();
+  const matches = skills.filter(
+    (skill) =>
+      !query ||
+      skill.name.toLowerCase().includes(query) ||
+      skill.description.toLowerCase().includes(query),
+  );
+  const offset = Number.isSafeInteger(input.skillOffset) ? Math.max(0, input.skillOffset!) : 0;
+  const page = matches.slice(offset, offset + 40);
+
   return {
+    skillTotal: matches.length,
+    skillNextOffset: offset + page.length < matches.length ? offset + page.length : null,
     guidance: TASK_CATALOG_GUIDANCE,
     tasks: tasks.map((task) => ({
       id: task.id,
@@ -86,9 +100,9 @@ export async function taskCatalogFromTool(deps: TaskCatalogToolDeps, input: Task
       status: skill.status,
       source: "taught_skill",
     })),
-    skills: skills.map((skill) => ({
+    skills: page.map((skill) => ({
       name: skill.name,
-      description: skill.description,
+      description: skill.description.slice(0, 200),
       source: skill.source,
       readOnly: skill.readOnly,
     })),

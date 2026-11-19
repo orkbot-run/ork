@@ -1,3 +1,5 @@
+<!-- Modified by Ork contributors to add a response latency verification plan. See LICENSE.md. -->
+
 # Run dispatch and response timing
 
 A run starts in the process that makes it due. When the API commits a message, a new
@@ -70,6 +72,26 @@ already committed operation.
 These are server-side availability measurements. They do not measure network
 delivery or rendering on a user's device. Client delivery/render timing would need
 a separate acknowledgement.
+
+### Response latency verification
+
+1. Compare the same prompt, thread history, model connection and reasoning effort.
+   Record cold and repeated requests separately. Use `run.model_dispatched` for setup
+   and contextual waits, `model.first_text` for provider time, and `run.first_response`
+   for the first committed visible response.
+2. On desktop, compare the performance marks `ork.chat.outgoing-painted`,
+   `ork.chat.agent-output-painted` and `ork.chat.agent-text-painted`. The last mark
+   excludes tool activity. The renderer records the first sample per loaded document.
+   Use a fresh document for each measurement. Explicit reply mode still keeps text
+   before tool calls private.
+3. Start the macOS binary with `ORKBOT_STARTUP_TIMING=1` to print the duration of native
+   startup stages. Compare account authorization, workspace catalog, route setup,
+   server probe and renderer readiness on the same saved installation.
+4. Exercise plain chat, a library with 100 skills, explicit and discovered skills,
+   an image, an approval, a long conversation, and a rate-limited connection
+   with a fallback. Compare p50 and p95 time to first text, total time, model calls,
+   cache token usage, total cost and task success. Use the existing offline tests
+   for deterministic regressions and live repetitions for provider latency targets.
 
 Recurring timer routines mark their origin durably and keep one pristine pending
 catch-up run for the same routine, prompt, thread, and model selection. A later

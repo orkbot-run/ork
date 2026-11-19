@@ -2,16 +2,27 @@ import { buildSkillMd, formatSkillsCatalogInstruction, parseSkillMd } from "@ork
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILTIN_AGENT_SKILLS } from "./builtin-skills.js";
 import {
-  listAgentSkillRecords,
+  listAgentSkillCatalog,
+  loadReferencedAgentSkills,
   skillCreateFromTool,
   skillDeleteFromTool,
   skillReadFromTool,
   skillUpdateFromTool,
 } from "./skill-tools.js";
 
-type Scope = { spaceId?: string; userId?: string; OR?: Array<{ spaceId?: string }> };
+type Scope = {
+  id?: string | { in: string[] };
+  spaceId?: string;
+  userId?: string;
+  OR?: Array<{ spaceId?: string }>;
+};
 /** The owner's rows here: added in this space (no fixture is available beyond one). */
 function inScope(row: Record<string, unknown>, where: Scope): boolean {
+  if (
+    where.id &&
+    (typeof where.id === "string" ? row.id !== where.id : !where.id.in.includes(String(row.id)))
+  )
+    return false;
   if (where.userId && row.userId !== where.userId) return false;
   if (where.spaceId && row.spaceId !== where.spaceId) return false;
   if (where.OR && !where.OR.some((branch) => branch.spaceId === row.spaceId)) return false;
@@ -22,12 +33,19 @@ function makePrisma(rows: Array<Record<string, unknown>> = []) {
   const store = [...rows];
   return {
     agentSkill: {
-      findMany: vi.fn(async ({ where }: { where?: Scope } = {}) =>
-        store.filter((row) => !where || inScope(row, where)).map((row) => ({ ...row })),
+      findMany: vi.fn(
+        async ({ where, select }: { where?: Scope; select?: Record<string, boolean> } = {}) =>
+          store
+            .filter((row) => !where || inScope(row, where))
+            .map((row) =>
+              select
+                ? Object.fromEntries(Object.keys(select).map((key) => [key, row[key]]))
+                : { ...row },
+            ),
       ),
       findFirst: vi.fn(async ({ where }: { where: Scope & { id: string } }) => {
         const row = store.find((item) => item.id === where.id && inScope(item, where));
-        return row ? { files: row.files ?? null } : null;
+        return row ? { ...row, files: row.files ?? null } : null;
       }),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         const row = {
@@ -221,7 +239,7 @@ describe("skill tools", () => {
       description: "Prepare standup notes",
       body: "steps",
     });
-    const records = await listAgentSkillRecords(prisma as never, owner);
+    const records = await listAgentSkillCatalog(prisma as never, owner);
     expect(records.map((row) => row.name)).toContain("Daily standup");
     expect(records.map((row) => row.name)).not.toContain("Other workspace skill");
     const catalog = formatSkillsCatalogInstruction(records);
@@ -265,7 +283,7 @@ describe("skill tools", () => {
       expect(skill.description.length).toBeLessThanOrEqual(72);
     }
 
-    const records = await listAgentSkillRecords(prisma as never, owner);
+    const records = await listAgentSkillCatalog(prisma as never, owner);
     const interrogate = records.find((row) => row.name === "Interrogate");
     expect(interrogate).toMatchObject({
       id: "builtin:Interrogate",
@@ -314,7 +332,7 @@ describe("skill tools", () => {
       },
     ]);
 
-    const records = await listAgentSkillRecords(prisma as never, owner);
+    const records = await listAgentSkillCatalog(prisma as never, owner);
     expect(records.filter((skill) => skill.name.trim().toLowerCase() === "interrogate")).toEqual([
       expect.objectContaining({ id: "legacy-1", source: "user", readOnly: false }),
     ]);
@@ -370,5 +388,73 @@ describe("skill tools", () => {
         newName: longName,
       }),
     ).toEqual({ error: "Skill name must be at most 80 characters." });
+  });
+});
+
+describe("lazy skill loading", () => {
+  const row = (id: string, name: string, scope = owner) => ({
+    id,
+    name,
+    description: "A recipe",
+    source: "user",
+    content: `body:${id}`,
+    ...scope,
+  });
+
+  it("reads only metadata for a large catalog and fetches selected bodies in one scoped query", async () => {
+    const prisma = makePrisma(Array.from({ length: 1000 }, (_, i) => row(`s${i}`, `Recipe ${i}`)));
+    const catalog = await listAgentSkillCatalog(prisma as never, owner);
+    expect(catalog.every((skill) => !("content" in skill))).toBe(true);
+    expect(prisma.agentSkill.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        select: { id: true, name: true, description: true, source: true },
+      }),
+    );
+    const records = await loadReferencedAgentSkills(
+      prisma as never,
+      owner,
+      "@Recipe 7 and @Recipe 999",
+      catalog,
+    );
+    expect(records.map((skill) => skill.content)).toEqual(["body:s999", "body:s7"]);
+    expect(prisma.agentSkill.findMany).toHaveBeenCalledTimes(2);
+    expect(prisma.agentSkill.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ userId: owner.userId, id: { in: ["s999", "s7"] } }),
+        select: { id: true, name: true, description: true, source: true, content: true },
+      }),
+    );
+    await loadReferencedAgentSkills(prisma as never, owner, "No skill reference", catalog);
+    expect(prisma.agentSkill.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves forced-name precedence and checks visibility again when reading a body", async () => {
+    const prisma = makePrisma([row("first", "First"), row("second", "Second")]);
+    const catalog = await listAgentSkillCatalog(prisma as never, owner);
+    const selected = await loadReferencedAgentSkills(
+      prisma as never,
+      owner,
+      "/First\n@Second",
+      catalog,
+    );
+    expect(selected.map((skill) => skill.id)).toEqual(["first"]);
+    prisma._store[0]!.userId = "other-user";
+    expect(
+      await loadReferencedAgentSkills(prisma as never, owner, "Use skill: First", catalog),
+    ).toEqual([]);
+  });
+
+  it("reads a target id directly without scanning bodies or leaking another owner's skill", async () => {
+    const prisma = makePrisma([
+      row("mine", "Mine"),
+      row("foreign", "Foreign", { ...owner, userId: "other" }),
+    ]);
+    expect(await skillReadFromTool(prisma as never, owner, { skillId: "mine" })).toMatchObject({
+      content: "body:mine",
+    });
+    expect(await skillReadFromTool(prisma as never, owner, { skillId: "foreign" })).toEqual({
+      error: "Skill not found.",
+    });
+    expect(prisma.agentSkill.findMany).not.toHaveBeenCalled();
   });
 });

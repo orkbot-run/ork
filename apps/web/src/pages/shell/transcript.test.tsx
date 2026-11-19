@@ -1,5 +1,7 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// The response paint regression check is an Ork addition. See LICENSE.md.
 
 // @vitest-environment jsdom
 import type { ThreadMessage } from "@orkbot/contracts";
@@ -270,10 +272,32 @@ it("marks local outgoing paint and new agent output without counting loaded hist
   render({ ...props, followRequest: 1, outgoingMessages });
   expect(markAfterPaint).toHaveBeenCalledWith("ork.chat.outgoing-painted");
   expect(markAfterPaint).not.toHaveBeenCalledWith("ork.chat.agent-output-painted");
+  expect(markAfterPaint).not.toHaveBeenCalledWith("ork.chat.agent-text-painted");
   render({
-    ...baseProps([old, textMessage("new", "bot", "New reply")]),
+    ...baseProps([
+      old,
+      {
+        ...textMessage("progress:run", "bot", ""),
+        blocks: [{ kind: "progress", text: "Running", activity: true }],
+      },
+    ]),
+    followRequest: 1,
+    outgoingMessages: [],
+    showToolActivity: true,
+  });
+  expect(markAfterPaint).not.toHaveBeenCalledWith("ork.chat.agent-output-painted");
+  expect(markAfterPaint).not.toHaveBeenCalledWith("ork.chat.agent-text-painted");
+  render({
+    ...baseProps([
+      old,
+      {
+        ...textMessage("progress:run", "bot", ""),
+        blocks: [{ kind: "progress", text: "New reply", streaming: true }],
+      },
+    ]),
     followRequest: 1,
     outgoingMessages: [],
   });
   expect(markAfterPaint).toHaveBeenCalledWith("ork.chat.agent-output-painted");
+  expect(markAfterPaint).toHaveBeenCalledWith("ork.chat.agent-text-painted");
 });

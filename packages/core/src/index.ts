@@ -66,6 +66,7 @@ export * from "./markdown-plain.js";
 export * from "./mcp.js";
 export * from "./message-pages.js";
 export * from "./message-reactions.js";
+export * from "./message-reasoning.js";
 export * from "./message-replies.js";
 export * from "./message-visibility.js";
 export * from "./messaging-commands.js";

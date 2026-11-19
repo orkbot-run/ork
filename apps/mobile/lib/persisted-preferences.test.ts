@@ -30,6 +30,7 @@ function deferred<T>() {
 const cases = [
   {
     name: "remote images",
+    fallback: "off",
     load: async () => {
       const m = await import("./remote-images-preference");
       return {
@@ -41,6 +42,7 @@ const cases = [
   },
   {
     name: "streaming",
+    fallback: "on",
     load: async () => {
       const m = await import("./response-streaming");
       return {
@@ -115,7 +117,7 @@ it.each(cases)(
   async (spec) => {
     const store = await spec.load();
     state.get.mockRejectedValue(new Error("blocked"));
-    expect(await store.load()).toBe("off");
+    expect(await store.load()).toBe(spec.fallback);
     state.set.mockRejectedValue(new Error("blocked"));
     expect(await store.save("on")).toBe("on");
     expect(store.get()).toBe(true);

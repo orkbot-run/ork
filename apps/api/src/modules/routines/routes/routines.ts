@@ -4,7 +4,13 @@
 // Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { routineJobKey, routineWakeupJob, runContinueJob } from "@orkbot/adapter-kit";
-import { parseRoutineWatch, stableStringify, validateRoutineWatch } from "@orkbot/adapters";
+import {
+  listAgentSkillCatalog,
+  loadReferencedAgentSkills,
+  parseRoutineWatch,
+  stableStringify,
+  validateRoutineWatch,
+} from "@orkbot/adapters";
 import { canonicalPiProviderId } from "@orkbot/contracts";
 import {
   expandSkillReferencesInPrompt,
@@ -32,7 +38,7 @@ import {
 } from "../routines.js";
 
 export function routinesRoutes(ctx: RouterContext) {
-  const { deps, repos, announceRoutine, codexCatalog, agentSkills, authed } = ctx;
+  const { deps, repos, announceRoutine, codexCatalog, authed } = ctx;
   return {
     routines: {
       listForMentions: authed.routines.listForMentions.handler(async ({ context, input }) => {
@@ -345,7 +351,13 @@ export function routinesRoutes(ctx: RouterContext) {
             : null;
         const existing = await findExisting();
         if (existing) return { runId: existing.id };
-        const skillRecords = await agentSkills.listWithContent(context.actor);
+        const catalog = await listAgentSkillCatalog(deps.prisma, context.actor);
+        const skillRecords = await loadReferencedAgentSkills(
+          deps.prisma,
+          context.actor,
+          target.routine.prompt,
+          catalog,
+        );
         const prompt = expandSkillReferencesInPrompt(target.routine.prompt, skillRecords);
         let run: { id: string };
         try {

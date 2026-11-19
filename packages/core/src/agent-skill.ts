@@ -124,10 +124,24 @@ export function skillCatalogLine(entry: Pick<SkillCatalogEntry, "name" | "descri
 
 export function formatSkillsCatalogInstruction(entries: SkillCatalogEntry[]): string | undefined {
   if (entries.length === 0) return undefined;
-  const lines = entries.slice(0, 50).map(skillCatalogLine).join("\n");
+  const lines = [...entries]
+    .sort(
+      (a, b) =>
+        Number(b.source === "builtin") - Number(a.source === "builtin") ||
+        a.name.localeCompare(b.name, "en"),
+    )
+    .slice(0, 40)
+    .map((entry) =>
+      skillCatalogLine({
+        name: entry.name.replace(/\s+/g, " ").slice(0, 80),
+        description: entry.description.replace(/\s+/g, " ").slice(0, 120),
+      }),
+    )
+    .join("\n");
   return [
-    "Available Claude Agent Skills (SKILL.md recipes shared across assistants; generic how-tos, not account-specific routines). The Pi runtime already understands this format; we persist and inject them:",
+    "Available Agent Skills (SKILL.md recipes shared across assistants):",
     lines,
+    "For other skills, call task_catalog with skillQuery to search names and descriptions; use skillOffset to continue a page. Then call skill_read with the exact name.",
     "When a skill matches the user's request, call skill_read for that name and follow it immediately. Prefer matching skills over improvising multi-step recipes.",
     "Users can force a skill with /Name in the composer. Routines may mention a skill as @Name — that loads the skill at fire time.",
     "Create a skill with skill_create when a multi-step task is worth repeating (or when asked). After creating one, mention /Name so the user can open it.",
@@ -234,6 +248,23 @@ export function findSkillByName<T extends { name: string }>(
   const needle = name.trim().toLowerCase();
   if (!needle) return undefined;
   return skills.find((skill) => skill.name.trim().toLowerCase() === needle);
+}
+
+/** Resolve references with the same forced-name precedence as prompt expansion. */
+export function referencedSkills<T extends { name: string }>(
+  prompt: string,
+  skills: readonly T[],
+): T[] {
+  const forced = extractForcedSkillName(prompt);
+  const forcedSkill = forced && findSkillByName(skills, forced.name);
+  if (forcedSkill) return [forcedSkill];
+  return extractRoutineSkillMentions(
+    prompt,
+    skills.map((skill) => skill.name),
+  ).flatMap((name) => {
+    const skill = findSkillByName(skills, name);
+    return skill ? [skill] : [];
+  });
 }
 
 /** True when `rest` already begins with the skill body (prior expand pass). */

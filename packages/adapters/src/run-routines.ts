@@ -27,7 +27,7 @@ import { routineRunModelPin } from "./model-selection.js";
 import { findPendingRoutineTick, routineTimerNonce } from "./routine-coalescing.js";
 import { tickRoutineWatch } from "./routine-watch.js";
 import { notifyRun } from "./run-notifications.js";
-import { listAgentSkillRecords } from "./skill-tools.js";
+import { listAgentSkillCatalog, loadReferencedAgentSkills } from "./skill-tools.js";
 
 /** A routine run stopped by a transient model error gets one more try this much later. */
 const ROUTINE_RETRY_DELAY_MS = 12 * 60_000;
@@ -193,7 +193,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
           new Date(Date.now()),
           routine.timezone,
         );
-  const skillRecords = await listAgentSkillRecords(deps.prisma, {
+  const skillCatalog = await listAgentSkillCatalog(deps.prisma, {
     spaceId: routine.spaceId,
     userId: routine.userId,
   });
@@ -217,12 +217,21 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
     // The claim locks the row, so the prompt and the model are the versions
     // committed when it fired; a prompt edit that lands while the tick gathers
     // its context must not pair with the newer model. Skill expansion runs on
-    // the already-loaded list.
+    // the metadata catalog; fetch only bodies selected by the claimed prompt.
     const current = await tx.routine.findUnique({
       where: { id: routine.id },
       select: { prompt: true, modelProvider: true, modelId: true, thinkingLevel: true },
     });
     if (!current) return null;
+    const skillRecords = await loadReferencedAgentSkills(
+      tx,
+      {
+        spaceId: routine.spaceId,
+        userId: routine.userId,
+      },
+      current.prompt,
+      skillCatalog,
+    );
     const routinePrompt =
       expandSkillReferencesInPrompt(current.prompt, skillRecords) +
       (watchTick?.run ? watchTick.note : "");

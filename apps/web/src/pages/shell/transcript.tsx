@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+// Ork records text paint separately from other agent output.
 
 import { i18n } from "@lingui/core";
 import { useLingui } from "@lingui/react/macro";
@@ -209,23 +210,36 @@ export const Transcript = memo(function Transcript({
     () => expandPeerReplies(transcript, expandedPeerMarkers),
     [transcript, expandedPeerMarkers],
   );
-  const outputBaseline = useRef<{ request: number; visibleIds: Set<string> } | null>(null);
+  const outputBaseline = useRef<{
+    request: number;
+    visibleIds: Set<string>;
+    textIds: Set<string>;
+  } | null>(null);
   useEffect(() => {
     if (outgoingMessages.length) markAfterPaint("ork.chat.outgoing-painted");
     const botMessages = messages.filter(
       (message) =>
         message.role === "bot" && messageHasVisibleBlocks(message.blocks, showToolActivity),
     );
+    const hasText = (message: ThreadMessage) =>
+      message.blocks.some(
+        (block) =>
+          (block.kind === "text" ||
+            (block.kind === "progress" && block.streaming && !block.activity)) &&
+          block.text.trim(),
+      );
     if (!outputBaseline.current || outputBaseline.current.request !== followRequest) {
       outputBaseline.current = {
         request: followRequest,
         visibleIds: new Set(botMessages.map((message) => message.id)),
+        textIds: new Set(botMessages.filter(hasText).map((message) => message.id)),
       };
-    } else if (
-      followRequest > 0 &&
-      botMessages.some((message) => !outputBaseline.current?.visibleIds.has(message.id))
-    ) {
-      markAfterPaint("ork.chat.agent-output-painted");
+    } else if (followRequest > 0) {
+      const baseline = outputBaseline.current;
+      if (botMessages.some((message) => !baseline.visibleIds.has(message.id)))
+        markAfterPaint("ork.chat.agent-output-painted");
+      if (botMessages.some((message) => !baseline.textIds.has(message.id) && hasText(message)))
+        markAfterPaint("ork.chat.agent-text-painted");
     }
   }, [messages, outgoingMessages.length, followRequest, showToolActivity]);
   const messageById = useMemo(

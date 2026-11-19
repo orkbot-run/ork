@@ -21,7 +21,7 @@ const preference = browserPreference(
   normalizeResponseStreamingPreference,
 );
 
-/** Saved choice wins. Nothing saved leaves streaming off. */
+/** Saved choice wins. Nothing saved leaves streaming on. */
 export function resolveResponseStreamingPreference(
   options: ResolveResponseStreamingOptions = {},
 ): ResponseStreamingPreference {

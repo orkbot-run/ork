@@ -65,6 +65,7 @@ async function runRoutine(
     onRunStarted?: () => void;
     backgroundHelperWithoutComputer?: boolean;
     managedWorkspace?: boolean;
+    userPrompt?: string;
     authorizeWork?: Parameters<typeof createRunExecutor>[0]["authorizeWork"];
     onRuntimeStart?: () => void;
   } = {},
@@ -90,7 +91,7 @@ async function runRoutine(
         ? "bot_message"
         : options.delegation === "group"
           ? "follow_up"
-          : options.attachments && !options.steering
+          : options.userPrompt || (options.attachments && !options.steering)
             ? "user"
             : "routine",
     sourceMessageId:
@@ -144,7 +145,7 @@ async function runRoutine(
       yield { type: "takeover" as const, reason: "Sign in to the inbox." };
       return;
     }
-    yield { type: "text-delta" as const, text: "Inbox is clear." };
+    yield { type: "text" as const, text: "Inbox is clear." };
     yield { type: "done" as const, text: "Inbox is clear." };
   });
   const prisma = {
@@ -284,7 +285,12 @@ async function runRoutine(
       ),
       count: vi.fn(async () => 0),
     },
-    task: { findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Sweep the inbox" })) },
+    task: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        id: run.taskId,
+        prompt: options.userPrompt ?? "Sweep the inbox",
+      })),
+    },
     computer: {
       updateMany: vi.fn(async () => ({ count: 1 })),
       findFirst: vi.fn(async () => ({
@@ -423,6 +429,7 @@ async function runRoutine(
   };
   return {
     finalizeRun,
+    events,
     sandbox,
     sleepJobs,
     toolResults,
@@ -483,6 +490,31 @@ afterEach(() => {
 });
 
 describe("run computer provisioning", () => {
+  it("applies the requested effort and publishes text before finalizing the same user run", async () => {
+    const result = await runRoutine([], {
+      userPrompt: "/think quick Summarize the inbox",
+      secrets: ["x".repeat(256)],
+    });
+    expect(result.runtimeRun).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        model: expect.objectContaining({ thinkingLevel: "low" }),
+        prompt: expect.stringContaining("Summarize the inbox"),
+      }),
+      expect.anything(),
+    );
+    expect(result.runtimeRun.mock.calls[0]?.[0].prompt).not.toContain("/think");
+    const progress = result.events.append.mock.calls
+      .map((call, index) => ({
+        event: (call as unknown[])[0],
+        order: result.events.append.mock.invocationCallOrder[index]!,
+      }))
+      .find(({ event }) => (event as { type: string })?.type === "thread.progress");
+    expect(progress?.event).toMatchObject({
+      payload: { text: "Inbox is clear.", streaming: true },
+    });
+    expect(progress?.order).toBeLessThan(result.finalizeRun.mock.invocationCallOrder[0]!);
+  });
+
   it("runs a background helper without a computer or connector discovery", async () => {
     const result = await runRoutine([], { backgroundHelperWithoutComputer: true });
     expect(result.runtimeRun).toHaveBeenCalledOnce();

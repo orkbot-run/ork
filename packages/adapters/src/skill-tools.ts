@@ -1,10 +1,11 @@
-import type { SkillRecord, SkillSource } from "@orkbot/core";
+import type { SkillCatalogEntry, SkillRecord, SkillSource } from "@orkbot/core";
 import {
   buildSkillMd,
   findSkillByName,
   isSkillReadOnly,
   mergeBuiltinSkills,
   parseSkillMd,
+  referencedSkills,
 } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import { availableInSpace } from "@orkbot/db";
@@ -63,6 +64,56 @@ export function builtinAgentSkillRecords(): Array<SkillRecord & { id: string }> 
   }));
 }
 
+export type AgentSkillCatalogEntry = SkillCatalogEntry & { id: string };
+
+export function builtinAgentSkillCatalog(): AgentSkillCatalogEntry[] {
+  return builtinAgentSkillRecords().map(({ content: _content, ...entry }) => entry);
+}
+
+export async function listAgentSkillCatalog(
+  prisma: PrismaClient,
+  owner: SkillOwner,
+): Promise<AgentSkillCatalogEntry[]> {
+  const rows = await prisma.agentSkill.findMany({
+    where: availableInSpace(owner),
+    select: { id: true, name: true, description: true, source: true },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+  });
+  return mergeBuiltinSkills(
+    builtinAgentSkillCatalog(),
+    rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      source: asSource(row.source),
+      readOnly: isSkillReadOnly(asSource(row.source)),
+    })),
+  );
+}
+
+/** Fetch only bodies explicitly selected by this prompt; recheck visibility at read time. */
+export async function loadReferencedAgentSkills(
+  prisma: Pick<PrismaClient, "agentSkill">,
+  owner: SkillOwner,
+  prompt: string,
+  catalog: readonly AgentSkillCatalogEntry[],
+): Promise<Array<SkillRecord & { id: string }>> {
+  const selected = referencedSkills(prompt, catalog);
+  if (selected.length === 0) return [];
+  const ids = selected.filter((skill) => !skill.id.startsWith("builtin:")).map((skill) => skill.id);
+  const rows = ids.length
+    ? await prisma.agentSkill.findMany({
+        where: { ...availableInSpace(owner), id: { in: ids } },
+        select: { id: true, name: true, description: true, source: true, content: true },
+      })
+    : [];
+  const records = [...builtinAgentSkillRecords(), ...rows.map(toRecord)];
+  return selected.flatMap((entry) => {
+    const record = records.find((skill) => skill.id === entry.id);
+    return record ? [record] : [];
+  });
+}
+
 function rejectOversizedContent(content: string): string | undefined {
   if (content.length > MAX_SKILL_CONTENT_CHARS) {
     return `Skill content must be at most ${MAX_SKILL_CONTENT_CHARS} characters.`;
@@ -98,30 +149,31 @@ function onlyInSpace(owner: SkillOwner) {
 const SHARED_SKILL_ERROR =
   "Could not change this skill. A skill available in other spaces can only be changed by the user.";
 
-export async function listAgentSkillRecords(
-  prisma: PrismaClient,
-  owner: SkillOwner,
-): Promise<Array<SkillRecord & { id: string }>> {
-  const rows = await prisma.agentSkill.findMany({
-    where: availableInSpace(owner),
-    // Reference files are read one at a time through skill_read, never with the catalog.
-    omit: { files: true },
-    orderBy: [{ name: "asc" }, { id: "asc" }],
-  });
-  return mergeBuiltinSkills(builtinAgentSkillRecords(), rows.map(toRecord));
-}
-
 async function findOwnedSkill(
   prisma: PrismaClient,
   owner: SkillOwner,
   input: { skillId?: string; name?: string },
-): Promise<(SkillRecord & { id: string }) | null> {
-  const skills = await listAgentSkillRecords(prisma, owner);
-  if (input.skillId) {
-    return skills.find((skill) => skill.id === input.skillId) ?? null;
+): Promise<(SkillRecord & { id: string; files?: unknown }) | null> {
+  const catalog =
+    !input.skillId || input.skillId.startsWith("builtin:")
+      ? await listAgentSkillCatalog(prisma, owner)
+      : [];
+  const entry = input.skillId
+    ? input.skillId.startsWith("builtin:")
+      ? catalog.find((skill) => skill.id === input.skillId)
+      : { id: input.skillId }
+    : input.name
+      ? findSkillByName(catalog, input.name)
+      : undefined;
+  if (!entry) return null;
+  if (entry.id.startsWith("builtin:")) {
+    return builtinAgentSkillRecords().find((skill) => skill.id === entry.id) ?? null;
   }
-  if (input.name) return findSkillByName(skills, input.name) ?? null;
-  return null;
+  const row = await prisma.agentSkill.findFirst({
+    where: { ...availableInSpace(owner), id: entry.id },
+    select: { id: true, name: true, description: true, content: true, source: true, files: true },
+  });
+  return row ? { ...toRecord(row), files: row.files } : null;
 }
 
 /** The text files stored beside a skill's SKILL.md, keyed by relative path. */
@@ -141,13 +193,7 @@ export async function skillReadFromTool(
 ): Promise<Record<string, unknown>> {
   const skill = await findOwnedSkill(prisma, owner, input);
   if (!skill) return { error: "Skill not found." };
-  const row = skill.id.startsWith("builtin:")
-    ? null
-    : await prisma.agentSkill.findFirst({
-        where: { id: skill.id, ...availableInSpace(owner) },
-        select: { files: true },
-      });
-  const files = skillFiles(row?.files);
+  const files = skillFiles(skill.files);
   const paths = Object.keys(files).sort();
   const wanted = input.file?.trim().replace(/^\.\//, "");
   if (wanted) {

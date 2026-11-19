@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache material is preserved; Ork changes consolidate database error matching.
+// Ork lists skill metadata without fetching the instructions.
 
 import { BUILTIN_AGENT_SKILLS } from "@orkbot/adapters";
 import type { Actor, AgentSkill, AgentSkillSource } from "@orkbot/contracts";
@@ -42,19 +43,22 @@ function asSource(value: string): AgentSkillSource {
   return "user";
 }
 
-export function mapAgentSkill(row: AgentSkillRow): AgentSkill {
+function mapAgentSkillMetadata(row: Omit<AgentSkillRow, "content">): Omit<AgentSkill, "content"> {
   const source = asSource(row.source);
   return {
     id: row.id,
     name: row.name,
     description: row.description,
-    content: row.content,
     source,
     readOnly: isSkillReadOnly(source as SkillSource),
     availability: spaceAvailability(row),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+export function mapAgentSkill(row: AgentSkillRow): AgentSkill {
+  return { ...mapAgentSkillMetadata(row), content: row.content };
 }
 
 function builtinCatalog(): AgentSkill[] {
@@ -149,23 +153,14 @@ export function createAgentSkillsService(prisma: PrismaClient) {
     async list(actor: Actor): Promise<Omit<AgentSkill, "content">[]> {
       const rows = await prisma.agentSkill.findMany({
         where: availableInSpace(actor),
-        omit: { files: true },
+        omit: { files: true, content: true },
         include: { availableIn: AVAILABILITY_SELECT },
         orderBy: [{ name: "asc" }, { id: "asc" }],
       });
-      return mergeBuiltinSkills(builtinCatalog(), rows.map(mapAgentSkill)).map(
-        ({ content: _content, ...entry }) => entry,
+      return mergeBuiltinSkills(
+        builtinCatalog().map(({ content: _content, ...entry }) => entry),
+        rows.map(mapAgentSkillMetadata),
       );
-    },
-
-    async listWithContent(actor: Actor): Promise<AgentSkill[]> {
-      const rows = await prisma.agentSkill.findMany({
-        where: availableInSpace(actor),
-        omit: { files: true },
-        include: { availableIn: AVAILABILITY_SELECT },
-        orderBy: [{ name: "asc" }, { id: "asc" }],
-      });
-      return mergeBuiltinSkills(builtinCatalog(), rows.map(mapAgentSkill));
     },
 
     async get(actor: Actor, input: { skillId?: string; name?: string }): Promise<AgentSkill> {

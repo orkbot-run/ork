@@ -538,3 +538,18 @@ describe("renameRoutineSkillMentions", () => {
     ).toBe("Use @garden tools, then @garden-2. Email@garden stays.");
   });
 });
+
+it("keeps prompt skill metadata stable and bounded for a large catalog", () => {
+  const catalog = Array.from({ length: 1000 }, (_, i) => ({
+    name: `Recipe ${String(i).padStart(4, "0")}`,
+    description: "x".repeat(2000),
+    source: "user" as const,
+    readOnly: false,
+  }));
+  const text = formatSkillsCatalogInstruction(catalog)!;
+  expect(text).toBe(formatSkillsCatalogInstruction([...catalog].reverse()));
+  expect(text.length).toBeLessThan(11_000);
+  expect(text).toContain("task_catalog");
+  expect(text).toContain("Recipe 0000");
+  expect(text).not.toContain("Recipe 0999");
+});

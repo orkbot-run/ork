@@ -53,15 +53,16 @@ describe("isRunTerminalEvent", () => {
 });
 
 describe("response streaming preference", () => {
-  it("enables streaming only for an explicit on value", () => {
+  it("defaults to on while preserving off and rejecting malformed saved values", () => {
     expect(normalizeResponseStreamingPreference("on")).toBe("on");
     expect(normalizeResponseStreamingPreference(" ON ")).toBe("on");
     expect(normalizeResponseStreamingPreference("off")).toBe("off");
     expect(normalizeResponseStreamingPreference(" OFF ")).toBe("off");
     expect(normalizeResponseStreamingPreference("")).toBe("off");
-    expect(normalizeResponseStreamingPreference(null)).toBe("off");
+    expect(normalizeResponseStreamingPreference(null)).toBe("on");
+    expect(normalizeResponseStreamingPreference(undefined)).toBe("on");
     expect(normalizeResponseStreamingPreference("maybe")).toBe("off");
-    expect(responseStreamingEnabled()).toBe(false);
+    expect(responseStreamingEnabled()).toBe(true);
     expect(responseStreamingEnabled("off")).toBe(false);
     expect(responseStreamingEnabled("on")).toBe(true);
   });
@@ -266,7 +267,7 @@ describe("projectMessages", () => {
     ]);
     expect(messages).toHaveLength(2);
     expect(messages[0]?.blocks[0]).toEqual({ kind: "text", text: "hi" });
-    expect(messages[1]?.blocks[0]).toEqual({ kind: "progress", text: "Lisbon" });
+    expect(messages[1]?.blocks[0]).toEqual({ kind: "progress", text: "Lisbon", streaming: true });
   });
 
   it("drops streaming tokens once the completed message is durable", () => {
@@ -494,7 +495,7 @@ describe("projectMessages", () => {
     ]);
     expect(messages[0]?.blocks).toEqual([
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
-      { kind: "progress", text: "The check passed." },
+      { kind: "progress", text: "The check passed.", streaming: true },
     ]);
   });
 
@@ -535,6 +536,7 @@ describe("projectMessages", () => {
       {
         kind: "progress",
         text: "Let me check what I have locally and try the GitHub API",
+        streaming: true,
         pendingToolNames: ["shell"],
       },
     ]);
@@ -922,6 +924,35 @@ describe("redactSecrets", () => {
 });
 
 describe("createStreamingRedactor", () => {
+  it("streams safe text immediately even with a long configured secret", () => {
+    const redactor = createStreamingRedactor(["fake-private-token-".repeat(200)]);
+    expect(redactor.push("Hello there.")).toBe("Hello there.");
+    expect(redactor.finish()).toBe("");
+  });
+
+  it("holds only a possible secret suffix and releases it as soon as it diverges", () => {
+    const redactor = createStreamingRedactor(["fake-secret-123"]);
+    expect(redactor.push("Hello fake-se")).toBe("Hello ");
+    expect(redactor.push("parate text")).toBe("fake-separate text");
+    expect(redactor.push(" fake-sec")).toBe(" ");
+    expect(redactor.finish()).toBe("fake-sec");
+    expect(redactor.finish()).toBe("");
+  });
+
+  it("emits a complete secret immediately and keeps touching matches separate", () => {
+    const redactor = createStreamingRedactor(["abc"]);
+    expect(redactor.push("abc")).toBe("[redacted]");
+    expect(redactor.push("abc")).toBe("[redacted]");
+    expect(redactor.finish()).toBe("");
+  });
+
+  it("keeps a surrogate paired when a possible secret starts with its low half", () => {
+    const redactor = createStreamingRedactor(["\uDE00secret"]);
+    expect(redactor.push("hello \uD83D\uDE00")).toBe("hello ");
+    expect(redactor.push(" world")).toBe("😀 world");
+    expect(redactor.finish()).toBe("");
+  });
+
   it("hides a value split between skipped text and the next chunk", () => {
     const redactor = createStreamingRedactor(["hunter123xyz"]);
     const before = redactor.push("Checking hunter1");
@@ -1002,10 +1033,9 @@ describe("createStreamingRedactor", () => {
     const redactor = createStreamingRedactor(["abcdefghij"]); // length 10
     const high = "\uD83D";
     const low = "\uDE00";
-    // safeStartLimit lands between high and low; the pair must stay buffered together.
-    expect(redactor.push(`x${high}${low}abcdefgh`)).toBe("x");
-    expect(redactor.push("ij done")).toBe("😀[redacted]");
-    expect(redactor.finish()).toBe(" done");
+    expect(redactor.push(`x${high}${low}abcdefgh`)).toBe("x😀");
+    expect(redactor.push("ij done")).toBe("[redacted] done");
+    expect(redactor.finish()).toBe("");
   });
 
   it("replaces an orphaned high surrogate at end of stream", () => {

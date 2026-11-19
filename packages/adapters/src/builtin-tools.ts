@@ -1128,7 +1128,20 @@ export const builtinAgentTools: ConnectorTool[] = [
     name: "task_catalog",
     description:
       "Read-only inventory and source of truth for this bot's real open tasks, saved routines, taught skills, reusable skills, and currently exposed tools. Call it before claiming a task or skill exists. Use the returned ids and exact names; do not infer capabilities from memory or conversation text.",
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: {
+      type: "object",
+      properties: {
+        skillQuery: {
+          type: "string",
+          description: "Filter reusable skills by name or description.",
+        },
+        skillOffset: {
+          type: "integer",
+          minimum: 0,
+          description: "Continue skills from skillNextOffset.",
+        },
+      },
+    },
     readOnly: true,
   },
   {
