@@ -104,6 +104,8 @@ export interface AppendEventInput {
   type: ProductEvent["type"];
   payload: Record<string, unknown>;
   runId?: string;
+  /** A private chat's live status changed. Signal its roster after commit. */
+  invalidateRoster?: boolean;
   /** Terminal echo after the run is already cancelled. Every other event stays rejected. */
   allowCancelledRun?: boolean;
   /** The executing attempt's lease; a superseded attempt cannot write. Never serialized. */
@@ -2342,6 +2344,13 @@ export async function appendEventInTransaction(
       runId: input.runId,
     },
   });
+  if (input.type === "thread.progress" && input.invalidateRoster) {
+    await tx.$executeRaw`
+      SELECT public.orkbot_roster_signal('roster:user:' || "userId", 'roster')
+      FROM threads
+      WHERE id = ${input.threadId} AND "botId" = ${input.botId} AND "parentThreadId" IS NULL
+    `;
+  }
   const firstResponse = Boolean(
     input.runId &&
       !firstResponseAt &&

@@ -313,7 +313,7 @@ export const Transcript = memo(function Transcript({
   const shownMessages = visibleReceipts.filter((message) => isFirstReceipt(message.id));
   const separatorIds = timeSeparatorIds(shownMessages);
   const unreadDividerId = unreadDividerMessageId(shownMessages, unreadAfterSeq, olderCursor);
-  const workingLabel = liveActivityLine(messages) ?? t`Working…`;
+  const workingLabel = liveActivityLine(messages) ?? t`Thinking…`;
   const [quoteDraft, setQuoteDraft] = useState<{
     message: ThreadMessage;
     text: string;

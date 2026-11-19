@@ -174,8 +174,28 @@ export function mayBeSilentEnding(ctx: Pick<RunContext, "groupReplyOptional">, t
   return ctx.groupReplyOptional && (couldBecomeNoResponse(text) || isPlaceholderText(text));
 }
 
-export async function flushProgress(ctx: RunContext) {
+/** Invalidate the sidebar when the displayed status changes, without signaling each reply delta. */
+export async function appendProgress(ctx: RunContext, payload: Record<string, unknown>) {
   const { deps, run, runId, bot, thread } = ctx;
+  const { reply } = ctx.state;
+  const step =
+    payload.activity === true && typeof payload.text === "string" ? payload.text.trim() : "";
+  const rosterProgress = step ? `step:${step}` : payload.streaming === true ? "writing" : undefined;
+  const invalidateRoster = thread.botId === bot.id && rosterProgress !== reply.rosterProgress;
+  await deps.events.append({
+    spaceId: run.spaceId,
+    threadId: thread.id,
+    botId: bot.id,
+    type: "thread.progress",
+    runId,
+    payload,
+    ...(invalidateRoster ? { invalidateRoster: true } : {}),
+  });
+  reply.rosterProgress = rosterProgress;
+}
+
+export async function flushProgress(ctx: RunContext) {
+  const { run } = ctx;
   const { reply } = ctx.state;
   // Routines may finish silently. Do not leak narration or a partial silence
   // sentinel before the final outcome is known.
@@ -188,18 +208,14 @@ export async function flushProgress(ctx: RunContext) {
     progressHeldForSilence(ctx)
   )
     return;
-  await deps.events.append({
-    spaceId: run.spaceId,
-    threadId: thread.id,
-    botId: bot.id,
-    type: "thread.progress",
-    runId,
+  await appendProgress(
+    ctx,
     // The first flush replaces the "working…" placeholder outright — a delta here
     // would otherwise get appended straight onto it with no separator.
-    payload: reply.hasStreamedText
+    reply.hasStreamedText
       ? { delta: reply.pendingProgress, streaming: true }
       : { text: reply.pendingProgress, streaming: true },
-  });
+  );
   reply.hasStreamedText = true;
   reply.pendingProgress = "";
   reply.lastProgressAt = Date.now();
@@ -299,7 +315,7 @@ export async function publishNarrationBeforeAsk(ctx: RunContext) {
  * narration back (routines, peers, background work) keep their live view.
  */
 export async function showNarrationStatus(ctx: RunContext, note: string | undefined) {
-  const { deps, run, runId, bot, thread } = ctx;
+  const { run } = ctx;
   if (
     !note ||
     ctx.scripted ||
@@ -308,12 +324,5 @@ export async function showNarrationStatus(ctx: RunContext, note: string | undefi
   )
     return;
   ctx.state.reply.narrationStatusShowing = true;
-  await deps.events.append({
-    spaceId: run.spaceId,
-    threadId: thread.id,
-    botId: bot.id,
-    type: "thread.progress",
-    runId,
-    payload: { reset: true, text: narrationStatusLine(note), activity: true },
-  });
+  await appendProgress(ctx, { reset: true, text: narrationStatusLine(note), activity: true });
 }

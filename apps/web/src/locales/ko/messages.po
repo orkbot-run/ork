@@ -6874,6 +6874,11 @@ msgstr "생각 깊이"
 msgid "Thinking: {0}"
 msgstr "사고: {0}"
 
+#: src/lib/roster-status.ts
+#: src/pages/shell/transcript.tsx
+msgid "Thinking…"
+msgstr "생각하는 중…"
+
 #: src/lib/user-error.ts
 msgid "This app needs its own sign-in setup to connect."
 msgstr "이 앱을 연결하려면 자체 로그인 설정이 필요합니다."
@@ -7650,9 +7655,7 @@ msgid "Working instructions"
 msgstr "작업 지침"
 
 #: src/components/ToolActivityDisclosure.tsx
-#: src/lib/roster-status.ts
 #: src/pages/Auth.tsx
-#: src/pages/shell/transcript.tsx
 msgid "Working…"
 msgstr "처리 중…"
 
@@ -7679,6 +7682,10 @@ msgstr ""
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"
 msgstr ""
+
+#: src/lib/roster-status.ts
+msgid "Writing a reply…"
+msgstr "답변을 작성하는 중…"
 
 #: src/lib/billing.ts
 msgid "year"

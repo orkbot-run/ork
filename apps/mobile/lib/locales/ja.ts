@@ -855,6 +855,7 @@ export const JA_MESSAGES: Record<string, string> = {
   "Treg token": "Tregトークン",
   Uninstall: "アンインストール",
   "Verify and add": "確認して追加",
+  "Thinking…": "考え中…",
   "Working…": "処理中…",
   "https://example.com/graphql": "https://example.com/graphql",
   "https://example.com/mcp": "https://example.com/mcp",

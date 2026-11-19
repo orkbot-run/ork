@@ -160,6 +160,7 @@ async function runTurn(
   const savedEvents: AppendEventInput[] = [];
   let failMessage = options.failMessageOnce;
   const prisma = {
+    $executeRaw: vi.fn(async () => 0),
     workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
     threadSnooze: { findFirst: vi.fn(async () => null) },
     user: { findUnique: vi.fn(async () => null) },
@@ -214,6 +215,7 @@ async function runTurn(
       })),
       findUniqueOrThrow: vi.fn(async () => ({
         id: run.threadId,
+        botId: options.group ? null : run.botId,
         groupId: options.group ? "group-1" : null,
         historyCompactionSummary: null,
         historyCompactedUpToSeq: null,
@@ -1034,6 +1036,24 @@ describe("notes that can't be posted as messages", () => {
     const shown = JSON.stringify([append.mock.calls, messages, stepNotes(finalizeRun)]);
     expect(shown).not.toContain("abcxyz");
     expect(shown).toContain("[redacted] saved.");
+  });
+
+  it("refreshes the roster when a step starts, clears, and gives way to writing", async () => {
+    const { append } = await runTurn("", false, undefined, [], "fyi", {
+      runtimeEvents: [
+        { type: "progress", text: "Reading totals.csv", activity: true },
+        { type: "progress", text: "Reading totals.csv", activity: true },
+        { type: "progress", text: "", activity: true },
+        { type: "text", text: "They match." },
+        { type: "done", text: "They match." },
+      ],
+    });
+    const updates = progress(append).filter((event) => event.invalidateRoster);
+    expect(updates.map((event) => event.payload)).toEqual([
+      { text: "Reading totals.csv", activity: true },
+      { text: "", activity: true },
+      { text: "They match.", streaming: true },
+    ]);
   });
 
   it("keeps tool status lines from replacing the note until the bot writes again", async () => {

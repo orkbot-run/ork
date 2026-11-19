@@ -38,6 +38,8 @@ const fakeAgentState = vi.hoisted(() => ({
   emitFinalDeltaOnly: false,
   narration: "I will check the destination first.",
   finalDelta: undefined as string | undefined,
+  parallelActivity: false,
+  activityTextDuringTools: false,
   abortCount: 0,
   tools: [] as Array<{
     name: string;
@@ -149,7 +151,26 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
             content: [{ type: "toolCall", id: "call-1", name: target.name, arguments: args }],
           },
         });
-        this.emit({ type: "tool_execution_start", toolName: target.name, args });
+        this.emit({
+          type: "tool_execution_start",
+          toolCallId: "call-1",
+          toolName: target.name,
+          args,
+        });
+        if (fakeAgentState.parallelActivity) {
+          this.emit({
+            type: "tool_execution_start",
+            toolCallId: "call-2",
+            toolName: target.name,
+            args,
+          });
+        }
+        if (fakeAgentState.activityTextDuringTools) {
+          this.emit({
+            type: "message_update",
+            assistantMessageEvent: { type: "text_delta", delta: "Composing reply" },
+          });
+        }
         const result = await target.execute("call-1", args);
         fakeAgentState.toolResult = result;
         this.emit({
@@ -159,6 +180,31 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
           result,
           isError: false,
         });
+        if (fakeAgentState.parallelActivity) {
+          // Another call can begin while the second call is still running.
+          if (!fakeAgentState.activityTextDuringTools)
+            this.emit({
+              type: "tool_execution_start",
+              toolCallId: "call-3",
+              toolName: target.name,
+              args,
+            });
+          this.emit({
+            type: "tool_execution_end",
+            toolCallId: "call-2",
+            toolName: target.name,
+            result,
+            isError: false,
+          });
+          if (!fakeAgentState.activityTextDuringTools)
+            this.emit({
+              type: "tool_execution_end",
+              toolCallId: "call-3",
+              toolName: target.name,
+              result,
+              isError: false,
+            });
+        }
         // Like pi-agent-core, the terminating tool result lands in the transcript:
         // it stays the last message, because the turn ends at it.
         const toolResultMessage = {
@@ -575,6 +621,8 @@ const previousMaxToolCalls = process.env.MAX_TOOL_CALLS_PER_TURN;
 describe("Pi connector tool dispatch", () => {
   beforeEach(() => {
     fakeAgentState.mode = "dispatch";
+    fakeAgentState.parallelActivity = false;
+    fakeAgentState.activityTextDuringTools = false;
     fakeAgentState.abortCount = 0;
     fakeAgentState.tools = [];
     fakeAgentState.preparedMessages = [];
@@ -2013,6 +2061,56 @@ describe("Pi connector tool dispatch", () => {
       text: "I stopped after reaching the limit of 80 tool calls in this turn. Send another message to continue.",
     });
   });
+
+  it.each([
+    { parallel: false, writing: false },
+    { parallel: true, writing: false },
+    { parallel: true, writing: true },
+  ])(
+    "clears active tool feedback safely ($parallel parallel, $writing writing)",
+    async ({ parallel, writing }) => {
+      fakeAgentState.mode = "terminating-tool";
+      fakeAgentState.parallelActivity = parallel;
+      fakeAgentState.activityTextDuringTools = writing;
+      const runtime = new PiAgentRuntime();
+      const events: Array<{ type: string; text?: string; activity?: boolean }> = [];
+      for await (const event of runtime.run(
+        {
+          botId: "b",
+          threadId: "t",
+          runId: "activity-clear",
+          prompt: "change your model",
+          instructions: "Use shell.",
+          history: [],
+          tools: [shellTool],
+          model: { provider: "test", id: "dispatch-test-model" },
+          executeTool: vi.fn(async () => terminatingToolResult(OWNER_SETTINGS_REFUSAL_REPLY, {})),
+        },
+        {
+          operationId: "activity-clear",
+          traceId: "activity-clear",
+          spaceId: "w",
+          userId: "u",
+          signal: new AbortController().signal,
+        },
+      ))
+        events.push(event as (typeof events)[number]);
+
+      const activity = events.filter((event) => event.type === "progress" && event.activity);
+      expect(activity).toHaveLength((parallel ? (writing ? 2 : 3) : 1) + 1);
+      expect(activity.at(-1)).toEqual({ type: "progress", text: "", activity: true });
+      expect(activity.filter((event) => event.text === "")).toHaveLength(1);
+      if (writing) {
+        const clearIndex = events.findIndex(
+          (event) => event.type === "progress" && event.text === "",
+        );
+        const textIndex = events.findIndex(
+          (event) => event.type === "text" && event.text === "Composing reply",
+        );
+        expect(clearIndex).toBeLessThan(textIndex);
+      }
+    },
+  );
 
   it("ends the run with the reply a terminating tool result carries", async () => {
     fakeAgentState.mode = "terminating-tool";

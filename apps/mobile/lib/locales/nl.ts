@@ -868,6 +868,7 @@ export const NL_MESSAGES: Record<string, string> = {
   "Treg token": "Treg-token",
   Uninstall: "Verwijderen",
   "Verify and add": "Verifiëren en toevoegen",
+  "Thinking…": "Denkt na…",
   "Working…": "Bezig…",
   "https://example.com/graphql": "https://example.com/graphql",
   "https://example.com/mcp": "https://example.com/mcp",

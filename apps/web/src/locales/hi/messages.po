@@ -6874,6 +6874,11 @@ msgstr "सोच रहा है"
 msgid "Thinking: {0}"
 msgstr "सोच: {0}"
 
+#: src/lib/roster-status.ts
+#: src/pages/shell/transcript.tsx
+msgid "Thinking…"
+msgstr "सोच रहा है…"
+
 #: src/lib/user-error.ts
 msgid "This app needs its own sign-in setup to connect."
 msgstr "कनेक्ट करने के लिए इस ऐप को अपना साइन-इन सेटअप चाहिए।"
@@ -7650,9 +7655,7 @@ msgid "Working instructions"
 msgstr "काम के निर्देश"
 
 #: src/components/ToolActivityDisclosure.tsx
-#: src/lib/roster-status.ts
 #: src/pages/Auth.tsx
-#: src/pages/shell/transcript.tsx
 msgid "Working…"
 msgstr "काम चल रहा है…"
 
@@ -7679,6 +7682,10 @@ msgstr ""
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"
 msgstr ""
+
+#: src/lib/roster-status.ts
+msgid "Writing a reply…"
+msgstr "जवाब लिख रहा है…"
 
 #: src/lib/billing.ts
 msgid "year"

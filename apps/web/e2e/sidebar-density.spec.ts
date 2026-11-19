@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
+import { PostgresRealtimeFanout } from "../../../packages/adapters/src/realtime";
+import { appendEventInTransaction, createDb, notifyRealtime } from "../../../packages/db/src/index";
 import {
   activeBotId,
   captureScreenshot,
@@ -13,6 +15,101 @@ import {
 import { expect, test } from "./renderer-test";
 
 const DENSITY_KEY = "orkbot.botsSidebarDensity";
+
+test("the sidebar follows live steps and reply writing in open and background chats", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await signup(page, `sidebar-live-${Date.now()}@orkbot.test`, "password12", "Sidebar Activity");
+  await completeOnboarding(page);
+  const botId = activeBotId(page);
+  await rpc(page, "onboarding/dismissFocus", { botId });
+  const another = await rpc<{ id: string }>(page, "bots/create", {
+    name: "Another Chat",
+    description: "",
+    instructions: "",
+    notifyOnFinish: true,
+    computerMode: "team",
+  });
+  const transcript = page.getByTestId("transcript");
+  const row = page.locator(`[data-roster-bot-id="${botId}"]`);
+  const status = row.locator('[data-roster-status="running"]');
+  const connectionString = process.env.DATABASE_URL!;
+  const { prisma, pool } = createDb(connectionString);
+  const realtime = new PostgresRealtimeFanout({ connectionString, publisher: pool });
+  try {
+    // Seed a running turn whose progress is controlled by this test.
+    const run = await prisma.$transaction(async (tx) => {
+      const thread = await tx.thread.findUniqueOrThrow({ where: { botId } });
+      const identity = {
+        botId,
+        threadId: thread.id,
+        spaceId: thread.spaceId,
+        userId: thread.userId,
+      };
+      const task = await tx.task.create({
+        data: { ...identity, prompt: "Check the project notes", status: "running" },
+      });
+      return tx.run.create({
+        data: { ...identity, taskId: task.id, trigger: "user", status: "running" },
+      });
+    });
+    await page.reload();
+    await expect(status).toHaveText("Thinking…");
+    await expect(transcript.getByRole("status").filter({ hasText: "Thinking…" })).toBeVisible();
+    async function publish(payload: Record<string, unknown>) {
+      const event = await prisma.$transaction((tx) =>
+        appendEventInTransaction(tx, {
+          botId,
+          spaceId: run.spaceId,
+          threadId: run.threadId,
+          runId: run.id,
+          type: "thread.progress",
+          invalidateRoster: true,
+          payload,
+        }),
+      );
+      await notifyRealtime(realtime, run.threadId, event.seq);
+    }
+
+    await publish({ text: "Reading project notes.pdf", activity: true });
+    await expect(status).toHaveText("Reading project notes.pdf");
+    await expect(
+      transcript.getByRole("status").filter({ hasText: "Reading project notes.pdf" }),
+    ).toBeVisible();
+    await captureScreenshot(page, testInfo, "sidebar-live-activity");
+
+    await page.locator(`[data-roster-bot-id="${another.id}"]`).click();
+    await expect(page).toHaveURL(new RegExp(`/app/${another.id}$`));
+    await publish({ text: "Checking the summary", activity: true });
+    await expect(status).toHaveText("Checking the summary");
+
+    await page.getByTestId("minimize-bots-sidebar").click();
+    await expect(row).toHaveAccessibleDescription(/Checking the summary/);
+    await row.hover();
+    await expect(
+      page.locator('[data-slot="tooltip-content"]').filter({ hasText: "Checking the summary" }),
+    ).toBeVisible();
+    await page.getByTestId("restore-bots-sidebar").click();
+
+    await row.click();
+    await expect(page).toHaveURL(new RegExp(`/app/${botId}$`));
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await publish({ text: "", activity: true });
+    await expect(status).toHaveText("Thinking…");
+    await expect(status.locator(".text-shimmer")).toHaveCSS("animation-name", "none");
+    await publish({ text: "Here is the project summary.", streaming: true });
+    await expect(status).toHaveText("Writing a reply…");
+    await expect(
+      transcript.getByText("Here is the project summary.", { exact: true }),
+    ).toBeVisible();
+  } finally {
+    await rpc(page, "threads/stop", { botId }).catch(() => {});
+    await realtime.close();
+    await prisma.$disconnect();
+    await pool.end();
+  }
+});
 
 test("compact bot sidebar hides previews and preserves roster status accessibly", async ({
   page,
@@ -119,16 +216,19 @@ test("compact bot sidebar hides previews and preserves roster status accessibly"
   try {
     await composer.fill("keep working until I stop you");
     await composer.press("Enter");
-    await expect(previewRow.locator('[data-roster-status="running"]')).toHaveText("Working…", {
-      timeout: 30_000,
-    });
+    await expect(previewRow.locator('[data-roster-status="running"]')).toHaveText(
+      "still working…",
+      {
+        timeout: 30_000,
+      },
+    );
     await expect(previewRow.locator('[data-working="true"]')).toBeVisible();
     await expect(previewRow.locator('[data-roster-status="running"]')).toHaveClass(
-      /text-status-working/,
+      /text-muted-foreground/,
     );
     await expect(previewRow.locator('[data-roster-status="running"]')).toHaveCSS(
       "font-weight",
-      "600",
+      "500",
     );
     await expect(previewRow).not.toContainText("keep working until I stop you");
     await captureScreenshot(page, testInfo, "sidebar-density-compact-working");

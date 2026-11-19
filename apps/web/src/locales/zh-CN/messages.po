@@ -6874,6 +6874,11 @@ msgstr "思考"
 msgid "Thinking: {0}"
 msgstr "思考：{0}"
 
+#: src/lib/roster-status.ts
+#: src/pages/shell/transcript.tsx
+msgid "Thinking…"
+msgstr "思考中…"
+
 #: src/lib/user-error.ts
 msgid "This app needs its own sign-in setup to connect."
 msgstr "此应用需要单独设置登录后才能连接。"
@@ -7650,9 +7655,7 @@ msgid "Working instructions"
 msgstr "工作指令"
 
 #: src/components/ToolActivityDisclosure.tsx
-#: src/lib/roster-status.ts
 #: src/pages/Auth.tsx
-#: src/pages/shell/transcript.tsx
 msgid "Working…"
 msgstr "处理中…"
 
@@ -7679,6 +7682,10 @@ msgstr ""
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"
 msgstr ""
+
+#: src/lib/roster-status.ts
+msgid "Writing a reply…"
+msgstr "正在撰写回复…"
 
 #: src/lib/billing.ts
 msgid "year"

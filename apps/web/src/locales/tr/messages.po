@@ -6874,6 +6874,11 @@ msgstr "Düşünüyor"
 msgid "Thinking: {0}"
 msgstr "Düşünme: {0}"
 
+#: src/lib/roster-status.ts
+#: src/pages/shell/transcript.tsx
+msgid "Thinking…"
+msgstr "Düşünüyor…"
+
 #: src/lib/user-error.ts
 msgid "This app needs its own sign-in setup to connect."
 msgstr "Bu uygulamanın bağlanması için kendi oturum açma kurulumu gerekiyor."
@@ -7650,9 +7655,7 @@ msgid "Working instructions"
 msgstr "Çalışma talimatları"
 
 #: src/components/ToolActivityDisclosure.tsx
-#: src/lib/roster-status.ts
 #: src/pages/Auth.tsx
-#: src/pages/shell/transcript.tsx
 msgid "Working…"
 msgstr "Çalışıyor…"
 
@@ -7679,6 +7682,10 @@ msgstr ""
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"
 msgstr ""
+
+#: src/lib/roster-status.ts
+msgid "Writing a reply…"
+msgstr "Yanıt yazıyor…"
 
 #: src/lib/billing.ts
 msgid "year"

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; bounded action display labels follow LICENSE.md.
 
-import type { MessageBlock, ThreadMessage } from "@orkbot/contracts";
+import type { BotLiveActivity, MessageBlock, ThreadMessage } from "@orkbot/contracts";
 import { cloudAgentBlockFromPayload } from "./cloud-agent.js";
 import { preserveIdentitySource } from "./identity-source.js";
 import { modelFallbackFailure, parseModelFallbackFailure } from "./run-error.js";
@@ -381,13 +381,28 @@ export function liveMessageComposing(blocks: readonly MessageBlock[]): boolean {
   );
 }
 
+/** Current tool step or reply composition for a live run. */
+export function liveActivity(
+  messages: readonly { id: string; blocks: readonly MessageBlock[] }[],
+  runId?: string,
+): BotLiveActivity | undefined {
+  const live = messages.findLast((message) =>
+    runId === undefined ? message.id.startsWith("progress:") : message.id === `progress:${runId}`,
+  );
+  if (!live) return undefined;
+  if (liveMessageComposing(live.blocks)) return { kind: "writing" };
+  const tail = live.blocks.at(-1);
+  const text = tail?.kind === "progress" && tail.activity ? tail.text.trim() : "";
+  return text ? { kind: "step", text } : undefined;
+}
+
 /** The tool status line the newest live message is showing ("Searching the web: …"), if any. */
 export function liveActivityLine(
   messages: readonly { id: string; blocks: readonly MessageBlock[] }[],
+  runId?: string,
 ): string | undefined {
-  const live = messages.findLast((message) => message.id.startsWith("progress:"));
-  const tail = live?.blocks.at(-1);
-  return (tail?.kind === "progress" && tail.activity && tail.text.trim()) || undefined;
+  const activity = liveActivity(messages, runId);
+  return activity?.kind === "step" ? activity.text : undefined;
 }
 
 export type ToolStep = { label: string; count: number; note?: string };

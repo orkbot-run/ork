@@ -6874,6 +6874,11 @@ msgstr "Thinking"
 msgid "Thinking: {0}"
 msgstr "Thinking: {0}"
 
+#: src/lib/roster-status.ts
+#: src/pages/shell/transcript.tsx
+msgid "Thinking…"
+msgstr "Thinking…"
+
 #: src/lib/user-error.ts
 msgid "This app needs its own sign-in setup to connect."
 msgstr "This app needs its own sign-in setup to connect."
@@ -7650,9 +7655,7 @@ msgid "Working instructions"
 msgstr "Working instructions"
 
 #: src/components/ToolActivityDisclosure.tsx
-#: src/lib/roster-status.ts
 #: src/pages/Auth.tsx
-#: src/pages/shell/transcript.tsx
 msgid "Working…"
 msgstr "Working…"
 
@@ -7679,6 +7682,10 @@ msgstr "Workspace unavailable"
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"
 msgstr "Workspaces"
+
+#: src/lib/roster-status.ts
+msgid "Writing a reply…"
+msgstr "Writing a reply…"
 
 #: src/lib/billing.ts
 msgid "year"

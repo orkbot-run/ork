@@ -101,6 +101,12 @@ export const InstructionVersionSchema = z.object({
   createdAt: z.string(),
 });
 
+export const BotLiveActivitySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("step"), text: z.string() }),
+  z.object({ kind: z.literal("writing") }),
+]);
+export type BotLiveActivity = z.infer<typeof BotLiveActivitySchema>;
+
 export const BotSchema = z.object({
   id: Id,
   spaceId: Id,
@@ -127,6 +133,7 @@ export const BotSchema = z.object({
   preview: z.string(),
   status: z.string(),
   threadStatus: z.string().optional(),
+  liveActivity: BotLiveActivitySchema.optional(),
   runErrorId: Id.nullable().default(null),
   computerMode: ComputerModeSchema,
   updatedAt: z.string(),
@@ -301,6 +308,7 @@ export const SpaceBotSchema = BotSchema.pick({
   preview: true,
   status: true,
   threadStatus: true,
+  liveActivity: true,
   runErrorId: true,
   updatedAt: true,
 });

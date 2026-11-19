@@ -846,6 +846,7 @@ export const ES_MESSAGES: Record<string, string> = {
   "Treg token": "Token de Treg",
   Uninstall: "Desinstalar",
   "Verify and add": "Verificar y agregar",
+  "Thinking…": "Pensando…",
   "Working…": "Trabajando…",
   "https://example.com/graphql": "https://example.com/graphql",
   "https://example.com/mcp": "https://example.com/mcp",

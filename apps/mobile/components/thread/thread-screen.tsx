@@ -533,7 +533,7 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
         composing: composingBots.split(",").includes(bot.id),
       }))}
       atBottom={!scroll.state.detached}
-      label={activityLine ?? t("Working…")}
+      label={activityLine ?? t("Thinking…")}
     />
   );
 

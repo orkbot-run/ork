@@ -6874,6 +6874,11 @@ msgstr "рассуждение"
 msgid "Thinking: {0}"
 msgstr "Размышление: {0}"
 
+#: src/lib/roster-status.ts
+#: src/pages/shell/transcript.tsx
+msgid "Thinking…"
+msgstr "Думает…"
+
 #: src/lib/user-error.ts
 msgid "This app needs its own sign-in setup to connect."
 msgstr "Для подключения этому приложению нужна собственная настройка входа."
@@ -7650,9 +7655,7 @@ msgid "Working instructions"
 msgstr "Рабочие инструкции"
 
 #: src/components/ToolActivityDisclosure.tsx
-#: src/lib/roster-status.ts
 #: src/pages/Auth.tsx
-#: src/pages/shell/transcript.tsx
 msgid "Working…"
 msgstr "Выполняется…"
 
@@ -7679,6 +7682,10 @@ msgstr ""
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"
 msgstr ""
+
+#: src/lib/roster-status.ts
+msgid "Writing a reply…"
+msgstr "Пишет ответ…"
 
 #: src/lib/billing.ts
 msgid "year"

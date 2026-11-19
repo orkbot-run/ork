@@ -6874,6 +6874,11 @@ msgstr "Denkmodus"
 msgid "Thinking: {0}"
 msgstr "Denken: {0}"
 
+#: src/lib/roster-status.ts
+#: src/pages/shell/transcript.tsx
+msgid "Thinking…"
+msgstr "Denkt nach…"
+
 #: src/lib/user-error.ts
 msgid "This app needs its own sign-in setup to connect."
 msgstr "Diese App braucht eine eigene Anmeldeeinrichtung, um sich zu verbinden."
@@ -7650,9 +7655,7 @@ msgid "Working instructions"
 msgstr "Arbeitsanweisungen"
 
 #: src/components/ToolActivityDisclosure.tsx
-#: src/lib/roster-status.ts
 #: src/pages/Auth.tsx
-#: src/pages/shell/transcript.tsx
 msgid "Working…"
 msgstr "Wird verarbeitet…"
 
@@ -7679,6 +7682,10 @@ msgstr ""
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"
 msgstr ""
+
+#: src/lib/roster-status.ts
+msgid "Writing a reply…"
+msgstr "Schreibt eine Antwort…"
 
 #: src/lib/billing.ts
 msgid "year"

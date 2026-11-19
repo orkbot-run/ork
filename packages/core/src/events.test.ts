@@ -12,6 +12,7 @@ import {
   endsSentence,
   humanizeToolName,
   isRunTerminalEvent,
+  liveActivity,
   liveActivityLine,
   normalizeResponseStreamingPreference,
   noteLastToolStep,
@@ -1111,6 +1112,94 @@ describe("stale helper projection", () => {
     expect(next.find((m) => m.id === "subagent:resumed")?.blocks[0]).toMatchObject({
       status: "running",
     });
+  });
+});
+
+describe("liveActivity", () => {
+  it("reads the requested run without leaking another bot's concurrent activity", () => {
+    const messages = [
+      {
+        id: "progress:own",
+        blocks: [
+          { kind: "progress" as const, text: "  Reading report  ", activity: true as const },
+        ],
+      },
+      {
+        id: "progress:other",
+        blocks: [{ kind: "progress" as const, text: "Drafting", streaming: true as const }],
+      },
+    ];
+    expect(liveActivity(messages, "own")).toEqual({ kind: "step", text: "Reading report" });
+    expect(liveActivityLine(messages, "own")).toBe("Reading report");
+    expect(liveActivity(messages)).toEqual({ kind: "writing" });
+    expect(liveActivity(messages, "missing")).toBeUndefined();
+  });
+
+  it("accepts synthetic narration and excludes tools waiting on it", () => {
+    const blocks = [{ kind: "progress" as const, text: "Drafting reply" }];
+    expect(liveActivity([{ id: "progress:r", blocks }])).toEqual({ kind: "writing" });
+    expect(
+      liveActivity([
+        { id: "progress:r", blocks: [{ ...blocks[0]!, pendingToolNames: ["shell"] }] },
+      ]),
+    ).toBeUndefined();
+    expect(liveActivity([{ id: "m1", blocks }])).toBeUndefined();
+  });
+
+  it.each(["run.completed", "run.cancelled", "run.failed"])(
+    "does not retain activity after %s",
+    (type) => {
+      const events = [
+        {
+          id: "e1",
+          seq: 1,
+          threadId: "t",
+          runId: "r",
+          createdAt: new Date(0),
+          type: "thread.progress",
+          payload: { text: "Reading report", activity: true },
+        },
+        { id: "e2", seq: 2, threadId: "t", runId: "r", createdAt: new Date(1), type, payload: {} },
+      ];
+      expect(liveActivity(projectMessages(events), "r")).toBeUndefined();
+    },
+  );
+
+  it("returns to thinking after a persisted tool clear and resumes writing on deltas", () => {
+    const events = [
+      {
+        id: "e1",
+        seq: 1,
+        threadId: "t",
+        runId: "r",
+        createdAt: new Date(0),
+        type: "thread.progress",
+        payload: { text: "Reading report", activity: true },
+      },
+      {
+        id: "e2",
+        seq: 2,
+        threadId: "t",
+        runId: "r",
+        createdAt: new Date(1),
+        type: "thread.progress",
+        payload: { text: "", activity: true },
+      },
+    ];
+    expect(liveActivity(projectMessages(events.slice(0, 1)), "r")).toEqual({
+      kind: "step",
+      text: "Reading report",
+    });
+    expect(liveActivity(projectMessages(events), "r")).toBeUndefined();
+    expect(
+      liveActivity(
+        projectMessages([
+          ...events,
+          { ...events[1]!, id: "e3", seq: 3, payload: { delta: "Reply", streaming: true } },
+        ]),
+        "r",
+      ),
+    ).toEqual({ kind: "writing" });
   });
 });
 

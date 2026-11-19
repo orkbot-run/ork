@@ -6874,6 +6874,11 @@ msgstr "Rozumowanie"
 msgid "Thinking: {0}"
 msgstr "Rozumowanie: {0}"
 
+#: src/lib/roster-status.ts
+#: src/pages/shell/transcript.tsx
+msgid "Thinking…"
+msgstr "Myśli…"
+
 #: src/lib/user-error.ts
 msgid "This app needs its own sign-in setup to connect."
 msgstr "Ta aplikacja wymaga własnej konfiguracji logowania do połączenia."
@@ -7650,9 +7655,7 @@ msgid "Working instructions"
 msgstr "Instrukcje pracy"
 
 #: src/components/ToolActivityDisclosure.tsx
-#: src/lib/roster-status.ts
 #: src/pages/Auth.tsx
-#: src/pages/shell/transcript.tsx
 msgid "Working…"
 msgstr "Praca w toku…"
 
@@ -7679,6 +7682,10 @@ msgstr "Przestrzeń robocza niedostępna"
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"
 msgstr "Workspace’y"
+
+#: src/lib/roster-status.ts
+msgid "Writing a reply…"
+msgstr "Pisze odpowiedź…"
 
 #: src/lib/billing.ts
 msgid "year"

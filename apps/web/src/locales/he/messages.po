@@ -6874,6 +6874,11 @@ msgstr "חשיבה"
 msgid "Thinking: {0}"
 msgstr "חשיבה: {0}"
 
+#: src/lib/roster-status.ts
+#: src/pages/shell/transcript.tsx
+msgid "Thinking…"
+msgstr "חושב…"
+
 #: src/lib/user-error.ts
 msgid "This app needs its own sign-in setup to connect."
 msgstr "האפליקציה הזו צריכה הגדרת התחברות משלה כדי להתחבר."
@@ -7650,9 +7655,7 @@ msgid "Working instructions"
 msgstr "הוראות עבודה"
 
 #: src/components/ToolActivityDisclosure.tsx
-#: src/lib/roster-status.ts
 #: src/pages/Auth.tsx
-#: src/pages/shell/transcript.tsx
 msgid "Working…"
 msgstr "עובד…"
 
@@ -7679,6 +7682,10 @@ msgstr ""
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"
 msgstr ""
+
+#: src/lib/roster-status.ts
+msgid "Writing a reply…"
+msgstr "כותב תשובה…"
 
 #: src/lib/billing.ts
 msgid "year"

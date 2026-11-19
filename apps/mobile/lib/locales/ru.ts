@@ -1023,6 +1023,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Waiting…": "Ожидание…",
   "What this bot is for": "Для чего нужен этот бот",
   Working: "Выполняется",
+  "Thinking…": "Думает…",
   "Working…": "Выполняется…",
   "Work stopped, but the thread could not refresh: {detail}":
     "Работа остановлена, но диалог не удалось обновить: {detail}",

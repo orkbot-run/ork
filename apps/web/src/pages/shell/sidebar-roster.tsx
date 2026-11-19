@@ -6,7 +6,7 @@ import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { Bot, BotSection, Group, Space, ThreadSnapshot } from "@orkbot/contracts";
-import { threadSnoozeState } from "@orkbot/core";
+import { liveActivity, threadSnoozeState } from "@orkbot/core";
 import {
   BotAvatar,
   Button,
@@ -22,6 +22,7 @@ import {
 import { ChevronDown, CircleAlert, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
 import { Suspense } from "react";
+import { LiveStatusText } from "../../components/ai/LiveStatusText";
 import { IconTooltip } from "../../components/IconTooltip";
 import type { BotsSidebarDensity } from "../../lib/bots-sidebar-density-pref";
 import {
@@ -98,6 +99,9 @@ export function SidebarRoster({
 }) {
   useRedrawAtMidnight();
   const { t } = useLingui();
+  const openRun = !inGroup && activeSnapshot?.run?.status === "running" ? activeSnapshot.run : null;
+  const openActivity =
+    openRun && activeSnapshot ? liveActivity(activeSnapshot.messages, openRun.id) : undefined;
   return (
     <>
       {sidebarGroups.map((group, groupIndex) => {
@@ -274,17 +278,31 @@ export function SidebarRoster({
                   (item.kind === "bot" && !inGroup && active?.id === item.chat.id) ||
                   (item.kind === "group" && inGroup && activeGroup?.id === item.chat.id);
                 const compact = botsSidebarDensity === "compact";
+                const ownOpenChat =
+                  item.kind === "bot" && !inGroup && activeSnapshot?.botId === item.chat.id;
+                const status =
+                  item.kind === "bot"
+                    ? ownOpenChat && openRun
+                      ? openRun.status
+                      : item.chat.status
+                    : undefined;
+                const activity =
+                  item.kind === "bot"
+                    ? ownOpenChat
+                      ? openActivity
+                      : item.chat.liveActivity
+                    : undefined;
                 const workStatusLabel =
-                  item.kind === "bot" ? rosterWorkStatusLabel(item.chat.status) : null;
+                  status === undefined ? null : rosterWorkStatusLabel(status, activity);
                 const rowError =
                   item.kind === "bot" &&
                   (rosterHasUndismissedRunError(item.chat.runErrorId, dismissedRunErrorIds) ||
                     (active?.id === item.chat.id && Boolean(displayedRunError)));
                 const compactStatusLabel =
-                  (compact || mini) && item.kind === "bot"
+                  (compact || mini) && status !== undefined
                     ? rowError
                       ? t`Error`
-                      : compactRosterStatusLabel(item.chat.status)
+                      : compactRosterStatusLabel(status, activity)
                     : null;
                 const rosterLine = compact
                   ? compactStatusLabel
@@ -316,7 +334,7 @@ export function SidebarRoster({
                       identity={item.chat.id}
                       avatarSeed={item.chat.avatarSeed}
                       size={mini ? 40 : compact ? 28 : 38}
-                      status={item.chat.status}
+                      status={status}
                     />
                   ) : (
                     <GroupAvatar
@@ -516,38 +534,41 @@ export function SidebarRoster({
                           compactStatusLabel ? (
                             <div
                               dir="auto"
-                              data-roster-status={
+                              data-roster-status={rowError ? "error" : status}
+                              className={`mt-0.5 flex items-center gap-1 text-[11.5px] font-medium ${quickAccess ? "md:justify-center" : ""} ${
                                 rowError
-                                  ? "error"
-                                  : item.kind === "bot"
-                                    ? item.chat.status
-                                    : undefined
-                              }
-                              className={`mt-0.5 flex items-center gap-1 text-[11.5px] ${quickAccess ? "md:justify-center" : ""} ${
-                                rowError
-                                  ? "font-medium text-destructive"
+                                  ? "text-destructive"
                                   : workStatusLabel
-                                    ? "font-semibold text-status-working"
-                                    : "font-medium text-foreground/75"
+                                    ? "text-muted-foreground"
+                                    : "text-foreground/75"
                               }`}
                             >
                               {rowError ? <CircleAlert size={12} aria-hidden="true" /> : null}
-                              <span>{compactStatusLabel}</span>
+                              {workStatusLabel && !rowError ? (
+                                <LiveStatusText text={workStatusLabel} />
+                              ) : (
+                                <span>{compactStatusLabel}</span>
+                              )}
                             </div>
                           ) : null
                         ) : (
                           <div
                             dir="auto"
+                            data-roster-status={workStatusLabel ? status : undefined}
                             data-roster-preview={!workStatusLabel ? "true" : undefined}
                             className={`mt-1 truncate text-label ${quickAccess && !workStatusLabel ? "md:hidden" : ""} ${
                               workStatusLabel
-                                ? "font-semibold text-status-working"
+                                ? "font-medium text-muted-foreground"
                                 : item.chat.unread
                                   ? "font-medium text-foreground/75"
                                   : "text-muted-foreground"
                             }`}
                           >
-                            {rosterLine}
+                            {workStatusLabel ? (
+                              <LiveStatusText text={workStatusLabel} />
+                            ) : (
+                              rosterLine
+                            )}
                           </div>
                         )}
                       </div>

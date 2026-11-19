@@ -127,6 +127,7 @@ export interface ReplyState {
   pendingProgress: string;
   lastProgressAt: number;
   hasStreamedText: boolean;
+  rosterProgress?: string;
   /**
    * Set by a tool call or a new assistant message: the next text starts a new
    * assistant turn and needs a break from the earlier text that stayed in this reply.

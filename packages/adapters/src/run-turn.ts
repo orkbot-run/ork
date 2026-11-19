@@ -60,6 +60,7 @@ import {
   subagentMarksUnread,
 } from "./run-notifications.js";
 import {
+  appendProgress,
   canPublishDurableNarration,
   flushPendingTools,
   flushProgress,
@@ -329,7 +330,7 @@ async function streamText(ctx: RunContext, event: RuntimeEvent<"text">) {
 }
 
 async function streamProgress(ctx: RunContext, event: RuntimeEvent<"progress">) {
-  const { deps, run, runId, bot, thread } = ctx;
+  const { run } = ctx;
   const { reply } = ctx.state;
   // Tool status lines are not the model writing.
   if (!event.activity) ctx.state.toolCallStreak = { key: undefined, count: 0 };
@@ -339,27 +340,13 @@ async function streamProgress(ctx: RunContext, event: RuntimeEvent<"progress">) 
   // Flush batched text deltas first so an activity line cannot land
   // ahead of text the model streamed before the tool call.
   if (run.replyMode !== "explicit" && reply.pendingProgress && !progressHeldForSilence(ctx)) {
-    await deps.events.append({
-      spaceId: run.spaceId,
-      threadId: thread.id,
-      botId: bot.id,
-      type: "thread.progress",
-      runId,
-      payload: { delta: reply.pendingProgress, streaming: true },
-    });
+    await appendProgress(ctx, { delta: reply.pendingProgress, streaming: true });
     reply.pendingProgress = "";
     reply.lastProgressAt = Date.now();
   }
-  await deps.events.append({
-    spaceId: run.spaceId,
-    threadId: thread.id,
-    botId: bot.id,
-    type: "thread.progress",
-    runId,
-    payload: {
-      text: redactSecrets(event.text, ctx.secrets),
-      ...(event.activity ? { activity: true } : {}),
-    },
+  await appendProgress(ctx, {
+    text: redactSecrets(event.text, ctx.secrets),
+    ...(event.activity ? { activity: true } : {}),
   });
 }
 
