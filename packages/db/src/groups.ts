@@ -6,7 +6,8 @@ import type { Actor, Group, GroupMember, SpaceGroup } from "@orkbot/contracts";
 import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN, resolveBotAvatarSet } from "@orkbot/contracts";
 import { displayName } from "@orkbot/core";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
-import type { Prisma, PrismaClient } from "./client.js";
+import type { PrismaClient } from "./client.js";
+import { Prisma } from "./client.js";
 import { expireComputerExecutionLeases, restoreBotUnderComputerQuota } from "./computers.js";
 import { transientRunEventsWhere } from "./events.js";
 import { deletePageShareSecrets } from "./page-shares.js";
@@ -672,21 +673,26 @@ export function createGroupRepos(prisma: PrismaClient) {
     async removeGroup(actor: Actor, groupId: string) {
       return prisma.$transaction(async (tx) => {
         await lockOwnedGroup(tx, actor, groupId);
+        const [thread] = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM threads WHERE "groupId" = ${groupId} FOR UPDATE
+        `;
+        // Drain the writer holding the thread before excluding new references to the group.
+        // Writers can take the group's foreign-key lock while they finish their thread writes.
+        await lockOwnedGroup(tx, actor, groupId, { forDeletion: true });
         const group = await tx.chatGroup.findUnique({
           where: { id: groupId },
           select: {
             artifacts: { select: { storageKey: true } },
             members: { orderBy: groupMemberOrder, take: 1, select: { botId: true } },
-            thread: { select: { id: true } },
           },
         });
         const contextBotId = group?.members[0]?.botId;
         if (!contextBotId) throw new IsolationError();
         // The thread's runs cascade away with the group, but their computer leases don't:
         // cancel them first so the route can stop their work and release the leases.
-        const activeRuns = group.thread
+        const activeRuns = thread
           ? await tx.run.findMany({
-              where: { threadId: group.thread.id, status: { in: activeRunStatuses } },
+              where: { threadId: thread.id, status: { in: activeRunStatuses } },
               select: { id: true, taskId: true, userId: true, spaceId: true },
             })
           : [];
@@ -710,19 +716,23 @@ export function createGroupRepos(prisma: PrismaClient) {
   };
 }
 
+/** Serialize group edits while allowing thread writers to take foreign-key locks.
+ * Deletion upgrades only after locking the thread, before taking its teardown snapshot.
+ */
 export async function lockOwnedGroup(
   prisma: Pick<Prisma.TransactionClient, "$queryRaw">,
   actor: Pick<Actor, "spaceId" | "userId">,
   groupId: string,
+  opts: { forDeletion?: boolean } = {},
 ) {
-  const locked = await prisma.$queryRaw<Array<{ id: string }>>`
+  const locked = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT id
     FROM chat_groups
     WHERE id = ${groupId}
       AND "spaceId" = ${actor.spaceId}
       AND "userId" = ${actor.userId}
-    FOR UPDATE
-  `;
+    ${opts.forDeletion ? Prisma.sql`FOR UPDATE` : Prisma.sql`FOR NO KEY UPDATE`}
+  `);
   if (locked.length !== 1) throw new IsolationError();
 }
 

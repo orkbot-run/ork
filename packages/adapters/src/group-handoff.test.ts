@@ -419,10 +419,12 @@ describe("explicit group destinations", () => {
       }),
     ).resolves.toMatchObject({ error: "group is no longer available" });
     expect(h.messageCreate).not.toHaveBeenCalled();
-    const groupLock = h.tx.$queryRaw.mock.calls.find(([query]) =>
-      String(query).includes("FROM chat_groups"),
+    expect(h.tx.$queryRaw).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining("FROM chat_groups"),
+        values: ["group-1", run.spaceId, run.userId],
+      }),
     );
-    expect(groupLock?.slice(1)).toEqual(["group-1", run.spaceId, run.userId]);
   });
 
   it("requires both bots to be active members of the destination", async () => {
