@@ -58,6 +58,8 @@ export const RU_MESSAGES: Record<string, string> = {
     "Не удалось завершить обновление. Повторите попытку позже.",
   "Could not reach the update server.": "Не удалось связаться с сервером обновлений.",
   "Allow local computer access?": "Разрешить доступ к локальному компьютеру?",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "Если управление экраном доступно, боты смогут видеть приложения, которые вы разрешили в чате, и управлять ими.",
   "Allow bots to use this computer?": "Разрешить ботам использовать этот компьютер?",
   Cancel: "Отменить",
   Allow: "Разрешить",

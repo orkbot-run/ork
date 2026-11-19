@@ -9,7 +9,9 @@ mod browser_auth;
 mod credentials;
 mod document;
 mod host_computer;
+mod host_device;
 mod host_runner;
+mod host_screen;
 mod installation_login;
 mod installation_transport;
 #[cfg(any(target_os = "macos", test))]
@@ -1147,7 +1149,9 @@ async fn request_computer_access(
         }
         let (sender, receiver) = tokio::sync::oneshot::channel();
         let dialog = app.dialog()
-            .message(native_text(app, "Allow bots to use this computer?") + "\n\n" + &native_text(app, "Bots on this local instance can run commands, read and change files, and launch apps with your account’s permissions. You can revoke access from the app menu."))
+            .message(native_text(app, "Allow bots to use this computer?") + "\n\n"
+                + &native_text(app, "Bots on this local instance can run commands, read and change files, and launch apps with your account’s permissions. You can revoke access from the app menu.")
+                + "\n\n" + &native_text(app, "When screen control is available, bots can see and control apps you approve in chat."))
             .title(native_text(app, "Allow local computer access?"))
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::OkCancelCustom(native_text(app, "Allow"), native_text(app, "Cancel")));
@@ -1172,6 +1176,33 @@ async fn request_computer_access(
     }
     if !host.grant(&owner, intent) {
         return Ok(false);
+    }
+    // Only native consent may prompt for OS permissions. Shell access still works if
+    // screen support is absent or the OS permissions were declined.
+    if let Some(screen) = &host.screen {
+        if screen.request_permissions().await.unwrap_or(false) {
+            let paired = async {
+                let origin = stack.web_url();
+                if origin.origin() != document.origin.origin() {
+                    return Err("This local server is no longer active.".into());
+                }
+                let window = app
+                    .get_webview_window(&document.label)
+                    .ok_or("Local computer unavailable.")?;
+                let cookies = server_session_cookies(&window, &document.origin).await?;
+                if !managed_stack_is_current(app, document, &stack)
+                    || host.intent(&owner) != Some(intent)
+                {
+                    return Err("Local computer consent changed.".into());
+                }
+                host.pair_device(origin, &cookies).await
+            }
+            .await;
+            if let Err(error) = paired {
+                host.revoke_owner(&owner);
+                return Err(error);
+            }
+        }
     }
     if let Err(error) = stack.save_host_choice("this-mac").await {
         host.revoke_owner(&owner);

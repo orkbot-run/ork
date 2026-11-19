@@ -11,6 +11,7 @@ const element = z.number().int().min(0).max(100_000);
 const coordinate = z.number().finite().min(0).max(20_000);
 
 export const hostScreenAction = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("move"), x: coordinate, y: coordinate }),
   z.object({
     kind: z.literal("click"),
     element: element.optional(),

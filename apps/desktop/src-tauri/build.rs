@@ -2,6 +2,36 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 fn main() {
+    println!("cargo:rerun-if-changed=native/host-screen.swift");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        let output =
+            std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("ork-host-screen");
+        let target = std::env::var("TARGET").unwrap();
+        let architecture = if target.starts_with("aarch64") {
+            "arm64"
+        } else {
+            "x86_64"
+        };
+        let status = std::process::Command::new("xcrun")
+            .args([
+                "swiftc",
+                "-parse-as-library",
+                "-O",
+                "-target",
+                &format!("{architecture}-apple-macosx12.0"),
+                "native/host-screen.swift",
+                "-o",
+            ])
+            .arg(&output)
+            .status()
+            .expect("Xcode Swift compiler is required for native screen control");
+        assert!(status.success(), "could not compile native screen control");
+        println!(
+            "cargo:rustc-env=ORK_HOST_SCREEN_HELPER={}",
+            output.display()
+        );
+    }
+
     println!("cargo:rerun-if-env-changed=ORKBOT_INSTALLER_REVISION");
     let revision = std::env::var("ORKBOT_INSTALLER_REVISION").ok().or_else(|| {
         let output = std::process::Command::new("git")

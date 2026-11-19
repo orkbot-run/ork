@@ -63,6 +63,8 @@ export const ES_MESSAGES: Record<string, string> = {
 
   // Computer access
   "Allow local computer access?": "¿Permitir el acceso a la computadora local?",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "Cuando el control de pantalla esté disponible, los bots podrán ver y controlar las aplicaciones que apruebes en el chat.",
   "Allow bots to use this computer?": "¿Permitir que los bots usen esta computadora?",
   Cancel: "Cancelar",
   Allow: "Permitir",

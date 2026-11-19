@@ -52,6 +52,8 @@ export const ZH_TW_MESSAGES: Record<string, string> = {
   "The update could not be completed. Try again later.": "無法完成更新。請稍後再試一次。",
   "Could not reach the update server.": "無法連線到更新伺服器。",
   "Allow local computer access?": "要允許存取本機電腦嗎？",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "螢幕控制可用時，機器人可以查看和操作你在聊天中核准的應用程式。",
   "Allow bots to use this computer?": "要允許機器人使用這台電腦嗎？",
   Cancel: "取消",
   Allow: "允許",

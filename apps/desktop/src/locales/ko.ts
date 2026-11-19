@@ -57,6 +57,8 @@ export const KO_MESSAGES: Record<string, string> = {
     "업데이트를 완료할 수 없습니다. 나중에 다시 시도하세요.",
   "Could not reach the update server.": "업데이트 서버에 연결할 수 없습니다.",
   "Allow local computer access?": "로컬 컴퓨터 접근을 허용할까요?",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "화면 제어를 사용할 수 있으면 봇이 채팅에서 승인한 앱을 보고 조작할 수 있습니다.",
   "Allow bots to use this computer?": "봇이 이 컴퓨터를 사용하도록 허용할까요?",
   Cancel: "취소",
   Allow: "허용",

@@ -105,6 +105,8 @@ export const PL_MESSAGES: Record<string, string> = {
 
   // Computer access
   "Allow local computer access?": "Zezwolić na dostęp do lokalnego komputera?",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "Jeśli sterowanie ekranem jest dostępne, boty mogą widzieć i obsługiwać aplikacje, na które zezwolisz w czacie.",
   "Allow bots to use this computer?": "Zezwolić botom na korzystanie z tego komputera?",
   Cancel: "Anuluj",
   Allow: "Zezwól",

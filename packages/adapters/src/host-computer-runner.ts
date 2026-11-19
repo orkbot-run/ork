@@ -76,6 +76,9 @@ export function createHostComputerRunner(options: { root: string; screen?: HostS
       case "screenAct":
         yield await screen().act(scope, input.app, input.actions);
         break;
+      case "capabilities":
+        yield { screen: Boolean(options.screen), control: Boolean(options.screen) };
+        break;
       case "environment":
         yield await provider.environment();
         break;

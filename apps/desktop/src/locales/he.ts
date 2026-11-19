@@ -55,6 +55,8 @@ export const HE_MESSAGES: Record<string, string> = {
     "לא ניתן היה להשלים את העדכון. כדאי לנסות שוב מאוחר יותר.",
   "Could not reach the update server.": "לא ניתן היה להתחבר לשרת העדכונים.",
   "Allow local computer access?": "לאפשר גישה למחשב המקומי?",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "כאשר שליטה במסך זמינה, הבוטים יכולים לראות את היישומים שאישרת בצ׳אט ולשלוט בהם.",
   "Allow bots to use this computer?": "לאפשר לבוטים להשתמש במחשב הזה?",
   Cancel: "ביטול",
   Allow: "אישור",

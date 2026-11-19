@@ -108,6 +108,24 @@ describe("host screen requests", () => {
     expect(frames).toEqual([{ error: "Screen control is not available on this computer." }]);
   });
 
+  it("maps pointer movement through the same approved application protocol", async () => {
+    const screen = fakeScreen();
+    const actions = [{ kind: "move", x: 12, y: 24 }];
+    await send(screen, { method: "screenAct", botId: "bot-1", app: "TextEdit", actions });
+    expect(screen.act).toHaveBeenCalledWith(expect.anything(), "TextEdit", actions);
+  });
+
+  it("reports no graphical capability when the native bridge is missing", async () => {
+    expect((await send(undefined, { method: "capabilities", botId: "bot-1" })).frames).toEqual([
+      { value: { screen: false, control: false } },
+      { done: true },
+    ]);
+    expect((await send(fakeScreen(), { method: "capabilities", botId: "bot-1" })).frames).toEqual([
+      { value: { screen: true, control: true } },
+      { done: true },
+    ]);
+  });
+
   it("gives screen requests a short deadline", () => {
     expect(
       hostComputerDeadlineMs({ method: "screenObserve", botId: "bot-1", app: "TextEdit" }),

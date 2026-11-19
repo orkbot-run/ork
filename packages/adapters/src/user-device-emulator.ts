@@ -27,6 +27,10 @@ export class UserDeviceEmulator implements UserDeviceGateway {
     _signal: AbortSignal,
   ): AsyncIterable<T> {
     this.requests.push({ userId, request });
+    if (request.method === "capabilities") {
+      yield { screen: true, control: true } as T;
+      return;
+    }
     if (request.method === "environment") {
       const environment: HostComputerEnvironment = {
         platform: "darwin",
