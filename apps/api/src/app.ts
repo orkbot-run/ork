@@ -139,10 +139,12 @@ import {
   createRosterChanges,
   createSecurityEventPruner,
   createThreadEvents,
+  databaseOperationFailed,
   describeRowSecurity,
   IsolationError,
   installAuditEventStore,
   installSecurityEventStore,
+  isDatabaseUnavailable,
   ProviderTransactionBusyError,
   parsePositiveInteger,
   provisionMessagingIdentity,
@@ -222,6 +224,10 @@ import {
   withClientIp,
 } from "#modules/platform/client-ip";
 import { clientProtocolMiddleware } from "#modules/platform/client-protocol";
+import {
+  databaseErrorHandler,
+  retryUnavailableRequests,
+} from "#modules/platform/database-unavailable";
 import type { AppEnv } from "#modules/platform/env";
 import { loadEnv } from "#modules/platform/env";
 import { healthRoutes } from "#modules/platform/health";
@@ -705,11 +711,16 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     email,
     logger: {
       level: "error",
-      log: (_level, _message, ...args) =>
-        getLogger().error(
-          "auth.request.failed",
-          args.find((arg) => arg instanceof Error),
-        ),
+      log: (_level, _message, ...args) => {
+        const error = args.find((arg) => arg instanceof Error);
+        if (isDatabaseUnavailable(error)) {
+          databaseOperationFailed(error);
+          markExpectedFailure();
+          enrichLogContext({ "db.unavailable": true });
+          return;
+        }
+        getLogger().error("auth.request.failed", error);
+      },
     },
     onEmailError,
     afterSignIn:
@@ -1064,9 +1075,11 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ],
   });
   const app = new Hono();
+  app.onError(databaseErrorHandler);
   const inFlight = trackInFlightRequests();
   app.use("*", inFlight.middleware);
-  app.use("*", requestLogging(logger));
+  app.use("*", requestLogging(logger, { isExpectedError: isDatabaseUnavailable }));
+  app.use("*", retryUnavailableRequests);
   app.use("*", clientIpMiddleware(clientIp, env.clientIpHeader));
   app.use(
     "*",
@@ -1989,6 +2002,14 @@ export function handleRpcError(
   path: readonly string[],
   signal?: AbortSignal,
 ): void {
+  if (isDatabaseUnavailable(error)) {
+    databaseOperationFailed(error);
+    markExpectedFailure();
+    throw new ORPCError("SERVICE_UNAVAILABLE", {
+      message: "Database temporarily unavailable",
+      cause: error,
+    });
+  }
   // A missing or foreign resource is the caller's mistake (a stale client, a deleted bot),
   // not a server failure, so it is a warning rather than an error report.
   if (error instanceof IsolationError) {

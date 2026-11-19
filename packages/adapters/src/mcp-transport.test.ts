@@ -1022,3 +1022,45 @@ describe("MCP transport seam", () => {
     expect(inner).toHaveBeenCalledTimes(1);
   });
 });
+
+it("cancels one stdio tool call while preserving the process and its state", async () => {
+  const session = new McpSession();
+  const script = `
+    const readline = require('node:readline');
+    let calls = 0;
+    const answer = (id, result) => process.stdout.write(JSON.stringify({jsonrpc:'2.0', id, result}) + '\\n');
+    readline.createInterface({ input: process.stdin }).on('line', line => {
+      const message = JSON.parse(line);
+      if (message.method === 'initialize') answer(message.id, {
+        protocolVersion: '2025-11-25', capabilities: {tools:{}}, serverInfo:{name:'stateful',version:'1'}
+      });
+      if (message.method === 'tools/call') {
+        calls++;
+        if (message.params.name !== 'slow') answer(message.id, {
+          content: [{type:'text', text: JSON.stringify({pid:process.pid, calls})}]
+        });
+      }
+    });
+  `;
+  try {
+    await session.connectStdio({
+      command: process.execPath,
+      args: ["-e", script],
+      allowedCommands: [process.execPath],
+    });
+    const first = await session.callTool("state");
+    const readState = (result: typeof first) =>
+      JSON.parse((result.content[0] as { text: string }).text);
+    const before = readState(first);
+    const caller = new AbortController();
+    const pending = session.callTool("slow", {}, { signal: caller.signal }).catch((error) => error);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    caller.abort(new Error("caller cancelled"));
+    expect(await pending).toEqual(new Error("caller cancelled"));
+    const after = readState(await session.callTool("state"));
+    expect(after).toEqual({ pid: before.pid, calls: 3 });
+    expect(session.connectionClosed).toBe(false);
+  } finally {
+    await session.close();
+  }
+});

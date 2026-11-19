@@ -220,6 +220,18 @@ describe("keyless HTTP web provider", () => {
     expect(extracted.text).toContain("just text here");
   });
 
+  it("keeps text from a page that is too large for article parsing", () => {
+    const html =
+      `<!doctype html><title>Large catalogue</title><nav>Navigation marker</nav>` +
+      `<main>${"<span>Listing</span>".repeat(10_001)}<p>Last item</p></main>`;
+    const started = performance.now();
+    const extracted = extractReadableText(html, "https://example.test/");
+    expect(extracted.title).toBe("Large catalogue");
+    expect(extracted.text).toContain("Navigation marker");
+    expect(extracted.text).toContain("Last item");
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   it("keeps the HTML strip fallback's output", () => {
     const html = [
       "<frameset><TITLE lang=en>A  <b>page</b></title><style>p{}</style>",

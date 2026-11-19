@@ -35,7 +35,10 @@ import { ComputerBusyError, provisionComputer } from "./computer-lifecycle.js";
 import { resolveBotWorkspaceCwd, teamBotWorkspaceDirectory } from "./computer-support.js";
 import { connectedContext, selectRunConnections } from "./connection-context.js";
 import { nativeShellCommandArgv, usesNativeShell } from "./native-shell.js";
+import { isEgressRefusal } from "./network-address.js";
 import { loadPurchaseRedactions } from "./purchase-service.js";
+import type { SafeWebFetchOptions } from "./web-ssrf.js";
+import { assertSafeWebUrl, fetchSafeWebBytes } from "./web-ssrf.js";
 
 /**
  * The checker behind a routine's "when something changes" trigger. It never
@@ -46,6 +49,8 @@ import { loadPurchaseRedactions } from "./purchase-service.js";
 /** Virtual root for validating watch paths; providers resolve the actual workspace. */
 const WORKSPACE = "/home/orkbot";
 const CHECK_TIMEOUT_MS = 60_000;
+const HTTP_CHECK_TIMEOUT_MS = 15_000;
+const HTTP_WATCH_MAX_BYTES = 512 * 1024;
 /** Starting a stopped computer can take longer than a check; it gets its own budget. */
 const PROVISION_TIMEOUT_MS = 5 * 60_000;
 /** A busy or still-booting computer is tried again this soon, not counted as a failure. */
@@ -68,6 +73,7 @@ export type RoutineWatchDeps = {
   /** Decrypts Vault credentials. Absent, a command watch runs without them. */
   secretStore?: SecretStore;
   paymentWallet?: PaymentWalletProvider | null;
+  http?: Pick<SafeWebFetchOptions, "fetch" | "resolveHostname">;
 };
 
 export type RoutineWatchTarget = {
@@ -111,6 +117,7 @@ export function nextRoutineWatchAt(watch: RoutineWatch, from: Date): Date {
 export function describeRoutineWatch(watch: RoutineWatch): string {
   if (watch.kind === "files") return (watch.paths ?? []).join(", ");
   if (watch.kind === "command") return `\`${watch.command ?? ""}\``;
+  if (watch.kind === "http") return watch.url ? new URL(watch.url).hostname : "";
   return watch.tool ?? "";
 }
 
@@ -123,10 +130,36 @@ export async function checkRoutineWatch(
   if (!watch) throw new RoutineWatchError("The change trigger's settings are not valid.");
   const previous = parseRoutineWatchState(routine.watchState);
   const reading =
-    watch.kind === "tool"
-      ? await readTool(deps, routine, watch)
-      : await readComputer(deps, routine, watch);
+    watch.kind === "http"
+      ? await readHttp(deps, watch)
+      : watch.kind === "tool"
+        ? await readTool(deps, routine, watch)
+        : await readComputer(deps, routine, watch);
   return compareReading(previous, reading, now);
+}
+
+async function readHttp(deps: RoutineWatchDeps, watch: RoutineWatch): Promise<Reading> {
+  if (!watch.url) throw new RoutineWatchError("Add an HTTPS address to watch.");
+  let body: Uint8Array;
+  try {
+    ({ body } = await fetchSafeWebBytes(watch.url, {
+      ...deps.http,
+      headers: { accept: "*/*" },
+      maxRedirects: 0,
+      timeoutMs: HTTP_CHECK_TIMEOUT_MS,
+      maxBytes: HTTP_WATCH_MAX_BYTES,
+    }));
+  } catch (error) {
+    if (isEgressRefusal(error)) throw new RoutineWatchError("The HTTPS address must be public.");
+    throw new RoutineWatchError(
+      "Could not read the HTTPS address. Check that it returns a successful response within the time and size limits.",
+    );
+  }
+  if (watch.track) return readItems(new TextDecoder().decode(body), watch.track);
+  return {
+    fingerprint: createHash("sha256").update(body).digest("hex"),
+    detail: "The HTTPS response changed.",
+  };
 }
 
 type Reading = {
@@ -850,6 +883,10 @@ export async function validateRoutineWatch(
   target: { spaceId: string; userId: string; botId: string },
   computer?: { scope: string } | null,
 ): Promise<void> {
+  if (watch.kind === "http" && watch.url) {
+    await validateRoutineWatchHttpUrl(watch.url);
+    return;
+  }
   if (watch.kind === "files" && computer) {
     for (const path of watch.paths ?? [])
       resolveWatchPath(parseComputerMode(computer.scope), target.botId, path);
@@ -870,6 +907,16 @@ export async function validateRoutineWatch(
     )?.tool;
   if (!tool) throw new RoutineWatchError(`No connected integration has a tool named ${name}.`);
   assertWatchToolReadOnly(name, declaredRead(tool));
+}
+
+/** Validate DNS before offering an approval, and again before a direct save. */
+export async function validateRoutineWatchHttpUrl(url: string): Promise<void> {
+  try {
+    await assertSafeWebUrl(url, undefined, AbortSignal.timeout(5_000));
+  } catch (error) {
+    if (isEgressRefusal(error)) throw new RoutineWatchError("The HTTPS address must be public.");
+    throw new RoutineWatchError("Could not resolve the HTTPS address.");
+  }
 }
 
 /** A batch runs whatever actions its arguments name, so it is never a declared read. */

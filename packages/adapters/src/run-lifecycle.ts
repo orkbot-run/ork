@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
+
 import { runContinueJob } from "@orkbot/adapter-kit";
 import { displayName } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
@@ -132,6 +137,7 @@ export async function renewRunLease(
       status: "running",
       leaseOwner: workerId,
       leaseFence: fence,
+      leaseExpiresAt: { gt: new Date() },
     },
     data: { leaseExpiresAt: new Date(Date.now() + 5 * 60_000) },
   });

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited web fetching is preserved. Bounded article parsing follows LICENSE.md.
+
 import { Readability } from "@mozilla/readability";
 import type {
   AdapterContext,
@@ -23,6 +27,9 @@ export {
 } from "./web-limits.js";
 
 const DEFAULT_SEARCH_ENDPOINT = "https://html.duckduckgo.com/html/";
+// Large pages use a linear text scan before spending time building a DOM.
+const MAX_READABILITY_ELEMENTS = 10_000;
+const MAX_READABILITY_SOURCE_LENGTH = 512 * 1024;
 
 export type KeylessHtmlSearchBackend = {
   id: string;
@@ -167,16 +174,25 @@ export function extractReadableText(html: string, url: string): { title: string;
 }
 
 function extractWithReadability(html: string, url: string): { title: string; text: string } | null {
+  if (html.length > MAX_READABILITY_SOURCE_LENGTH) return null;
+  let openings = 0;
+  for (const _ of html.matchAll(/<[a-z]/gi)) {
+    if (++openings > MAX_READABILITY_ELEMENTS) return null;
+  }
   try {
     const dom = new JSDOM(html, { url });
-    const article = new Readability(dom.window.document).parse();
-    if (article?.textContent && article.textContent.length > 0) {
+    try {
+      const article = new Readability(dom.window.document, {
+        maxElemsToParse: MAX_READABILITY_ELEMENTS,
+      }).parse();
+      if (!article?.textContent) return null;
       return {
         title: article.title?.trim() || "Untitled",
         text: normalizeArticleText(article.textContent),
       };
+    } finally {
+      dom.window.close();
     }
-    return null;
   } catch {
     return null;
   }

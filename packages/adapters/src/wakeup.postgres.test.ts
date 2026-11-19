@@ -1,10 +1,17 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
+
 import type { BackgroundJob, BackgroundJobHandlers } from "@orkbot/adapter-kit";
 import { messagingDeliverJob, routineWakeupJob } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { createPool, currentDbContext, runAsTenant } from "@orkbot/db";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { Pool } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ABANDONED_JOB_ERROR,
   createDeadJobPruner,
   createReservedGraphileJobWorkerHost,
   GraphileJobPublisher,
@@ -750,6 +757,7 @@ describePostgres("Graphile background jobs (PostgreSQL contract)", () => {
       lockedDead: { name: "computer.sleep", payload: { computerId: "locked-dead" } },
       oldLive: { name: "computer.sleep", payload: { computerId: "old-live" } },
       notice: { name: "routine.retry", payload: { runId: "notice" } },
+      future: { name: "computer.sleep", payload: { computerId: "future" } },
     } as const;
     const keys = Object.keys(jobs).map((name) => `${prefix}:${name}`);
     try {
@@ -761,9 +769,16 @@ describePostgres("Graphile background jobs (PostgreSQL contract)", () => {
          set attempts = case when key = $2 then 1 else max_attempts end,
              locked_at = case when key = $3 then now() else null end,
              locked_by = case when key = $3 then 'contract-worker' else null end,
-             updated_at = case when key = $4 then now() else now() - interval '8 days' end
+             updated_at = case when key = $4 then now() else now() - interval '8 days' end,
+             run_at = case when key = $5 then now() + interval '10 days' else now() - interval '8 days' end
          where key = any($1::text[])`,
-        [keys, `${prefix}:oldLive`, `${prefix}:lockedDead`, `${prefix}:recentDead`],
+        [
+          keys,
+          `${prefix}:oldLive`,
+          `${prefix}:lockedDead`,
+          `${prefix}:recentDead`,
+          `${prefix}:future`,
+        ],
       );
 
       await createDeadJobPruner(testPool())();
@@ -773,6 +788,7 @@ describePostgres("Graphile background jobs (PostgreSQL contract)", () => {
         [keys],
       );
       expect(remaining.rows.map((row) => row.key.slice(prefix.length + 1)).sort()).toEqual([
+        "future",
         "lockedDead",
         "notice",
         "oldLive",
@@ -783,6 +799,86 @@ describePostgres("Graphile background jobs (PostgreSQL contract)", () => {
         keys,
       ]);
       await publisher.close();
+    }
+  });
+
+  it("does not prune a job being refreshed by another transaction", async () => {
+    const publisher = new GraphileJobPublisher(testPool());
+    const key = `contract:revival:${Date.now()}`;
+    const client = await testPool().connect();
+    try {
+      await publisher.enqueue({
+        name: "computer.sleep",
+        payload: { computerId: "revived" },
+        replaceKey: key,
+      });
+      await testPool().query(
+        "update graphile_worker._private_jobs set attempts = max_attempts, run_at = now() - interval '8 days', updated_at = now() - interval '8 days' where key = $1",
+        [key],
+      );
+      await client.query("begin");
+      await client.query(
+        "update graphile_worker._private_jobs set attempts = 0, run_at = now() + interval '1 day', updated_at = now() where key = $1",
+        [key],
+      );
+      await createDeadJobPruner(testPool())();
+      await client.query("commit");
+      const { rows } = await testPool().query(
+        "select attempts from graphile_worker._private_jobs where key = $1",
+        [key],
+      );
+      expect(rows).toEqual([{ attempts: 0 }]);
+    } finally {
+      await client.query("rollback");
+      client.release();
+      await testPool().query("delete from graphile_worker._private_jobs where key = $1", [key]);
+      await publisher.close();
+    }
+  });
+
+  it("reports and unlocks an abandoned last attempt once, including submillisecond timestamps", async () => {
+    const sink = createTestSink();
+    installLogger(createLogger({ service: "test", sinks: [sink] }));
+    const publisher = new GraphileJobPublisher(testPool());
+    const key = `contract:abandoned:${Date.now()}`;
+    try {
+      await publisher.enqueue({
+        name: "computer.sleep",
+        payload: { computerId: "private-payload" },
+        replaceKey: key,
+      });
+      await testPool().query(
+        `update graphile_worker._private_jobs set attempts = max_attempts,
+          locked_at = now() - interval '231 minutes', locked_by = 'dead-worker',
+          updated_at = now() - interval '231 minutes' where key = $1`,
+        [key],
+      );
+      const prune = createDeadJobPruner(testPool());
+      await Promise.all([prune(), createDeadJobPruner(testPool())()]);
+      await prune();
+      const { rows } = await testPool().query(
+        "select locked_at, locked_by, last_error from graphile_worker._private_jobs where key = $1",
+        [key],
+      );
+      expect(rows[0]).toMatchObject({
+        locked_at: null,
+        locked_by: null,
+        last_error: ABANDONED_JOB_ERROR,
+      });
+      const reports = sink.events.filter(
+        (event) => event.message === "job.gave_up" && event["job.key"] === key,
+      );
+      expect(reports).toHaveLength(1);
+      expect(reports[0]).toMatchObject({
+        "job.type": "computer.sleep",
+        "job.attempts": 25,
+        "job.max_attempts": 25,
+      });
+      expect(JSON.stringify(reports)).not.toContain("private-payload");
+    } finally {
+      await testPool().query("delete from graphile_worker._private_jobs where key = $1", [key]);
+      await publisher.close();
+      installLogger(createLogger({ service: "test", level: "off", sinks: [] }));
     }
   });
 

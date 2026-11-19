@@ -8,6 +8,23 @@ export const PL_MESSAGES: Record<string, string> = {
     "Nie udało się otworzyć Ork Accounts. Spróbuj ponownie.",
   "This workspace was closed or your access was removed.":
     "Ta przestrzeń została zamknięta lub odebrano Ci do niej dostęp.",
+  "HTTPS address": "Adres HTTPS",
+  "Enter a public HTTPS address without credentials or a fragment":
+    "Wpisz publiczny adres HTTPS bez danych logowania i fragmentu",
+  "Unchanged checks appear in history. You can also post them in chat.":
+    "Sprawdzenia bez zmian pojawiają się w historii. Możesz też publikować je na czacie.",
+  "Watching an HTTPS address requires approval.": "Obserwowanie adresu HTTPS wymaga zatwierdzenia.",
+  "Watch an HTTPS address": "Obserwuj adres HTTPS",
+  "Check interval in minutes": "Co ile minut sprawdzać",
+  "Check every 5 to 1,440 minutes and track up to five fields.":
+    "Sprawdzaj co 5–1440 minut i śledź najwyżej pięć pól.",
+  "Add a schedule or an HTTPS address to run this routine.":
+    "Dodaj harmonogram lub adres HTTPS, aby uruchamiać tę rutynę.",
+  "Fields that mark a change": "Pola wykrywające zmianę",
+  "Fields to compare, e.g. id, modifiedTime (optional)":
+    "Pola do porównania, np. id, modifiedTime (opcjonalnie)",
+  'Post "No changes" in chat': "Publikuj „Bez zmian” na czacie",
+  "Remove change trigger": "Usuń wyzwalacz zmiany",
   "Organization settings": "Ustawienia organizacji",
   "Personal models": "Modele osobiste",
   "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them.":

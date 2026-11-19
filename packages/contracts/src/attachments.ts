@@ -25,15 +25,23 @@ export const ATTACHMENT_AUDIO_MIME_TYPES = [
   "audio/mp4",
 ] as const;
 
+export const ATTACHMENT_VIDEO_MIME_TYPES = ["video/mp4", "video/quicktime", "video/3gpp"] as const;
+
 export const ATTACHMENT_FILE_MIME_TYPES = [
   ...ATTACHMENT_AUDIO_MIME_TYPES,
-  "video/mp4",
+  ...ATTACHMENT_VIDEO_MIME_TYPES,
+  "image/heic",
+  "image/heif",
   "application/pdf",
   "text/plain",
   "text/markdown",
   "text/csv",
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "text/html",
   "application/json",
   "application/zip",
@@ -69,7 +77,7 @@ export function artifactPreviewKind(mimeType: string): ArtifactPreviewKind {
   if (type === "text/markdown") return "markdown";
   if (type === "application/pdf") return "pdf";
   if (isAttachmentImageMimeType(type)) return "image";
-  if (type === "video/mp4") return "video";
+  if ((ATTACHMENT_VIDEO_MIME_TYPES as readonly string[]).includes(type)) return "video";
   if (type.startsWith("text/") || TEXT_APPLICATION_MIME_TYPES.has(type)) return "text";
   return "none";
 }
@@ -104,3 +112,6 @@ export function attachmentSizeLabel(maxBytes: number): string {
 export function attachmentMaxCount(config?: { maxAttachmentsPerMessage?: number } | null): number {
   return config?.maxAttachmentsPerMessage ?? ATTACHMENT_MAX_COUNT;
 }
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited attachment policy is preserved. Extended file formats follow LICENSE.md.

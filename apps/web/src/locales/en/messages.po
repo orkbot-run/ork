@@ -7839,3 +7839,20 @@ msgstr "Your voice provider key was rejected."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "ZIP or postal code"
+
+#: src/pages/RoutineEditor.tsx
+msgid "HTTPS address"
+msgstr "HTTPS address"
+
+#: src/pages/RoutineEditor.tsx
+msgid "Enter a public HTTPS address without credentials or a fragment"
+msgstr "Enter a public HTTPS address without credentials or a fragment"
+
+#: src/pages/RoutineEditor.tsx
+msgid "Unchanged checks appear in history. You can also post them in chat."
+msgstr "Unchanged checks appear in history. You can also post them in chat."
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Watching an HTTPS address requires approval."
+msgstr "Watching an HTTPS address requires approval."

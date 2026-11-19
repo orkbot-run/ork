@@ -132,6 +132,7 @@ async function main() {
   const created = createDb(databaseUrl, {
     poolMax,
     applicationName: "orkbot-worker",
+    queryTimeoutMs: 5_000,
     keyProvider: contentKeyProviderFromEnv(),
   });
   const { pool } = created;

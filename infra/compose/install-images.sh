@@ -31,6 +31,7 @@ prepare_only=false
 skip_existing=false
 pull_never=false
 offline=false
+install_backups=false
 if [[ "${ORKBOT_DOWNLOAD_SKIP_EXISTING:-}" == "1" ]]; then
   skip_existing=true
 fi
@@ -46,6 +47,9 @@ done
 for arg in "$@"; do
   [[ "$server_mode" != true ]] || break
   case "$arg" in
+    --install-backups)
+      install_backups=true
+      ;;
     --prepare-only)
       prepare_only=true
       ;;
@@ -62,7 +66,7 @@ for arg in "$@"; do
       offline=true
       ;;
     *)
-      echo "Usage: bash install-images.sh [--prepare-only] [--local] [--pull-never] [--offline]" >&2
+      echo "Usage: bash install-images.sh [--prepare-only] [--local] [--pull-never] [--offline] [--install-backups]" >&2
       exit 2
       ;;
   esac
@@ -205,7 +209,7 @@ curl_download() {
 
 download() {
   local filename="$1"
-  local url="${DOWNLOAD_BASE}/${filename}"
+  local url="${2:-${DOWNLOAD_BASE}/${filename}}"
 
   if [[ "$skip_existing" == true && -e "$filename" ]]; then
     echo "Using local ${filename}"
@@ -410,6 +414,40 @@ configure_computer_egress() {
   echo "See Restricted computer egress in docs/self-host-docker-computers.md." >&2
 }
 
+# Explicit opt-in: this installs host units, while the default image installer
+# remains usable on macOS and Docker hosts without systemd.
+check_backups_host() {
+  [[ "$(uname -s)" == Linux && "$EUID" == 0 ]] || fail "--install-backups requires root on a Linux host with systemd."
+  command -v systemctl >/dev/null 2>&1 || fail "--install-backups requires systemd."
+}
+
+download_backup_files() {
+  local filename
+  for filename in backup-prod.sh backup-drill.sh; do download "$filename"; done
+  for filename in orkbot-backup.service orkbot-backup.timer; do
+    download "$filename" "${DOWNLOAD_BASE}/../systemd/${filename}"
+  done
+}
+
+configure_backups() {
+  local deploy_dir="$(pwd -P)" escaped
+  [[ "$deploy_dir" != *$'\n'* && "$deploy_dir" != *$'\r'* ]] || fail "the backup deployment path cannot contain newlines."
+  install -d -m 700 /etc/orkbot /var/backups/orkbot
+  install -m 755 backup-prod.sh /usr/local/sbin/orkbot-backup
+  install -m 755 backup-drill.sh /usr/local/sbin/orkbot-backup-drill
+  install -m 644 orkbot-backup.service orkbot-backup.timer /etc/systemd/system/
+  touch /etc/orkbot/backup.env
+  chmod 600 /etc/orkbot/backup.env
+  if ! grep -Eq '^[[:space:]]*ORKBOT_DEPLOY_DIR=' /etc/orkbot/backup.env; then
+    escaped="${deploy_dir//\\/\\\\}"
+    escaped="${escaped//\"/\\\"}"
+    printf '\nORKBOT_DEPLOY_DIR="%s"\n' "$escaped" >>/etc/orkbot/backup.env
+  fi
+  systemctl daemon-reload
+  systemctl enable --now orkbot-backup.timer
+  echo "Nightly backups enabled. Settings: /etc/orkbot/backup.env; run now: systemctl start orkbot-backup.service"
+}
+
 # The public server path reuses downloads, secret generation and validation below.
 # Its helper comes from the same revision or operator mirror as the Compose files.
 if [[ "$server_mode" == true ]]; then
@@ -426,7 +464,13 @@ if [[ "$server_mode" == true ]]; then
   exit 0
 fi
 
+if [[ "$install_backups" == true && "$prepare_only" != true ]]; then
+  check_backups_host
+fi
 required_files=("$COMPOSE_FILE" "$ENV_EXAMPLE")
+if [[ "$install_backups" == true ]]; then
+  required_files+=(backup-prod.sh backup-drill.sh orkbot-backup.service orkbot-backup.timer)
+fi
 if [[ "$offline" == true ]]; then
   for filename in "${required_files[@]}"; do
     [[ -f "$filename" ]] || fail "--offline requires local ${filename}; copy it into the working directory first."
@@ -441,7 +485,11 @@ done
 docker compose version >/dev/null 2>&1 || fail "the Docker Compose plugin is required."
 
 for filename in "${required_files[@]}"; do
-  download "$filename"
+  case "$filename" in
+    orkbot-backup.service|orkbot-backup.timer)
+      download "$filename" "${DOWNLOAD_BASE}/../systemd/${filename}" ;;
+    *) download "$filename" ;;
+  esac
 done
 
 compose_files=(-f "$COMPOSE_FILE")
@@ -501,6 +549,12 @@ if grep -q -- '--wait-timeout' <<<"$compose_up_help"; then
   docker compose --env-file "$ENV_FILE" "${compose_files[@]}" up -d ${up_pull_args[@]+"${up_pull_args[@]}"} --wait --wait-timeout 300
 else
   docker compose --env-file "$ENV_FILE" "${compose_files[@]}" up -d ${up_pull_args[@]+"${up_pull_args[@]}"}
+fi
+
+if [[ "$install_backups" == true ]]; then
+  configure_backups
+else
+  echo "Nightly backups are available on Linux with systemd: rerun as root with --install-backups (see docs/self-host-backups.md)."
 fi
 
 echo "Ork is starting at http://127.0.0.1:5173"

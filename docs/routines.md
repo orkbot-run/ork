@@ -41,9 +41,15 @@ accepts a cron expression. Times use your timezone, set in **Settings → Genera
 ### When something changes
 
 The bot checks something at a set interval (**Check every**, from 5 minutes to a day) and runs only
-when it changed. **What to watch** can be files or folders on the computer, a command's output, or a
-tool from a connected app. Turn on **Post "No changes" in chat** if you want a note every time. A
+when it changed. **What to watch** can be files or folders on the computer, a command's output, a
+read-only tool from a connected app, or a public HTTPS address. Turn on **Post "No changes" in chat** if you want a note every time. A
 watch can't be combined with a schedule.
+
+**HTTPS address** sends a GET from the server without starting the bot's computer. The first
+successful check records a baseline. A changed response starts the routine. For JSON responses,
+enter fields such as `id, modifiedTime` to compare each item by its ID and modification time.
+Quiet checks still appear in history. HTTPS watches work without credentials or redirects and
+require one-time approval when a bot proposes one.
 
 ### Webhook
 
@@ -74,8 +80,8 @@ Runs when the bot receives a message in Slack. Needs [Slack connected](./messagi
 Open a bot's profile to see its routines. Tap **+** to create one, or open an existing
 routine to view its instruction, schedule, next run and run history. You can pause it
 or start a test run there. **Edit routine** lets you change its name, instruction and
-schedules, or delete it.
+schedules, add or edit an HTTPS change trigger, or delete it.
 
-Configure webhook, Git event, Slack message and change triggers in chat or on the web
+Configure webhook, Git event, Slack message and other change triggers in chat or on the web
 or desktop app. Set a routine's own model there too. Mobile displays these settings
 and preserves them when you edit the routine.

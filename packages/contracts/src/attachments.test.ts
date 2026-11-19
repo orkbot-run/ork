@@ -61,8 +61,12 @@ describe("attachment contracts", () => {
     expect(artifactPreviewKind("text/markdown")).toBe("markdown");
     expect(artifactPreviewKind("text/html")).toBe("html");
     expect(artifactPreviewKind("video/mp4")).toBe("video");
+    expect(artifactPreviewKind("video/quicktime")).toBe("video");
+    expect(artifactPreviewKind("video/3gpp")).toBe("video");
     expect(artifactPreviewKind("application/pdf")).toBe("pdf");
     expect(artifactPreviewKind("image/png")).toBe("image");
+    expect(artifactPreviewKind("image/heic")).toBe("none");
+    expect(artifactPreviewKind("image/heif")).toBe("none");
     expect(artifactPreviewKind("application/zip")).toBe("none");
   });
 });

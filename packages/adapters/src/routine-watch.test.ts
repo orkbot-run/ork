@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { accountVault, fakeDatabase } from "./bot-secrets.test-support.js";
 import { ComputerBusyError, provisionComputer } from "./computer-lifecycle.js";
 import { protectedComputerLifecycleRefusal } from "./desktop-command-guard.js";
+import { egressRefused } from "./network-address.js";
 import type { RoutineWatchTickDeps } from "./routine-watch.js";
 import {
   checkRoutineWatch,
@@ -41,6 +42,35 @@ describe("RoutineWatchSchema", () => {
     expect(RoutineWatchSchema.safeParse({ kind: "files" }).success).toBe(false);
     expect(RoutineWatchSchema.safeParse({ kind: "command" }).success).toBe(false);
     expect(RoutineWatchSchema.safeParse({ kind: "tool" }).success).toBe(false);
+  });
+
+  it.each([
+    undefined,
+    "http://example.com/",
+    "https://user:password@example.com/",
+    "https://example.com/#status",
+    "https://localhost/",
+    "https://127.1/",
+    "https://192.168.1.1/",
+    "https://[::1]/",
+  ])("rejects an absent or non-public HTTPS address %s", (url) => {
+    expect(RoutineWatchSchema.safeParse({ kind: "http", url }).success).toBe(false);
+  });
+
+  it("normalizes a public address and accepts tracking fields", () => {
+    expect(
+      RoutineWatchSchema.parse({
+        kind: "http",
+        url: " HTTPS://EXAMPLE.COM:443/status ",
+        track: [" id "],
+      }),
+    ).toEqual({
+      kind: "http",
+      url: "https://example.com/status",
+      track: ["id"],
+      everyMinutes: 15,
+      loud: false,
+    });
   });
 
   it("keeps integration checks to at most every 5 minutes", () => {
@@ -184,6 +214,90 @@ describe("tickRoutineWatch", () => {
     };
     return { deps, routine, updateMany, messages };
   }
+
+  it("starts the routine only on tracked HTTP changes, without looking up a computer", async () => {
+    const { deps, routine, updateMany, messages } = setup(
+      {},
+      {
+        kind: "http",
+        url: "https://example.test/status",
+        track: ["id", "status"],
+      },
+    );
+    let output = { id: "issue-1", status: "ok", lastUpdated: 1 };
+    const fetch = vi.fn(async () => Response.json([output]));
+    deps.http = { fetch, resolveHostname: async () => [{ address: "1.1.1.1", family: 4 }] };
+    expect(await tickRoutineWatch(deps, routine, target, scheduledAt)).toEqual({ run: false });
+    routine.watchState = (
+      updateMany.mock.calls.at(-1) as unknown as [
+        { data: { watchState: typeof routine.watchState } },
+      ]
+    )[0].data.watchState;
+    output = { ...output, lastUpdated: 2 };
+    expect(await tickRoutineWatch(deps, routine, target, scheduledAt)).toEqual({ run: false });
+    expect(messages).toEqual([]);
+    output = { ...output, status: "down" };
+    expect(await tickRoutineWatch(deps, routine, target, scheduledAt)).toMatchObject({ run: true });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "https://example.test/status",
+      expect.objectContaining({
+        method: "GET",
+        redirect: "manual",
+        headers: expect.not.objectContaining({ authorization: expect.anything() }),
+      }),
+    );
+    expect(deps.prisma.bot.findUnique).not.toHaveBeenCalled();
+    expect(deps.connector?.execute).not.toHaveBeenCalled();
+    expect(provisionComputer).not.toHaveBeenCalled();
+  });
+
+  it("fails a check when DNS resolves to a private address without fetching it", async () => {
+    const { deps, routine } = setup({}, { kind: "http", url: "https://example.test/status" });
+    const fetch = vi.fn();
+    deps.http = { fetch, resolveHostname: async () => [{ address: "192.168.0.5", family: 4 }] };
+    await expect(checkRoutineWatch(deps, routine)).rejects.toThrow("must be public");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("records a wrapped egress refusal as a failed check", async () => {
+    const { deps, routine, updateMany } = setup(
+      {},
+      { kind: "http", url: "https://example.test/status" },
+    );
+    const denied = egressRefused("example.test", new Error("Private address"));
+    deps.http = {
+      fetch: async () => {
+        throw new TypeError("fetch failed", { cause: new AggregateError([denied]) });
+      },
+      resolveHostname: async () => [{ address: "1.1.1.1", family: 4 }],
+    };
+    expect(await tickRoutineWatch(deps, routine, target, scheduledAt)).toEqual({ run: false });
+    expect(updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          watchState: expect.objectContaining({
+            outcome: "failed",
+            detail: "The HTTPS address must be public.",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it.each([
+    () => new Response(null, { status: 302, headers: { location: "https://elsewhere.test" } }),
+    () => new Response("x".repeat(512 * 1024 + 1)),
+    () => new Response("temporarily unavailable", { status: 503 }),
+  ])("does not treat redirects, oversized bodies or failures as changes", async (response) => {
+    const { deps, routine } = setup({}, { kind: "http", url: "https://example.test/status" });
+    const fetch = vi.fn(async () => response());
+    deps.http = { fetch, resolveHostname: async () => [{ address: "1.1.1.1", family: 4 }] };
+    await expect(checkRoutineWatch(deps, routine)).rejects.toThrow(
+      "Could not read the HTTPS address",
+    );
+    expect(fetch).toHaveBeenCalledOnce();
+  });
 
   it("records a quiet no-change check without a message and schedules the next", async () => {
     const { deps, routine, updateMany, messages } = setup({ data: { changes: [] } });

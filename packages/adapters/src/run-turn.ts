@@ -49,6 +49,7 @@ import {
 } from "./routine-backoff.js";
 import type { RunContext, RunState } from "./run-context.js";
 import { persistTurnCheckpoint } from "./run-context.js";
+import { retryRunDatabaseOperation } from "./run-database-recovery.js";
 import { renewRunLease, requeueComputerRun } from "./run-lifecycle.js";
 import { publishMessage, redactBlocks } from "./run-messages.js";
 import {
@@ -940,27 +941,34 @@ export async function completeRun(ctx: RunContext) {
   ) {
     throw new Error(TOOL_STEPS_WITHOUT_RESPONSE);
   }
-  if (!(await renewRunLease(deps, runId, ctx.workerId, ctx.fence))) return;
+  if (
+    !(await retryRunDatabaseOperation(ctx, () =>
+      renewRunLease(deps, runId, ctx.workerId, ctx.fence),
+    ))
+  )
+    return;
   const botMessageOutcome =
     run.trigger === "bot_message"
       ? botMessageOutcomeFromMidTurn(text, reply.midTurnUserTexts)
       : null;
   await ctx.settleRunningHelpers();
-  const completed = await deps.events.finalizeRun({
-    spaceId: run.spaceId,
-    threadId: thread.id,
-    botId: bot.id,
-    runId,
-    taskId: run.taskId,
-    attemptId: ctx.attempt.id,
-    leaseOwner: ctx.workerId,
-    leaseFence: ctx.fence,
-    outcome: "completed",
-    blocks,
-    markUnread:
-      !groupSilentEnd &&
-      completionMarksUnread(run.trigger, text, ctx.source.peerMessage?.repliesToRequest === true),
-  });
+  const completed = await retryRunDatabaseOperation(ctx, () =>
+    deps.events.finalizeRun({
+      spaceId: run.spaceId,
+      threadId: thread.id,
+      botId: bot.id,
+      runId,
+      taskId: run.taskId,
+      attemptId: ctx.attempt.id,
+      leaseOwner: ctx.workerId,
+      leaseFence: ctx.fence,
+      outcome: "completed",
+      blocks,
+      markUnread:
+        !groupSilentEnd &&
+        completionMarksUnread(run.trigger, text, ctx.source.peerMessage?.repliesToRequest === true),
+    }),
+  );
   if (!completed) return;
   if (run.trigger === "background_helper") {
     await deliverBackgroundHelperOutcome(deps, { spaceId: run.spaceId, runId }).catch((error) =>

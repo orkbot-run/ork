@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
+
 import { getHeapStatistics } from "node:v8";
 import type { BackgroundJobHandlers } from "@orkbot/adapter-kit";
 import {
@@ -839,6 +844,9 @@ describe("GraphileJobWorkerHost runner lifecycle", () => {
       const failed = on.mock.calls.find((call) => call[0] === "job:failed")?.[1] as
         | ((event: {
             job: {
+              id: string;
+              key: string | null;
+              created_at: Date;
               task_identifier: string;
               payload: unknown;
               attempts: number;
@@ -850,6 +858,9 @@ describe("GraphileJobWorkerHost runner lifecycle", () => {
       expect(failed).toBeTypeOf("function");
       failed?.({
         job: {
+          id: "queue-1",
+          key: "key",
+          created_at: new Date(),
           task_identifier: "history.compact",
           payload: wrapJobPayload({ threadId: "thread-9" }),
           attempts: HISTORY_COMPACT_MAX_ATTEMPTS,
@@ -859,6 +870,9 @@ describe("GraphileJobWorkerHost runner lifecycle", () => {
       });
       failed?.({
         job: {
+          id: "queue-1",
+          key: "key",
+          created_at: new Date(),
           task_identifier: "run.continue",
           payload: wrapJobPayload({ runId: "run-1" }),
           attempts: 25,
@@ -871,7 +885,8 @@ describe("GraphileJobWorkerHost runner lifecycle", () => {
       installLogger(createLogger({ service: "orkbot-worker", level: "off", sinks: [] }));
     }
 
-    expect(sink.events).toEqual([
+    expect(sink.events.filter((event) => event.message === "job.gave_up")).toHaveLength(2);
+    expect(sink.events.filter((event) => event.message !== "job.gave_up")).toEqual([
       expect.objectContaining({
         level: "error",
         message: "history.compact failed permanently",

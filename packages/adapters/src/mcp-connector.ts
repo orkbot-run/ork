@@ -73,9 +73,14 @@ import {
 } from "./mcp-package-installer.js";
 import type { McpServerHealthUpdate } from "./mcp-server-health.js";
 import { needsMcpOAuthClient, recordMcpServerHealth } from "./mcp-server-health.js";
+import { isBrokenMcpCall } from "./mcp-tool-call.js";
 import { McpSession, mcpStdioRefusal } from "./mcp-transport.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
-import { ConnectorRedirectError, isMcpSessionGoneError } from "./remote-mcp.js";
+import {
+  ConnectorRedirectError,
+  isMcpSessionGoneError,
+  RemoteMcpTransportError,
+} from "./remote-mcp.js";
 import { appendToolCompletionAudit } from "./tool-completion-audit.js";
 
 type SessionEntry = {
@@ -700,20 +705,30 @@ export class McpConnector implements ConnectorProvider {
     // oauthMaterialSecrets(material) so in-place token refresh stays covered.
     let material: OAuthMaterial | undefined;
     let launchSecrets: string[] = [];
+    let usedEntry: SessionEntry | undefined;
     const sessionKey = this.sessionKey(assignment.server, context);
     try {
       const toolName = call.route.toolName;
       const result = await this.withSession(assignment.server, context, (session) => {
-        material = this.sessions.get(sessionKey)?.material;
-        launchSecrets = this.sessions.get(sessionKey)?.launchSecrets ?? [];
+        const entry = this.sessions.get(sessionKey);
+        usedEntry = entry?.session === session ? entry : undefined;
+        material = usedEntry?.material;
+        launchSecrets = usedEntry?.launchSecrets ?? [];
         return session.callTool(toolName, call.args, { signal: context.signal });
       });
       const secrets = [...(material ? oauthMaterialSecrets(material) : []), ...launchSecrets];
       yield { type: "result", data: redactConnectorPayload(result, secrets) };
     } catch (error) {
-      // A thrown call means the transport or auth broke; drop the session so the next call reconnects.
+      // Only a broken transport/auth or silence deadline retires the session.
       const secrets = [...(material ? oauthMaterialSecrets(material) : []), ...launchSecrets];
-      await this.evict(sessionKey);
+      if (
+        usedEntry &&
+        (usedEntry.session.connectionClosed ||
+          isBrokenMcpCall(error) ||
+          error instanceof RemoteMcpTransportError)
+      ) {
+        await this.evict(sessionKey, usedEntry);
+      }
       yield { type: "error", message: sanitizeConnectorError(error, secrets) };
     }
   }
@@ -882,9 +897,9 @@ export class McpConnector implements ConnectorProvider {
    * Stop reusing a session. A session other calls are still using is closed by the last of
    * them (see withSession), so one failure never cuts off another bot's running call.
    */
-  private async evict(sessionKey: string): Promise<void> {
+  private async evict(sessionKey: string, expected?: SessionEntry): Promise<void> {
     const entry = this.sessions.get(sessionKey);
-    if (!entry) return;
+    if (!entry || (expected && entry !== expected)) return;
     entry.session.retire();
     this.sessions.delete(sessionKey);
     if ((this.inFlight.get(entry.session) ?? 0) > 0) {

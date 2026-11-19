@@ -31,7 +31,6 @@ import type { Dispatcher } from "undici";
 import { createCheckedProxyDispatcher } from "./checked-proxy-dispatcher.js";
 import { composioToolBatch } from "./composio-batch.js";
 import { sensitiveQueryParameter } from "./connector-http.js";
-import { combineSignals } from "./connector-safety.js";
 import { credentialDigest } from "./credential-digest.js";
 import type {
   McpDiscoveryDiagnostic,
@@ -40,6 +39,7 @@ import type {
 } from "./mcp-discovery.js";
 import { mcpDiscoveryLimits } from "./mcp-discovery.js";
 import { limitMcpResponseBody } from "./mcp-response-limit.js";
+import { callMcpToolWithDeadline, isBrokenMcpCall } from "./mcp-tool-call.js";
 import type { ResolvedAddress, ResolveHostname } from "./network-address.js";
 import {
   createAddressCheckedLookup,
@@ -187,10 +187,7 @@ async function callMcpTool(
   args: Record<string, unknown>,
   projectResult?: (result: unknown) => unknown,
 ): Promise<unknown> {
-  const result = await client.callTool({ name: toolName, arguments: args }, undefined, {
-    signal,
-    timeout: MCP_TIMEOUT_MS,
-  });
+  const result = await callMcpToolWithDeadline(client, toolName, args, signal);
   const isError = result.isError === true;
   const envelope = {
     content: withoutDuplicatedStructuredText(result.content, result.structuredContent, isError),
@@ -316,7 +313,7 @@ async function withRemoteMcpClient<T>(
     options.resolveHostname ?? resolveHostname,
     policy,
   );
-  const signal = combineSignals(options.signal, AbortSignal.timeout(MCP_TIMEOUT_MS));
+  const signal = options.signal;
   const safeFetch = createSafeRemoteFetch(
     options.fetch,
     options.resolveHostname ?? resolveHostname,
@@ -326,7 +323,6 @@ async function withRemoteMcpClient<T>(
     requestInit: {
       headers: options.headers,
       redirect: "manual",
-      signal,
     },
     fetch: async (input, init) => limitMcpResponseBody(await safeFetch(input, init), init?.headers),
   });
@@ -388,8 +384,6 @@ export class RemoteMcpSessionCache {
       const session = await this.sessionFor(key, options);
       session.inFlight += 1;
       const controller = new AbortController();
-      const deadlineReason = new DOMException("Timed out", "TimeoutError");
-      const deadline = setTimeout(() => controller.abort(deadlineReason), MCP_TIMEOUT_MS);
       const onAbort = () => controller.abort(options.signal?.reason);
       if (options.signal?.aborted) onAbort();
       else options.signal?.addEventListener("abort", onAbort, { once: true });
@@ -409,11 +403,9 @@ export class RemoteMcpSessionCache {
         // running on the transport; only closing the session aborts it and
         // tells the server to drop the work, as a one-off session does. The
         // combined signal keeps the reason of whichever signal fired first.
-        if (brokeMcpSession(session, error) || (signal.aborted && signal.reason === deadlineReason))
-          void this.drop(session);
+        if (brokeMcpSession(session, error)) void this.drop(session);
         throw error;
       } finally {
-        clearTimeout(deadline);
         options.signal?.removeEventListener("abort", onAbort);
         session.inFlight -= 1;
         session.lastUsedAt = this.now();
@@ -930,5 +922,7 @@ export function isMcpSessionGoneError(error: unknown): boolean {
  * same -32000 code the client uses for closure — cannot be trusted for the
  * next call. A missed closure is still caught by the server's next 404. */
 function brokeMcpSession(session: ScopedMcpSession, error: unknown): boolean {
-  return session.connectionClosed || error instanceof RemoteMcpTransportError;
+  return (
+    session.connectionClosed || error instanceof RemoteMcpTransportError || isBrokenMcpCall(error)
+  );
 }

@@ -11,7 +11,11 @@ import type {
   RoutineWatch,
   RoutineWatchInput,
 } from "@orkbot/contracts";
-import { ROUTINE_WATCH_DEFAULT_MINUTES, ROUTINE_WATCH_MIN_MINUTES } from "@orkbot/contracts";
+import {
+  ROUTINE_WATCH_DEFAULT_MINUTES,
+  ROUTINE_WATCH_MIN_MINUTES,
+  RoutineWatchHttpUrlSchema,
+} from "@orkbot/contracts";
 import type { CronFreq, CronLabels, CronPreset } from "@orkbot/core";
 import {
   credentialForModel,
@@ -115,6 +119,7 @@ export type RoutineWatchDraft = {
   paths: string;
   command: string;
   tool: string;
+  url: string;
   /** JSON object of arguments for the tool. */
   args: string;
   /** Comma-separated field names; see RoutineWatch.track. */
@@ -129,6 +134,7 @@ export function emptyWatchDraft(): RoutineWatchDraft {
     paths: "",
     command: "",
     tool: "",
+    url: "",
     args: "{}",
     track: "",
     everyMinutes: ROUTINE_WATCH_DEFAULT_MINUTES,
@@ -143,6 +149,7 @@ function watchDraftFromRoutine(watch: RoutineWatch | null): RoutineWatchDraft | 
     paths: (watch.paths ?? []).join("\n"),
     command: watch.command ?? "",
     tool: watch.tool ?? "",
+    url: watch.url ?? "",
     args: JSON.stringify(watch.args ?? {}),
     track: (watch.track ?? []).join(", "),
     everyMinutes: watch.everyMinutes,
@@ -171,6 +178,12 @@ export function watchFromDraft(
   if (draft.kind === "command") {
     if (!draft.command.trim()) return { error: t`Add a command to run` };
     return { watch: { ...base, command: draft.command.trim(), ...track } };
+  }
+  if (draft.kind === "http") {
+    const url = RoutineWatchHttpUrlSchema.safeParse(draft.url);
+    if (!url.success)
+      return { error: t`Enter a public HTTPS address without credentials or a fragment` };
+    return { watch: { ...base, url: url.data, ...track } };
   }
   if (!draft.tool.trim()) return { error: t`Pick a tool to check` };
   let args: unknown;
@@ -823,6 +836,7 @@ function WatchTriggerCard({
           <NativeSelectOption value="files">{t`Files or folders on the computer`}</NativeSelectOption>
           <NativeSelectOption value="command">{t`A command's output`}</NativeSelectOption>
           <NativeSelectOption value="tool">{t`An integration tool`}</NativeSelectOption>
+          <NativeSelectOption value="http">{t`HTTPS address`}</NativeSelectOption>
         </NativeSelect>
         {watch.kind === "files" ? (
           <Textarea
@@ -841,6 +855,33 @@ function WatchTriggerCard({
             onChange={(e) => onChange({ ...watch, command: e.target.value })}
             className="font-mono text-[13px]"
           />
+        ) : null}
+        {watch.kind === "http" ? (
+          <div className="space-y-1.5">
+            <label htmlFor={`${id}-url`} className="text-[13.5px] text-muted-foreground">
+              <Trans>HTTPS address</Trans>
+            </label>
+            <Input
+              id={`${id}-url`}
+              name="watchUrl"
+              type="url"
+              autoCapitalize="none"
+              spellCheck={false}
+              aria-describedby={`${id}-http-help`}
+              aria-invalid={
+                watch.url.trim() && !RoutineWatchHttpUrlSchema.safeParse(watch.url).success
+                  ? true
+                  : undefined
+              }
+              placeholder="https://example.com/status.json"
+              value={watch.url}
+              onChange={(e) => onChange({ ...watch, url: e.target.value })}
+              className="font-mono text-[13px]"
+            />
+            <p id={`${id}-http-help`} className="text-[12.5px] text-muted-foreground">
+              <Trans>Unchanged checks appear in history. You can also post them in chat.</Trans>
+            </p>
+          </div>
         ) : null}
         {watch.kind === "tool" ? (
           <>

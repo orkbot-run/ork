@@ -29,6 +29,7 @@ export * from "./content-migration.js";
 export * from "./credential-secrets.js";
 export * from "./cross-space-communication.js";
 export * from "./database-access.js";
+export * from "./database-availability.js";
 export * from "./database-errors.js";
 export * from "./deferred-migrations.js";
 export * from "./events.js";

@@ -1,6 +1,6 @@
 import { i18n } from "@lingui/core";
 import { t as translate } from "@lingui/core/macro";
-import { useLingui } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { ChatMarkdown } from "@orkbot/chat-ui/web";
 import { artifactPreviewKind, isAttachmentAudioMimeType } from "@orkbot/contracts";
 import { fileSizeParts } from "@orkbot/core";
@@ -33,7 +33,7 @@ function isPreviewable(mimeType: string) {
   return (
     isTextPreview(mimeType) ||
     artifactPreviewKind(mimeType) === "pdf" ||
-    artifactPreviewKind(mimeType) === "video"
+    (artifactPreviewKind(mimeType) === "video" && canPreviewVideo(mimeType))
   );
 }
 
@@ -240,7 +240,7 @@ function FilePreview({
         ) : kind === "html" && state.text !== undefined ? (
           <SandboxedHtmlViewer html={state.text} title={name} />
         ) : kind === "video" ? (
-          <VideoPreview bytes={state.bytes} name={name} />
+          <VideoPreview bytes={state.bytes} name={name} mimeType={mimeType} />
         ) : kind === "pdf" ? (
           <PdfViewer bytes={state.bytes} title={name} />
         ) : state.text !== undefined && kind === "text" ? (
@@ -348,13 +348,39 @@ function AudioArtifactPreview({
   );
 }
 
-export function VideoPreview({ bytes, name }: { bytes: Uint8Array; name: string }) {
+function canPreviewVideo(mimeType: string): boolean {
+  return (
+    mimeType === "video/mp4" ||
+    (typeof document !== "undefined" &&
+      Boolean(document.createElement("video").canPlayType(mimeType)))
+  );
+}
+
+export function VideoPreview({
+  bytes,
+  name,
+  mimeType = "video/mp4",
+}: {
+  bytes: Uint8Array;
+  name: string;
+  mimeType?: string;
+}) {
   const [src, setSrc] = useState<string>();
+  const [failedSource, setFailedSource] = useState<string>();
+  const supported = canPreviewVideo(mimeType);
   useEffect(() => {
-    const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: "video/mp4" }));
+    if (!supported) return;
+    const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mimeType }));
     setSrc(url);
     return () => URL.revokeObjectURL(url);
-  }, [bytes]);
+  }, [bytes, mimeType, supported]);
+  if (!supported || (src && failedSource === src)) {
+    return (
+      <div className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground">
+        <Trans>Preview isn't available for this file type — download it to view it.</Trans>
+      </div>
+    );
+  }
   return (
     // biome-ignore lint/a11y/useMediaCaption: Attachment playback has no caption track supplied by the author.
     <video
@@ -363,6 +389,7 @@ export function VideoPreview({ bytes, name }: { bytes: Uint8Array; name: string 
       playsInline
       preload="metadata"
       aria-label={name}
+      onError={() => setFailedSource(src)}
       className="h-full w-full object-contain"
     />
   );

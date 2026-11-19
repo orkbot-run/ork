@@ -5,6 +5,7 @@ import {
   ATTACHMENT_ALLOWED_MIME_TYPES,
   ATTACHMENT_COUNT_CEILING,
   ATTACHMENT_MAX_BYTES,
+  isAttachmentImageMimeType,
 } from "@orkbot/contracts";
 import { Directory, File, Paths } from "expo-file-system";
 import type { ComposerDraftScope } from "./composer-draft";
@@ -106,7 +107,7 @@ export function readComposerDraftAttachments(
     if (!saved || Date.now() - saved.updatedAt >= DRAFT_ATTACHMENT_RETENTION_MS) return [];
     return saved.attachments.map((item) => ({
       ...item,
-      previewUri: item.mimeType.startsWith("image/")
+      previewUri: isAttachmentImageMimeType(item.mimeType)
         ? `data:${item.mimeType};base64,${item.contentBase64}`
         : undefined,
     }));

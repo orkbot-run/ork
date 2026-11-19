@@ -655,6 +655,7 @@ class HostCheckTests(unittest.TestCase):
                 "stat": 'if [[ "$3" == / ]]; then echo 1; else echo 2; fi',
                 "systemctl": "exit 1",
                 "sshd": 'echo "port 2222"',
+                "getconf": "echo 2",
                 "alert": 'echo "$*" >> "$ALERT_LOG"; if (($# < 2)); then cat >> "$ALERT_LOG"; fi',
             }
             for name, command in commands.items():
@@ -662,6 +663,17 @@ class HostCheckTests(unittest.TestCase):
                 executable.write_text("#!/bin/bash\n" + command + "\n")
                 executable.chmod(0o755)
             source = (ROOT / "check-host.sh").read_text()
+            proc = root / "proc"
+            (proc / "pressure").mkdir(parents=True)
+            pressure = proc / "pressure" / "cpu"
+            pressure.write_text("some avg10=98.00 avg60=0.50 avg300=0.10 total=2000\n")
+            (proc / "loadavg").write_text("100.00 100.00 100.00 1/50 1\n")
+            meminfo = proc / "meminfo"
+            meminfo.write_text(
+                "MemTotal: 2097152 kB\nMemAvailable: 1048576 kB\n"
+                "SwapTotal: 2097152 kB\nSwapFree: 2097152 kB\n"
+            )
+            source = source.replace("/proc/", str(proc) + "/")
             source = source.replace("/var/backups", str(backups))
             source = source.replace("/etc/ufw/user.rules", str(rules))
             audit_env = root / "audit-ship.env"
@@ -693,6 +705,37 @@ class HostCheckTests(unittest.TestCase):
                 ["bash", str(script)], env=env, capture_output=True, text=True
             )
             self.assertEqual(result.returncode, 0, result.stderr)
+            pressure.write_text("some avg10=0.00 avg60=32.00 avg300=51.50 total=2000\n")
+            result = subprocess.run(
+                ["bash", str(script)], env=env, capture_output=True, text=True
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("51.50% stalled", result.stderr)
+            pressure.unlink()
+            meminfo.write_text(
+                "MemTotal: 2097152 kB\nMemAvailable: 1048576 kB\n"
+                "SwapTotal: 2097152 kB\nSwapFree: 524288 kB\n"
+            )
+            result = subprocess.run(
+                ["bash", str(script)], env=env, capture_output=True, text=True
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("100.00 over 15 minutes on 2 CPUs", result.stderr)
+            self.assertIn("1536 MiB swap used", result.stderr)
+            pressure.write_text("some avg10=0.00 avg60=0.10 avg300=0.20 total=2000\n")
+            meminfo.write_text(
+                "MemTotal: 2097152 kB\nMemAvailable: 104857 kB\n"
+                "SwapTotal: 2097152 kB\nSwapFree: 2097152 kB\n"
+            )
+            result = subprocess.run(
+                ["bash", str(script)], env=env, capture_output=True, text=True
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("5.0% available, 0 MiB swap used", result.stderr)
+            meminfo.write_text(
+                "MemTotal: 2097152 kB\nMemAvailable: 1048576 kB\n"
+                "SwapTotal: 2097152 kB\nSwapFree: 2097152 kB\n"
+            )
             # A plaintext latest snapshot alerts until it is encrypted or explicitly allowed.
             plaintext = backups / "orkbot" / "20261020T000000Z" / "orkbot.dump"
             plaintext.write_text("dump")

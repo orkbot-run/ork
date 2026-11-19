@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
+
 import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import type { Pool, PoolClient } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -28,6 +33,7 @@ describe("createDb", () => {
     expect(pool.options.connectionTimeoutMillis).toBe(10_000);
     expect(pool.options.idleTimeoutMillis).toBe(0);
     expect(pool.options.application_name).toBe("orkbot-test");
+    expect(pool.options.keepAliveInitialDelayMillis).toBe(1_000);
     expect(pool.listenerCount("error")).toBeGreaterThan(0);
     expect(pool.listenerCount("connect")).toBeGreaterThan(0);
 
@@ -38,6 +44,15 @@ describe("createDb", () => {
     const { pool } = createDb("postgres://orkbot:orkbot@127.0.0.1:9/orkbot");
     pools.push(pool);
     expect(pool.options.max).toBe(4);
+  });
+
+  it("bounds worker connection-loss detection without imposing a query timeout on API pools", () => {
+    const { pool } = createDb("postgres://orkbot:orkbot@127.0.0.1:9/orkbot", {
+      queryTimeoutMs: 5_000,
+    });
+    pools.push(pool);
+    expect(pool.options.query_timeout).toBe(5_000);
+    expect(pool.options.statement_timeout).toBe(4_000);
   });
 
   it("lets a transaction wait for a busy pool past Prisma's 2s default", async () => {

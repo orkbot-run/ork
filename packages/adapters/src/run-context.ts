@@ -64,6 +64,8 @@ export interface RunLeaseState {
   lastCheckAt: number;
   /** A takeover keeps the computer lease past this attempt. */
   retainComputer: boolean;
+  /** Conservative deadline from the last successful renewal of both leases. */
+  databaseDeadline?: number;
 }
 
 export interface RunComputerUseState {

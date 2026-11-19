@@ -138,7 +138,7 @@ describePostgres("computer runs (PostgreSQL)", () => {
     expect((await o.runs()).map((run) => run.endReason)).toEqual(["idle", null]);
   });
 
-  it("sleeps past a run waiting for takeover, but not past a run using the computer", async () => {
+  it("sleeps without an execution lease and for takeover, while a live run keeps the computer on", async () => {
     const o = await owner();
     await o.start();
     const bot = await system.bot.create({
@@ -172,8 +172,15 @@ describePostgres("computer runs (PostgreSQL)", () => {
         taskId: task.id,
         status: "running",
         trigger: "user_message",
+        leaseExpiresAt: new Date(Date.now() + 60_000),
       },
     });
+    await o.sleep();
+    expect((await system.computer.findUniqueOrThrow({ where: { id: o.id } })).state).toBe(
+      "suspended",
+    );
+    await o.start();
+
     await system.computerExecutionLease.create({
       data: {
         computerId: o.id,

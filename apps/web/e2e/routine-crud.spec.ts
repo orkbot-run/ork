@@ -499,3 +499,42 @@ test("change-trigger screenshot walkthrough", { tag: "@nightly" }, async ({ page
   });
   await captureScreenshot(page, testInfo, "routine-watch-10-saved-list");
 });
+
+test("an HTTPS change trigger validates, saves and reopens without a computer", async ({
+  page,
+}) => {
+  await signup(page, `routine-https-${Date.now()}@orkbot.test`, "password12", "HTTPS Routine");
+  await completeOnboarding(page);
+  const botId = activeBotId(page);
+  await openBotPanelTab(page, "Routines");
+  await page.getByRole("button", { name: "Create Routine" }).click();
+  await page.getByLabel("Name", { exact: true }).fill("HTTPS Watch");
+  await page.getByLabel("Instruction", { exact: true }).fill("Summarize status changes.");
+  await page.getByRole("button", { name: "Add trigger" }).click();
+  await page.getByRole("menuitem", { name: "When something changes" }).click();
+  const card = page.getByTestId("routine-watch-card");
+  await card.getByRole("combobox", { name: "What to watch" }).selectOption("http");
+  const address = card.getByRole("textbox", { name: "HTTPS address" });
+  await address.fill("https://127.0.0.1/status");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Enter a public HTTPS address without credentials or a fragment",
+  );
+  expect(await rpc<Routine[]>(page, "routines/list", { botId })).toEqual([]);
+  await address.fill("https://1.1.1.1/status");
+  await card.getByRole("textbox", { name: "Fields that mark a change" }).fill("id, status");
+  await card.getByRole("spinbutton", { name: "Check every" }).fill("10");
+  expect(await saveAndReturn(page, "routines/create")).toMatchObject({
+    watch: {
+      kind: "http",
+      url: "https://1.1.1.1/status",
+      track: ["id", "status"],
+      everyMinutes: 10,
+    },
+  });
+  await page.getByRole("button", { name: /HTTPS Watch/ }).click();
+  await expect(
+    page.getByTestId("routine-watch-card").getByRole("textbox", { name: "HTTPS address" }),
+  ).toHaveValue("https://1.1.1.1/status");
+  await expect(page.getByText(/Booting up .* computer/)).toBeHidden();
+});

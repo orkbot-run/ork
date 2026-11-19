@@ -46,7 +46,10 @@ export async function createOwnedArtifact(
   if (replayed) return createdArtifact(replayed);
   const inferredType = inferAttachmentMimeType(input.name, input.mimeType);
   const mimeType =
-    inferredType && (inferredType === "application/zip" || isAttachmentAudioMimeType(inferredType))
+    inferredType &&
+    (input.mimeType === "application/octet-stream" ||
+      inferredType === "application/zip" ||
+      isAttachmentAudioMimeType(inferredType))
       ? inferredType
       : input.mimeType;
   validateAttachmentMimeType(mimeType);

@@ -1673,6 +1673,44 @@ describe("deliverMessagingOutbound attachments", () => {
       return request.attachment ? `file:${request.attachment.name}` : request.body;
     });
 
+  it.each([
+    ["offer.doc", "application/msword"],
+    ["offer.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+    ["slides.ppt", "application/vnd.ms-powerpoint"],
+    ["slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+  ])(
+    "delivers a stored %s to Slack and Telegram with its canonical MIME and bytes",
+    async (name, mimeType) => {
+      for (const provider of ["slack", "telegram"]) {
+        const threadId = provider === "slack" ? "slack:CTEST:" : "telegram:123";
+        const office = { ...artifacts[1]!, name, mimeType };
+        const deps = createDeps({
+          identity: {
+            provider,
+            address: provider === "slack" ? "UTEST" : "123",
+            dmThreadId: threadId,
+          },
+          messages: [
+            {
+              id: "office-reply",
+              blocks: [{ kind: "file", artifactId: office.id, name, mimeType, size: 5 }],
+            },
+          ],
+          artifacts: [office],
+        });
+        vi.spyOn(deps.messaging, "platforms").mockReturnValue([
+          { provider, capabilities: { direct: true, groups: false, receipt: null, files: true } },
+        ]);
+        await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
+        expect(deps.sendToThread).toHaveBeenCalledExactlyOnceWith(
+          { threadId, body: "", attachment: { name, mimeType, data: bytes(office.storageKey) } },
+          expect.anything(),
+        );
+        expect(deps.rows.map((row) => row.status)).toEqual(["sent"]);
+      }
+    },
+  );
+
   it("sends a reply's image and file after its text, one row each", async () => {
     const deps = createDeps({ identity: telegram, messages: [reply], artifacts });
     await deliverMessagingOutbound(deps, { runId: "run-1" }, context);

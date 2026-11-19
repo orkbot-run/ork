@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   draftFromRoutine,
   emptyRoutineDraft,
+  emptyRoutineHttpWatch,
   routineDraftChanged,
   routineSaveRequest,
 } from "./routine-draft";
@@ -54,6 +55,57 @@ describe("routineSaveRequest", () => {
         notify: true,
       },
     });
+  });
+
+  it("creates and edits an HTTPS watch without modifying other triggers", () => {
+    const base = {
+      ...emptyRoutineDraft(),
+      name: "Status",
+      prompt: "Summarize the changes.",
+      httpWatch: {
+        ...emptyRoutineHttpWatch(),
+        url: "https://example.com/status",
+        track: "id, status",
+        loud: true,
+      },
+    };
+    const expected = {
+      kind: "http" as const,
+      url: "https://example.com/status",
+      track: ["id", "status"],
+      loud: true,
+      everyMinutes: 15,
+    };
+    expect(routineSaveRequest(base, null, "bot-1", "UTC")).toMatchObject({
+      create: { crons: [], watch: expected },
+    });
+    const existing = { ...routine, crons: [], watch: expected };
+    const draft = draftFromRoutine(existing);
+    expect(routineSaveRequest(draft, existing, "bot-1", "UTC")).toEqual({ unchanged: true });
+    expect(
+      routineSaveRequest(
+        {
+          ...draft,
+          httpWatch: { ...draft.httpWatch!, everyMinutes: "20" },
+        },
+        existing,
+        "bot-1",
+        "UTC",
+      ),
+    ).toEqual({
+      update: { routineId: routine.id, watch: { ...expected, everyMinutes: 20 } },
+    });
+    expect(
+      routineSaveRequest(
+        {
+          ...draft,
+          httpWatch: { ...draft.httpWatch!, url: "https://localhost" },
+        },
+        existing,
+        "bot-1",
+        "UTC",
+      ),
+    ).toEqual({ error: "watchUrl" });
   });
 
   it("asks for a name, an instruction and a trigger before saving", () => {

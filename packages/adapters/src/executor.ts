@@ -53,6 +53,7 @@ import {
   availableInSpace,
   declareRunReaderVersion,
   effectiveMemoryScope,
+  isDatabaseUnavailable,
   isPartialReplyClientNonce,
   isTooManyDatabaseConnections,
   loadRunHistoryMessages,
@@ -163,6 +164,10 @@ import type {
   RunState,
 } from "./run-context.js";
 import { restoreTurnCheckpointEffects, settleRunningHelpers } from "./run-context.js";
+import {
+  recoverRunFromDatabaseOutage,
+  recoverRunSetupFromDatabaseOutage,
+} from "./run-database-recovery.js";
 import { APPROVED_EFFECT_REPLAY_ORDER, buildApprovalContinuation } from "./run-effects.js";
 import {
   BOT_DIRECTORY_LIMIT,
@@ -323,7 +328,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
     },
   };
   const baseDeps: ExecutorDeps = { ...executorDeps, events };
-  return {
+  const executor = {
     resolveConnectedModel,
     contextStrategy,
     resolveModel: resolveRunModel.bind(undefined, baseDeps),
@@ -334,7 +339,12 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
     ),
     retryRoutineRun: retryRoutineRun.bind(undefined, baseDeps),
 
-    async continueRun(runId: string, workerId: string, onRunStarted?: () => void) {
+    async continueRun(
+      runId: string,
+      workerId: string,
+      onRunStarted: (() => void) | undefined,
+      recovery: { runId: string; workerId: string; fence: number | undefined; deadline: number },
+    ) {
       let deps = baseDeps;
       // A stopping process must not claim work it cannot finish. The row stays
       // queued or expired for a worker that is still running.
@@ -368,6 +378,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       let { resumeCheckpoint, heldForTakeover, takeoverResume } = takeoverContinuePlan(run);
 
       const fence = nextFence(run.leaseFence);
+      recovery.fence = fence;
       const now = new Date();
       const leased = await deps.prisma.$transaction(async (tx) => {
         // Keep the accepted run unchanged while deletion is pending. A thrown guard leaves
@@ -558,12 +569,14 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         completed: false,
         lastCheckAt: 0,
         retainComputer: false,
+        databaseDeadline: now.getTime() + 5 * 60_000 - 10_000,
       };
       const computerUse: RunComputerUseState = {
         reason: "none",
         tool: undefined,
         screenRelease: undefined,
       };
+      recovery.deadline = lease.databaseDeadline!;
       const runAbortController = new AbortController();
       let workPermission: { signal: AbortSignal; dispose(): void } | null | undefined;
       const workScope = {
@@ -582,8 +595,23 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       const settleHelpers = () => settleRunningHelpers(deps, run, runningHelpers);
 
       let detachShutdown: (() => void) | undefined;
+      let expiryTimer: ReturnType<typeof setTimeout> | undefined;
+      const watchLeaseExpiry = () => {
+        clearTimeout(expiryTimer);
+        expiryTimer = setTimeout(
+          () => {
+            if (lease.completed) return;
+            lease.valid = false;
+            runAbortController.abort();
+          },
+          Math.max(0, lease.databaseDeadline! - Date.now()),
+        );
+        expiryTimer.unref?.();
+      };
+      watchLeaseExpiry();
       const heartbeat = setInterval(() => {
         if (lease.completed) return;
+        const renewalStartedAt = Date.now();
         void Promise.all([
           renewRunLease(deps, runId, workerId, fence),
           renewComputerExecutionLease(deps.prisma, computerLease),
@@ -593,10 +621,15 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             if (!runRenewed || !computerRenewed) {
               lease.valid = false;
               runAbortController?.abort();
+            } else {
+              lease.databaseDeadline = renewalStartedAt + 5 * 60_000 - 10_000;
+              recovery.deadline = lease.databaseDeadline;
+              watchLeaseExpiry();
             }
           })
-          .catch(() => {
+          .catch((error) => {
             if (lease.completed) return;
+            if (isDatabaseUnavailable(error) && Date.now() < lease.databaseDeadline!) return;
             lease.valid = false;
             runAbortController?.abort();
           });
@@ -605,6 +638,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       const stopHeartbeatAfterCompletion = () => {
         lease.completed = true;
         clearInterval(heartbeat);
+        clearTimeout(expiryTimer);
       };
 
       const runSecrets = [...deps.secrets];
@@ -1904,7 +1938,9 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           : buildApprovalContinuation(
               approvedEffects,
               (request) => redactSecrets(JSON.stringify(request), runSecrets),
-              { exposedToolNames: new Set(partitionTools(tools).listed.map((tool) => tool.name)) },
+              {
+                exposedToolNames: new Set(partitionTools(tools).listed.map((tool) => tool.name)),
+              },
             );
         let lateRoutineNote: string | undefined;
         const lateSince = current.lateSince ?? firstLateSince;
@@ -2347,6 +2383,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         } catch (turnError) {
           if (await interruptedByShutdown()) return;
           if (workPermission?.signal.aborted) return;
+          if (await recoverRunFromDatabaseOutage(ctx, turnError)) return;
           let caughtError = turnError;
           if (handoffEndedTurn(state, caughtError)) {
             try {
@@ -2365,6 +2402,10 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         // An abort while stopping is not a setup failure, and must not spend the
         // retry budget that eventually fails the run.
         if (deps.shutdownSignal?.aborted) return;
+        if (isDatabaseUnavailable(setupError)) {
+          lease.retainComputer = true;
+          throw setupError;
+        }
         const computerAccountRefused = setupError instanceof SandboxAccountError;
         const workspaceRefused = setupError instanceof WorkspaceExecutionDeniedError;
         if (workspaceRefused) return;
@@ -2455,6 +2496,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         });
         detachShutdown?.();
         clearInterval(heartbeat);
+        clearTimeout(expiryTimer);
         if (
           (run.centralWorkspaceId || workPermission === null) &&
           !lease.completed &&
@@ -2523,6 +2565,23 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           })
           .catch(() => undefined);
         await settleHelpers();
+      }
+    },
+  };
+  return {
+    ...executor,
+    async continueRun(runId: string, workerId: string, onRunStarted?: () => void) {
+      const recovery = {
+        runId,
+        workerId,
+        fence: undefined as number | undefined,
+        deadline: Date.now() + 4 * 60_000,
+      };
+      try {
+        await executor.continueRun(runId, workerId, onRunStarted, recovery);
+      } catch (error) {
+        if (await recoverRunSetupFromDatabaseOutage(baseDeps, recovery, error)) return;
+        throw error;
       }
     },
   };

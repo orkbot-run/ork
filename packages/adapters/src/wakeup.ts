@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
+
 import type {
   BackgroundJob,
   BackgroundJobExecution,
@@ -8,12 +13,19 @@ import type {
 } from "@orkbot/adapter-kit";
 import { dispatchBackgroundJob } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
-import { isPoolCheckoutTimeout, isTooManyDatabaseConnections, runAsSystem } from "@orkbot/db";
+import {
+  isDatabaseUnavailable,
+  isPoolCheckoutTimeout,
+  isTooManyDatabaseConnections,
+  runAsSystem,
+} from "@orkbot/db";
 import { getLogger, runCorrelatedJob, unwrapJobPayload, wrapJobPayload } from "@orkbot/logging";
 import type { Runner, WorkerUtils } from "graphile-worker";
 import { makeWorkerUtils, run } from "graphile-worker";
 import type { Pool } from "pg";
 import { recordHistoryCompactAttemptsExhausted } from "./history-compaction.js";
+import type { ExhaustedJob } from "./job-give-up.js";
+import { publicJobType, reportJobGiveUp } from "./job-give-up.js";
 import { RunExecutionHost } from "./run-execution.js";
 
 // Adapter-local task name: the shared job contract remains run.continue. Older
@@ -342,6 +354,7 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
       },
     });
     runner.events.on("job:failed", ({ job, error }) => {
+      reportJobGiveUp(job, error);
       recordHistoryCompactAttemptsExhausted(job, error);
     });
     if (this.stopping) {
@@ -509,6 +522,50 @@ export const DEAD_JOB_RETENTION_DAYS = 7;
 const DEAD_JOB_PRUNE_INTERVAL_MS = 60 * 60 * 1000;
 const DEAD_JOB_PRUNE_BATCH = 1_000;
 const DEAD_JOB_PRUNE_MAX_BATCHES = 50;
+export const ABANDONED_JOB_LOCK_MINUTES = 230;
+export const ABANDONED_JOB_ERROR = "Worker stopped during the last attempt";
+
+/** Hold row locks through reporting and the guarded update, including across reconcilers. */
+async function reportAbandonedJobs(pool: Pick<Pool, "connect">) {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const { rows } = await client.query<
+      ExhaustedJob & { lock_version: string; row_version: string }
+    >(
+      `select jobs.*, tasks.identifier as task_identifier,
+              jobs.locked_at::text as lock_version, jobs.updated_at::text as row_version
+       from graphile_worker._private_jobs jobs
+       join graphile_worker._private_tasks tasks on tasks.id = jobs.task_id
+       where jobs.attempts >= jobs.max_attempts
+         and jobs.locked_at < now() - make_interval(mins => $1::int)
+       order by jobs.id limit $2 for update of jobs skip locked`,
+      [ABANDONED_JOB_LOCK_MINUTES, DEAD_JOB_PRUNE_BATCH],
+    );
+    for (const job of rows) {
+      reportJobGiveUp(job, ABANDONED_JOB_ERROR);
+      await client.query(
+        `update graphile_worker._private_jobs
+         set locked_at = null, locked_by = null, last_error = $2, updated_at = now()
+         where id = $1 and attempts >= max_attempts and locked_at::text = $3 and updated_at::text = $4
+           and locked_at < now() - make_interval(mins => $5::int)`,
+        [
+          job.id,
+          ABANDONED_JOB_ERROR,
+          job.lock_version,
+          job.row_version,
+          ABANDONED_JOB_LOCK_MINUTES,
+        ],
+      );
+    }
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 /**
  * Graphile keeps a job that exhausted its retries forever, and its own maintenance scans them.
@@ -520,38 +577,63 @@ const DEAD_JOB_PRUNE_MAX_BATCHES = 50;
  * a select and the delete would go with it. This deletes in one statement that rechecks.
  */
 export function createDeadJobPruner(
-  pool: Pick<Pool, "query">,
+  pool: Pick<Pool, "query" | "connect">,
   options: { retentionDays?: number; intervalMs?: number } = {},
 ): () => Promise<void> {
   const retentionDays = options.retentionDays ?? DEAD_JOB_RETENTION_DAYS;
   const intervalMs = options.intervalMs ?? DEAD_JOB_PRUNE_INTERVAL_MS;
   let lastRun: number | undefined;
   return async () => {
+    // Every reconciliation tick, so the 10-minute window before Graphile's reset is covered.
+    try {
+      await reportAbandonedJobs(pool);
+    } catch (error) {
+      if (isDatabaseUnavailable(error)) throw error;
+      getLogger().error("jobs.abandoned_reconciliation_failed", error);
+    }
     const now = Date.now();
     if (lastRun !== undefined && now - lastRun < intervalMs) return;
     lastRun = now;
     let removed = 0;
+    const removedByType: Record<string, number> = {};
     for (let batch = 0; batch < DEAD_JOB_PRUNE_MAX_BATCHES; batch += 1) {
-      const { rowCount } = await pool.query(
-        `delete from graphile_worker._private_jobs as jobs
+      const { rows } = await pool.query<{ type: string; count: number }>(
+        `with removed as (delete from graphile_worker._private_jobs as jobs
          where jobs.id in (
            select dead.id
            from graphile_worker._private_jobs as dead
            join graphile_worker._private_tasks as tasks on tasks.id = dead.task_id
            where dead.attempts >= dead.max_attempts and dead.locked_at is null
              and dead.updated_at < now() - make_interval(days => $1::int)
+             and dead.run_at < now() - make_interval(days => $1::int)
              and tasks.identifier <> 'routine.retry'
            order by dead.id
            limit $2
            for update of dead skip locked
          )
-         and jobs.attempts >= jobs.max_attempts and jobs.locked_at is null`,
+         and jobs.attempts >= jobs.max_attempts and jobs.locked_at is null
+         and jobs.updated_at < now() - make_interval(days => $1::int)
+         and jobs.run_at < now() - make_interval(days => $1::int)
+         returning jobs.task_id)
+         select tasks.identifier as type, count(*)::int as count from removed
+         join graphile_worker._private_tasks tasks on tasks.id = removed.task_id
+         group by tasks.identifier`,
         [retentionDays, DEAD_JOB_PRUNE_BATCH],
       );
-      removed += rowCount ?? 0;
-      if ((rowCount ?? 0) < DEAD_JOB_PRUNE_BATCH) break;
+      let batchRemoved = 0;
+      for (const row of rows) {
+        const type = publicJobType(row.type);
+        removedByType[type] = (removedByType[type] ?? 0) + row.count;
+        batchRemoved += row.count;
+      }
+      removed += batchRemoved;
+      if (batchRemoved < DEAD_JOB_PRUNE_BATCH) break;
     }
-    if (removed > 0) getLogger().info("jobs.dead_pruned", { "jobs.removed": removed });
+    if (removed > 0)
+      getLogger().info("jobs.dead_pruned", {
+        "jobs.removed": removed,
+        "jobs.by_type": removedByType,
+      });
   };
 }
 

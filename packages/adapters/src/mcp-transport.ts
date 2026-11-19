@@ -23,9 +23,15 @@ import {
   isPackageRunnerCommand,
 } from "./mcp-package-installer.js";
 import { limitMcpResponseBody } from "./mcp-response-limit.js";
+import { callMcpToolWithDeadline } from "./mcp-tool-call.js";
 
 import type { RemoteTransportDependencies, SafeRemoteFetch } from "./remote-mcp.js";
-import { ConnectorRedirectError, createSafeRemoteFetch, listMcpTools } from "./remote-mcp.js";
+import {
+  ConnectorRedirectError,
+  createSafeRemoteFetch,
+  listMcpTools,
+  RemoteMcpTransportError,
+} from "./remote-mcp.js";
 
 export type McpRemoteTransport = "streamable-http" | "sse";
 
@@ -244,7 +250,10 @@ export function secureFetch(
           "MCP redirects are not permitted; configure the final HTTPS URL explicitly",
         );
       }
-      throw error;
+      if (requestInit.signal?.aborted) throw error;
+      throw new RemoteMcpTransportError(error instanceof Error ? error.message : String(error), {
+        cause: error,
+      });
     }
     return limitMcpResponseBody(response, headers);
   };
@@ -375,6 +384,10 @@ export class McpSession {
       }
     };
     return client;
+  }
+
+  get connectionClosed(): boolean {
+    return !this.connected;
   }
 
   /** Credentials may change while the SDK keeps the same transport alive. */
@@ -529,9 +542,12 @@ export class McpSession {
   ): Promise<CallToolResult> {
     this.assertConnected();
     try {
-      return (await this.client.callTool({ name, arguments: args }, undefined, {
-        signal: options?.signal,
-      })) as CallToolResult;
+      return (await callMcpToolWithDeadline(
+        this.client,
+        name,
+        args,
+        options?.signal,
+      )) as CallToolResult;
     } catch (error) {
       // This includes unknown-tool protocol errors. Invalidate conservatively:
       // error messages are server-defined, and tool calls must never be replayed

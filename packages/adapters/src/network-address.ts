@@ -10,6 +10,7 @@ type PinnedDns = { hostname: string; addresses: ResolvedAddress[] };
 
 const pinnedDns = new AsyncLocalStorage<PinnedDns>();
 let dnsPinInstalled = false;
+const egressRefusals = new WeakSet<Error>();
 
 function normalizeLookupHostname(hostname: string): string {
   return hostname.replace(/^\[|\]$/g, "").toLowerCase();
@@ -84,11 +85,26 @@ export function createAddressCheckedLookup(
  */
 export function egressRefused(hostname: string, error: unknown): Error {
   const refusal = error instanceof Error ? error : new Error(String(error));
+  egressRefusals.add(refusal);
   void recordSecurityEvent({
     type: "egress.refused",
     metadata: { host: hostname.slice(0, 253), reason: refusal.message },
   });
   return refusal;
+}
+
+/** Fetch and proxy layers may wrap the refusal in Error.cause or AggregateError. */
+export function isEgressRefusal(error: unknown): boolean {
+  const pending = [error];
+  const visited = new Set<Error>();
+  for (const candidate of pending) {
+    if (!(candidate instanceof Error) || visited.has(candidate)) continue;
+    if (egressRefusals.has(candidate)) return true;
+    visited.add(candidate);
+    pending.push(candidate.cause);
+    if (candidate instanceof AggregateError) pending.push(...candidate.errors);
+  }
+  return false;
 }
 
 function pinnedAddressesFor(hostname: string): ResolvedAddress[] | undefined {

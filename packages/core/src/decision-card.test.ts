@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   approvalCanCreateRule,
   decisionDetailContext,
-  scheduledCommandNeedsApproval,
+  scheduledWatchApprovalReason,
 } from "./decision-card.js";
 
 const ordinary = { toolName: "schedule_create", args: {}, trigger: "user" };
@@ -43,12 +43,24 @@ describe("persisted approval rule eligibility", () => {
   it("blocks structural command watches even on an inconsistent fresh card", () => {
     const watch = { kind: "command", command: "date" };
     for (const value of [watch, JSON.stringify(watch)]) {
-      expect(scheduledCommandNeedsApproval("schedule_create", { watch: value })).toBe(true);
+      expect(scheduledWatchApprovalReason("schedule_create", { watch: value })).toBe(
+        "scheduled_command",
+      );
       expect(approvalCanCreateRule({ ...ordinary, args: { watch: value }, allowRule: true })).toBe(
         false,
       );
     }
-    expect(scheduledCommandNeedsApproval("schedule_create", { watch: "invalid" })).toBe(false);
+    expect(scheduledWatchApprovalReason("schedule_create", { watch: "invalid" })).toBeUndefined();
+  });
+
+  it("disables always-allow on HTTPS watch proposals", () => {
+    const input = {
+      toolName: "schedule_create",
+      args: { watch: { kind: "http", url: "https://example.com/status" } },
+      trigger: "user_message",
+    };
+    expect(scheduledWatchApprovalReason(input.toolName, input.args)).toBe("scheduled_http_watch");
+    expect(approvalCanCreateRule({ ...input, allowRule: true })).toBe(false);
   });
 
   it("keeps webhook writes and shared-page changes once-only", () => {

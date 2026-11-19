@@ -3516,3 +3516,137 @@ it("marks a Composio MCP server's multi-execute tool as a batch under its prefix
     await connector.close();
   }
 });
+
+describe("MCP call failure session retention", () => {
+  it.each([
+    "jsonrpc",
+    "cancel",
+    "tool-error",
+    "timeout",
+    "transport",
+    "unauthorized",
+    "closed",
+  ] as const)("handles %s without replaying the call", async (kind) => {
+    const { ErrorCode, McpError } = await import("@modelcontextprotocol/sdk/types.js");
+    const { McpToolTimeoutError } = await import("./mcp-tool-call.js");
+    const { RemoteMcpTransportError } = await import("./remote-mcp.js");
+    const state = { failNext: false, initializations: 0 };
+    vi.stubGlobal("fetch", mcpFetch(state));
+    const connector = new McpConnector(
+      {
+        mcpServer: NO_SHARED_SERVERS,
+        botMcpServer: { findMany: async () => [ASSIGNMENT], findFirst: async () => ASSIGNMENT },
+      } as never,
+      {} as never,
+      { network: TEST_NETWORK },
+    );
+    const controller = new AbortController();
+    const context = {
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: controller.signal,
+    } as never;
+    const execute = async () => {
+      const events = [];
+      for await (const event of connector.execute(
+        {
+          tool: "mcp__demo__echo",
+          args: {},
+          executionId: "call",
+          route: { connectorId: "mcp", resourceId: SERVER.id, toolName: "echo" },
+        },
+        context,
+      ))
+        events.push(event);
+      return events;
+    };
+    let call: ReturnType<typeof vi.spyOn> | undefined;
+    try {
+      await connector.discoverTools(context);
+      call = vi.spyOn(McpSession.prototype, "callTool").mockImplementationOnce(async function (
+        this: McpSession,
+      ) {
+        if (kind === "tool-error") return { content: [], isError: true };
+        if (kind === "cancel") {
+          controller.abort();
+          throw controller.signal.reason;
+        }
+        if (kind === "timeout") throw new McpToolTimeoutError("silent");
+        if (kind === "transport") throw new RemoteMcpTransportError("socket closed");
+        if (kind === "unauthorized") throw new StreamableHTTPError(401, "invalid_token");
+        if (kind === "closed") {
+          await this.close();
+          throw new McpError(ErrorCode.ConnectionClosed, "closed");
+        }
+        // This code is also used by SDK closure; a server response alone must not evict.
+        throw new McpError(ErrorCode.ConnectionClosed, "server application error");
+      });
+      expect(await execute()).toMatchObject([{ type: kind === "tool-error" ? "result" : "error" }]);
+      expect(call).toHaveBeenCalledTimes(1);
+      call.mockRestore();
+      // A new caller is independent of the cancelled run's signal.
+      (context as { signal: AbortSignal }).signal = new AbortController().signal;
+      expect(await execute()).toMatchObject([{ type: "result" }]);
+      expect(state.initializations).toBe(
+        ["timeout", "transport", "unauthorized", "closed"].includes(kind) ? 2 : 1,
+      );
+    } finally {
+      call?.mockRestore();
+      await connector.close();
+    }
+  });
+
+  it("does not evict the replacement when an old call fails", async () => {
+    const { RemoteMcpTransportError } = await import("./remote-mcp.js");
+    const state = { failNext: false, initializations: 0 };
+    vi.stubGlobal("fetch", mcpFetch(state));
+    const connector = new McpConnector(
+      {
+        mcpServer: NO_SHARED_SERVERS,
+        botMcpServer: { findMany: async () => [ASSIGNMENT], findFirst: async () => ASSIGNMENT },
+      } as never,
+      {} as never,
+      { network: TEST_NETWORK },
+    );
+    const context = {
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never;
+    const sessions = (connector as unknown as { sessions: Map<string, { session: McpSession }> })
+      .sessions;
+    let call: ReturnType<typeof vi.spyOn> | undefined;
+    let old: McpSession | undefined;
+    try {
+      await connector.discoverTools(context);
+      const [key, entry] = [...sessions][0]!;
+      old = entry.session;
+      const replacement = new McpSession();
+      const retire = vi.spyOn(replacement, "retire");
+      call = vi.spyOn(old, "callTool").mockImplementationOnce(async () => {
+        sessions.set(key, { ...entry, session: replacement });
+        throw new RemoteMcpTransportError("old connection failed");
+      });
+      const events = [];
+      for await (const event of connector.execute(
+        {
+          tool: "mcp__demo__echo",
+          args: {},
+          executionId: "call",
+          route: { connectorId: "mcp", resourceId: SERVER.id, toolName: "echo" },
+        },
+        context,
+      ))
+        events.push(event);
+      expect(events).toMatchObject([{ type: "error" }]);
+      expect(sessions.get(key)?.session).toBe(replacement);
+      expect(retire).not.toHaveBeenCalled();
+    } finally {
+      call?.mockRestore();
+      await old?.close();
+      await connector.close();
+    }
+  });
+});

@@ -13,7 +13,12 @@ import type {
   ThreadMessage,
   ThreadSnapshot,
 } from "@orkbot/contracts";
-import { attachmentMaxBytes, attachmentMaxCount, attachmentSizeLabel } from "@orkbot/contracts";
+import {
+  attachmentMaxBytes,
+  attachmentMaxCount,
+  attachmentSizeLabel,
+  isAttachmentImageMimeType,
+} from "@orkbot/contracts";
 import type { ComposerMention } from "@orkbot/core";
 import {
   applyThreadSendReceipt,
@@ -372,7 +377,7 @@ export function useComposerActions({
           id: newClientId(),
           threadKey,
           file,
-          previewUrl: mimeType.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+          previewUrl: isAttachmentImageMimeType(mimeType) ? URL.createObjectURL(file) : undefined,
         });
       }
       if (next.length) setPendingAttachments((current) => [...current, ...next]);

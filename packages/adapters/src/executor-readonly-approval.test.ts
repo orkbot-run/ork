@@ -2680,6 +2680,66 @@ describe("command watch creation approval", () => {
     },
   );
 
+  it.each([true, false])(
+    "requires an owner for HTTPS watches in auto-review mode %s",
+    async (autoReview) => {
+      const f = fixture({
+        name: "schedule_create",
+        builtin: true,
+        autoReview,
+        rules: [{ effect: "always_allow", matchKind: "tool", matchValue: "schedule_create" }],
+      });
+      f.setCalls([
+        {
+          args: {
+            name: "Service status",
+            prompt: "Summarize the change",
+            watch: JSON.stringify({ kind: "http", url: "HTTPS://1.1.1.1:443/status" }),
+          },
+          executionId: "site-watch",
+        },
+      ]);
+      await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blocks: [
+            expect.objectContaining({
+              approvalReason: "scheduled_http_watch",
+              allowRule: false,
+              actions: [
+                { id: "allow", label: "Allow once" },
+                { id: "deny", label: "Deny" },
+              ],
+            }),
+          ],
+        }),
+      );
+      expect(f.effects[0]?.request).toMatchObject({
+        watch: { kind: "http", url: "https://1.1.1.1/status" },
+      });
+      expect(reviewMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses private HTTPS watch URLs before proposing an approval", async () => {
+    const f = fixture({ name: "schedule_create", builtin: true, autoReview: true });
+    f.setCalls([
+      {
+        args: {
+          name: "Service",
+          prompt: "Watch it",
+          watch: { kind: "http", url: "https://10.0.0.1" },
+        },
+        executionId: "private-watch",
+      },
+    ]);
+    await f.run();
+    expect(f.results[0]).toEqual({
+      error: "Enter a public HTTPS address without credentials or a fragment",
+    });
+    expect(f.pauseRunForInput).not.toHaveBeenCalled();
+  });
+
   it("returns a command watch sent with a schedule as an error without a card", async () => {
     const f = fixture({
       name: "schedule_create",

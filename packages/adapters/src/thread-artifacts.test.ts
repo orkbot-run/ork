@@ -19,6 +19,47 @@ import {
 } from "./thread-artifacts.js";
 
 describe("current-turn thread files", () => {
+  it.each([
+    ["offer.doc", "application/msword"],
+    ["offer.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+    ["slides.ppt", "application/vnd.ms-powerpoint"],
+    ["slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+  ])("stores generated %s with inferred MIME and a file reply block", async (name, mimeType) => {
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    const put = vi.fn().mockResolvedValue({ id: "stored" });
+    const artifact = {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn(async ({ data }) => ({ id: "office-artifact", ...data })),
+    };
+    const tx = { artifact, $queryRaw: vi.fn().mockResolvedValue([]) };
+    const attached = await attachWorkspaceFileToThread(
+      {
+        prisma: {
+          artifact,
+          $transaction: async (work: (client: typeof tx) => Promise<unknown>) => work(tx),
+        } as unknown as PrismaClient,
+        artifacts: { put } as unknown as ArtifactStore,
+      },
+      {
+        spaceId: "space",
+        userId: "owner",
+        botId: "bot",
+        runId: "run",
+        filePath: `generated/${name}`,
+        bytes,
+        operationId: "op",
+      },
+    );
+    expect(put).toHaveBeenCalledWith({ name, mimeType, bytes }, expect.anything());
+    expect(artifact.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ name, mimeType, size: 4, storageKey: "stored" }),
+    });
+    expect(attached).toMatchObject({
+      artifactId: "office-artifact",
+      block: { kind: "file", name, mimeType, size: 4 },
+    });
+  });
+
   it("rejects generated output above a lower configured attachment limit before storage", async () => {
     const put = vi.fn();
     await expect(
@@ -220,6 +261,14 @@ describe("current-turn thread files", () => {
     ["audio/mp4", ".m4a"],
     ["application/pdf", ".pdf"],
     ["application/zip", ".zip"],
+    ["application/msword", ".doc"],
+    ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"],
+    ["application/vnd.ms-powerpoint", ".ppt"],
+    ["application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx"],
+    ["image/heic", ".heic"],
+    ["image/heif", ".heif"],
+    ["video/quicktime", ".mov"],
+    ["video/3gpp", ".3gp"],
   ])(
     "copies %s attachments into the bot workspace and describes their paths",
     async (mimeType, extension) => {

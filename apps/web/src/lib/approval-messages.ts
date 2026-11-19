@@ -12,6 +12,11 @@ export function translateApprovalReason(reason: ApprovalReason): string {
         id: "Scheduling a command requires approval.",
         message: "Scheduling a command requires approval.",
       });
+    case "scheduled_http_watch":
+      return i18n._({
+        id: "Watching an HTTPS address requires approval.",
+        message: "Watching an HTTPS address requires approval.",
+      });
     case "outside_content_schedule":
       return i18n._({
         id: "Adding routine destinations from outside content requires approval.",

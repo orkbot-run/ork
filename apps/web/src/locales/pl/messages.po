@@ -7839,3 +7839,20 @@ msgstr "Klucz dostawcy głosu został odrzucony."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "Kod pocztowy"
+
+#: src/pages/RoutineEditor.tsx
+msgid "HTTPS address"
+msgstr "Adres HTTPS"
+
+#: src/pages/RoutineEditor.tsx
+msgid "Enter a public HTTPS address without credentials or a fragment"
+msgstr "Wpisz publiczny adres HTTPS bez danych logowania i fragmentu"
+
+#: src/pages/RoutineEditor.tsx
+msgid "Unchanged checks appear in history. You can also post them in chat."
+msgstr "Sprawdzenia bez zmian pojawiają się w historii. Możesz też publikować je na czacie."
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Watching an HTTPS address requires approval."
+msgstr "Obserwowanie adresu HTTPS wymaga zatwierdzenia."

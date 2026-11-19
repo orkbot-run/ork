@@ -124,6 +124,7 @@ server_main() {
   while (($#)); do
     case "$1" in
       --server) shift ;;
+      --install-backups) install_backups=true; shift ;;
       --url) (($# >= 2)) || fail "--url requires an HTTPS origin."; server_url="$2"; shift 2 ;;
       --code) (($# >= 2)) || fail "--code requires an installation code."; code="$2"; shift 2 ;;
       --code-stdin) read_code=true; shift ;;
@@ -133,9 +134,10 @@ server_main() {
       --external-proxy) external_proxy=true; shift ;;
       --local) skip_existing=true; shift ;;
       --pull-never) pull_never=true; shift ;;
-      *) fail "Usage: bash install-images.sh --server [--url https://server.example.com] [--code CODE | --code-stdin] [--organization ID | --confirm-server] [--auto-direct-route] [--external-proxy] [--pull-never]" ;;
+      *) fail "Usage: bash install-images.sh --server [--url https://server.example.com] [--code CODE | --code-stdin] [--organization ID | --confirm-server] [--auto-direct-route] [--external-proxy] [--pull-never] [--install-backups]" ;;
     esac
   done
+  if [[ "$install_backups" == true ]]; then check_backups_host; fi
   [[ -z "$server_url" || "$server_url" =~ ^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || fail "--url must be an exact HTTPS origin, without a port, path or trailing slash."
   [[ -z "$organization_id" || "$organization_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || fail "--organization must be an organization UUID."
   [[ -z "$organization_id" || "$confirm_server" != true ]] || fail "use --organization and --confirm-server separately."
@@ -208,6 +210,7 @@ server_main() {
   local -a managed_templates=("$COMPOSE_FILE")
   required_files=("$COMPOSE_FILE" "$ENV_EXAMPLE")
   for filename in "${required_files[@]}"; do download "$filename"; done
+  if [[ "$install_backups" == true ]]; then download_backup_files; fi
   compose_files=(-f "$COMPOSE_FILE")
   override_present=''
   if [[ -f "$OVERRIDE_FILE" ]]; then compose_files+=(-f "$OVERRIDE_FILE"); override_present=1; fi
@@ -331,5 +334,10 @@ print("Connect:", "https://app.ork.run/account/connect-server#code=" + code)
     fi
   elif [[ -n "$organization_id" || "$confirm_server" == true ]]; then
     fail "server enrollment requires native Accounts configuration."
+  fi
+  if [[ "$install_backups" == true ]]; then
+    configure_backups
+  else
+    echo "Nightly backups are available: rerun this server installation as root with --install-backups (see docs/self-host-backups.md)."
   fi
 }

@@ -4,8 +4,50 @@ umask 077
 
 PROJECT_DIR="${ORKBOT_DEPLOY_DIR:-/srv/orkbot}"
 [[ "${PROJECT_DIR}" == /* ]] || { echo "ORKBOT_DEPLOY_DIR must be an absolute path" >&2; exit 1; }
-COMPOSE_FILE="${PROJECT_DIR}/infra/compose/docker-compose.prod.yml"
 ENV_FILE="${PROJECT_DIR}/.env"
+# Match the updater's explicit stack before probing either supported layout.
+# Read only this literal dotenv setting; never execute the deployment's .env.
+compose_setting="${ORKBOT_COMPOSE_FILE-}"
+if [[ ! ${ORKBOT_COMPOSE_FILE+x} && -f "${ENV_FILE}" ]]; then
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line%$'\r'}"
+    if [[ "${line}" =~ ^[[:space:]]*(export[[:space:]]+)?ORKBOT_COMPOSE_FILE[[:space:]]*=(.*)$ ]]; then
+      compose_setting="${BASH_REMATCH[2]}"
+      compose_setting="${compose_setting#"${compose_setting%%[![:space:]]*}"}"
+      compose_setting="${compose_setting%"${compose_setting##*[![:space:]]}"}"
+      if [[ "${compose_setting}" =~ ^\"([^\"]*)\"[[:space:]]*(#.*)?$ || "${compose_setting}" =~ ^\'([^\']*)\'[[:space:]]*(#.*)?$ ]]; then
+        compose_setting="${BASH_REMATCH[1]}"
+      else
+        compose_setting="${compose_setting%%[[:space:]]#*}"
+        compose_setting="${compose_setting%"${compose_setting##*[![:space:]]}"}"
+      fi
+    fi
+  done <"${ENV_FILE}"
+fi
+compose_files=()
+if [[ -n "${compose_setting}" ]]; then
+  [[ "${compose_setting}" != :* && "${compose_setting}" != *: && "${compose_setting}" != *::* ]] || {
+    echo "ORKBOT_COMPOSE_FILE contains an empty Compose file path" >&2; exit 1;
+  }
+  IFS=: read -r -a configured_files <<<"${compose_setting}"
+  for file in "${configured_files[@]}"; do
+    [[ "${file}" == /* ]] || file="${PROJECT_DIR}/${file}"
+    [[ -f "${file}" && -r "${file}" ]] || { echo "Compose file is missing or unreadable: ${file}" >&2; exit 1; }
+    compose_files+=(-f "${file}")
+  done
+elif [[ -f "${PROJECT_DIR}/infra/compose/docker-compose.prod.yml" ]]; then
+  compose_files=(-f "${PROJECT_DIR}/infra/compose/docker-compose.prod.yml")
+elif [[ -f "${PROJECT_DIR}/docker-compose.images.yml" ]]; then
+  compose_files=(-f "${PROJECT_DIR}/docker-compose.images.yml")
+  if [[ -f "${PROJECT_DIR}/docker-compose.override.yml" ]]; then
+    compose_files+=(-f "${PROJECT_DIR}/docker-compose.override.yml")
+  fi
+else
+  echo "No Compose stack found in ${PROJECT_DIR}; set ORKBOT_COMPOSE_FILE or provide infra/compose/docker-compose.prod.yml or docker-compose.images.yml" >&2
+  exit 1
+fi
+# Relative dotenv references (and Compose's project discovery) belong to the deployment.
+cd "${PROJECT_DIR}"
 BACKUP_ROOT="/var/backups/orkbot"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SNAPSHOT_DIR="${BACKUP_ROOT}/${STAMP}"
@@ -61,7 +103,7 @@ if [[ "${ORKBOT_BACKUP_REQUIRE_VOLUME:-0}" == 1 ]]; then
   }
 fi
 
-compose=(docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}")
+compose=(docker compose --env-file "${ENV_FILE}" "${compose_files[@]}")
 
 # Archive the appdata volume from the host, not through `compose exec api`: the cap-dropped
 # api user cannot read the root-owned mode-600 bot homes, so its archive would miss the bot

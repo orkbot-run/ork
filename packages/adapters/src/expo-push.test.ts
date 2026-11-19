@@ -944,3 +944,105 @@ it("uses data-only delivery only for Android builds that registered sender suppo
   });
   expect(request).not.toHaveProperty("priority");
 });
+
+it("fans message pushes out to both devices with each session's presentation and scope", async () => {
+  const tokens = new MemoryPushTokenStore();
+  await tokens.save("user-1", "ExponentPushToken[phone]", "phone", "android_sender");
+  await tokens.save("user-1", "ExponentPushToken[tablet]", "tablet");
+  const expo = fakeExpo([
+    { status: "ok", id: "tablet-ticket" },
+    { status: "ok", id: "phone-ticket" },
+  ]);
+  const push = new ExpoPushProvider(tokens, {
+    sessionExpiresAt: async () => new Date(Date.now() + 60_000),
+  });
+  await expect(
+    push.deliver(
+      { kind: "completion", title: "Done", body: "Finished", botId: "b", threadId: "t" },
+      notifyContext,
+    ),
+  ).resolves.toBe("delivered");
+  expect(expo.sent).toHaveLength(2);
+  expect(expo.sent).toContainEqual(
+    expect.objectContaining({
+      to: "ExponentPushToken[phone]",
+      data: expect.objectContaining({
+        sessionScope: notificationSessionScope("phone"),
+        notificationTitle: "Done",
+      }),
+    }),
+  );
+  expect(expo.sent).toContainEqual(
+    expect.objectContaining({
+      to: "ExponentPushToken[tablet]",
+      title: "Done",
+      data: expect.objectContaining({ sessionScope: notificationSessionScope("tablet") }),
+    }),
+  );
+  await tokens.endSession("user-1", "phone");
+  expect(await tokens.list("user-1")).toEqual([
+    { token: "ExponentPushToken[tablet]", sessionId: "tablet" },
+  ]);
+});
+
+it("keeps successful devices when one token is rejected and logs only its digest", async () => {
+  const tokens = new MemoryPushTokenStore();
+  await tokens.save("user-1", "ExponentPushToken[good]", "good");
+  await tokens.save("user-1", "ExponentPushToken[invalid]", "invalid");
+  const sink = createTestSink();
+  installLogger(createLogger({ service: "test", sinks: [sink] }));
+  const expo = fakeExpo([
+    { status: "error", details: { error: "DeviceNotRegistered" } },
+    { status: "ok", id: "good-ticket" },
+  ]);
+  const push = new ExpoPushProvider(tokens, {
+    sessionExpiresAt: async () => new Date(Date.now() + 60_000),
+  });
+  await expect(
+    push.deliver(
+      { kind: "completion", title: "Done", body: "Finished", botId: "b", threadId: "t" },
+      notifyContext,
+    ),
+  ).resolves.toBe("delivered");
+  expect(expo.sent).toHaveLength(2);
+  expect(await tokens.list("user-1")).toEqual([
+    { token: "ExponentPushToken[good]", sessionId: "good" },
+  ]);
+  expect(sink.events).toContainEqual(
+    expect.objectContaining({
+      message: "push.delivery_failed",
+      "push.registration_digest": credentialDigest("ExponentPushToken[invalid]"),
+    }),
+  );
+  expect(JSON.stringify(sink.events)).not.toContain("ExponentPushToken[");
+});
+
+it("attempts every device after a delivery error and never retries devices that already accepted", async () => {
+  const tokens = new MemoryPushTokenStore();
+  await tokens.save("user-1", "ExponentPushToken[good]", "good");
+  await tokens.save("user-1", "ExponentPushToken[bad]", "bad");
+  const sink = createTestSink();
+  installLogger(createLogger({ service: "test", sinks: [sink] }));
+  const expo = fakeExpo([
+    { status: "error", message: "invalid ExponentPushToken[bad]" },
+    { status: "ok", id: "good-ticket" },
+  ]);
+  const push = new ExpoPushProvider(tokens, {
+    sessionExpiresAt: async () => new Date(Date.now() + 60_000),
+    retryDelaysMs: [],
+  });
+  await expect(
+    push.deliver(
+      { kind: "completion", title: "Done", body: "Finished", botId: "b", threadId: "t" },
+      notifyContext,
+    ),
+  ).resolves.toBe("delivered");
+  expect(expo.sent).toHaveLength(2);
+  expect(sink.events).toContainEqual(
+    expect.objectContaining({
+      message: "push.delivery_failed",
+      "push.registration_digest": credentialDigest("ExponentPushToken[bad]"),
+    }),
+  );
+  expect(JSON.stringify(sink.events)).not.toContain("ExponentPushToken[");
+});

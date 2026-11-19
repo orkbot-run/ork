@@ -9,7 +9,7 @@ import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@orkbot/a
 import type { MessageBlock } from "@orkbot/contracts";
 import { stuckWorkStatusMessages } from "@orkbot/core";
 import type { Pool, PrismaClient, ThreadEvents } from "@orkbot/db";
-import { reconcileComputerRuns } from "@orkbot/db";
+import { databaseOperationFailed, isDatabaseUnavailable, reconcileComputerRuns } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import type { PoolClient } from "pg";
 import { deliverBackgroundHelperOutcome } from "./background-helper-delivery.js";
@@ -34,6 +34,14 @@ const ABANDONED_QUEUED_LOCK_MS = 5 * 60_000;
 // with an application using the one-key advisory-lock API.
 const RECONCILIATION_LOCK_NAMESPACE = 1_380_019_075;
 const RECONCILIATION_LOCK_ID = 1;
+
+function reportReconciliationFailure(message: string, error: unknown): void {
+  if (isDatabaseUnavailable(error)) {
+    databaseOperationFailed(error);
+    return;
+  }
+  getLogger().error(message, error);
+}
 
 type Cursor = { at: Date; id: string };
 type ControlCursor = { at: Date | null; id: string };
@@ -172,7 +180,7 @@ export function createJobReconciler(
       if (housekeepingRunning.has(reconcile)) continue;
       const running = Promise.resolve()
         .then(reconcile)
-        .catch((error) => getLogger().error("auxiliary reconciliation", error))
+        .catch((error) => reportReconciliationFailure("auxiliary reconciliation", error))
         .finally(() => housekeepingRunning.delete(reconcile));
       housekeepingRunning.set(reconcile, running);
     }
@@ -191,7 +199,7 @@ export function createJobReconciler(
       ]);
       for (const result of auxiliary) {
         if (result.status === "rejected")
-          getLogger().error("auxiliary reconciliation", result.reason);
+          reportReconciliationFailure("auxiliary reconciliation", result.reason);
       }
 
       const now = new Date();
@@ -206,7 +214,7 @@ export function createJobReconciler(
           cursor: stuckCursor,
         });
       } catch (error) {
-        getLogger().error("stuck work reconciliation", error);
+        reportReconciliationFailure("stuck work reconciliation", error);
       }
       const runCursorFilter = runCursor
         ? {
@@ -514,7 +522,7 @@ export function createJobReconciler(
   };
   const reconcileSafely = () => {
     void reconcileOnce().catch((error) =>
-      getLogger().error("background job reconciliation", error),
+      reportReconciliationFailure("background job reconciliation", error),
     );
   };
 

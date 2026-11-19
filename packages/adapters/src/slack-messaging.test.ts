@@ -295,3 +295,47 @@ describe("Slack sends", () => {
     }
   });
 });
+
+describe("Slack Office attachment uploads", () => {
+  it.each([
+    ["offer.doc", "application/msword"],
+    ["offer.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+    ["slides.ppt", "application/vnd.ms-powerpoint"],
+    ["slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+  ])(
+    "uploads %s through the real Slack adapter without changing its bytes or extension",
+    async (name, mimeType) => {
+      const platforms = await messagingPlatformsFromEnv({
+        slackBotToken: "xoxb-fake",
+        slackSigningSecret: signingSecret,
+      });
+      const adapter = platforms[0]!.adapter as unknown as {
+        _client: { files: { uploadV2: (...args: unknown[]) => Promise<unknown> } };
+      };
+      const upload = vi
+        .spyOn(adapter._client.files, "uploadV2")
+        .mockResolvedValue({ ok: true, files: [{ files: [{ id: "Foffice" }] }] });
+      const surface = new ChatSdkMessagingSurface(platforms);
+      const data = new Uint8Array([1, 2, 3, 4]);
+      try {
+        await surface.sendToThread(
+          {
+            threadId: "slack:CTEST:1700000000.000001",
+            body: "",
+            attachment: { name, mimeType, data },
+          },
+          context,
+        );
+        expect(upload).toHaveBeenCalledExactlyOnceWith({
+          channel_id: "CTEST",
+          thread_ts: "1700000000.000001",
+          token: "xoxb-fake",
+          file_uploads: [{ filename: name, file: Buffer.from(data) }],
+        });
+      } finally {
+        upload.mockRestore();
+        await surface.shutdown();
+      }
+    },
+  );
+});
