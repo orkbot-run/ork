@@ -9,6 +9,13 @@ export function localPromptCacheDisabled(env: NodeJS.ProcessEnv = process.env): 
   return env.ORKBOT_LOCAL_PROMPT_CACHE?.trim().toLowerCase() === "off";
 }
 
+export function localInputTokensPerMinute(
+  env: NodeJS.ProcessEnv = process.env,
+): number | undefined {
+  const limit = Number(env.ORKBOT_LOCAL_TOKENS_PER_MINUTE);
+  return Number.isSafeInteger(limit) && limit > 0 ? limit : undefined;
+}
+
 /** Comma-separated model ids exactly as the local server names them. */
 export function localModelIds(env: NodeJS.ProcessEnv = process.env): string[] {
   return (env.ORKBOT_LOCAL_MODELS ?? "")

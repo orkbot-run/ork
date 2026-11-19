@@ -187,7 +187,7 @@ async function run(input: AgentRunRequest, signal = new AbortController().signal
   return events;
 }
 
-type StreamOptions = { maxTokens?: number; reasoning?: string };
+type StreamOptions = { maxTokens?: number; reasoning?: string; timeoutMs?: number };
 const sentOptions = () =>
   providerState.stream.mock.calls.map(([, , options]) => options as StreamOptions);
 const sentContexts = () =>
@@ -205,6 +205,44 @@ beforeEach(() => {
   }
   providerState.stream.mockReset();
   providerState.delay.mockReset().mockResolvedValue(undefined);
+});
+
+it("can retry a local request after its token queue waited longer than the request timeout", async () => {
+  vi.useFakeTimers({ now: 0 });
+  vi.stubEnv("ORKBOT_LOCAL_TOKENS_PER_MINUTE", "5000");
+  vi.stubEnv("MODEL_STREAM_TIMEOUT_MS", "5000");
+  const local = model("local", "paced", { reasoning: false });
+  providerState.models.set("local/paced", local as unknown as Record<string, unknown>);
+  const priming = message(local, [{ type: "text", text: "Primed" }], "stop");
+  priming.usage.input = 5_000;
+  providerState.stream
+    .mockImplementationOnce(() => stream(priming))
+    .mockImplementationOnce(() => stream(message(local, [], "error", "terminated")))
+    .mockImplementationOnce(() => reply(local, "Recovered after pacing."));
+  providerState.delay.mockImplementationOnce(async (delay) => {
+    vi.setSystemTime(Date.now() + delay);
+  });
+  const abort = new AbortController();
+  let waiting: Promise<AgentRuntimeEvent[]> | undefined;
+  try {
+    await run(request(local));
+    waiting = run(request(local), abort.signal);
+    void waiting.catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(providerState.stream).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(waiting).resolves.toContainEqual({
+      type: "done",
+      text: "Recovered after pacing.",
+    });
+    expect(providerState.delay).toHaveBeenCalledWith(2_000, expect.any(AbortSignal));
+    expect(sentOptions().map((options) => options.timeoutMs)).toEqual([5_000, 5_000, 3_000]);
+  } finally {
+    abort.abort();
+    await waiting?.catch(() => undefined);
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  }
 });
 
 describe("a call that has only thought has not started", () => {

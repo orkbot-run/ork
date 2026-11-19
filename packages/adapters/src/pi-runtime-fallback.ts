@@ -106,6 +106,7 @@ export interface FallbackStreamState {
     target: RuntimeModelTarget,
     context: TranscriptContext,
     options: ModelsSimpleStreamOptions | undefined,
+    onPacingWait?: (waitedMs: number) => void,
   ): AssistantMessageEventStream;
 }
 
@@ -526,6 +527,9 @@ export function fallbackAwareModelStream(
             : thinkingOverride
               ? { ...attemptOptions, reasoning }
               : attemptOptions,
+          (waitedMs) => {
+            startedAt += waitedMs;
+          },
         );
       } catch (error) {
         finishWithThrownError(target, error);

@@ -73,6 +73,8 @@ ORKBOT_LOCAL_CONTEXT_WINDOW=32768
 ORKBOT_LOCAL_MAX_TOKENS=4096
 # Optional: trim stale context sooner when this server has no prompt cache.
 # ORKBOT_LOCAL_PROMPT_CACHE=off
+# Optional: pace requests to the local endpoint by input tokens per minute.
+# ORKBOT_LOCAL_TOKENS_PER_MINUTE=60000
 # Optional: model ids on this endpoint that accept images (screenshot computer tools).
 ORKBOT_LOCAL_VISION_MODELS=qwen3-vl
 # Optional: model ids on this endpoint that accept OpenAI-style reasoning_effort.
@@ -91,6 +93,13 @@ prompt, so long chats are compacted sooner.
 Set `ORKBOT_LOCAL_PROMPT_CACHE=off` if the local server does not reuse cached prefixes. Ork then
 rebuilds the transcript when it can drop at least 3,000 estimated tokens of stale content, such as
 earlier browser state and screenshots. Leave the variable unset for servers that reuse prefixes.
+
+Set `ORKBOT_LOCAL_TOKENS_PER_MINUTE` to a positive integer to pace local model requests within a
+rolling 60-second window. All local models use the configured endpoint and share the window within
+each Ork process. Requests wait before sending, so that wait does not use their HTTP timeout. Ork
+uses the server's reported input usage to adjust later estimates and releases reservations for failed
+calls. Leave the variable unset to send requests without this pacing. For an endpoint shared across
+multiple worker processes, set each process's budget to its share of the endpoint's limit.
 
 The loopback default is suitable when running Ork from a source checkout. From containers,
 prefer a stable LAN RFC1918 address (not Compose service DNS alone). On Docker Desktop,

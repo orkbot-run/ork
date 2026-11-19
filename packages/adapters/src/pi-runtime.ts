@@ -474,7 +474,7 @@ export class PiAgentRuntime implements AgentRuntime {
           backupOutcomes: new Map(),
           selfRecoveries: 0,
           cutReplies: new WeakMap(),
-          stream: (target, ctx, options) => {
+          stream: (target, ctx, options, onPacingWait) => {
             if (hasCurrentImages && !target.model.input.includes("image")) {
               throw new Error(MODEL_IMAGE_INPUT_ERROR);
             }
@@ -502,6 +502,7 @@ export class PiAgentRuntime implements AgentRuntime {
                     {
                       ...usageHooks,
                       prepareContext,
+                      onPacingWait,
                       onProviderError: (message) => providerFailures.add(message.content),
                     },
                   ),
