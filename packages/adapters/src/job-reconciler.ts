@@ -140,7 +140,12 @@ export function createJobReconciler(
     reconcileIdleComputers?: () => Promise<void>;
     reconcileDeadJobs?: () => Promise<void>;
   },
-  options: { intervalMs?: number; batchSize?: number; maxPagesPerPass?: number } = {},
+  options: {
+    intervalMs?: number;
+    batchSize?: number;
+    maxPagesPerPass?: number;
+    stopPendingPass?: boolean;
+  } = {},
 ) {
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
   const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
@@ -191,6 +196,7 @@ export function createJobReconciler(
     if (stopping) return;
     reconciling = (async () => {
       if (deps.leadership && !(await deps.leadership.tryAcquire())) return;
+      if (stopping && options.stopPendingPass) return;
 
       startHousekeeping();
       const auxiliary = await Promise.allSettled([
@@ -541,7 +547,6 @@ export function createJobReconciler(
       if (timer) clearInterval(timer);
       timer = undefined;
       await reconciling?.catch(() => undefined);
-      // A pass waiting for leadership can start housekeeping after stop() begins.
       await Promise.allSettled(housekeepingRunning.values());
       await deps.leadership?.release();
     },

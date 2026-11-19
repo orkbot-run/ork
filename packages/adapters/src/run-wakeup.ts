@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 run dispatch is preserved. Shutdown changes follow LICENSE.md.
+
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import type {
   BackgroundJob,
@@ -190,7 +194,12 @@ export class RunWorkerHost implements JobWorkerHost {
     private readonly prisma: PrismaClient,
     private readonly realtime: RealtimeFanout,
     private readonly starter: RunStarter,
-    private readonly options: { intervalMs?: number; batchSize?: number; pool?: Pool } = {},
+    private readonly options: {
+      intervalMs?: number;
+      batchSize?: number;
+      pool?: Pool;
+      shutdownIoTimeoutMs?: number;
+    } = {},
   ) {}
 
   async start(handlers: BackgroundJobHandlers): Promise<void> {
@@ -207,9 +216,14 @@ export class RunWorkerHost implements JobWorkerHost {
     this.eventLoopDelay.enable();
     try {
       // A release before handoffs carried a run id notifies with an empty payload.
-      this.unsubscribe = await this.realtime.subscribe(RUN_READY_TOPIC, (runId) =>
+      const unsubscribe = await this.realtime.subscribe(RUN_READY_TOPIC, (runId) =>
         runId ? this.starter.take(runId) : this.wake(),
       );
+      if (this.stopping) {
+        await unsubscribe();
+        return;
+      }
+      this.unsubscribe = unsubscribe;
     } catch (error) {
       this.stopping = true;
       this.eventLoopDelay.disable();
@@ -224,6 +238,22 @@ export class RunWorkerHost implements JobWorkerHost {
     this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     this.eventLoopDelay.disable();
+    if (this.options.shutdownIoTimeoutMs !== undefined) {
+      // Never stop waiting for an owned run just because a read or unsubscribe has hung.
+      const runs = this.starter.stop();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<void>((resolve) => {
+        timer = setTimeout(() => {
+          getLogger().warn("run dispatch shutdown timed out");
+          resolve();
+        }, this.options.shutdownIoTimeoutMs);
+      });
+      const io = Promise.allSettled([this.unsubscribe?.(), this.scanning]);
+      await Promise.race([io, timeout]);
+      clearTimeout(timer);
+      await runs;
+      return;
+    }
     await this.unsubscribe?.();
     await this.starter.stop();
     await this.scanning;
@@ -385,8 +415,10 @@ export class RunWorkerHost implements JobWorkerHost {
         bot: { select: { computerId: true } },
       },
     });
+    if (this.stopping) return;
     // The executor still acquires the lease atomically to handle races here.
     const blockers = await findRunRecoveryBlockers(this.prisma, rows, now);
+    if (this.stopping) return;
     const runnable = rows.filter((row) => !blockers.has(row.id));
     // A takeover request holds its bot's computer. Chat work must not wait behind one the user
     // has not acted on, so end it; the freed rows start on the next scan.
@@ -421,7 +453,11 @@ export class RunWorkerHost implements JobWorkerHost {
 }
 
 /** Start direct execution even if the background scheduler is temporarily unavailable. */
-export function withRunWorker(runs: RunWorkerHost, background: JobWorkerHost): JobWorkerHost {
+export function withRunWorker(
+  runs: RunWorkerHost,
+  background: JobWorkerHost,
+  options: { abandonStartupOnStop?: boolean } = {},
+): JobWorkerHost {
   let stopping = false;
   let starting: Promise<void> | undefined;
   return {
@@ -446,9 +482,13 @@ export function withRunWorker(runs: RunWorkerHost, background: JobWorkerHost): J
     async stop() {
       stopping = true;
       // A scheduler start already in flight can create listeners after its first
-      // stop. Wait for startup, then stop it again before releasing dependencies.
-      const results = await Promise.allSettled([runs.stop(), background.stop(), starting]);
-      await background.stop();
+      // stop. In drain mode both hosts fence late startup, so a stalled connect can be left.
+      const results = await Promise.allSettled([
+        runs.stop(),
+        background.stop(),
+        options.abandonStartupOnStop ? undefined : starting,
+      ]);
+      if (!options.abandonStartupOnStop) await background.stop();
       const failed = results.slice(0, 2).find((result) => result.status === "rejected");
       if (failed?.status === "rejected") throw failed.reason;
     },

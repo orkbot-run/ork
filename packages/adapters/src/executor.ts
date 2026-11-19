@@ -348,12 +348,13 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       let deps = baseDeps;
       // A stopping process must not claim work it cannot finish. The row stays
       // queued or expired for a worker that is still running.
-      if (deps.shutdownSignal?.aborted) return;
+      if (deps.shutdownSignal?.aborted || deps.runAdmissionSignal?.aborted) return;
       const persistedRun = await deps.prisma.run.findUnique({
         where: { id: runId },
         include: { thread: { select: { parentThreadId: true } } },
       });
       if (!persistedRun) return;
+      if (deps.runAdmissionSignal?.aborted) return;
       // Existing readers know and hide the ticket trigger. A parent relation, created only by
       // helper admission, distinguishes this run for the new reader.
       const run =
@@ -378,14 +379,15 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       let { resumeCheckpoint, heldForTakeover, takeoverResume } = takeoverContinuePlan(run);
 
       const fence = nextFence(run.leaseFence);
-      recovery.fence = fence;
       const now = new Date();
       const leased = await deps.prisma.$transaction(async (tx) => {
         // Keep the accepted run unchanged while deletion is pending. A thrown guard leaves
         // both the durable run and its retryable job available if deletion is cancelled.
         await lockSpaceForWork(tx, run.spaceId);
         await declareRunReaderVersion(tx);
-        return tx.run.updateMany({
+        deps.runAdmissionSignal?.throwIfAborted();
+        recovery.fence = fence;
+        const result = await tx.run.updateMany({
           where: {
             id: runId,
             ...continueRunClaimFence(run),
@@ -408,6 +410,9 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             wakeAt: null,
           },
         });
+        // The update can wait for a row lock. Roll it back if draining began meanwhile.
+        deps.runAdmissionSignal?.throwIfAborted();
+        return result;
       });
       if (leased.count !== 1) return;
 
@@ -2580,6 +2585,13 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       try {
         await executor.continueRun(runId, workerId, onRunStarted, recovery);
       } catch (error) {
+        const admission = baseDeps.runAdmissionSignal;
+        if (
+          admission?.aborted &&
+          (error === admission.reason ||
+            (recovery.fence === undefined && isDatabaseUnavailable(error)))
+        )
+          return;
         if (await recoverRunSetupFromDatabaseOutage(baseDeps, recovery, error)) return;
         throw error;
       }

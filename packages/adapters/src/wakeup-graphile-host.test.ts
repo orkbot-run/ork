@@ -415,6 +415,175 @@ describe("GraphileJobWorkerHost runner lifecycle", () => {
     vi.useRealTimers();
   });
 
+  it("bounds an idle runner's stuck stop and supervision without replay", async () => {
+    vi.useFakeTimers();
+    const first = mockRunner();
+    vi.mocked(first.runner.stop).mockImplementation(() => new Promise(() => undefined));
+    run.mockResolvedValueOnce(first.runner);
+    const target = handlers();
+    const host = new GraphileJobWorkerHost({} as Pool, { idleStopTimeoutMs: 30 });
+    await host.start(target);
+    const stopping = host.stop();
+    await vi.advanceTimersByTimeAsync(30);
+    await stopping;
+    const dispatch = run.mock.calls[0]![0].taskList["computer.sleep"];
+    await expect(dispatch({ computerId: "late" })).rejects.toThrow("Worker is stopping");
+    expect(target["computer.sleep"]).not.toHaveBeenCalled();
+    expect(first.runner.kill).not.toHaveBeenCalled();
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the busy drain budget for active handlers", async () => {
+    vi.useFakeTimers();
+    const first = mockRunner();
+    const release = deferred();
+    run.mockResolvedValueOnce(first.runner);
+    const target = handlers();
+    target["computer.sleep"] = vi.fn(async () => {
+      await release.promise;
+    });
+    const host = new GraphileJobWorkerHost({} as Pool, { idleStopTimeoutMs: 30 });
+    await host.start(target);
+    const delivery = run.mock.calls[0]![0].taskList["computer.sleep"]({ computerId: "active" });
+    // A real Graphile runner waits for that delivery before resolving stop().
+    vi.mocked(first.runner.stop).mockImplementation(async () => {
+      await delivery;
+      first.rejectLife(tooMany);
+    });
+    let stopped = false;
+    const stopping = host.stop().then(() => {
+      stopped = true;
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(stopped).toBe(false);
+    release.resolve();
+    await stopping;
+    expect(target["computer.sleep"]).toHaveBeenCalledOnce();
+  });
+
+  it("keeps disabled idle shutdown waiting for runner.stop", async () => {
+    vi.useFakeTimers();
+    const first = mockRunner();
+    const release = deferred();
+    vi.mocked(first.runner.stop).mockImplementation(async () => {
+      await release.promise;
+    });
+    run.mockResolvedValueOnce(first.runner);
+    const host = new GraphileJobWorkerHost({} as Pool);
+    await host.start(handlers());
+    let stopped = false;
+    const stopping = host.stop().then(() => {
+      stopped = true;
+    });
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(stopped).toBe(false);
+    release.resolve();
+    first.rejectLife(tooMany);
+    await stopping;
+  });
+
+  it.each(["job:success", "job:error"])(
+    "does not treat %s or job:complete as a durable receipt",
+    async (outcome) => {
+      vi.useFakeTimers();
+      const first = mockRunner();
+      const release = deferred();
+      vi.mocked(first.runner.stop).mockImplementation(async () => {
+        await release.promise;
+      });
+      const query = vi.fn(async () => ({ rows: [{ id: "1" }] }));
+      run.mockResolvedValueOnce(first.runner);
+      const host = new GraphileJobWorkerHost({ query } as unknown as Pool, {
+        idleStopTimeoutMs: 30,
+      });
+      await host.start(handlers());
+      const events = run.mock.calls[0]![0].events;
+      events.emit("job:start", { job: { id: "1" } });
+      events.emit(outcome, { job: { id: "1" } });
+      events.emit("job:complete", { job: { id: "1" } });
+      let stopped = false;
+      const stopping = host.stop().then(() => {
+        stopped = true;
+      });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(stopped).toBe(false);
+      expect(query).toHaveBeenCalled();
+      release.resolve();
+      first.rejectLife(tooMany);
+      await stopping;
+    },
+  );
+
+  it("verifies old receipts while healthy and uses the idle bound after DB loss", async () => {
+    vi.useFakeTimers();
+    const first = mockRunner();
+    vi.mocked(first.runner.stop).mockImplementation(() => new Promise(() => undefined));
+    const query = vi.fn(async () => ({ rows: [] }));
+    run.mockResolvedValueOnce(first.runner);
+    const host = new GraphileJobWorkerHost({ query } as unknown as Pool, { idleStopTimeoutMs: 30 });
+    await host.start(handlers());
+    const events = run.mock.calls[0]![0].events;
+    events.emit("job:start", { job: { id: "1" } });
+    events.emit("job:complete", { job: { id: "1" } });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(query).toHaveBeenCalledOnce();
+    query.mockRejectedValue(new Error("offline"));
+    const stopping = host.stop();
+    await vi.advanceTimersByTimeAsync(30);
+    await stopping;
+    expect(query).toHaveBeenCalledOnce();
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  it("keeps uncertain receipts when a new claim races the idle probe", async () => {
+    vi.useFakeTimers();
+    const first = mockRunner();
+    const release = deferred();
+    vi.mocked(first.runner.stop).mockImplementation(async () => {
+      await release.promise;
+    });
+    let acknowledge!: (result: { rows: { id: string }[] }) => void;
+    const query = vi.fn(
+      () =>
+        new Promise<{ rows: { id: string }[] }>((resolve) => {
+          acknowledge = resolve;
+        }),
+    );
+    run.mockResolvedValueOnce(first.runner);
+    const host = new GraphileJobWorkerHost({ query } as unknown as Pool, { idleStopTimeoutMs: 30 });
+    await host.start(handlers());
+    const events = run.mock.calls[0]![0].events;
+    events.emit("job:start", { job: { id: "1" } });
+    events.emit("job:complete", { job: { id: "1" } });
+    await vi.advanceTimersByTimeAsync(100);
+    events.emit("job:start", { job: { id: "2" } });
+    acknowledge({ rows: [] });
+    await Promise.resolve();
+    let stopped = false;
+    const stopping = host.stop().then(() => {
+      stopped = true;
+    });
+    await vi.advanceTimersByTimeAsync(30);
+    expect(stopped).toBe(false);
+    release.resolve();
+    first.rejectLife(tooMany);
+    await stopping;
+  });
+
+  it("rejects claims arriving after drain begins without invoking handlers", async () => {
+    const first = mockRunner();
+    run.mockResolvedValueOnce(first.runner);
+    const target = handlers();
+    const host = new GraphileJobWorkerHost({} as Pool, { idleStopTimeoutMs: 30 });
+    await host.start(target);
+    const stopping = host.stop();
+    await expect(
+      run.mock.calls[0]![0].taskList["computer.sleep"]({ computerId: "late" }),
+    ).rejects.toThrow("Worker is stopping");
+    await stopping;
+    expect(target["computer.sleep"]).not.toHaveBeenCalled();
+  });
+
   it("stops waiting for a handed-off run that outlives the drain deadline", async () => {
     run.mockResolvedValueOnce(mockRunner().runner);
     const host = new GraphileJobWorkerHost({} as Pool, { concurrency: 1, drainTimeoutMs: 20 });

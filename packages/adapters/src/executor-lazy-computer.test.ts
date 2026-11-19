@@ -60,6 +60,8 @@ async function runRoutine(
     setupError?: Error;
     secrets?: string[];
     shutdownSignal?: AbortSignal;
+    runAdmissionSignal?: AbortSignal;
+    onRunRead?: () => void;
     /** User stop already flipped the run to cancelled before the turn ends. */
     cancelRun?: boolean;
     onRunStarted?: () => void;
@@ -154,7 +156,10 @@ async function runRoutine(
       async (work: (tx: unknown) => Promise<unknown>): Promise<unknown> => work(prisma),
     ),
     run: {
-      findUnique: vi.fn(async () => run),
+      findUnique: vi.fn(async () => {
+        options.onRunRead?.();
+        return run;
+      }),
       findUniqueOrThrow: vi.fn(async () => run),
       // No other run of this bot waits for the computer.
       findFirst: vi.fn(async (args?: { where?: { status?: unknown } }) =>
@@ -391,6 +396,7 @@ async function runRoutine(
           fallbacks: async () => [],
         }
       : undefined,
+    runAdmissionSignal: options.runAdmissionSignal,
     shutdownSignal: options.shutdownSignal
       ? AbortSignal.any([options.shutdownSignal, shutdownRelay.signal])
       : undefined,
@@ -1094,6 +1100,44 @@ describe("run computer provisioning", () => {
     expect(prisma.attempt.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "interrupted" }) }),
     );
+  });
+
+  it("does not claim a run whose lookup crossed the start of draining", async () => {
+    const admission = new AbortController();
+    const result = await runRoutine([], {
+      runAdmissionSignal: admission.signal,
+      onRunRead: () => admission.abort(),
+    });
+    expect(result.prisma.run.updateMany).not.toHaveBeenCalled();
+    expect(result.runtimeRun).not.toHaveBeenCalled();
+    expect(result.run).toMatchObject({ status: "queued", leaseOwner: null });
+  });
+
+  it("continues an owned turn after admission closes", async () => {
+    const admission = new AbortController();
+    const result = await runRoutine([], {
+      runAdmissionSignal: admission.signal,
+      onRunStarted: () => admission.abort(),
+    });
+    expect(result.runtimeRun).toHaveBeenCalledOnce();
+    expect(result.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "completed" }),
+    );
+    expect(continueJobs(result.enqueue)).toEqual([]);
+  });
+
+  it("does not retry a failed lookup for an unclaimed run after admission closes", async () => {
+    const admission = new AbortController();
+    const result = await runRoutine([], {
+      runAdmissionSignal: admission.signal,
+      onRunRead: () => {
+        admission.abort();
+        throw Object.assign(new Error("database unavailable"), { code: "P1001" });
+      },
+    });
+    expect(result.prisma.run.findUnique).toHaveBeenCalledOnce();
+    expect(result.prisma.run.updateMany).not.toHaveBeenCalled();
+    expect(result.enqueue).not.toHaveBeenCalled();
   });
 
   it("does not claim a run when the worker is already shutting down", async () => {

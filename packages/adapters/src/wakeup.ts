@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
 
+import { EventEmitter } from "node:events";
 import type {
   BackgroundJob,
   BackgroundJobExecution,
@@ -20,7 +21,7 @@ import {
   runAsSystem,
 } from "@orkbot/db";
 import { getLogger, runCorrelatedJob, unwrapJobPayload, wrapJobPayload } from "@orkbot/logging";
-import type { Runner, WorkerUtils } from "graphile-worker";
+import type { Runner, WorkerEvents, WorkerUtils } from "graphile-worker";
 import { makeWorkerUtils, run } from "graphile-worker";
 import type { Pool } from "pg";
 import { recordHistoryCompactAttemptsExhausted } from "./history-compaction.js";
@@ -220,6 +221,14 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
   private runner: Runner | undefined;
   private handlers: BackgroundJobHandlers | undefined;
   private stopping = false;
+  private lifecycle = {
+    abandoned: false,
+    receiptRisk: false,
+    generation: 0,
+    receipts: new Set<string>(),
+  };
+  private verifyIdleReceipts: (() => void) | undefined;
+  private receiptTimer: ReturnType<typeof setTimeout> | undefined;
   private superviseTask: Promise<void> | undefined;
   private wakeSleep: (() => void) | undefined;
   private readonly executions = new RunExecutionHost();
@@ -240,6 +249,8 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
       sleep?: (ms: number) => Promise<void>;
       /** Test seam for JOB_DRAIN_TIMEOUT_MS. */
       drainTimeoutMs?: number;
+      /** Opt-in bound for stopping a runner with no active work or unverified receipts. */
+      idleStopTimeoutMs?: number;
     } = {},
   ) {}
 
@@ -248,6 +259,12 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
     this.stopping = false;
     this.executions.start();
     this.abandoned = abandonment();
+    this.lifecycle = {
+      abandoned: false,
+      receiptRisk: false,
+      generation: 0,
+      receipts: new Set<string>(),
+    };
     this.handlers = handlers;
     await this.launchRunner();
     // run() resolves once the runner is up; runner.promise can still reject later
@@ -270,18 +287,50 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
     const started = Date.now();
     const busy = this.running.size > 0 || this.executions.activeCount > 0;
     if (busy) getLogger().info("jobs.draining", this.runningBindings());
+    const lifecycle = this.lifecycle;
     const deadline = setTimeout(() => {
       getLogger().warn("jobs.drain_timed_out", this.runningBindings());
+      lifecycle.abandoned = true;
       this.abandoned.abandon();
     }, this.options.drainTimeoutMs ?? JOB_DRAIN_TIMEOUT_MS);
-    try {
+    let idleDeadline: ReturnType<typeof setTimeout> | undefined;
+    const shutdown = (async () => {
       await this.runner?.stop();
+      await this.superviseTask?.catch(() => undefined);
+    })();
+    const idleTimeout = this.options.idleStopTimeoutMs;
+    this.verifyIdleReceipts?.();
+    // Graphile 0.17's job:complete fires when a receipt is ENQUEUED, not committed.
+    // Verify that observed claims no longer have database locks before using the
+    // idle bound; errors or unverified receipts retain the normal long drain.
+    const idleStop =
+      idleTimeout === undefined
+        ? undefined
+        : new Promise<void>((resolve) => {
+            idleDeadline = setTimeout(() => {
+              if (
+                this.running.size ||
+                this.executions.activeCount ||
+                lifecycle.receiptRisk ||
+                lifecycle.receipts.size
+              )
+                return;
+              lifecycle.abandoned = true;
+              getLogger().warn("jobs.idle_stop_timed_out", this.runningBindings());
+              resolve();
+            }, idleTimeout);
+          });
+    try {
+      await (idleStop ? Promise.race([shutdown, idleStop]) : shutdown);
     } finally {
       // The queue has stopped accepting deliveries. Handed-off runs still own
       // leases and must finish before their database and providers are closed.
       await Promise.race([draining, this.abandoned.promise.catch(() => undefined)]);
+      if (idleTimeout !== undefined) lifecycle.abandoned = true;
       clearTimeout(deadline);
-      await this.superviseTask?.catch(() => undefined);
+      clearTimeout(idleDeadline);
+      clearTimeout(this.receiptTimer);
+      this.verifyIdleReceipts = undefined;
       this.runner = undefined;
       this.superviseTask = undefined;
       this.handlers = undefined;
@@ -301,6 +350,62 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
   private async launchRunner(): Promise<void> {
     const handlers = this.handlers;
     if (!handlers) throw new Error("Background job worker has no handlers");
+    const lifecycle = this.lifecycle;
+    const events = new EventEmitter() as WorkerEvents;
+    const claim = (id: string) => {
+      lifecycle.generation++;
+      if (lifecycle.receipts.size >= 1_000) lifecycle.receiptRisk = true;
+      else lifecycle.receipts.add(id);
+    };
+    let verifying = false;
+    let receiptRetryMs = 100;
+    const scheduleReceiptCheck = () => {
+      clearTimeout(this.receiptTimer);
+      this.receiptTimer = setTimeout(verify, receiptRetryMs);
+      this.receiptTimer.unref();
+    };
+    const verify = () => {
+      if (
+        verifying ||
+        lifecycle.receiptRisk ||
+        !lifecycle.receipts.size ||
+        this.running.size ||
+        lifecycle.abandoned
+      )
+        return;
+      verifying = true;
+      const generation = lifecycle.generation;
+      const ids = [...lifecycle.receipts];
+      void this.pgPool
+        .query<{ id: string }>(
+          "select id::text as id from graphile_worker._private_jobs where id = any($1::bigint[]) and locked_at is not null",
+          [ids],
+        )
+        .then(
+          ({ rows }) => {
+            // A claim arriving while the query was in flight cannot be certified by it.
+            if (generation !== lifecycle.generation || lifecycle.abandoned) return;
+            const locked = new Set(rows.map(({ id }) => id));
+            for (const id of ids) if (!locked.has(id)) lifecycle.receipts.delete(id);
+          },
+          () => undefined,
+        )
+        .finally(() => {
+          verifying = false;
+          if (!this.stopping && !lifecycle.abandoned && lifecycle.receipts.size) {
+            receiptRetryMs = Math.min(receiptRetryMs * 2, 5_000);
+            scheduleReceiptCheck();
+          }
+        });
+    };
+    if (this.options.idleStopTimeoutMs !== undefined) {
+      this.verifyIdleReceipts = verify;
+      events.on("job:start", ({ job }) => claim(job.id));
+      events.on("job:complete", () => {
+        receiptRetryMs = 100;
+        scheduleReceiptCheck();
+      });
+    }
     const taskList = Object.fromEntries(
       (Object.keys(handlers) as BackgroundJobName[])
         .filter((name) => {
@@ -310,7 +415,17 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
         })
         .map((name) => [
           this.options.workload === "interactive" ? INTERACTIVE_RUN_TASK : name,
-          async (payload: unknown) => {
+          async (payload: unknown, helpers?: { job: { id: string } }) => {
+            if (this.options.idleStopTimeoutMs !== undefined) {
+              if (helpers?.job) claim(helpers.job.id);
+              else lifecycle.receiptRisk = true;
+            }
+            if (
+              lifecycle.abandoned ||
+              (this.stopping && this.options.idleStopTimeoutMs !== undefined)
+            ) {
+              throw new Error("Worker is stopping");
+            }
             const unpacked = unwrapJobPayload(payload);
             const execute = (execution?: BackgroundJobExecution) =>
               runCorrelatedJob({
@@ -334,6 +449,7 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
     );
     if (!this.options.workload) taskList[INTERACTIVE_RUN_TASK] = taskList["run.continue"]!;
     const runner = await run({
+      events,
       pgPool: this.pgPool,
       concurrency: this.options.concurrency ?? 4,
       pollInterval: this.options.pollInterval ?? 500,
@@ -424,7 +540,7 @@ const MAINTENANCE_LOCAL_QUEUE_SIZE = 10;
 /** Long agent turns cannot occupy the capacity reserved for other workloads. */
 export function createReservedGraphileJobWorkerHost(
   pool: Pool,
-  options: { concurrency?: number; pollInterval?: number } = {},
+  options: { concurrency?: number; pollInterval?: number; idleStopTimeoutMs?: number } = {},
 ): JobWorkerHost {
   const hosts = (["interactive", "background", "maintenance"] as const).map(
     (workload) =>
@@ -675,6 +791,8 @@ export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
   private acceptingClosingJobs = false;
   private closeRequested = false;
 
+  constructor(private readonly options: { stopExistingOnly?: boolean } = {}) {}
+
   async enqueue(job: BackgroundJob): Promise<void> {
     const stored = toQueuedJob(job);
     if (this.closed) throw new Error("Background job publisher is closed");
@@ -809,6 +927,7 @@ export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
   }
 
   private enqueueWhileClosing(job: QueuedJob): void {
+    if (this.options.stopExistingOnly) throw new Error("Background job publisher is closing");
     if (job.replaceKey) {
       const existing = this.closingJobs.findIndex((queued) => queued.replaceKey === job.replaceKey);
       if (existing >= 0) this.closingJobs.splice(existing, 1);
@@ -835,11 +954,11 @@ export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
 
   private async performDrain(): Promise<void> {
     this.closing = true;
-    this.acceptingClosingJobs = true;
+    this.acceptingClosingJobs = !this.options.stopExistingOnly;
     for (const timer of this.timers) {
       clearTimeout(timer);
       const job = this.scheduled.get(timer);
-      if (job) this.enqueueWhileClosing(job);
+      if (job && !this.options.stopExistingOnly) this.enqueueWhileClosing(job);
     }
     this.timers.clear();
     this.scheduled.clear();

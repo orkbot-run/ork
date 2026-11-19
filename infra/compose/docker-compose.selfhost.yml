@@ -92,6 +92,9 @@ services:
     working_dir: /app/apps/worker
     command: [node, /app/infra/compose/selfhost-runtime.mjs, /run/orkbot/environment.json, node, --enable-source-maps, dist/index.js]
     stop_grace_period: 50m
+    environment:
+      RUN_DRAIN_ENABLED: "${RUN_DRAIN_ENABLED:-true}"
+      RUN_DRAIN_MS: "${RUN_DRAIN_MS:-}"
     pids_limit: 512
     mem_limit: 2g
     volumes: [worker-configuration:/run/orkbot:ro, server-data:/data]

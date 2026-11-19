@@ -100,6 +100,8 @@ export interface ExecutorDeps {
   userDevices?: UserDeviceGateway;
   /** Aborted when createApp stop() begins so in-flight continueRun boot waits exit promptly. */
   shutdownSignal?: AbortSignal;
+  /** Stops new claims while a worker still allows owned turns to finish. */
+  runAdmissionSignal?: AbortSignal;
   /** Set by withRunLease for one attempt; that run's history writes carry its lease. */
   runLease?: RunLease & { runId: string };
 }

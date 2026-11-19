@@ -377,6 +377,38 @@ describe("InMemoryJobQueue", () => {
     await expect(enqueue).rejects.toThrow("Background job publisher is stopped");
   });
 
+  it("optionally stops only active handlers and drops queued work", async () => {
+    vi.useFakeTimers();
+    const queue = new InMemoryJobQueue({ stopExistingOnly: true });
+    const target = handlers();
+    let release!: () => void;
+    target["computer.sleep"] = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    await queue.start(target);
+    await queue.enqueue({ name: "computer.sleep", payload: { computerId: "active" } });
+    await vi.advanceTimersByTimeAsync(0);
+    await queue.enqueue({ name: "computer.sleep", payload: { computerId: "queued" } });
+    let stopped = false;
+    const stopping = queue.stop().then(() => {
+      stopped = true;
+    });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(stopped).toBe(false);
+    expect(target["computer.sleep"]).toHaveBeenCalledOnce();
+    await expect(
+      queue.enqueue({ name: "computer.sleep", payload: { computerId: "late" } }),
+    ).rejects.toThrow("closing");
+    release();
+    await stopping;
+    await queue.close();
+    expect(target["computer.sleep"]).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
   it("drains an accepted immediate timer during close", async () => {
     const queue = new InMemoryJobQueue();
     const target = handlers();
