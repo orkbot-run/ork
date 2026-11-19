@@ -25,6 +25,7 @@ import {
   modelConnectionOptions,
   modelConnectRequest,
   pickCatalogModelId,
+  sanitizeModelConnectionError,
 } from "@orkbot/core";
 import {
   Button,
@@ -393,7 +394,12 @@ export function OnboardingPage() {
       },
       onError: (err) => {
         if (!preflightStillCurrent(revision)) return;
-        setPreflightFailure(classifyModelConnectionFailure(err, { modelId }));
+        setPreflightFailure(
+          classifyModelConnectionFailure(err, {
+            modelId,
+            credentials: [apiKey, ...Object.values(modelHeadersInput(headerRows) ?? {})],
+          }),
+        );
         setNotice(null);
       },
     });
@@ -477,7 +483,13 @@ export function OnboardingPage() {
       await rpc.models.connect(request.input);
       if (form.isCurrent()) await continueAfterModel(form.isCurrent);
     } catch (err) {
-      if (form.isCurrent()) setError(errorText(err, t`Could not save model`));
+      if (form.isCurrent())
+        setError(
+          sanitizeModelConnectionError(errorText(err, t`Could not save model`), [
+            apiKey,
+            ...Object.values(modelHeadersInput(headerRows) ?? {}),
+          ]),
+        );
     } finally {
       if (form.isSelected()) setSaving(false);
     }

@@ -34,6 +34,7 @@ import {
   createModelProbe,
   initialModelProbeState,
   modelConnectRequest,
+  sanitizeModelConnectionError,
   savedCompatibleModelIds,
   toggleEnabledModelId,
 } from "@orkbot/core";
@@ -412,7 +413,10 @@ export default function ModelConnection() {
       onError: (err) => {
         if (form.isCurrent())
           publishFeedback("probe", {
-            error: errorText(err, t("Could not reach this model server")),
+            error: sanitizeModelConnectionError(
+              errorText(err, t("Could not reach this model server")),
+              [apiKey, ...Object.values(modelHeadersInput(headerRows) ?? {})],
+            ),
           });
       },
     });
@@ -518,7 +522,10 @@ export default function ModelConnection() {
     } catch (err) {
       if (!form.isCurrent()) return;
       publishFeedback(anchor, {
-        error: errorText(err, t("Could not connect this provider")),
+        error: sanitizeModelConnectionError(errorText(err, t("Could not connect this provider")), [
+          apiKey,
+          ...Object.values(modelHeadersInput(headerRows) ?? {}),
+        ]),
       });
     } finally {
       if (form.isSelected()) setPending(null);

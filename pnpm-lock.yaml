@@ -1092,6 +1092,9 @@ importers:
       '@orkbot/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@orkbot/logging':
+        specifier: workspace:*
+        version: link:../logging
       '@orkbot/ui-tokens':
         specifier: workspace:*
         version: link:../ui-tokens
@@ -1200,6 +1203,9 @@ importers:
         specifier: 4.13.16
         version: 4.13.16
     devDependencies:
+      fast-check:
+        specifier: 4.10.2
+        version: 4.10.2
       typescript:
         specifier: 7.0.2
         version: 7.0.2

@@ -89,6 +89,7 @@
     "@orkbot/avatar": "workspace:*",
     "@observablehq/plot": "0.6.17",
     "@orkbot/contracts": "workspace:*",
+    "@orkbot/logging": "workspace:*",
     "@orkbot/ui-tokens": "workspace:*",
     "@tanstack/query-core": "5.105.3",
     "croner": "10.0.1",

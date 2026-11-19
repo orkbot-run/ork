@@ -116,3 +116,86 @@ it("does not return a key echoed by a model discovery endpoint", async () => {
   expect(result.models).toEqual(["company-model"]);
   expect(JSON.stringify(result)).not.toContain(key);
 });
+
+it.each(["submitted", "stored"])(
+  "masks %s model credentials echoed in probe errors",
+  async (source) => {
+    const key = 'fixture private / key "quoted"';
+    const header = "fixture-routing-secret";
+    const plaintext = JSON.stringify({
+      kind: "openai_compatible",
+      baseUrl: "https://ollama.com/v1",
+      apiKey: key,
+      headers: { "x-routing": header },
+    });
+    const deps = {
+      prisma: {
+        userModelPreference: { findMany: vi.fn(async () => []) },
+        userModelCredential: {
+          findMany: vi.fn(async () => [{ id: "saved", secretId: "saved-secret" }]),
+        },
+        secret: {
+          findMany: vi.fn(async () => [{ id: "saved-secret", ciphertext: "fixture-encrypted" }]),
+        },
+      },
+      secrets: { load: vi.fn(async () => plaintext) },
+      env: { agentRuntime: "pi", defaultProvider: "openrouter", defaultModel: "model" },
+      modelConnectionFetch: vi.fn(async (url) => {
+        if (String(url).endsWith("/api/balance")) return new Response("{}", { status: 200 });
+        throw new Error(
+          `401 rejected ${encodeURIComponent(key)} ${JSON.stringify(key).slice(1, -1)} ${header} Authorization: Custom fixture-unknown-credential`,
+        );
+      }),
+    } as unknown as RouterDeps;
+    const actor = {
+      userId: "u",
+      spaceId: "s",
+      email: "u@example.test",
+      isDeploymentOwner: false,
+    } satisfies Actor;
+    const client = createRouterClient(createRouter(deps), { context: { actor } as never });
+    const error = await client.models
+      .probeOpenAiCompatible({
+        baseUrl: "https://ollama.com/v1",
+        ...(source === "submitted" ? { apiKey: key, headers: { "x-routing": header } } : {}),
+      })
+      .catch((error: unknown) => error);
+    expect(error).toMatchObject({ code: "BAD_REQUEST" });
+    expect((error as Error).message).toContain("401");
+    if (source === "stored") expect(deps.secrets.load).toHaveBeenCalled();
+    expect((error as Error).message).not.toMatch(/fixture|quoted/);
+  },
+);
+
+it("masks a provider echo when saving a model connection", async () => {
+  const apiKey = "fixture-check-key";
+  const check = vi.fn(async () => {
+    throw new Error("401 rejected %66ixture-check-key");
+  });
+  const deps = {
+    prisma: { workspaceModelPolicy: { findFirst: vi.fn(async () => null) } },
+    secrets: {},
+    env: { agentRuntime: "pi", defaultProvider: "openrouter", defaultModel: "model" },
+    modelConnectionFetch: vi.fn(async () => new Response("{}", { status: 200 })),
+    modelConnectionCheck: check,
+  } as unknown as RouterDeps;
+  const actor = {
+    userId: "u",
+    spaceId: "s",
+    email: "u@example.test",
+    isDeploymentOwner: false,
+  } satisfies Actor;
+  const client = createRouterClient(createRouter(deps), { context: { actor } as never });
+  await expect(
+    client.models.connect({
+      provider: "openrouter",
+      modelId: "test/model",
+      apiKey,
+      credentialId: null,
+    }),
+  ).rejects.toMatchObject({ code: "BAD_REQUEST", message: "401 rejected [redacted]" });
+  expect(check).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ apiKey }),
+    expect.anything(),
+  );
+});

@@ -26,7 +26,7 @@ import {
   storedPiProviderIds,
   usableModelId,
 } from "@orkbot/contracts";
-import { clampCatalogThinkingLevel } from "@orkbot/core";
+import { clampCatalogThinkingLevel, sanitizeModelConnectionError } from "@orkbot/core";
 import {
   deleteUnreferencedCredentialSecret,
   findNewestUserModelCredential,
@@ -317,6 +317,7 @@ export function createModelConnector(deps: RouterDeps, codexCatalog: CodexLiveCa
   ) => {
     const credential = await modelConnectionTarget(deps, actor, input.provider, input.credentialId);
     let plaintext: string;
+    const secretValues = [input.apiKey ?? "", ...Object.values(input.headers ?? {})];
     try {
       let previousPlaintext: string | undefined;
       let omitVisionModelIds = false;
@@ -346,6 +347,7 @@ export function createModelConnector(deps: RouterDeps, codexCatalog: CodexLiveCa
       if (input.provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
         const saved = parseModelSecret(plaintext);
         if (saved.kind === "openai_compatible") {
+          secretValues.push(saved.apiKey ?? "", ...Object.values(saved.headers ?? {}));
           await verifyOpenAiCompatibleApiKey(saved, deps.modelConnectionFetch, signal);
         }
       }
@@ -375,7 +377,10 @@ export function createModelConnector(deps: RouterDeps, codexCatalog: CodexLiveCa
       }
     } catch (error) {
       throw new ORPCError("BAD_REQUEST", {
-        message: error instanceof Error ? error.message : "Invalid model connection",
+        message:
+          error instanceof Error
+            ? sanitizeModelConnectionError(error.message, secretValues)
+            : "Invalid model connection",
       });
     }
     if (input.provider === OPENAI_COMPATIBLE_PROVIDER_ID) {

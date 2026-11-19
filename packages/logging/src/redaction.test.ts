@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; secret handling changes follow LICENSE.md.
+
 import { execFileSync } from "node:child_process";
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { createLogger } from "./logger.js";
 import { redactBindings, redactSensitiveText } from "./redaction.js";
@@ -383,5 +388,146 @@ describe("redaction", () => {
     expect(redactSensitiveText("cannot open C:\\Users\\example-user\\app.db")).toBe(
       "cannot open [user]\\app.db",
     );
+  });
+});
+
+describe("credential redaction regressions", () => {
+  it.each([
+    'passwd = "fixture secret with spaces"',
+    "client_secret='fixture secret with spaces'",
+    'x-api-key = {"nested": ["fixture", "secret"]}',
+    'cookie: ["fixture", {"nested":"secret"}]',
+    "Cookie: sid=fixture-session; other=fixture-other",
+    "credential=123456789",
+    'Authorization: Digest username = "fixture-user", nonce = "fixture-secret" attached',
+    'api_key={] "fixture-secret"}',
+    "prefixak_fixture_secret_suffix",
+    '"api key":123456789',
+    '{" api key":"fixture-secret"}',
+    String.raw`{"\u0061piKey":"fixture-secret"}`,
+    String.raw`{\"api_key\":123456789}`,
+    JSON.stringify({ api_key: 'fixture "secret" tail' }).replaceAll('"', '\\"'),
+    'Authorization: Digest username="fixture-user", realm="fixture-realm", nonce="fixture-secret" attached',
+    'Authorization: Signature keyId="fixture-id", signature="fixture-secret" attached',
+    String.raw`"\u0061uthorization": Custom fixture-value fixture-parameters`,
+    'api-key: "fixture \\"secret\\" tail"',
+    String.raw`{\"api_key\":\"fixture secret\"}`,
+    "Authorization: CustomScheme fixture-credential attached",
+    "proxy-authorization=Negotiate fixture-credential attached",
+    "redis://fixture-user:fixture-secret@cache.example.test/db",
+    String.raw`redis:\/\/fixture-user:fixture-secret@cache.example.test/db`,
+    "custom+secure://fixture-user:fixture-secret@cache.example.test/db",
+    "prefixsk-fixturecredential99suffix",
+    "prefixak_fixturecredentialsuffix",
+    "%73%6b%2Dfixturecredential99",
+    "%FF%73%6b%2Dfixturecredential99",
+    "%73%6B%2Dfixturecredential99%20token%3Dfixturevalue",
+    "3782 822463 10005",
+    "3056-9309-0259-04",
+  ])("masks the whole credential in %s", (text) => {
+    const redacted = redactSensitiveText(text);
+    expect(redacted).toContain("[Redacted]");
+    expect(redacted).not.toMatch(/fixture|123456789|822463|9309/);
+    expect(redactSensitiveText(redacted)).toBe(redacted);
+  });
+
+  it("preserves ordinary prose and public URL components", () => {
+    expect(redactSensitiveText("the bearer of bad news")).toBe("the bearer of bad news");
+    expect(redactSensitiveText("redis://cache.example.test/db?q=public")).toBe(
+      "redis://cache.example.test/db?q=public",
+    );
+    expect(redactSensitiveText("retry check_status or ignore break_glass")).toBe(
+      "retry check_status or ignore break_glass",
+    );
+  });
+
+  it("masks grouped cards beside unrelated numbers", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(["3782", "822463", "10005"], ["3056", "930902", "5904"]),
+        fc.constantFrom(" ", "-"),
+        (groups, separator) => {
+          const card = groups.join(separator);
+          expect(redactSensitiveText(`ref 123 ${card} 55`)).toBe("ref 123 [Redacted] 55");
+        },
+      ),
+    );
+  });
+
+  it("masks generated secrets in URL userinfo, authorization and percent-encoded values", () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^[a-z0-9]{12,32}$/), (value) => {
+        const cases = [
+          `custom://fixture:${value}@example.test/db`,
+          `Authorization: Private-Auth ${value} extra=${value}`,
+          `prefixsk-${value}suffix`,
+          `%73%6B%2D${value}`,
+        ];
+        for (const input of cases) {
+          const output = redactSensitiveText(input);
+          expect(output).not.toContain(value);
+          expect(redactSensitiveText(output)).toBe(output);
+        }
+      }),
+      { seed: 301, numRuns: 150 },
+    );
+  });
+
+  it("uses one secret-name rule in assignments and structured bindings", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(
+          "passwd",
+          "credential",
+          "cookie",
+          "api-key",
+          "api_key",
+          "authorization",
+          "secret",
+          "token",
+        ),
+        fc.stringMatching(/^[a-z]{0,20}$/),
+        fc.stringMatching(/^[a-z]{0,20}$/),
+        fc.jsonValue(),
+        (name, prefix, suffix, value) => {
+          const key = `${prefix}${name}${suffix}`;
+          expect(redactBindings({ [key]: value })[key]).toBe("[Redacted]");
+          const redacted = redactSensitiveText(JSON.stringify({ [key]: value }));
+          expect(redacted).toBe(JSON.stringify({ [key]: "[Redacted]" }));
+        },
+      ),
+      { seed: 301, numRuns: 300 },
+    );
+  });
+
+  it("is idempotent for arbitrary text and keeps long malformed inputs bounded", () => {
+    fc.assert(
+      fc.property(fc.string(), (text) => {
+        const redacted = redactSensitiveText(text);
+        expect(redactSensitiveText(redacted)).toBe(redacted);
+      }),
+      { seed: 301, numRuns: 500 },
+    );
+    const moduleUrl = new URL("./redaction.ts", import.meta.url).href;
+    const output = execFileSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "-e",
+        `
+      import { redactSensitiveText } from ${JSON.stringify(moduleUrl)};
+      const samples = ["x".repeat(1024 * 1024), "token".repeat(200 * 1024),
+        "api_key=" + "[".repeat(1024 * 1024), '"secret"' + " ".repeat(1024 * 1024),
+        "%73%6b%2D" + "x".repeat(1024 * 1024), "redis://" + "x".repeat(1024 * 1024), "Authorization: Custom " + 'id="fixture", '.repeat(80 * 1024),
+        ("\\\\".repeat(2) + '"x ').repeat(100 * 1024)];
+      for (const text of samples) redactSensitiveText(text);
+      process.stdout.write("done");
+    `,
+      ],
+      { encoding: "utf8", timeout: 5_000 },
+    );
+    expect(output).toBe("done");
   });
 });

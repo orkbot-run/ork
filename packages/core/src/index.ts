@@ -72,6 +72,7 @@ export * from "./messaging-commands.js";
 export * from "./messaging-delivery-review.js";
 export * from "./messaging-prompts.js";
 export * from "./messaging-providers.js";
+export * from "./model-connection-error.js";
 export * from "./model-connection-form.js";
 export * from "./model-oauth.js";
 export * from "./model-probe.js";

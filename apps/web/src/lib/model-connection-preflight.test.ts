@@ -1,10 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; secret handling changes follow LICENSE.md.
+
+import { sanitizeModelConnectionError } from "@orkbot/core";
 import { describe, expect, it, vi } from "vitest";
 import {
   classifyModelConnectionFailure,
   loadStoredModelAuth,
   modelPreflightSuccessMessage,
   runModelConnectionPreflight,
-  sanitizeModelConnectionError,
   unavailableSelectedModel,
 } from "./model-connection-preflight.js";
 
@@ -312,4 +316,21 @@ describe("modelPreflightSuccessMessage", () => {
     expect(modelPreflightSuccessMessage(0)).toBe("No models listed.");
     expect(modelPreflightSuccessMessage(0)).not.toMatch(/model id/i);
   });
+});
+
+it("masks a submitted nonstandard key echoed by a catalog failure", async () => {
+  const apiKey = 'fixture private / key "quoted"';
+  const result = await runModelConnectionPreflight({
+    authKind: "api-key",
+    provider: "fixture",
+    apiKey,
+    catalogProbe: true,
+    probeCatalog: async () => {
+      throw new Error(
+        `401 rejected ${encodeURIComponent(apiKey)} ${JSON.stringify(apiKey).slice(1, -1)}`,
+      );
+    },
+  });
+  expect(result).toMatchObject({ ok: false, failure: { outcome: "unauthorized" } });
+  expect(JSON.stringify(result)).not.toMatch(/fixture|quoted/);
 });

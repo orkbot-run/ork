@@ -37,6 +37,7 @@ import {
   initialModelProbeState,
   modelConnectRequest,
   popularModelProvidersFirst,
+  sanitizeModelConnectionError,
   savedCompatibleModelIds,
 } from "@orkbot/core";
 import { fetchFresh } from "@orkbot/core/query";
@@ -518,7 +519,12 @@ export function useModelSettings(onClose: () => void, scope: SettingsScope) {
       },
       onError: (err) => {
         if (!preflightStillCurrent(revision)) return;
-        setPreflightFailure(classifyModelConnectionFailure(err, { modelId }));
+        setPreflightFailure(
+          classifyModelConnectionFailure(err, {
+            modelId,
+            credentials: [apiKey, ...Object.values(modelHeadersInput(headerRows) ?? {})],
+          }),
+        );
         setNotice(null);
       },
     });
@@ -645,7 +651,13 @@ export function useModelSettings(onClose: () => void, scope: SettingsScope) {
       // A fresh connection speaks for itself through the Active model row.
       if (form.isCurrent() && (isOpenAiCompatible || savingLimitOnly)) setNotice(t`Saved.`);
     } catch (err) {
-      if (form.isCurrent()) setError(errorText(err, t`Could not connect this provider`));
+      if (form.isCurrent())
+        setError(
+          sanitizeModelConnectionError(errorText(err, t`Could not connect this provider`), [
+            apiKey,
+            ...Object.values(modelHeadersInput(headerRows) ?? {}),
+          ]),
+        );
     } finally {
       if (stillSelected()) setPending(null);
     }

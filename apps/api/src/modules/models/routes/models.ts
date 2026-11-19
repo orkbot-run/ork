@@ -31,7 +31,7 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@orkbot/contracts";
-import { clampCatalogThinkingLevel, redactSecrets } from "@orkbot/core";
+import { clampCatalogThinkingLevel, sanitizeModelConnectionError } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import {
   appliedModelRole,
@@ -453,7 +453,7 @@ export function modelsRoutes(ctx: RouterContext) {
             throw new ORPCError("BAD_REQUEST", {
               message:
                 error instanceof Error
-                  ? redactSecrets(error.message, secretValues)
+                  ? sanitizeModelConnectionError(error.message, secretValues)
                   : "Could not list models",
             });
           }
@@ -472,7 +472,7 @@ export function modelsRoutes(ctx: RouterContext) {
           throw new ORPCError("BAD_REQUEST", {
             message:
               error instanceof Error
-                ? redactSecrets(error.message, [input.apiKey])
+                ? sanitizeModelConnectionError(error.message, [input.apiKey])
                 : "Could not list models",
           });
         }
