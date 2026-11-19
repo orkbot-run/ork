@@ -118,6 +118,10 @@ jobs:
           node apps/desktop/scripts/macos-distribution.ts identity "$identity_dir/config.json"
       - name: Run native unit tests
         run: pnpm --filter @orkbot/desktop tauri:test
+      - name: Verify Windows window control
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./apps/desktop/src-tauri/native/host-screen.test.ps1
       - name: Check native code
         run: pnpm --filter @orkbot/desktop tauri:check
       - name: Configure Linux WebKit helpers

@@ -2,8 +2,17 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 $ErrorActionPreference = 'Stop'
 $completed = 0
+$utf8 = [System.Text.UTF8Encoding]::new($false, $true)
+
+function Write-ScreenResponse($response) {
+  $bytes = $utf8.GetBytes((ConvertTo-Json -InputObject $response -Depth 6 -Compress))
+  [Console]::OpenStandardOutput().Write($bytes, 0, $bytes.Length)
+}
+
 try {
-  $request = [Console]::In.ReadToEnd() | ConvertFrom-Json
+  $reader = [System.IO.StreamReader]::new([Console]::OpenStandardInput(), $utf8)
+  try { $request = $reader.ReadToEnd() | ConvertFrom-Json }
+  finally { $reader.Dispose() }
   Add-Type -AssemblyName System.Drawing
   Add-Type -TypeDefinition @'
 using System;
@@ -15,7 +24,7 @@ public static class OrkWindow {
  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out Rect rect);
  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr window);
- [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
+ [DllImport("user32.dll", EntryPoint = "PostMessageW", ExactSpelling = true)] public static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
  [DllImport("user32.dll")] public static extern bool ScreenToClient(IntPtr window, ref Point point);
  [DllImport("user32.dll")] public static extern IntPtr ChildWindowFromPointEx(IntPtr window, Point point, uint flags);
  [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
@@ -39,7 +48,7 @@ public static class OrkWindow {
   if ($request.method -eq 'permissions' -or $request.method -eq 'capabilities') {
     $ready = [Environment]::UserInteractive -and [OrkWindow]::GetThreadDesktop([OrkWindow]::GetCurrentThreadId()) -ne [IntPtr]::Zero
     if ($ready) { $probe = New-Object System.Drawing.Bitmap(1, 1); $probe.Dispose() }
-    @{ screen = $ready; control = $ready } | ConvertTo-Json -Compress
+    Write-ScreenResponse @{ screen = $ready; control = $ready }
     exit
   }
   # Exact process product/application name only. Never interpret an application as a path or command.
@@ -139,12 +148,12 @@ public static class OrkWindow {
   try { $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png); $encoded = [Convert]::ToBase64String($stream.ToArray()) }
   finally { $bitmap.Dispose(); $stream.Dispose() }
   $observation = @{ app=$request.app; title=$app.MainWindowTitle; tree='Approved application window. Coordinates use this image''s pixels.'; image=@{mimeType='image/png';data=$encoded;width=$width;height=$height} }
-  if ($request.method -eq 'screenAct') { @{completed=$completed;observation=$observation} | ConvertTo-Json -Depth 6 -Compress }
-  else { $observation | ConvertTo-Json -Depth 6 -Compress }
+  if ($request.method -eq 'screenAct') { Write-ScreenResponse @{completed=$completed;observation=$observation} }
+  else { Write-ScreenResponse $observation }
 } catch {
   if ($request.method -eq 'screenAct') {
-    @{completed=$completed;error='The approved application could not finish the action batch. Observe the window before retrying.'} | ConvertTo-Json -Compress
+    Write-ScreenResponse @{completed=$completed;error='The approved application could not finish the action batch. Observe the window before retrying.'}
   } else {
-    @{error='The approved application could not be captured. Check its permissions and observe again.'} | ConvertTo-Json -Compress
+    Write-ScreenResponse @{error='The approved application could not be captured. Check its permissions and observe again.'}
   }
 }
