@@ -1,4 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 page browser tests are preserved. Ork changes follow LICENSE.md.
 """Offline tests for the page browser: the agent-browser wrapper and the saved-login, card and pay-token steps."""
+from concurrent.futures import ThreadPoolExecutor
 import importlib.machinery
 import importlib.util
 import json
@@ -7,6 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from threading import Barrier
 import time
 import unittest
 from unittest.mock import Mock, patch
@@ -1073,6 +1078,45 @@ class TypeTest(unittest.TestCase):
 
 
 class AgentBrowserTest(unittest.TestCase):
+    def test_parallel_screens_publish_complete_config_and_remove_temporary_files(self):
+        with tempfile.TemporaryDirectory() as root, patch.object(helper.tempfile, "gettempdir", return_value=root):
+            home = Path(root) / f"orkbot-ab-{os.getuid()}"
+            home.mkdir(mode=0o700)
+            config = home / "config.json"
+            config.write_text('{"previous":true}', encoding="utf-8")
+            both_ready = Barrier(2, timeout=3)
+            replace = os.replace
+
+            def publish(source, destination):
+                self.assertEqual(Path(destination), config)
+                self.assertEqual(Path(source).parent, home)
+                self.assertEqual(json.loads(Path(source).read_text()), {})
+                self.assertEqual(json.loads(config.read_text()), {"previous": True})
+                both_ready.wait()
+                replace(source, destination)
+
+            with patch.object(helper.os, "replace", side_effect=publish) as publish_config:
+                with ThreadPoolExecutor(max_workers=2) as workers:
+                    browsers = list(workers.map(helper.AgentBrowser, [9222, 9223]))
+                self.assertEqual(publish_config.call_count, 2)
+                self.assertNotEqual(publish_config.call_args_list[0].args[0], publish_config.call_args_list[1].args[0])
+
+            self.assertEqual([browser.session for browser in browsers], ["display-9222", "display-9223"])
+            self.assertEqual(json.loads(config.read_text()), {})
+            self.assertEqual(list(home.iterdir()), [config])
+
+    def test_failed_config_update_keeps_the_previous_file_and_cleans_up(self):
+        with tempfile.TemporaryDirectory() as root, patch.object(helper.tempfile, "gettempdir", return_value=root):
+            browser = helper.AgentBrowser(9222)
+            config = Path(browser.config)
+            config.write_text('{"previous":true}', encoding="utf-8")
+            with patch.object(helper.os, "replace", side_effect=OSError("fixture rename failure")):
+                with self.assertRaisesRegex(OSError, "fixture rename failure"):
+                    helper.AgentBrowser(9223)
+
+            self.assertEqual(json.loads(config.read_text()), {"previous": True})
+            self.assertEqual(list(config.parent.iterdir()), [config])
+
     def test_runs_on_the_screen_s_browser_with_its_own_settings_and_commands_over_stdin(self):
         browser = helper.AgentBrowser(9222)
         self.assertEqual(browser.env["AGENT_BROWSER_CDP"], "9222")

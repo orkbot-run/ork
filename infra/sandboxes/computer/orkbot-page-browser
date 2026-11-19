@@ -356,9 +356,17 @@ class AgentBrowser:
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
             raise RuntimeError("The page browser's own folder is not this user's")
         # Its own configuration, never one from the bot's home or working folder.
+        # Other displays share the file and must be able to read it during an update.
         self.config = os.path.join(self.home, "config.json")
-        with open(self.config, "w", encoding="utf-8") as config:
-            config.write("{}")
+        descriptor, temporary = tempfile.mkstemp(prefix=".config-", dir=self.home)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as config:
+                config.write("{}")
+            os.replace(temporary, self.config)
+        except BaseException:
+            with contextlib.suppress(FileNotFoundError):
+                os.unlink(temporary)
+            raise
         self.session = f"display-{port}"
         # When set, every command answers by then or is given up.
         self.deadline: float | None = None
