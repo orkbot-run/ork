@@ -663,6 +663,7 @@ function SpaceShell() {
     navigationRevision,
     overlayRevision,
     closeMobileSidebar: () => setMobileSidebarOpen(false),
+    knownSpaces: sidebarSpaces,
     backgroundTarget:
       backgroundSpace && backgroundPath
         ? { spaceId: backgroundSpace.id, path: backgroundPath }
@@ -1133,8 +1134,7 @@ function SpaceShell() {
               }}
               onOpen={(spaceId) => {
                 const space = allSidebarSpaces.find((row) => row.id === spaceId);
-                if (space)
-                  openSpaceChat(spaceId, workspaceChatPath(userId ?? null, space), sidebarSpaces);
+                if (space) openSpaceChat(spaceId, workspaceChatPath(userId ?? null, space));
               }}
               onCreate={
                 createWorkspaceAllowed

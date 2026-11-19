@@ -36,8 +36,8 @@ export function workspaceChatPath(userId: string | null, space: WorkspaceNavigat
 }
 
 /**
- * Opens a chat in any of the user's spaces. The workspace rail can select a known destination
- * immediately and show its authorized navigation while the model gate checks the new scope.
+ * Opens a chat in any of the user's spaces. A known destination can show its authorized
+ * navigation immediately while the model gate checks its scope.
  */
 export function useOpenSpaceChat({
   bootstrapSpaceId,
@@ -46,6 +46,7 @@ export function useOpenSpaceChat({
   navigationRevision,
   overlayRevision,
   closeMobileSidebar,
+  knownSpaces,
   backgroundTarget,
 }: {
   bootstrapSpaceId: string | undefined;
@@ -54,6 +55,7 @@ export function useOpenSpaceChat({
   navigationRevision: ReturnType<typeof useShellNavigation>["navigationRevision"];
   overlayRevision: ReturnType<typeof useShellNavigation>["overlayRevision"];
   closeMobileSidebar: () => void;
+  knownSpaces?: readonly WorkspaceNavigationSpace[];
   backgroundTarget?: { spaceId: string; path: string };
 }) {
   const spaceSwitchRequest = useRef(0);
@@ -149,7 +151,7 @@ export function useOpenSpaceChat({
   }, [backgroundPath, backgroundSpaceId, preloadSpaceChat, userId]);
 
   const openSpaceChat = useCallback(
-    (spaceId: string, path: string, spaces?: readonly WorkspaceNavigationSpace[]) => {
+    (spaceId: string, path: string) => {
       closeMobileSidebar();
       const request = ++spaceSwitchRequest.current;
       setPendingSpace(null);
@@ -208,7 +210,9 @@ export function useOpenSpaceChat({
         Date.now() - preload.startedAt < PRELOAD_MAX_AGE_MS;
       if (!matchingPreload) preload?.controller.abort();
       const preview =
-        userId && spaces?.some((space) => space.id === spaceId) ? { userId, spaces } : undefined;
+        userId && knownSpaces?.some((space) => space.id === spaceId)
+          ? { userId, spaces: knownSpaces }
+          : undefined;
       const primed = primeSpaceBootstrap(
         spaceId,
         target.botId,
@@ -263,7 +267,7 @@ export function useOpenSpaceChat({
         },
       );
     },
-    [bootstrapSpaceId, navigate, navigationRevision, overlayRevision, userId],
+    [bootstrapSpaceId, knownSpaces, navigate, navigationRevision, overlayRevision, userId],
   );
   return { openSpaceChat, preloadSpaceChat, pendingSpaceId: pendingSpace?.id ?? null };
 }

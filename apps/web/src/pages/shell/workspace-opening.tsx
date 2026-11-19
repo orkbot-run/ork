@@ -25,6 +25,7 @@ export function WorkspaceOpening({
     bootstrapSpaceId: spaceId,
     userId: preview.userId,
     closeMobileSidebar: () => {},
+    knownSpaces: preview.spaces,
   });
   const space = preview.spaces.find((entry) => entry.id === spaceId);
   const botId = matchPath("/app/:botId", pathname)?.params.botId;
@@ -46,7 +47,7 @@ export function WorkspaceOpening({
         }}
         onOpen={(id) => {
           const entry = preview.spaces.find((row) => row.id === id);
-          if (entry) openSpaceChat(id, workspaceChatPath(preview.userId, entry), preview.spaces);
+          if (entry) openSpaceChat(id, workspaceChatPath(preview.userId, entry));
         }}
       />
       <aside

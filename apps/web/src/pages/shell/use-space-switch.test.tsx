@@ -50,6 +50,7 @@ let navigationRevision: { current: number };
 let overlayRevision: { current: number };
 let navigate: ReturnType<typeof vi.fn>;
 let backgroundTarget: Parameters<typeof useOpenSpaceChat>[0]["backgroundTarget"];
+let knownSpaces: Parameters<typeof useOpenSpaceChat>[0]["knownSpaces"];
 
 function Harness() {
   ({
@@ -64,6 +65,7 @@ function Harness() {
     overlayRevision,
     closeMobileSidebar: () => {},
     backgroundTarget,
+    knownSpaces,
   }));
   return null;
 }
@@ -84,6 +86,7 @@ beforeEach(() => {
   overlayRevision = { current: 0 };
   navigate = vi.fn();
   backgroundTarget = undefined;
+  knownSpaces = undefined;
   state.prime.mockImplementation(
     (_space, _bot, _seed, prepared) =>
       prepared ?? new Promise<void>((resolve) => pending.push(resolve)),
@@ -295,7 +298,9 @@ it("cancels an unused preload when intent changes", () => {
 
 it("selects a known rail destination before its cold bootstrap settles", async () => {
   const spaces = [{ id: "new-space", name: "New space", isDefault: false, bots: [], groups: [] }];
-  act(() => open("new-space", "/app/new", spaces));
+  knownSpaces = spaces;
+  act(() => root.render(<Harness />));
+  act(() => open("new-space", "/app/new"));
   expect(pendingSpaceId).toBeNull();
   expect(state.prime).toHaveBeenCalledExactlyOnceWith("new-space", "target", undefined, undefined, {
     userId: "user",
