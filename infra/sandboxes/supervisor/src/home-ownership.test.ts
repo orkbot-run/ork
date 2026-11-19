@@ -217,6 +217,71 @@ describe("computer home ownership", () => {
   );
 });
 
+describe("computer home on Windows", () => {
+  it("ignores POSIX ownership and modes throughout the home", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "orkbot-home-windows-"));
+    roots.push(home);
+    const nested = path.join(home, "nested");
+    await mkdir(nested);
+    const file = path.join(nested, "profile.json");
+    await writeFile(file, "{}");
+    await chmod(file, 0o000);
+    await lockFolder(nested, 0o555);
+    await lockFolder(home, 0o555);
+
+    const stat = await lstat(home);
+    await expect(
+      assertHomeWritableOn("win32", home, stat.uid + 1, stat.gid + 1),
+    ).resolves.toBeUndefined();
+    // The same tree must still follow the existing macOS POSIX policy.
+    await expect(assertHomeWritableOn("darwin", home, stat.uid, stat.gid)).rejects.toThrow(
+      chmodHint(home, "."),
+    );
+  });
+
+  it("rejects a missing home", async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-windows-missing-"));
+    roots.push(parent);
+    await expect(
+      assertHomeWritableOn("win32", path.join(parent, "missing"), 1000, 1000),
+    ).rejects.toThrow(/does not exist/);
+  });
+
+  it("rejects a file as the home root", async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-windows-file-"));
+    roots.push(parent);
+    const home = path.join(parent, "home");
+    await writeFile(home, "{}");
+    await expect(assertHomeWritableOn("win32", home, 1000, 1000)).rejects.toThrow(
+      /must be a directory/,
+    );
+  });
+
+  it("rejects a symlink as the home root", async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-windows-link-"));
+    roots.push(parent);
+    const home = path.join(parent, "home");
+    await symlink(parent, home, "dir");
+    await expect(assertHomeWritableOn("win32", home, 1000, 1000)).rejects.toThrow(
+      /must not be a symbolic link/,
+    );
+  });
+
+  it("does not follow child directory links outside the home", async () => {
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-windows-child-link-"));
+    roots.push(parent);
+    const home = path.join(parent, "home");
+    const outside = path.join(parent, "outside");
+    await mkdir(home);
+    await mkdir(outside);
+    // A link back to the home makes following the outside tree fail with a link loop.
+    await symlink(home, path.join(outside, "back"), "dir");
+    await symlink(outside, path.join(home, "outside"), "dir");
+    await symlink(path.join(parent, "missing"), path.join(home, "dangling"));
+    await expect(assertHomeWritableOn("win32", home, 1000, 1000)).resolves.toBeUndefined();
+  });
+});
+
 describe.each(
   process.platform === "linux"
     ? [

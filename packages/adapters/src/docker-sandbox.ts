@@ -54,6 +54,17 @@ const SANDBOX_SUCCESS_RESPONSE_TIMEOUT_MS = 30_000;
 const COMMAND_RESPONSE_GRACE_MS = 15_000;
 const COMPUTER_PROBE_TIMEOUT_MS = 10_000;
 const FORCED_STOP_TIMEOUT_MS = 15_000;
+const HOME_WRITE_DENIED = "orkbot:home-write-denied";
+const HOME_WRITE_DENIED_EXIT = 77;
+const CHECK_HOME_WRITE = [
+  "probe=$(LC_ALL=C /usr/bin/mktemp -d -- /home/orkbot/.ork-write-check.XXXXXXXX 2>&1) || {",
+  '  case "$probe" in',
+  `    *"Permission denied"*|*"Read-only file system"*) printf '%s\\n' '${HOME_WRITE_DENIED}'; exit ${HOME_WRITE_DENIED_EXIT} ;;`,
+  "  esac",
+  "  exit 0",
+  "}",
+  '/usr/bin/rmdir -- "$probe"',
+].join("\n");
 
 async function safeBody(res: Response, signal?: AbortSignal): Promise<string> {
   const declared = Number(res.headers.get("content-length") ?? 0);
@@ -115,9 +126,9 @@ function sandboxGoneError(computer: ComputerRef): Error {
 
 export class DockerSandboxProvider implements SandboxProvider {
   private readonly supervisorToken: string;
-  private readonly suspectedComputers = new Map<
+  private readonly computerHealth = new Map<
     string,
-    { version: number; probe?: Promise<SandboxDamagedError | undefined> }
+    { unresponsive?: symbol; probe?: Promise<SandboxDamagedError | undefined> }
   >();
 
   constructor(
@@ -237,47 +248,55 @@ export class DockerSandboxProvider implements SandboxProvider {
 
   async prepare(computer: ComputerRef, context: AdapterContext): Promise<void> {
     context.signal.throwIfAborted();
-    const suspected = this.suspectedComputers.get(computer.id);
-    if (!suspected) return;
-    const { version } = suspected;
+    const health = this.computerHealth.get(computer.id) ?? {};
+    this.computerHealth.set(computer.id, health);
+    const { unresponsive } = health;
     // A caller can stop waiting without cancelling the probe for other callers. Keep any
     // failure recorded after the probe started even if that probe succeeds.
-    suspected.probe ??= this.probeComputer(computer, context)
+    health.probe ??= this.probeComputer(computer, context, unresponsive !== undefined)
       .then((failure) => {
-        if (
-          !failure &&
-          suspected.version === version &&
-          this.suspectedComputers.get(computer.id) === suspected
-        ) {
-          this.suspectedComputers.delete(computer.id);
-        }
+        if (!failure && health.unresponsive === unresponsive) health.unresponsive = undefined;
         return failure;
       })
       .finally(() => {
-        suspected.probe = undefined;
+        health.probe = undefined;
+        if (!health.unresponsive && this.computerHealth.get(computer.id) === health) {
+          this.computerHealth.delete(computer.id);
+        }
       });
-    const failure = await withAbort(suspected.probe, context.signal);
+    const failure = await withAbort(health.probe, context.signal);
     if (failure) throw failure;
   }
 
   private async probeComputer(
     computer: ComputerRef,
     context: AdapterContext,
+    unresponsive: boolean,
   ): Promise<SandboxDamagedError | undefined> {
     const deadline = requestDeadline(COMPUTER_PROBE_TIMEOUT_MS, "computer health check timed out");
+    let stdout = "";
     try {
-      for await (const event of this.execute(
+      for await (const event of this.executeCommand(
         computer,
-        { argv: ["/bin/true"], timeoutMs: COMPUTER_PROBE_TIMEOUT_MS },
+        { argv: ["/bin/sh", "-c", CHECK_HOME_WRITE], timeoutMs: COMPUTER_PROBE_TIMEOUT_MS },
         { ...context, signal: deadline.signal },
+        // Docker must start the shell even when it cannot enter the mounted home.
+        { cwd: "/", healthProbe: true },
       )) {
+        if (event.type === "stdout") stdout += event.data;
         if (event.type !== "exit") continue;
+        if (event.code === HOME_WRITE_DENIED_EXIT && stdout.trim() === HOME_WRITE_DENIED) {
+          return new SandboxDamagedError({
+            cause: new Error("Docker computer home is not writable"),
+          });
+        }
         if (event.code === 0) return undefined;
         throw new Error(`computer health check exited with code ${event.code}`);
       }
       throw new Error("computer health check ended without an exit status");
     } catch (cause) {
-      return new SandboxDamagedError({ cause });
+      // An unavailable probe alone cannot establish that a previously responsive computer is damaged.
+      return unresponsive ? new SandboxDamagedError({ cause }) : undefined;
     } finally {
       deadline.dispose();
     }
@@ -285,9 +304,9 @@ export class DockerSandboxProvider implements SandboxProvider {
 
   private reportUnresponsive(computer: ComputerRef, signal: AbortSignal, cause: unknown): never {
     signal.throwIfAborted();
-    const suspected = this.suspectedComputers.get(computer.id);
-    if (suspected) suspected.version += 1;
-    else this.suspectedComputers.set(computer.id, { version: 0 });
+    const health = this.computerHealth.get(computer.id) ?? {};
+    health.unresponsive = Symbol();
+    this.computerHealth.set(computer.id, health);
     throw new SandboxUnresponsiveError(COMPUTER_UNRESPONSIVE_ERROR, { cause });
   }
 
@@ -296,11 +315,20 @@ export class DockerSandboxProvider implements SandboxProvider {
     request: CommandRequest,
     context: AdapterContext,
   ): AsyncIterable<ProcessEvent> {
+    yield* this.executeCommand(computer, request, context, { cwd: dockerCwd(request.cwd) });
+  }
+
+  private async *executeCommand(
+    computer: ComputerRef,
+    request: CommandRequest,
+    context: AdapterContext,
+    options: { cwd: string; healthProbe?: true },
+  ): AsyncIterable<ProcessEvent> {
     const timeoutMs = boundedSandboxCommandTimeoutMs(request.timeoutMs);
     const body = JSON.stringify({
       ...request,
       argv: sandboxCommandArgv(request),
-      cwd: dockerCwd(request.cwd),
+      cwd: options.cwd,
       timeoutMs,
     });
     context.signal.throwIfAborted();
@@ -310,6 +338,10 @@ export class DockerSandboxProvider implements SandboxProvider {
       context.signal,
       AbortSignal.timeout(timeoutMs + COMMAND_RESPONSE_GRACE_MS),
     ]);
+    const transportFailed = (cause: unknown): never => {
+      if (options.healthProbe) throw cause;
+      return this.reportUnresponsive(computer, context.signal, cause);
+    };
     const res = await withAbort(
       fetch(this.url(`/computers/${computer.id}/exec`), {
         method: "POST",
@@ -318,7 +350,7 @@ export class DockerSandboxProvider implements SandboxProvider {
         signal,
       }),
       signal,
-    ).catch((cause: unknown) => this.reportUnresponsive(computer, context.signal, cause));
+    ).catch(transportFailed);
     if (!res.ok) {
       cancelResponseBody(res);
       // A stopped container cannot run anything; report it gone so the computer is booted again.
@@ -334,7 +366,7 @@ export class DockerSandboxProvider implements SandboxProvider {
       try {
         yield* readNdjsonProcessEvents(res, signal);
       } catch (cause) {
-        this.reportUnresponsive(computer, context.signal, cause);
+        transportFailed(cause);
       }
       return;
     }
@@ -706,7 +738,7 @@ export class DockerSandboxProvider implements SandboxProvider {
         throw new Error(`sandbox stop failed: ${res.status} ${await safeBody(res, signal)}`.trim());
       }
       cancelResponseBody(res);
-      this.suspectedComputers.delete(computer.id);
+      this.computerHealth.delete(computer.id);
     } finally {
       deadline?.dispose();
     }
@@ -726,7 +758,7 @@ export class DockerSandboxProvider implements SandboxProvider {
         throw new Error(`sandbox destroy failed: ${res.status} ${body}`.trim());
       }
     }
-    this.suspectedComputers.delete(computer.id);
+    this.computerHealth.delete(computer.id);
   }
 
   private async *walkWorkspace(

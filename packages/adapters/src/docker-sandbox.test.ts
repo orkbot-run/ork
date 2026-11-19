@@ -323,8 +323,6 @@ describe("Docker sandbox", () => {
       .mockReturnValueOnce(probe.promise);
     vi.stubGlobal("fetch", fetchMock);
     const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
-    await provider.prepare(computer, context);
-    expect(fetchMock).not.toHaveBeenCalled();
     await expect(runCommand(provider)).rejects.toMatchObject({
       name: "SandboxUnresponsiveError",
       message: COMPUTER_UNRESPONSIVE_ERROR,
@@ -343,7 +341,8 @@ describe("Docker sandbox", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const probeRequest = fetchMock.mock.calls[1]?.[1];
     expect(JSON.parse(String(probeRequest?.body))).toMatchObject({
-      argv: ["/bin/true"],
+      argv: ["/bin/sh", "-c", expect.stringContaining("/home/orkbot/.ork-write-check.")],
+      cwd: "/",
       timeoutMs: 10_000,
     });
     expect(probeRequest?.signal?.aborted).toBe(false);
@@ -358,9 +357,11 @@ describe("Docker sandbox", () => {
       .mockRejectedValueOnce(new TypeError("fetch failed"))
       .mockReturnValueOnce(probe.promise)
       .mockResolvedValueOnce(new Response("\n", { headers: processStreamHeaders }))
+      .mockRejectedValueOnce(new TypeError("probe transport unavailable"))
       .mockResolvedValueOnce(
         new Response('\n{"type":"exit","code":0}\n', { headers: processStreamHeaders }),
-      );
+      )
+      .mockRejectedValueOnce(new TypeError("probe transport unavailable"));
     vi.stubGlobal("fetch", fetchMock);
     const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
     await expect(runCommand(provider)).rejects.toBeInstanceOf(SandboxUnresponsiveError);
@@ -368,8 +369,66 @@ describe("Docker sandbox", () => {
     await expect(runCommand(provider)).rejects.toBeInstanceOf(SandboxUnresponsiveError);
     probe.resolve(new Response('{"type":"exit","code":0}\n', { headers: processStreamHeaders }));
     await preparing;
+    await expect(provider.prepare(computer, context)).rejects.toBeInstanceOf(SandboxDamagedError);
     await provider.prepare(computer, context);
     await provider.prepare(computer, context);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it("shares one write probe and reports a confirmed failure on a responsive computer", async () => {
+    const delayed = deferred<Response>();
+    const fetchMock = vi.fn<typeof fetch>().mockReturnValueOnce(delayed.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new DockerSandboxProvider("http://supervisor.test", "test-token", true);
+    const results = Promise.allSettled([
+      provider.prepare(computer, context),
+      provider.prepare(computer, context),
+    ]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    delayed.resolve(
+      new Response(
+        '{"type":"stdout","data":"orkbot:home-"}\n{"type":"stdout","data":"write-denied\\n"}\n{"type":"exit","code":77}\n',
+        { headers: processStreamHeaders },
+      ),
+    );
+    for (const result of await results) {
+      expect(result).toMatchObject({
+        status: "rejected",
+        reason: {
+          name: "SandboxDamagedError",
+          cause: { message: "Docker computer home is not writable" },
+        },
+      });
+    }
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://supervisor.test/workspace/v2/computers/computer/exec",
+      expect.objectContaining({ body: expect.stringContaining('"cwd":"/"') }),
+    );
+  });
+
+  it("does not confuse an unavailable or inconclusive write probe with a damaged home", async () => {
+    vi.useFakeTimers();
+    const pending = deferred<Response>();
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockReturnValueOnce(pending.promise)
+      .mockRejectedValueOnce(new TypeError("supervisor unreachable"))
+      .mockResolvedValueOnce(
+        Response.json({ stdout: "", stderr: "shell could not start", code: 77 }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ stdout: "orkbot:home-write-denied\n", stderr: "", code: 1 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+    const checking = provider.prepare(computer, context);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(checking).resolves.toBeUndefined();
+    expect(fetchMock.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    pending.reject(new TypeError("late transport failure"));
+    for (let i = 0; i < 3; i += 1) {
+      await expect(provider.prepare(computer, context)).resolves.toBeUndefined();
+    }
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
@@ -420,7 +479,7 @@ describe("Docker sandbox", () => {
     await executing;
     cancelled.reject(new TypeError("transport closed after cancellation"));
     await provider.prepare(computer, context);
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("requests a forced stop after a failed probe and clears the stopped computer's marker", async () => {
@@ -430,14 +489,16 @@ describe("Docker sandbox", () => {
       .mockResolvedValueOnce(
         new Response('{"type":"exit","code":1}\n', { headers: processStreamHeaders }),
       )
-      .mockImplementation(async () => Response.json({ ok: true }));
+      .mockResolvedValueOnce(Response.json({ ok: true }))
+      .mockRejectedValueOnce(new TypeError("probe transport unavailable"))
+      .mockResolvedValueOnce(Response.json({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
     const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
     await expect(runCommand(provider)).rejects.toBeInstanceOf(SandboxUnresponsiveError);
     await expect(provider.prepare(computer, context)).rejects.toBeInstanceOf(SandboxDamagedError);
     await provider.stop(computer, context, { discardUnsaved: true });
     await provider.prepare(computer, context);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock.mock.calls[2]).toEqual([
       "http://supervisor.test/computers/computer/stop",
       expect.objectContaining({
@@ -447,7 +508,7 @@ describe("Docker sandbox", () => {
     ]);
     await provider.stop(computer, context);
     expect(
-      new Headers(fetchMock.mock.calls[3]?.[1]?.headers).has("x-ork-sandbox-discard-unsaved"),
+      new Headers(fetchMock.mock.calls[4]?.[1]?.headers).has("x-ork-sandbox-discard-unsaved"),
     ).toBe(false);
   });
 
