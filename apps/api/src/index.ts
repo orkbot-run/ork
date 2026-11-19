@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 startup is preserved. Accounts-only configuration is an Ork addition.
+// Inherited Apache-2.0 startup is preserved. Accounts configuration and HTTP timeouts are Ork additions.
 
 import type { Socket } from "node:net";
 import { unwrapEnvFromKeyManager } from "@orkbot/adapters";
@@ -46,9 +46,18 @@ try {
       }
     : undefined;
   const { app, stop, handleUpgrade } = await createApp({ ...env, logger, serverUpdateSetup });
-  const server = serve({ fetch: app.fetch, port: env.port, hostname: env.apiHost }, () => {
-    logger.info("api listening", { "http.host": env.apiHost, "http.port": env.port });
-  });
+  const server = serve(
+    {
+      fetch: app.fetch,
+      port: env.port,
+      hostname: env.apiHost,
+      // Caddy keeps upstream connections idle for 120 seconds. Close after the proxy does.
+      serverOptions: { keepAliveTimeout: 125_000, headersTimeout: 130_000 },
+    },
+    () => {
+      logger.info("api listening", { "http.host": env.apiHost, "http.port": env.port });
+    },
+  );
   // Desktop apps hold an outbound socket so bots can reach the user's own computer.
   if (handleUpgrade) server.on("upgrade", handleUpgrade);
 
@@ -64,6 +73,7 @@ try {
   const shutdown = async () => {
     if (stopping) return;
     stopping = true;
+    // Node closes idle keep-alive connections immediately when stopping the HTTP server.
     const closed = new Promise<void>((resolve) => server.close(() => resolve()));
     const grace = setTimeout(() => {
       for (const socket of sockets) socket.destroy();
