@@ -373,6 +373,13 @@ export async function removeAgentHome(home: AgentHomeStore, homeKey: string, dat
   await removeTree(resolveAgentHomePath(home, homeKey, dataDir));
 }
 
+/** Permanently removes the stored home; a provider without deletion support must fail closed. */
+export async function purgeAgentHome(home: AgentHomeStore, homeKey: string): Promise<void> {
+  if (home.purge) return home.purge(homeKey);
+  if (home instanceof LocalAgentHomeStore) return home.remove(homeKey);
+  throw new Error("This home storage provider cannot permanently delete a home");
+}
+
 /**
  * Deletes folders under `parent` in a stored home and saves the result, so a computer that boots
  * from it later, on any host, no longer has them.

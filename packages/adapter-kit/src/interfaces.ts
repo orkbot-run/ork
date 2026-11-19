@@ -402,6 +402,10 @@ export interface AgentHomeStore {
   checkout(botId: string, dest: string, context: AdapterContext): Promise<string>;
   commit(botId: string, src: string, context: AdapterContext): Promise<string>;
   restore(botId: string, revision: string, dest: string, context: AdapterContext): Promise<void>;
+  /** Permanently removes a home's stored revisions. The caller must fence concurrent writes. */
+  purge?(botId: string): Promise<void>;
+  /** Sweep previously recorded object-storage namespaces after their homes are gone. */
+  purgeStorageIds?(storageIds: readonly string[]): Promise<void>;
   /**
    * Paths are relative to `directory`; a missing or linked directory exports nothing.
    * `skipHidden` leaves out hidden entries at the top of the directory, also behind links.
@@ -468,6 +472,8 @@ export interface ArtifactStore {
   put(artifact: ArtifactPut, context: AdapterContext): Promise<{ id: string; hash: string }>;
   get(id: string, context: AdapterContext): Promise<Uint8Array>;
   remove(id: string, context: AdapterContext): Promise<void>;
+  /** Remove every stored artifact in this space, including orphaned uploads. */
+  purgeSpace?(context: AdapterContext): Promise<void>;
 }
 
 export interface SecretStore {

@@ -74,6 +74,19 @@ export class ObjectArtifactStore implements ArtifactStore {
   async remove(id: string, context: AdapterContext) {
     await this.storage.delete([this.key(id, context.spaceId)]);
   }
+
+  async purgeSpace(context: AdapterContext): Promise<void> {
+    context.signal.throwIfAborted();
+    if (!/^[a-zA-Z0-9_-]+$/.test(context.spaceId)) throw new Error("Invalid space id");
+    const prefix = `artifacts/${context.spaceId}/`;
+    const keys: string[] = [];
+    for await (const object of this.storage.list(prefix)) {
+      context.signal.throwIfAborted();
+      if (!object.key.startsWith(prefix)) throw new Error("Invalid artifact storage key");
+      keys.push(object.key);
+    }
+    await this.storage.delete(keys);
+  }
 }
 
 /** Explicit storage keys preserve access to pre-existing local files during migration. */
@@ -98,6 +111,13 @@ export class DeploymentArtifactStore implements ArtifactStore {
   }
   async remove(id: string, context: AdapterContext) {
     return this.forId(id).remove(id, context);
+  }
+
+  async purgeSpace(context: AdapterContext): Promise<void> {
+    if (!this.local.purgeSpace || (this.object && !this.object.purgeSpace))
+      throw new Error("This artifact storage provider cannot permanently delete a space");
+    await this.local.purgeSpace(context);
+    await this.object?.purgeSpace?.(context);
   }
 }
 

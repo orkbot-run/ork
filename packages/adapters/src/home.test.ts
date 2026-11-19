@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentHomeStore } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { LocalAgentHomeStore, removeAgentHome } from "./home.js";
+import { LocalAgentHomeStore, purgeAgentHome, removeAgentHome } from "./home.js";
 
 const hooks = vi.hoisted(() => ({
   afterRealpath: undefined as ((target: string) => Promise<void>) | undefined,
@@ -88,6 +88,12 @@ async function exported(store: LocalAgentHomeStore, directory = "") {
 }
 
 describe("LocalAgentHomeStore path containment", () => {
+  it("refuses permanent deletion when the provider cannot purge its data", async () => {
+    await expect(purgeAgentHome({} as AgentHomeStore, "bot-1")).rejects.toThrow(
+      "This home storage provider cannot permanently delete a home",
+    );
+  });
+
   it.each([false, true])(
     "excludes caches from commits without descending into them (staged: %s)",
     async (staged) => {

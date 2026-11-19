@@ -124,6 +124,12 @@ export class LocalArtifactStore implements ArtifactStore {
     await rm(this.file(context.spaceId, id), { force: true });
   }
 
+  async purgeSpace(context: AdapterContext): Promise<void> {
+    context.signal.throwIfAborted();
+    if (!/^[a-zA-Z0-9_-]+$/.test(context.spaceId)) throw new Error("Invalid space id");
+    await rm(path.join(this.root, "artifacts", context.spaceId), { recursive: true, force: true });
+  }
+
   /** False when the artifact directory is missing, for example when the volume is not mounted. */
   hasDirectory(): Promise<boolean> {
     return stat(path.join(this.root, "artifacts")).then(
