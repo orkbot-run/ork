@@ -1,9 +1,14 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Read freshness tracking is an Ork addition.
+
 import type { Routine, RpcInput } from "@orkbot/contracts";
 import { fetchFresh, writeSaved } from "@orkbot/core/query";
 import type { QueryFunction } from "@tanstack/react-query";
 import { hashKey, useQuery } from "@tanstack/react-query";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { captureApiRequestContext, rpc } from "./api";
 import { queryClient, rpcQuery } from "./query";
 import { createQueuedSave } from "./queued-save";
@@ -194,8 +199,7 @@ export async function removeBotRoutine(botId: string, routineId: string): Promis
  * view it shows what is already known and reads again, then keeps reading while it stays.
  */
 export function useBotRoutines(botId: string) {
-  const [shownSince] = useState(Date.now);
-  const { data, error, dataUpdatedAt, errorUpdatedAt } = useQuery(
+  const { data, error, isError, isFetchedAfterMount } = useQuery(
     { ...routinesQuery(botId), enabled: false, select: oldestFirst },
     queryClient,
   );
@@ -207,7 +211,7 @@ export function useBotRoutines(botId: string) {
       return () => clearInterval(timer);
     }, [botId]),
   );
-  const failedSinceShown = errorUpdatedAt >= shownSince && errorUpdatedAt > dataUpdatedAt;
+  const failedSinceShown = isFetchedAfterMount && isError;
   // A delay seen before a failed read may already have cleared.
   const routines = useMemo(
     () => (failedSinceShown ? data?.map((r) => ({ ...r, scheduleDelayed: false })) : data),
@@ -217,7 +221,7 @@ export function useBotRoutines(botId: string) {
     routines,
     error,
     /** A read answered since this screen opened, so a missing routine is really gone. */
-    readSinceShown: dataUpdatedAt >= shownSince,
+    readSinceShown: isFetchedAfterMount && !isError,
     /** The latest read since this screen opened failed. */
     failedSinceShown,
   };

@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Read freshness coverage is an Ork addition.
 
 import type { Routine } from "@orkbot/contracts";
 import { notifyManager } from "@tanstack/react-query";
@@ -1054,22 +1058,27 @@ describe("routine detail", () => {
   });
 
   it("waits for a fresh read before calling a routine that isn't cached yet gone", async () => {
-    // The bot's list was read earlier, before the routine was created elsewhere.
-    params.current = { botId: "bot-fixture", name: "Fixture" };
-    profileRpc(async () => []);
-    await render(createElement(BotProfile));
-    act(() => root.unmount());
-    root = createRoot(container);
+    // A cached read and opening the detail may happen in the same millisecond.
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    try {
+      params.current = { botId: "bot-fixture", name: "Fixture" };
+      profileRpc(async () => []);
+      await render(createElement(BotProfile));
+      act(() => root.unmount());
+      root = createRoot(container);
 
-    let load!: (rows: unknown) => void;
-    profileRpc(() => new Promise((resolve) => (load = resolve)));
-    params.current = { botId: "bot-fixture", botName: "Fixture", routineId: "r1" };
-    await render(createElement(RoutineDetail));
-    expect(container.textContent).not.toContain("This routine no longer exists");
-    expect(container.querySelector("progress")).toBeTruthy();
+      let load!: (rows: unknown) => void;
+      profileRpc(() => new Promise((resolve) => (load = resolve)));
+      params.current = { botId: "bot-fixture", botName: "Fixture", routineId: "r1" };
+      await render(createElement(RoutineDetail));
+      expect(container.textContent).not.toContain("This routine no longer exists");
+      expect(container.querySelector("progress")).toBeTruthy();
 
-    await act(async () => load([routine("r1", "Morning digest")]));
-    expect(container.textContent).toContain("Check the inbox");
+      await act(async () => load([routine("r1", "Morning digest")]));
+      expect(container.textContent).toContain("Check the inbox");
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("shows the load error, not a missing routine, when the fresh read fails", async () => {
@@ -1091,9 +1100,14 @@ describe("routine detail", () => {
   });
 
   it("says when the routine is gone", async () => {
-    profileRpc(async () => [routine("r2", "Weekly report")]);
-    await render(createElement(RoutineDetail));
-    expect(container.textContent).toContain("This routine no longer exists");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    try {
+      profileRpc(async () => [routine("r2", "Weekly report")]);
+      await render(createElement(RoutineDetail));
+      expect(container.textContent).toContain("This routine no longer exists");
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("opens the form only from Edit routine", async () => {
