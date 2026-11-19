@@ -27,7 +27,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, watch, Semaphore};
 
 use crate::{
-    host_runner::HostRunner,
+    host_runner::{HostRunner, HostTransport},
     local_stack::{private_directory, read_owned_private, read_private, write_private},
 };
 
@@ -57,7 +57,9 @@ struct Consent {
 pub struct HostComputer {
     pub connection: Connection,
     runner: HostRunner,
+    pub screen: Option<crate::host_screen::HostScreen>,
     consent: Mutex<Consent>,
+    device: Mutex<Option<crate::host_device::HostDevice>>,
     accepted_token: Arc<Mutex<String>>,
     scope_secret: String,
     shutdown: watch::Sender<bool>,
@@ -65,11 +67,6 @@ pub struct HostComputer {
 
 impl HostComputer {
     pub fn prepare(directory: &Path) -> Result<Self, String> {
-        if !cfg!(unix) {
-            return Err(
-                "Host commands are not available on this platform in this desktop preview.".into(),
-            );
-        }
         private_directory(directory)?;
         let scope_file = directory.join("host-computer-scope-key");
         let scope_secret = match fs::symlink_metadata(&scope_file) {
@@ -120,7 +117,9 @@ impl HostComputer {
             })
             .map_err(|_| "Local computer unavailable.")?,
         )?;
-        let runner = HostRunner::new(directory.join("computers"));
+        let screen =
+            crate::host_screen::HostScreen::prepare(&directory.join("screen-control")).ok();
+        let runner = HostRunner::with_screen(directory.join("computers"), screen.clone());
         let (shutdown, cancel) = watch::channel(false);
         let accepted_token = Arc::new(Mutex::new(token.clone()));
         tauri::async_runtime::spawn(serve(
@@ -135,7 +134,9 @@ impl HostComputer {
                 token,
             },
             runner,
+            screen,
             consent: Mutex::new(Consent::default()),
+            device: Mutex::new(None),
             accepted_token,
             scope_secret,
             shutdown,
@@ -175,6 +176,19 @@ impl HostComputer {
         }
     }
 
+    pub async fn pair_device(&self, origin: url::Url, cookies: &str) -> Result<(), String> {
+        // Retire the old credential before granting the current sign-in a new one.
+        self.device.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let epoch = self.runner.epoch();
+        let device = crate::host_device::pair(origin, cookies, self.runner.clone()).await?;
+        let mut active = self.device.lock().unwrap_or_else(|e| e.into_inner());
+        if !self.runner.is_enabled() || self.runner.epoch() != epoch {
+            return Err("Local computer consent changed.".into());
+        }
+        *active = Some(device);
+        Ok(())
+    }
+
     pub fn activate(&self, owner: Option<String>) {
         let mut consent = self
             .consent
@@ -186,6 +200,7 @@ impl HostComputer {
             .map(|(label, _)| label.to_owned());
         if consent.scope != scope || owner.is_none() {
             consent.allowed = false;
+            self.device.lock().unwrap_or_else(|e| e.into_inner()).take();
         }
         if consent.owner != owner {
             consent.generation += 1;
@@ -235,6 +250,7 @@ impl HostComputer {
             return false;
         }
         consent.allowed = true;
+        self.runner.grant_session();
         self.runner.set_enabled(true);
         true
     }
@@ -251,6 +267,7 @@ impl HostComputer {
         consent.generation += 1;
         consent.allowed = false;
         self.runner.set_enabled(false);
+        self.device.lock().unwrap_or_else(|e| e.into_inner()).take();
         true
     }
 
@@ -381,7 +398,16 @@ async fn handle(
     let (sender, receiver) = mpsc::channel(8);
     let (cancel, cancelled) = watch::channel(false);
     tokio::spawn(async move {
-        if let Err(message) = runner.run(input, sender.clone(), cancelled, epoch).await {
+        if let Err(message) = runner
+            .run(
+                input,
+                sender.clone(),
+                cancelled,
+                epoch,
+                HostTransport::Sandbox,
+            )
+            .await
+        {
             let _ = sender.send(serde_json::json!({"error": message})).await;
         }
     });
@@ -527,6 +553,24 @@ mod tests {
     }
 
     #[test]
+    fn a_server_revoke_survives_reload_and_old_pairings_cannot_revoke_new_consent() {
+        let root = tempfile::tempdir().unwrap();
+        let host = HostComputer::prepare(root.path()).unwrap();
+        host.activate(Some("server-1:one".into()));
+        host.grant("server-1:one", host.intent("server-1:one").unwrap());
+        let old = host.runner.device_generation();
+        host.runner.revoke_device_session(old);
+        assert!(!host.is_enabled());
+        host.retire("server-1:one");
+        host.activate(Some("server-1:two".into()));
+        assert!(!host.is_enabled());
+        host.grant("server-1:two", host.intent("server-1:two").unwrap());
+        assert!(host.is_enabled());
+        host.runner.revoke_device_session(old);
+        assert!(host.is_enabled());
+    }
+
+    #[test]
     fn reload_cancels_old_work_but_only_the_same_window_keeps_session_consent() {
         let root = tempfile::tempdir().unwrap();
         let host = HostComputer::prepare(root.path()).unwrap();
@@ -582,6 +626,23 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(frames[0]["value"]["home"].is_string());
         assert_eq!(frames.last(), Some(&serde_json::json!({"done":true})));
+        for method in ["capabilities", "screenObserve", "screenAct"] {
+            let body = client
+                .post(&url)
+                .bearer_auth(&host.connection.token)
+                .json(&serde_json::json!({
+                    "method": method, "botId": "fixture", "app": "Fixture",
+                    "actions": [{"kind": "move", "x": 10, "y": 20}]
+                }))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            let frame: serde_json::Value = serde_json::from_str(&body).unwrap();
+            assert_eq!(frame["error"], "Screen access requires a paired device.");
+        }
         assert!(host.revoke_owner("fixture"));
         assert_eq!(call().send().await.unwrap().status(), 403);
     }

@@ -9,7 +9,9 @@ mod browser_auth;
 mod credentials;
 mod document;
 mod host_computer;
+mod host_device;
 mod host_runner;
+mod host_screen;
 mod installation_login;
 mod installation_transport;
 #[cfg(any(target_os = "macos", test))]
@@ -1147,7 +1149,9 @@ async fn request_computer_access(
         }
         let (sender, receiver) = tokio::sync::oneshot::channel();
         let dialog = app.dialog()
-            .message(native_text(app, "Allow bots to use this computer?") + "\n\n" + &native_text(app, "Bots on this local instance can run commands, read and change files, and launch apps with your account’s permissions. You can revoke access from the app menu."))
+            .message(native_text(app, "Allow bots to use this computer?") + "\n\n"
+                + &native_text(app, "Bots on this local instance can run commands, read and change files, and launch apps with your account’s permissions. You can revoke access from the app menu.")
+                + "\n\n" + &native_text(app, "When screen control is available, bots can see and control apps you approve in chat."))
             .title(native_text(app, "Allow local computer access?"))
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::OkCancelCustom(native_text(app, "Allow"), native_text(app, "Cancel")));
@@ -1172,6 +1176,33 @@ async fn request_computer_access(
     }
     if !host.grant(&owner, intent) {
         return Ok(false);
+    }
+    // Only native consent may prompt for OS permissions. Shell access still works if
+    // screen support is absent or the OS permissions were declined.
+    if let Some(screen) = &host.screen {
+        if screen.request_permissions().await.unwrap_or(false) {
+            let paired = async {
+                let origin = stack.web_url();
+                if origin.origin() != document.origin.origin() {
+                    return Err("This local server is no longer active.".into());
+                }
+                let window = app
+                    .get_webview_window(&document.label)
+                    .ok_or("Local computer unavailable.")?;
+                let cookies = server_session_cookies(&window, &document.origin).await?;
+                if !managed_stack_is_current(app, document, &stack)
+                    || host.intent(&owner) != Some(intent)
+                {
+                    return Err("Local computer consent changed.".into());
+                }
+                host.pair_device(origin, &cookies).await
+            }
+            .await;
+            if let Err(error) = paired {
+                host.revoke_owner(&owner);
+                return Err(error);
+            }
+        }
     }
     if let Err(error) = stack.save_host_choice("this-mac").await {
         host.revoke_owner(&owner);
@@ -1741,7 +1772,7 @@ async fn check_workspace<R: tauri::Runtime>(
     require_account(&state, &authorization)?;
     let target = server::normalize_server_url(&workspace.url)?;
     let mut reachable = if let Some(workspace) = &workspace.target {
-        probe_managed_workspace(&state, &authorization, workspace, &target, || {
+        probe_managed_workspace(&state, &authorization, workspace, &target, None, || {
             require_setup(&window).is_ok() && state.restore_intent.load(Ordering::SeqCst) == intent
         })
         .await
@@ -1768,12 +1799,13 @@ async fn check_workspace<R: tauri::Runtime>(
                 return Err("This connection is no longer active.".into());
             }
             if let Some(remote) = catalog.remote_origin_for_target(pin)? {
-                reachable = probe_managed_workspace(&state, &authorization, pin, &remote, || {
-                    require_setup(&window).is_ok()
-                        && state.restore_intent.load(Ordering::SeqCst) == intent
-                })
-                .await
-                .is_ok();
+                reachable =
+                    probe_managed_workspace(&state, &authorization, pin, &remote, None, || {
+                        require_setup(&window).is_ok()
+                            && state.restore_intent.load(Ordering::SeqCst) == intent
+                    })
+                    .await
+                    .is_ok();
             }
         }
     }
@@ -2129,12 +2161,15 @@ async fn connect_workspace(
         .try_lock()
         .map_err(|_| "A connection is already in progress.")?;
     // Re-fetch from the authenticated directory so the renderer cannot choose an arbitrary URL.
-    let workspace = server_directory::Directory::new()?
-        .workspaces_for_device(
+    let catalog = server_directory::Directory::new()?
+        .catalog_for_device(
             authorization.directory_bearer()?,
             &server_directory::device_id(&state.directory)?,
         )
-        .await?
+        .await?;
+    let workspace = catalog
+        .clone()
+        .workspaces()?
         .into_iter()
         .find(|workspace| workspace.id == id)
         .ok_or("That workspace is no longer available.")?;
@@ -2149,12 +2184,13 @@ async fn connect_workspace(
             return Err("Workspace unavailable.".into());
         }
     }
+    let original = server::normalize_server_url(&workspace.url)?;
     let (target, mode) = prepare_authorized_workspace_route(
         &window,
         &app,
         &state,
         &authorization,
-        &server::normalize_server_url(&workspace.url)?,
+        &original,
         workspace.target.as_ref(),
         intent,
     )
@@ -2162,6 +2198,7 @@ async fn connect_workspace(
     if state.restore_intent.load(Ordering::SeqCst) != intent {
         return Err("This connection is no longer active.".into());
     }
+    let verified_catalog = (target == original).then_some(&catalog);
     open_server(
         &window,
         &app,
@@ -2173,6 +2210,7 @@ async fn connect_workspace(
             workspace: workspace.target,
         },
         &authorization,
+        verified_catalog,
     )
     .await?;
     if state.restore_intent.load(Ordering::SeqCst) == intent {
@@ -2306,6 +2344,7 @@ async fn connect_directory_server(
                     workspace: None,
                 },
                 authorization,
+                None,
             )
             .await
         }
@@ -2464,6 +2503,7 @@ async fn connect_server(
             workspace: None,
         },
         &authorization,
+        None,
     )
     .await;
     if result.is_err() {
@@ -2598,6 +2638,7 @@ async fn start_local_server(
             workspace: workspace.target,
         },
         &authorization,
+        None,
     )
     .await
 }
@@ -2621,18 +2662,26 @@ async fn probe_managed_workspace(
     authorization: &accounts::Authorization,
     workspace: &server_directory::WorkspaceTarget,
     origin: &url::Url,
+    verified_catalog: Option<&server_directory::WorkspaceCatalog>,
     current: impl Fn() -> bool,
 ) -> Result<installation_transport::Selection, String> {
     require_native_account(state, authorization)?;
     if !current() {
         return Err("This connection is no longer active.".into());
     }
-    let catalog = server_directory::Directory::new()?
-        .catalog_for_device(
-            authorization.directory_bearer()?,
-            &server_directory::device_id(&state.directory)?,
-        )
-        .await?;
+    let fetched;
+    let catalog = match verified_catalog {
+        Some(catalog) => catalog,
+        None => {
+            fetched = server_directory::Directory::new()?
+                .catalog_for_device(
+                    authorization.directory_bearer()?,
+                    &server_directory::device_id(&state.directory)?,
+                )
+                .await?;
+            &fetched
+        }
+    };
     require_native_account(state, authorization)?;
     if !current() {
         return Err("This connection is no longer active.".into());
@@ -2668,6 +2717,7 @@ async fn open_server(
     state: &DesktopState,
     mut choice: settings::Setup,
     authorization: &accounts::Authorization,
+    verified_catalog: Option<&server_directory::WorkspaceCatalog>,
 ) -> Result<(), String> {
     let intent = state.restore_intent.load(Ordering::SeqCst);
     let accounts_generation = state
@@ -2697,10 +2747,17 @@ async fn open_server(
         Some(selection)
     } else if let Some(workspace) = &choice.workspace {
         Some(
-            probe_managed_workspace(state, authorization, workspace, &choice.server_url, || {
-                require_setup(window).is_ok()
-                    && state.restore_intent.load(Ordering::SeqCst) == intent
-            })
+            probe_managed_workspace(
+                state,
+                authorization,
+                workspace,
+                &choice.server_url,
+                verified_catalog,
+                || {
+                    require_setup(window).is_ok()
+                        && state.restore_intent.load(Ordering::SeqCst) == intent
+                },
+            )
             .await?,
         )
     } else {
@@ -3598,7 +3655,7 @@ async fn restore_personal_server(
             message: None,
         },
     );
-    open_server(window, app, &state, choice, &authorization).await?;
+    open_server(window, app, &state, choice, &authorization, None).await?;
     if state.restore_intent.load(Ordering::SeqCst) != intent {
         retire_server_windows(app, &state);
         return Ok(false);
@@ -3652,12 +3709,13 @@ async fn restore_saved_server(
         if state.restore_intent.load(Ordering::SeqCst) != intent {
             return Ok(false);
         }
+        let original = server::normalize_server_url(&workspace.url)?;
         let (target, mode) = prepare_authorized_workspace_route(
             window,
             app,
             &state,
             &authorization,
-            &server::normalize_server_url(&workspace.url)?,
+            &original,
             workspace.target.as_ref(),
             intent,
         )
@@ -3674,6 +3732,7 @@ async fn restore_saved_server(
             },
         );
         show_setup(app).map_err(|_| "Could not open server settings.")?;
+        let verified_catalog = (target == original).then_some(&catalog);
         open_server(
             window,
             app,
@@ -3685,6 +3744,7 @@ async fn restore_saved_server(
                 workspace: workspace.target,
             },
             &authorization,
+            verified_catalog,
         )
         .await?;
         if state.restore_intent.load(Ordering::SeqCst) != intent {

@@ -438,7 +438,7 @@ impl WorkspaceCatalog {
             .ok_or_else(|| "Server unavailable. Try again or choose a workspace.".into())
     }
 
-    fn workspaces(self) -> Result<Vec<Workspace>, String> {
+    pub(crate) fn workspaces(self) -> Result<Vec<Workspace>, String> {
         if self.version != 2
             || self
                 .default_organization_id

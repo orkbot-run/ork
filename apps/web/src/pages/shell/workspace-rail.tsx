@@ -12,11 +12,15 @@ export const WORKSPACE_RAIL_WIDTH = 60;
 export function WorkspaceRail({
   spaces,
   activeId,
+  pendingId,
+  onPrepare,
   onOpen,
   onCreate,
 }: {
   spaces: readonly Pick<Space, "id" | "name" | "isDefault">[];
   activeId: string | undefined;
+  pendingId: string | null;
+  onPrepare: (spaceId: string) => void;
   onOpen: (spaceId: string) => void;
   onCreate?: () => void;
 }) {
@@ -41,16 +45,26 @@ export function WorkspaceRail({
       >
         {orderedSpaces.map((space) => {
           const active = space.id === activeId;
+          const pending = space.id === pendingId;
+          const prepare = () => {
+            if (!active && !pending) onPrepare(space.id);
+          };
           const initials = Array.from(space.name.trim()).slice(0, 2).join("").toLocaleUpperCase();
           return (
             <IconTooltip key={space.id} label={space.name} side={tooltipSide}>
               <Button
                 type="button"
-                variant={active ? "default" : "outline"}
+                variant={active ? "default" : pending ? "secondary" : "outline"}
                 size="icon"
                 className="app-no-drag size-11 shrink-0 rounded-xl text-xs font-semibold"
                 aria-label={space.name}
                 aria-current={active || undefined}
+                aria-busy={pending || undefined}
+                onPointerEnter={(event) => {
+                  if (event.pointerType === "mouse") prepare();
+                }}
+                onPointerDown={prepare}
+                onFocus={prepare}
                 onClick={() => {
                   if (!active) onOpen(space.id);
                 }}

@@ -40,10 +40,12 @@ struct Inner {
     root: PathBuf,
     enabled: AtomicBool,
     epoch: AtomicU64,
+    device_consent: AtomicU64,
     sweeping: AtomicBool,
     sequence: AtomicU64,
     calls: Mutex<HashMap<u64, ActiveCall>>,
     processes: Mutex<HashMap<u32, ProcessOwner>>,
+    screen: Option<crate::host_screen::HostScreen>,
 }
 
 struct ActiveCall {
@@ -70,6 +72,8 @@ struct Request {
     max_bytes: Option<usize>,
     file: Option<PortableFile>,
     directories: Option<Directories>,
+    app: Option<String>,
+    actions: Option<Vec<Value>>,
 }
 
 #[derive(Deserialize)]
@@ -161,7 +165,12 @@ impl Request {
                 None => false,
             },
             "provision" | "prepare" | "isRunning" | "exportWorkspace" | "snapshot" | "stop"
-            | "destroy" | "environment" | "screenObserve" | "screenAct" => true,
+            | "destroy" | "environment" | "capabilities" => true,
+            "screenObserve" | "screenAct" => crate::host_screen::valid_request(
+                request.app.as_deref(),
+                request.actions.as_deref(),
+                request.method == "screenAct",
+            ),
             _ => false,
         };
         if valid {
@@ -172,16 +181,29 @@ impl Request {
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum HostTransport {
+    Sandbox,
+    PairedDevice,
+}
+
 impl HostRunner {
+    #[cfg(test)]
     pub fn new(root: PathBuf) -> Self {
+        Self::with_screen(root, None)
+    }
+
+    pub fn with_screen(root: PathBuf, screen: Option<crate::host_screen::HostScreen>) -> Self {
         Self(Arc::new(Inner {
             root,
             enabled: AtomicBool::new(false),
             epoch: AtomicU64::new(0),
+            device_consent: AtomicU64::new(0),
             sweeping: AtomicBool::new(false),
             sequence: AtomicU64::new(1),
             calls: Mutex::new(HashMap::new()),
             processes: Mutex::new(HashMap::new()),
+            screen,
         }))
     }
 
@@ -193,6 +215,41 @@ impl HostRunner {
         self.0.epoch.load(Ordering::SeqCst)
     }
 
+    pub fn grant_session(&self) {
+        let mut generation = self.device_generation();
+        loop {
+            match self.0.device_consent.compare_exchange_weak(
+                generation,
+                (generation & !1).wrapping_add(2),
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => break,
+                Err(current) => generation = current,
+            }
+        }
+    }
+
+    pub fn device_generation(&self) -> u64 {
+        self.0.device_consent.load(Ordering::SeqCst)
+    }
+
+    pub fn revoke_device_session(&self, generation: u64) {
+        if self
+            .0
+            .device_consent
+            .compare_exchange(
+                generation,
+                generation | 1,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            )
+            .is_ok()
+        {
+            self.set_enabled(false);
+        }
+    }
+
     pub fn set_enabled(&self, enabled: bool) {
         // Hold the registration lock so disabling cannot miss a request about to start.
         let calls = self
@@ -200,6 +257,7 @@ impl HostRunner {
             .calls
             .lock()
             .unwrap_or_else(|error| error.into_inner());
+        let enabled = enabled && self.device_generation() & 1 == 0;
         self.0.enabled.store(enabled, Ordering::SeqCst);
         if !enabled {
             self.0.epoch.fetch_add(1, Ordering::SeqCst);
@@ -265,16 +323,24 @@ impl HostRunner {
         });
     }
 
-    /// Sends the existing HostComputerFrame values; the HTTP owner supplies framing and
-    /// cancels this watch when its connection closes. Closing the receiver also stops work.
+    /// Sends HostComputerFrame values until the transport or consent ends.
     pub async fn run(
         &self,
         input: Value,
         sender: mpsc::Sender<Value>,
         mut cancelled: watch::Receiver<bool>,
         accepted_epoch: u64,
+        transport: HostTransport,
     ) -> Result<(), String> {
         let request = Request::parse(input)?;
+        if matches!(transport, HostTransport::Sandbox)
+            && matches!(
+                request.method.as_str(),
+                "capabilities" | "screenObserve" | "screenAct"
+            )
+        {
+            return Err("Screen access requires a paired device.".into());
+        }
         let (cancel, mut cancellation) = watch::channel(false);
         let id = self.0.sequence.fetch_add(1, Ordering::Relaxed);
         {
@@ -314,6 +380,8 @@ impl HostRunner {
                     .as_ref()
                     .and_then(|command| command.timeout_ms),
             ) + 30_000
+        } else if request.method.starts_with("screen") {
+            2 * 60_000
         } else {
             10 * 60_000
         };
@@ -440,7 +508,18 @@ impl HostRunner {
                     }
                 }
             }
-            "screenObserve" | "screenAct" => Err("Screen control is not available on this computer.".into()),
+            "capabilities" => {
+                let capabilities = match &self.0.screen {
+                    Some(screen) => screen.request(json!({"method":"capabilities"})).await.unwrap_or(json!({"screen":false,"control":false})),
+                    None => json!({"screen":false,"control":false}),
+                };
+                value(sender, capabilities).await
+            }
+            "screenObserve" | "screenAct" => {
+                let screen = self.0.screen.as_ref().ok_or("Screen control is not available on this computer.")?;
+                let result = screen.request(json!({"method":request.method,"app":request.app,"actions":request.actions})).await?;
+                value(sender, result).await
+            },
             _ => Err(INVALID.into()),
         }
     }
@@ -1321,7 +1400,13 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(8);
         let (_cancel, cancelled) = watch::channel(false);
         let (result, values) = tokio::join!(
-            runner.run(request, tx, cancelled, runner.epoch()),
+            runner.run(
+                request,
+                tx,
+                cancelled,
+                runner.epoch(),
+                HostTransport::Sandbox
+            ),
             async move {
                 let mut values = Vec::new();
                 while let Some(value) = rx.recv().await {
@@ -1380,7 +1465,8 @@ mod tests {
                 json!({"method":"environment","botId":"bot"}),
                 tx,
                 cancelled,
-                runner.epoch()
+                runner.epoch(),
+                HostTransport::Sandbox,
             )
             .await
             .is_err());
@@ -1402,7 +1488,8 @@ mod tests {
                 json!({"method":"environment","botId":"bot"}),
                 tx,
                 cancelled,
-                previous_epoch
+                previous_epoch,
+                HostTransport::Sandbox,
             )
             .await
             .is_err());
@@ -1659,7 +1746,7 @@ mod tests {
             let (cancel, cancelled) = watch::channel(false);
             let active = runner.clone();
             let operation = tokio::spawn(async move {
-                active.run(json!({"method":"execute","botId":"bot","runId":"run","command":{"argv":["/bin/sh","-c","printf '%s' $$; sleep 30"]}}), tx, cancelled, active.epoch()).await
+                active.run(json!({"method":"execute","botId":"bot","runId":"run","command":{"argv":["/bin/sh","-c","printf '%s' $$; sleep 30"]}}), tx, cancelled, active.epoch(), HostTransport::Sandbox).await
             });
             let event = tokio::time::timeout(Duration::from_secs(5), rx.recv())
                 .await

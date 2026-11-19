@@ -8,8 +8,16 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const api = vi.hoisted(() => ({ me: vi.fn(), policy: vi.fn(), bootstrap: vi.fn() }));
-vi.mock("../lib/bootstrap", () => ({ peekInitialBootstrap: api.bootstrap }));
+const api = vi.hoisted(() => ({
+  me: vi.fn(),
+  policy: vi.fn(),
+  bootstrap: vi.fn(),
+  selectedBootstrap: vi.fn(),
+}));
+vi.mock("../lib/bootstrap", () => ({
+  peekInitialBootstrap: api.bootstrap,
+  peekSelectedSpaceBootstrap: api.selectedBootstrap,
+}));
 vi.mock("../lib/rpc", () => ({
   SPACE_SELECTED_EVENT: "space-selected",
   captureRpcContext: () => ({
@@ -120,6 +128,23 @@ it("checks again when the selected workspace changes", async () => {
   expect(host.textContent).toContain("App content");
   api.policy.mockResolvedValueOnce({ managed: true, modelSetupMode: "pending" });
   await act(async () => window.dispatchEvent(new Event("space-selected")));
+  expect(host.textContent).toContain("Model setup");
+});
+
+it("keeps a visited workspace open while rechecking its setup from the shared bootstrap", async () => {
+  api.me.mockResolvedValue({ managedModelSetupRequired: false });
+  await render();
+  let resolve!: (bootstrap: { me: { managedModelSetupRequired: boolean } }) => void;
+  api.selectedBootstrap.mockReturnValue({
+    seed: { me: { managedModelSetupRequired: false } },
+    promise: new Promise((complete) => {
+      resolve = complete;
+    }),
+  });
+  await act(async () => window.dispatchEvent(new Event("space-selected")));
+  expect(host.textContent).toContain("App content");
+  expect(api.me).toHaveBeenCalledOnce();
+  await act(async () => resolve({ me: { managedModelSetupRequired: true } }));
   expect(host.textContent).toContain("Model setup");
 });
 

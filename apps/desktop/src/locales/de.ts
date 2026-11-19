@@ -57,6 +57,8 @@ export const DE_MESSAGES: Record<string, string> = {
     "Das Update konnte nicht abgeschlossen werden. Versuche es später erneut.",
   "Could not reach the update server.": "Der Update-Server ist nicht erreichbar.",
   "Allow local computer access?": "Zugriff auf den lokalen Computer erlauben?",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "Wenn die Bildschirmsteuerung verfügbar ist, können Bots die Apps sehen und bedienen, die du im Chat freigibst.",
   "Allow bots to use this computer?": "Bots die Nutzung dieses Computers erlauben?",
   Cancel: "Abbrechen",
   Allow: "Erlauben",

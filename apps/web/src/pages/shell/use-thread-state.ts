@@ -1,6 +1,15 @@
-import type { Routine, TaughtSkill, ThreadMessage, ThreadSnapshot } from "@orkbot/contracts";
-import { withLiveStreamingProgress } from "@orkbot/core";
+import type {
+  AppBootstrap,
+  Bot,
+  Routine,
+  TaughtSkill,
+  ThreadMessage,
+  ThreadSnapshot,
+} from "@orkbot/contracts";
+import { activeThreadRuns, isRunWorking, withLiveStreamingProgress } from "@orkbot/core";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { SpaceQueries } from "../../lib/query";
+import { queryClient } from "../../lib/query";
 import {
   getResponseStreamingEnabled,
   subscribeResponseStreaming,
@@ -15,10 +24,32 @@ export type PinnedAround = {
   olderCursor: number | null;
 };
 
+/** What a chat may show while its live snapshot loads. */
+export function cachedThreadSnapshot(
+  queries: SpaceQueries,
+  seed: AppBootstrap | undefined,
+  target: { bot: Bot } | { groupId: string },
+): ThreadSnapshot | null {
+  if ("groupId" in target) {
+    const { groupId } = target;
+    const cached = queryClient.getQueryData(queries.threads.get.queryKey({ input: { groupId } }));
+    return cached ?? (seed?.thread?.groupId === groupId ? seed.thread : null);
+  }
+  const { bot } = target;
+  const cached = queryClient.getQueryData(
+    queries.threads.get.queryKey({ input: { botId: bot.id } }),
+  );
+  const snapshot = cached ?? (seed?.thread?.botId === bot.id ? seed.thread : null);
+  if (!snapshot || snapshot.groupId) return null;
+  return bot.threadStatus === undefined ||
+    activeThreadRuns(snapshot).some((run) => isRunWorking(run.status)) ===
+      isRunWorking(bot.threadStatus)
+    ? snapshot
+    : null;
+}
+
 /** The open chat's snapshot, the bot data loaded with it, and where its loaded history stands. */
-export function useThreadState() {
-  const [snapshot, setSnapshot] = useState<ThreadSnapshot | null>(null);
-  const snapshotRef = useRef<ThreadSnapshot | null>(null);
+export function useThreadState(readSeed: () => ThreadSnapshot | null) {
   const streamResponses = useSyncExternalStore(
     subscribeResponseStreaming,
     getResponseStreamingEnabled,
@@ -26,6 +57,9 @@ export function useThreadState() {
   );
   const streamResponsesRef = useRef(streamResponses);
   streamResponsesRef.current = streamResponses;
+  const [seed] = useState(readSeed);
+  const [snapshot, setSnapshot] = useState(() => withLiveStreamingProgress(seed, streamResponses));
+  const snapshotRef = useRef<ThreadSnapshot | null>(seed);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [routinesBotId, setRoutinesBotId] = useState<string | null>(null);
   const [taughtSkills, setTaughtSkills] = useState<TaughtSkill[]>([]);

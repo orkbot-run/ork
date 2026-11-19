@@ -495,7 +495,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "user_computer_observe",
     description:
-      "Look at one app on the user's own computer without disturbing them: opens it in the background if needed and returns its window as numbered accessibility rows ([N]) and a screenshot. query narrows the rows. Use only when the task needs an app on their computer.",
+      "Look at one open app on the user's own computer. The result includes the window screenshot and, when supported by the device, numbered accessibility rows ([N]). query narrows those rows.",
     inputSchema: {
       type: "object",
       properties: {
@@ -508,7 +508,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "user_computer_act",
     description:
-      'Act in one app on the user\'s own computer, in the background, and return its window afterwards. Observe it first. Up to 24 ordered actions: click (element, or x,y in screenshot pixels; button, double), type (text, into element or the focused field), set (value of element: a pop-up\'s choice, a field\'s whole text), key (key such as return, tab, escape, up, a; modifiers cmd, shift, option, ctrl), scroll (direction, amount, at element or x,y), menu (path from the menu bar, like ["File","New"]; use it instead of shortcuts), wait (ms). Element numbers come from the latest observation of that app.',
+      "Act in one app on the user's own computer and return its window afterwards. Observe it first. Up to 24 ordered actions: click or move (x,y in screenshot pixels; click accepts button and double), type (text into the focused field), key (return, tab, escape, up, a), scroll (direction, amount, optional x,y), wait (ms). Use modifiers only if supported by the device. When the latest observation includes numbered accessibility rows, you can also target elements, set their value, or use a menu path.",
     inputSchema: {
       type: "object",
       properties: {
@@ -522,7 +522,7 @@ export const builtinAgentTools: ConnectorTool[] = [
             properties: {
               kind: {
                 type: "string",
-                enum: ["click", "type", "set", "key", "scroll", "menu", "wait"],
+                enum: ["click", "move", "type", "set", "key", "scroll", "menu", "wait"],
               },
               element: { type: "integer", minimum: 0 },
               x: { type: "number" },

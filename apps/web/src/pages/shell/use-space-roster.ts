@@ -285,6 +285,7 @@ export function useSpaceBootstrap({
     refreshBots,
   } = roster;
   const { snapshotRef, commitSnapshot, setRoutines, setRoutinesBotId, bootstrappedThread } = thread;
+  const bootstrapRequest = useRef<Promise<AppBootstrap> | null>(null);
   // Until the route names the chat reopened from cache, that chat stands in for it.
   const routeChat = botId || groupId ? undefined : startChat;
 
@@ -333,7 +334,8 @@ export function useSpaceBootstrap({
     let cancelled = false;
     const appliedAtStart = botsRefreshApplied.current;
     rosterFetchStartedAt.current = Date.now();
-    void takeInitialBootstrap(botId ?? startChat?.botId)
+    bootstrapRequest.current ??= takeInitialBootstrap(botId ?? startChat?.botId);
+    void bootstrapRequest.current
       .then(async (bootstrap) => {
         // Kept for the space it belongs to, so switching back to it can paint at once.
         saveSeed(bootstrap);

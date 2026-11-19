@@ -234,9 +234,10 @@ type ScreenRequest =
 /** The device gets the app name the approval card showed, never the raw argument. */
 async function userComputerScreen(ctx: RunContext, call: ToolCall, request: ScreenRequest) {
   if (!request.app) return call.finish({ error: "app must name an app on the user's computer." });
-  const connected = await connectedUserComputer(ctx);
-  if (!connected) return call.finish({ error: USER_COMPUTER_UNAVAILABLE });
-  const { owner, devices, deviceId } = connected;
+  const { userComputerOwner: owner, userComputerScreenDevice: deviceId } = ctx.source;
+  const devices = ctx.deps.userDevices;
+  if (ctx.run.centralWorkspaceId || !owner || !deviceId || !devices)
+    return call.finish({ error: USER_COMPUTER_UNAVAILABLE });
   const { signal } = ctx.context;
   try {
     const value = await lastValue(

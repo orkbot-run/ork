@@ -110,6 +110,7 @@ function fixture({
   routines = [] as { name: string; prompt: string }[],
   connectedApps = [] as string[],
   userDevices,
+  threadGroupId = null,
   botUserId = "user-1",
   batch,
   browser,
@@ -120,6 +121,7 @@ function fixture({
   /** The tool runs the actions its arguments name; see ConnectorTool.batch. */
   batch?: ConnectorTool["batch"];
   userDevices?: UserDeviceGateway;
+  threadGroupId?: string | null;
   /** The bot's owner; runs are started by user-1. */
   botUserId?: string;
   connectedApps?: string[];
@@ -387,11 +389,12 @@ function fixture({
     attempt: {
       create: vi.fn(async () => ({ id: "attempt-1" })),
       count: vi.fn(async () => 1),
+      findMany: vi.fn(async () => []),
       update: vi.fn(),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     thread: {
-      findUniqueOrThrow: vi.fn(async () => ({ id: run.threadId, groupId: null })),
+      findUniqueOrThrow: vi.fn(async () => ({ id: run.threadId, groupId: threadGroupId })),
       update: vi.fn(async () => ({ nextMessageSeq: 2, nextEventSeq: 2 })),
     },
     message: {
@@ -455,7 +458,7 @@ function fixture({
       })),
     },
     taughtSkill: { findMany: vi.fn(async () => []), findFirst: vi.fn(async () => null) },
-    chatGroup: { findMany: vi.fn(async () => []) },
+    chatGroup: { findMany: vi.fn(async () => []), findUnique: vi.fn(async () => null) },
     botSection: { findMany: vi.fn(async () => []) },
     vaultCredential: { findMany: vi.fn(async () => []) },
     agentSkill: { findMany: vi.fn(async () => []) },
@@ -3608,6 +3611,10 @@ describe("user_computer_shell", () => {
       connected: vi.fn(async (_userId: string) => (connected ? device : null)),
       pairedSince: vi.fn(async (_userId: string) => (paired ? pairedAt : null)),
       async *request<T>(userId: string, request: HostComputerRequest) {
+        if (request.method === "capabilities") {
+          yield { screen: false, control: false } as T;
+          return;
+        }
         requests.push({ userId, request });
         if (request.method === "environment") {
           yield { platform: "darwin", home: "/Users/fake", shell: "/bin/zsh" } as T;
@@ -3831,7 +3838,7 @@ describe("user computer screen control", () => {
     tree: '- [0] AXWindow "Untitled"\n  - [1] AXTextArea = "token sk-fake-secret"',
     image: { mimeType: "image/png", data: "iVBORw0KGgo=", width: 800, height: 600 },
   };
-  function devices(platform = "darwin") {
+  function devices(platform = "darwin", screen = true) {
     const requests: HostComputerRequest[] = [];
     const gateway = {
       connected: vi.fn(async (_userId: string) => ({
@@ -3841,6 +3848,10 @@ describe("user computer screen control", () => {
       })),
       pairedSince: vi.fn(async (_userId: string) => new Date(0)),
       async *request<T>(_userId: string, request: HostComputerRequest) {
+        if (request.method === "capabilities") {
+          yield { screen, control: screen } as T;
+          return;
+        }
         requests.push(request);
         yield (
           request.method === "screenAct"
@@ -3871,7 +3882,7 @@ describe("user computer screen control", () => {
       ],
     });
 
-  it("is offered only with a connected Mac or Windows PC", async () => {
+  it("is offered only when the connected device reports a working screen driver", async () => {
     for (const platform of ["darwin", "win32"]) {
       const connected = fixture({ ...ownRun, userDevices: devices(platform).gateway });
       await connected.run();
@@ -3879,10 +3890,13 @@ describe("user computer screen control", () => {
         expect.arrayContaining(["user_computer_observe", "user_computer_act"]),
       );
     }
-    const linux = fixture({ ...ownRun, userDevices: devices("linux").gateway });
+    const linux = fixture({ ...ownRun, userDevices: devices("linux", false).gateway });
     await linux.run();
     expect(linux.offeredTools()).toContain("user_computer_shell");
     expect(linux.offeredTools()).not.toContain("user_computer_observe");
+    const denied = fixture({ ...ownRun, userDevices: devices("darwin", false).gateway });
+    await denied.run();
+    expect(denied.offeredTools()).not.toContain("user_computer_observe");
     const disabled = fixture({
       ...ownRun,
       userDevices: devices().gateway,
@@ -3890,6 +3904,36 @@ describe("user computer screen control", () => {
     });
     await disabled.run();
     expect(disabled.offeredTools()).not.toContain("user_computer_act");
+  });
+
+  it("does not probe or access a device in an owner-started group chat", async () => {
+    const { gateway, requests } = devices();
+    const f = fixture({ ...ownRun, threadGroupId: "group-1", userDevices: gateway });
+    f.setCalls([observe("TextEdit")]);
+    await f.run();
+    expect(f.offeredTools()).not.toContain("user_computer_observe");
+    expect(gateway.connected).not.toHaveBeenCalled();
+    expect(f.pauseRunForInput).not.toHaveBeenCalled();
+    expect(requests).toEqual([]);
+  });
+
+  it("does not replay a screen approval on a different device", async () => {
+    const { gateway, requests } = devices();
+    const f = fixture({ ...ownRun, userDevices: gateway });
+    f.setCalls([observe("TextEdit")]);
+    await f.run();
+    expect(f.effects[0]?.request).toEqual({ app: "TextEdit", deviceId: "device-1" });
+    f.effects[0]!.status = "approved";
+    gateway.connected.mockResolvedValue({
+      deviceId: "device-2",
+      name: "Other",
+      platform: "darwin",
+    });
+    await f.run(true);
+    expect(f.results.at(-1)).toEqual({
+      error: expect.stringContaining("approved computer has changed"),
+    });
+    expect(requests).toEqual([]);
   });
 
   it("asks per app, then uses an allowed app across this space", async () => {

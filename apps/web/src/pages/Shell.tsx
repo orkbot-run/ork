@@ -74,7 +74,7 @@ import { lastChatKey, lastChatOf, queryClient, spaceQueries, spaceSeedKey } from
 import type { Panel } from "../lib/right-panel-state";
 import { rightPanelStorageKey } from "../lib/right-panel-state";
 import { createSpaceRpc, selectedSpaceId, selectSpace } from "../lib/rpc";
-import { markShellReady, useSpaceEpoch } from "../lib/space-switch";
+import { useSpaceEpoch } from "../lib/space-switch";
 
 import { getToolActivityEnabled, subscribeToolActivity } from "../lib/tool-activity-preference";
 import type { AppearancePreference } from "../lib/ui-appearance";
@@ -117,13 +117,13 @@ import { useReadAloud } from "./shell/use-read-aloud";
 import { useReportedUiLocale } from "./shell/use-reported-ui-locale";
 import { useRightPanel, useRightPanelRestore } from "./shell/use-right-panel";
 import { useRoutineEditor } from "./shell/use-routine-editor";
-import { useShellNavigation } from "./shell/use-shell-navigation";
+import { firstThreadRoute, useShellNavigation } from "./shell/use-shell-navigation";
 import { useSidebarExpansion } from "./shell/use-sidebar-expansion";
 import { useSidebarSearch } from "./shell/use-sidebar-search";
 import { useSnoozeClock } from "./shell/use-snooze-clock";
 import { useRosterDrop, useSpaceBootstrap, useSpaceRoster } from "./shell/use-space-roster";
 import { useOpenSpaceChat } from "./shell/use-space-switch";
-import { useThreadState } from "./shell/use-thread-state";
+import { cachedThreadSnapshot, useThreadState } from "./shell/use-thread-state";
 import { useThreadSync } from "./shell/use-thread-sync";
 import { WORKSPACE_RAIL_WIDTH, WorkspaceRail } from "./shell/workspace-rail";
 import type { SettingsSection } from "./shell-overlay";
@@ -193,7 +193,17 @@ function SpaceShell() {
     setBotsSidebarCollapsed(readBotsSidebarCollapsed(userId));
   }, [userId]);
   const search = useSidebarSearch({ rpc, navigate });
-  const thread = useThreadState();
+  const thread = useThreadState(() => {
+    if (!seed || searchParams.has("m")) return null;
+    const initialGroupId = groupId ?? startChat?.groupId;
+    if (initialGroupId) {
+      if (!seed.groups.some((group) => group.id === initialGroupId)) return null;
+      return cachedThreadSnapshot(queries, seed, { groupId: initialGroupId });
+    }
+    const initialBot =
+      seed.bots.find((bot) => bot.id === (botId ?? startChat?.botId)) ?? seed.bots[0];
+    return initialBot ? cachedThreadSnapshot(queries, seed, { bot: initialBot }) : null;
+  });
   const { snapshot } = thread;
   const showToolActivity = useSyncExternalStore(
     subscribeToolActivity,
@@ -636,7 +646,7 @@ function SpaceShell() {
     [sidebarSpaces],
   );
   useDesktopBadge(userId ? unreadChatCount : 0);
-  const { openSpaceChat, pendingSpaceId } = useOpenSpaceChat({
+  const { openSpaceChat, preloadSpaceChat, pendingSpaceId } = useOpenSpaceChat({
     bootstrapSpaceId: bootstrapMe?.spaceId,
     userId,
     navigate,
@@ -647,7 +657,7 @@ function SpaceShell() {
   useLayoutEffect(() => {
     openSpaceChatRef.current = openSpaceChat;
   }, [openSpaceChat]);
-  function openWorkspace(spaceId: string) {
+  function workspaceChatPath(spaceId: string) {
     const space = allSidebarSpaces.find((row) => row.id === spaceId);
     if (!space) return;
     // Older Accounts mappings return only navigation data until the Space is opened.
@@ -659,14 +669,9 @@ function SpaceShell() {
       seed,
       queryClient.getQueryData(lastChatKey(userId ?? null, spaceId)),
     );
-    openSpaceChat(
-      spaceId,
-      lastChat?.groupId
-        ? `/app/g/${lastChat.groupId}`
-        : lastChat?.botId
-          ? `/app/${lastChat.botId}`
-          : "/app",
-    );
+    if (lastChat?.groupId) return `/app/g/${lastChat.groupId}`;
+    if (lastChat?.botId) return `/app/${lastChat.botId}`;
+    return firstThreadRoute(seed?.bots ?? [], seed?.groups ?? []);
   }
 
   const activeSnapshot = inGroup
@@ -742,7 +747,6 @@ function SpaceShell() {
       markAfterPaint("rk:renderer:thread-painted");
     }
     if (shellReady) {
-      markShellReady();
       markOnce("rk:renderer:shell-ready");
       markAfterPaint("rk:renderer:shell-painted");
     }
@@ -1127,7 +1131,15 @@ function SpaceShell() {
             <WorkspaceRail
               spaces={allSidebarSpaces}
               activeId={bootstrapMe?.spaceId ?? shellSpaceId ?? undefined}
-              onOpen={openWorkspace}
+              pendingId={pendingSpaceId}
+              onPrepare={(spaceId) => {
+                const path = workspaceChatPath(spaceId);
+                if (path) preloadSpaceChat(spaceId, path);
+              }}
+              onOpen={(spaceId) => {
+                const path = workspaceChatPath(spaceId);
+                if (path) openSpaceChat(spaceId, path);
+              }}
               onCreate={
                 createWorkspaceAllowed
                   ? () => {
@@ -1196,7 +1208,6 @@ function SpaceShell() {
 
       {/* Keep the composer's z-index inside the chat so phone overlays like the side panel cover it. */}
       <main
-        data-space-switch="main"
         aria-hidden={mobileSidebarOpen || undefined}
         inert={mobileSidebarOpen}
         className="isolate flex min-w-0 flex-1 flex-col bg-background"

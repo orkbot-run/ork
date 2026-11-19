@@ -256,6 +256,7 @@ import { loadAgentTicketContext } from "./ticket-context.js";
 import { appendToolCompletionAudit } from "./tool-completion-audit.js";
 import { toolResultFingerprint } from "./tool-loop.js";
 import { restoreTurnCheckpoint } from "./turn-checkpoint.js";
+import { userDeviceScreenAvailable } from "./user-device-capabilities.js";
 import { createWebProvider } from "./web-provider-factory.js";
 import { findWorkspaceModelPolicy, resolveWorkspaceModel } from "./workspace-model-policy.js";
 import { retireWorkspaceRun } from "./workspace-run-retirement.js";
@@ -1522,17 +1523,18 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const pageBrowserAllowed =
           graphical && browser.describe().capabilities.page && !heldForTakeover;
         const disabledBuiltinTools = disabledBuiltinToolSet(bot.disabledBuiltinTools);
-        const userComputerOwnerId = run.centralWorkspaceId
-          ? undefined
-          : userComputerOwner({
-              trigger: run.trigger,
-              sourceRole: sourceMessage?.role,
-              messagingChannelRun: nonOwnerChatRun,
-              runUserId: run.userId,
-              botUserId: bot.userId,
-            });
+        const userComputerOwnerId =
+          run.centralWorkspaceId || thread.groupId || thread.externalConversationId
+            ? undefined
+            : userComputerOwner({
+                trigger: run.trigger,
+                sourceRole: sourceMessage?.role,
+                messagingChannelRun: nonOwnerChatRun,
+                runUserId: run.userId,
+                botUserId: bot.userId,
+              });
         let userComputer: UserComputerState;
-        let userComputerScreen = false;
+        let userComputerScreenDevice: string | undefined;
         if (
           userComputerOwnerId &&
           deps.userDevices &&
@@ -1541,8 +1543,16 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           const device = await deps.userDevices.connected(userComputerOwnerId).catch(() => null);
           if (device) {
             userComputer = "connected";
-            // The macOS and Windows desktops fetch a screen driver; Linux has none yet.
-            userComputerScreen = device.platform === "darwin" || device.platform === "win32";
+            if (
+              await userDeviceScreenAvailable(
+                deps.userDevices,
+                userComputerOwnerId,
+                device.deviceId,
+                bot.id,
+                context.signal,
+              )
+            )
+              userComputerScreenDevice = device.deviceId;
           } else userComputer = "offline";
         }
         const builtins = [
@@ -1569,7 +1579,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             fleetManagement: bot.fleetManagement,
             followUpFromUser: sourceMessage?.role === "user",
             userComputer: userComputer === "connected",
-            userComputerScreen,
+            userComputerScreen: userComputerScreenDevice !== undefined,
           }),
           // Cross-owner agent connections only exist for chat-linked bots.
           ...(hasMessagingIdentity &&
@@ -1759,6 +1769,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             callClientNonce: callClientNonceForRun,
             peerMessage,
             userComputerOwner: userComputerOwnerId,
+            userComputerScreenDevice,
           },
           computer: {
             get stored() {
@@ -2147,6 +2158,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 offeredFleetTools: offeredFleetTools(strategicBuiltins),
                 followUpsOffered: followUpsOffered(strategicBuiltins, ownerStartedRun),
                 userComputer,
+                userComputerScreenAvailable: userComputerScreenDevice !== undefined,
               })
                 .filter((instruction): instruction is string => Boolean(instruction))
                 .join("\n\n"),

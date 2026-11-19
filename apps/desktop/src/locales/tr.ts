@@ -57,6 +57,8 @@ export const TR_MESSAGES: Record<string, string> = {
     "Güncelleme tamamlanamadı. Daha sonra yeniden deneyin.",
   "Could not reach the update server.": "Güncelleme sunucusuna ulaşılamadı.",
   "Allow local computer access?": "Yerel bilgisayara erişime izin verilsin mi?",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "Ekran denetimi kullanılabiliyorsa botlar sohbette onayladığınız uygulamaları görebilir ve denetleyebilir.",
   "Allow bots to use this computer?": "Botların bu bilgisayarı kullanmasına izin verilsin mi?",
   Cancel: "Vazgeç",
   Allow: "İzin Ver",

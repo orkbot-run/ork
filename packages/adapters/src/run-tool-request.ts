@@ -51,7 +51,7 @@ import { fleetPrepareDeps } from "./run-model.js";
 import { BUILTIN_AGENT_TOOL_NAMES, FLEET_WRITE_TOOL_NAMES_SET } from "./run-tool-selection.js";
 import { preparePageSaveRequest } from "./run-tools-pages.js";
 import { scheduleCreateRefusal } from "./run-tools-tasks.js";
-import { USER_COMPUTER_TOOLS } from "./run-tools-user-computer.js";
+import { USER_COMPUTER_SCREEN_TOOLS, USER_COMPUTER_TOOLS } from "./run-tools-user-computer.js";
 import { SCHEDULE_TOOL_NAMES } from "./schedule-tools.js";
 import { SKILL_TOOL_NAMES } from "./skill-tools.js";
 import {
@@ -198,6 +198,15 @@ export async function resolveToolRequest(
   const nextApprovedTool = approvedReplays.nextToolName();
   let approvedEffectKey: string | undefined;
   const nextApprovedRequest = approvedReplays.nextRequest();
+  if (USER_COMPUTER_SCREEN_TOOLS.has(name)) {
+    const deviceId = ctx.source.userComputerScreenDevice;
+    if (!deviceId) return { error: "Screen control is unavailable on the connected computer." };
+    const approvedDeviceId = (nextApprovedRequest as { deviceId?: unknown } | null)?.deviceId;
+    if (nextApprovedTool === name && approvedDeviceId !== deviceId) {
+      return { error: "The approved computer has changed. Ask the user to start a new request." };
+    }
+    effectRequest = { ...args, deviceId };
+  }
   const liveRoute =
     connectorCall.route?.resourceId &&
     connectorCall.route.connectorId &&

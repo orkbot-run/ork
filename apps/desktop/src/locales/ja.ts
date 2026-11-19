@@ -58,6 +58,8 @@ export const JA_MESSAGES: Record<string, string> = {
     "アップデートを完了できませんでした。しばらくしてからもう一度お試しください。",
   "Could not reach the update server.": "アップデートサーバに接続できませんでした。",
   "Allow local computer access?": "ローカルコンピュータへのアクセスを許可しますか？",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "画面操作が利用できる場合、ボットはチャットで許可したアプリの画面を確認して操作できます。",
   "Allow bots to use this computer?": "ボットにこのコンピュータの使用を許可しますか？",
   Cancel: "キャンセル",
   Allow: "許可",

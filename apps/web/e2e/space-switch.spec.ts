@@ -3,7 +3,7 @@
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
 import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
-import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
 
 test("shows the Ork loading screen while the session is starting", async ({ page }, testInfo) => {
@@ -65,6 +65,9 @@ test("workspace icons switch the roster and restore the previous chat without re
   });
   expect(createdTelescope.ok()).toBe(true);
   const { json: telescope } = (await createdTelescope.json()) as { json: { id: string } };
+  const firstMessage = "Remember this workspace conversation";
+  await rpc(page, "threads/send", { botId: firstBot, text: firstMessage });
+  await rpc(page, "threads/stop", { botId: firstBot });
   await page.reload();
   const rail = page.getByRole("navigation", { name: "Workspaces" });
   const firstSpace = await rail.locator('[aria-current="true"]').getAttribute("aria-label");
@@ -76,25 +79,59 @@ test("workspace icons switch the roster and restore the previous chat without re
   await expect(page.getByTestId("bots-sidebar").getByRole("button", { name: /Scout/ })).toHaveCount(
     0,
   );
+  await expect(
+    page.getByTestId("transcript").getByText(firstMessage, { exact: true }),
+  ).toBeVisible();
+
+  let releaseCold = () => {};
+  let releaseWarm = () => {};
+  const cold = new Promise<void>((resolve) => {
+    releaseCold = resolve;
+  });
+  const warm = new Promise<void>((resolve) => {
+    releaseWarm = resolve;
+  });
+  let coldRequests = 0;
+  let holdWarm = false;
+  await page.route("**/rpc/bootstrap", async (route) => {
+    if (route.request().headers()["x-orkbot-space-id"] === space.id) {
+      coldRequests++;
+      await cold;
+    } else if (holdWarm) {
+      await warm;
+    }
+    await route.continue();
+  });
+  await page.route("**/rpc/threads/get", async (route) => {
+    if (holdWarm) await warm;
+    await route.continue();
+  });
 
   // A reload would drop this marker; an in-place switch keeps it. The observer
-  // records any moment the sidebar lost its bots while the screen was not being
-  // held by the switch's transition, which is the blank flash people see.
+  // records any moment the sidebar lost its bots during the switch.
   await page.evaluate(() => {
     const w = window as unknown as { spaceSwitchMarker?: boolean; visibleBlanks?: number };
     w.spaceSwitchMarker = true;
     w.visibleBlanks = 0;
     new MutationObserver(() => {
       const sidebar = document.querySelector('[data-testid="bots-sidebar"]');
-      const held = document.documentElement.classList.contains("rk-space-switching");
       const hasRoster =
         sidebar?.textContent?.includes("Scout") || sidebar?.textContent?.includes("Chief");
-      if (!hasRoster && !held) w.visibleBlanks! += 1;
+      if (!hasRoster) w.visibleBlanks! += 1;
     }).observe(document.body, { childList: true, subtree: true, characterData: true });
   });
-  await secondSpace.click();
+  try {
+    await secondSpace.hover();
+    await expect.poll(() => coldRequests).toBe(1);
+    await secondSpace.click();
+    await expect(secondSpace).toHaveAttribute("aria-busy", "true");
+    await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
+  } finally {
+    releaseCold();
+  }
   await page.waitForURL(`**/app/${scout.id}`);
   await expect(page.getByPlaceholder("Message Scout")).toBeVisible();
+  expect(coldRequests).toBe(1);
   await expect(secondSpace).toHaveAttribute("aria-current", "true");
   await expect(
     page.getByTestId("bots-sidebar").getByRole("button", { name: /^Chief/ }),
@@ -113,8 +150,18 @@ test("workspace icons switch the roster and restore the previous chat without re
   await page.locator(`[data-roster-bot-id="${telescope.id}"]`).click();
   await page.waitForURL(`**/app/${telescope.id}`);
   await expect(page.getByPlaceholder("Message Telescope")).toBeVisible();
-  await rail.getByRole("button", { name: firstSpace!, exact: true }).click();
-  await page.waitForURL(`**/app/${firstBot}`);
+  holdWarm = true;
+  try {
+    await rail.getByRole("button", { name: firstSpace!, exact: true }).click();
+    await page.waitForURL(`**/app/${firstBot}`);
+    await expect(
+      page.getByTestId("transcript").getByText(firstMessage, { exact: true }),
+    ).toBeVisible();
+    await expect(page.locator("html")).not.toHaveClass(/rk-space-switching/);
+  } finally {
+    holdWarm = false;
+    releaseWarm();
+  }
   await expect(page.getByTestId("bots-sidebar").getByRole("button", { name: /Scout/ })).toHaveCount(
     0,
   );
@@ -180,7 +227,9 @@ test("workspace drafts retain their own file bytes after switching and reopening
   });
   await composer.press("Enter");
   await expect(page.getByTestId("transcript").getByText(firstDraft, { exact: true })).toBeVisible();
-  expect(uploaded).toEqual([Buffer.from("Workspace A file bytes").toString("base64")]);
+  await expect
+    .poll(() => uploaded)
+    .toEqual([Buffer.from("Workspace A file bytes").toString("base64")]);
   await page.goto(`/app/${scout.id}`);
   await expect(composer).toHaveValue("Unsent workspace B draft");
   await expect(

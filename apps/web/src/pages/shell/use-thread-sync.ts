@@ -12,11 +12,9 @@ import type {
   ThreadSnapshot,
 } from "@orkbot/contracts";
 import {
-  activeThreadRuns,
   anySignal,
   createRefreshCoalescer,
   isRunTerminalEvent,
-  isRunWorking,
   isThreadSnapshotEvent,
   reconcileRefreshedThread,
   reduceThreadSnapshot,
@@ -49,6 +47,7 @@ import {
 import type { useBrowserNotifications } from "./use-browser-notifications";
 import type { ComputerState } from "./use-computer";
 import type { ThreadState } from "./use-thread-state";
+import { cachedThreadSnapshot } from "./use-thread-state";
 
 const THREAD_SNAPSHOT_TIMEOUT_MS = 2_000;
 
@@ -142,14 +141,6 @@ export function useThreadSync({
   // A very fast run can finish over SSE while its threads.send response is still
   // returning. Do not let that late receipt resurrect terminal work as queued.
   const terminalRunReceipts = useRef(new Set<string>());
-
-  /**
-   * Each chat's last snapshot, so reopening it paints at once. The live load and
-   * subscription still run and replace it, so it is only ever a first frame.
-   */
-  function cachedThreadKey(target: { botId: string } | { groupId: string }) {
-    return queries.threads.get.queryKey({ input: target });
-  }
 
   function snapTranscriptToEndAfterFrame() {
     const queuedElement = messageScroll.current;
@@ -326,19 +317,11 @@ export function useThreadSync({
     showCachedComputer(active.id);
     expandedHistoryThread.current = null;
     historyEpoch.current += 1;
-    const threadKey = cachedThreadKey({ botId: active.id });
-    const cachedThread = pendingJump
-      ? undefined
-      : (queryClient.getQueryData(threadKey) ??
-        (seed?.thread?.botId === active.id ? seed.thread : undefined));
-    if (
-      cachedThread &&
-      snapshotRef.current?.botId !== active.id &&
-      (active.threadStatus === undefined ||
-        activeThreadRuns(cachedThread).some((run) => isRunWorking(run.status)) ===
-          isRunWorking(active.threadStatus))
-    )
-      commitSnapshot(cachedThread);
+    const threadKey = queries.threads.get.queryKey({ input: { botId: active.id } });
+    if (!pendingJump && snapshotRef.current?.botId !== active.id) {
+      const cached = cachedThreadSnapshot(queries, seed, { bot: active });
+      if (cached) commitSnapshot(cached);
+    }
     const sidebarRefresh = createRefreshCoalescer(() => refreshBots());
     const snapshotRefresh = createRefreshCoalescer(() => refreshThread(active.id));
     const abort = new AbortController();
@@ -433,9 +416,11 @@ export function useThreadSync({
       expandedHistoryThread.current = null;
     }
     historyEpoch.current += 1;
-    const threadKey = cachedThreadKey({ groupId });
-    const cachedThread = pendingJump ? undefined : queryClient.getQueryData(threadKey);
-    if (cachedThread && snapshotRef.current?.groupId !== groupId) commitSnapshot(cachedThread);
+    const threadKey = queries.threads.get.queryKey({ input: { groupId } });
+    if (!pendingJump && snapshotRef.current?.groupId !== groupId) {
+      const cached = cachedThreadSnapshot(queries, seed, { groupId });
+      if (cached) commitSnapshot(cached);
+    }
     const sidebarRefresh = createRefreshCoalescer(() => refreshBots());
     const snapshotRefresh = createRefreshCoalescer(() => refreshGroupThread(groupId));
     const abort = new AbortController();

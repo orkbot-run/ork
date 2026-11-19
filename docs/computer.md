@@ -66,7 +66,11 @@ In the [desktop app](./desktop-app.md), bots can also run commands on the comput
 installed on. Turn on **Let bots use this computer** in **Settings → General** under **Computers**.
 In every [approval mode](./approvals.md), a bot asks before its first command in a space and before
 it first uses each app there, unless a Block rule refuses it. **Allow in this space** covers the
-rest of that space, in any chat, until you remove the computer from the same list.
+rest of that space in your own direct chats until you remove the computer from the same list.
+
+For an app-managed local installation, the native access menu also enables approved application
+screens on macOS and Windows. See [Local application screen control](./local-screen-control.md)
+for permissions, supported actions, and platform limits.
 
 > [!WARNING]
 > A bot with access to your computer can read your files and run programs as you. Only turn it on

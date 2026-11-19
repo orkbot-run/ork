@@ -58,6 +58,8 @@ export const FR_MESSAGES: Record<string, string> = {
     "Impossible de terminer la mise à jour. Réessayez plus tard.",
   "Could not reach the update server.": "Impossible de joindre le serveur de mises à jour.",
   "Allow local computer access?": "Autoriser l’accès à l’ordinateur local ?",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "Lorsque le contrôle de l’écran est disponible, les bots peuvent voir et contrôler les applications que vous autorisez dans le chat.",
   "Allow bots to use this computer?": "Autoriser les bots à utiliser cet ordinateur ?",
   Cancel: "Annuler",
   Allow: "Autoriser",

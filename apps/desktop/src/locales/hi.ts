@@ -56,6 +56,8 @@ export const HI_MESSAGES: Record<string, string> = {
     "अपडेट पूरा नहीं हो सका। बाद में फिर से कोशिश करें।",
   "Could not reach the update server.": "अपडेट सर्वर तक नहीं पहुँच सके।",
   "Allow local computer access?": "लोकल कंप्यूटर एक्सेस की अनुमति दें?",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "स्क्रीन नियंत्रण उपलब्ध होने पर बॉट उन ऐप्स को देख और चला सकते हैं जिन्हें आप चैट में अनुमति देते हैं।",
   "Allow bots to use this computer?": "बॉट को इस कंप्यूटर का इस्तेमाल करने दें?",
   Cancel: "रद्द करें",
   Allow: "अनुमति दें",

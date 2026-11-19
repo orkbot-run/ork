@@ -41,6 +41,7 @@ export const hostComputerRequest = z.discriminatedUnion("method", [
       "stop",
       "destroy",
       "environment",
+      "capabilities",
     ]),
   }),
   z.object({ ...base, method: z.literal("execute"), command }),

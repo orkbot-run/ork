@@ -57,6 +57,8 @@ export const NL_MESSAGES: Record<string, string> = {
     "De update kon niet worden voltooid. Probeer het later opnieuw.",
   "Could not reach the update server.": "De updateserver is niet bereikbaar.",
   "Allow local computer access?": "Toegang tot de lokale computer toestaan?",
+  "When screen control is available, bots can see and control apps you approve in chat.":
+    "Wanneer schermbediening beschikbaar is, kunnen bots de apps bekijken en bedienen waarvoor je in de chat toestemming geeft.",
   "Allow bots to use this computer?": "Bots toestaan deze computer te gebruiken?",
   Cancel: "Annuleer",
   Allow: "Sta toe",

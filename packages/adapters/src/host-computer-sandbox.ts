@@ -228,18 +228,24 @@ export class HostComputerSandbox implements SandboxProvider {
   async destroy(computer: ComputerRef, context: AdapterContext) {
     await this.one({ method: "destroy", botId: computer.botId }, context);
   }
+  // Generic sandbox screen calls have no approved app or paired-device identity.
+  // Native host screens use the owner-only user_computer_* paired protocol instead.
   async connectScreen(): Promise<never> {
-    throw new Error(
-      "Local screen control is unavailable. Use commands to work with files and apps.",
-    );
+    throw new Error("Choose an approved application through the user computer screen tools.");
   }
   async sendInput(): Promise<never> {
-    throw new Error("Local screen control is unavailable");
+    throw new Error(
+      "Host screen access requires an approved application and matched paired device",
+    );
   }
   async observe(): Promise<never> {
-    throw new Error("Local screen control is unavailable");
+    throw new Error(
+      "Host screen access requires an approved application and matched paired device",
+    );
   }
   async act(): Promise<never> {
-    throw new Error("Local screen control is unavailable");
+    throw new Error(
+      "Host screen access requires an approved application and matched paired device",
+    );
   }
 }
