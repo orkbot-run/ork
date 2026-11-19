@@ -203,6 +203,8 @@ mod tests {
     }
 
     #[tokio::test]
+    // Tungstenite's handshake callback requires its own unboxed error response type.
+    #[allow(clippy::result_large_err)]
     async fn paired_transport_dispatches_existing_frames_and_revokes_on_consent_end() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let origin =

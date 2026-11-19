@@ -3,6 +3,11 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  Checklist: "檢查清單",
+  "Computer screen preview": "電腦螢幕預覽",
+  "Computer screen preview unavailable": "無法預覽電腦螢幕",
+  "This computer request is no longer waiting": "此電腦請求已不再等待處理",
+  "You do not have access to this computer request": "你無權存取此電腦請求",
   "Organization settings": "組織設定",
   "Personal models": "個人模型",
   "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them.":

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Host permission assertions are an Ork addition.
+
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -131,8 +136,10 @@ describe.each([
       context,
     );
     if (provider instanceof HostComputerSandbox) {
-      await expect(provider.observe()).rejects.toThrow("Local screen control is unavailable");
-      await expect(provider.act()).rejects.toThrow("Local screen control is unavailable");
+      const reason =
+        "Host screen access requires an approved application and matched paired device";
+      await expect(provider.observe()).rejects.toThrow(reason);
+      await expect(provider.act()).rejects.toThrow(reason);
       return;
     }
     const before = await provider.observe(computer, context);
