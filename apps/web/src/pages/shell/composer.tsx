@@ -66,6 +66,7 @@ import {
 import { hasOpenDialog } from "../../lib/has-open-dialog";
 import { usePageSession } from "../../lib/pages";
 import { isFileDrag, isFilePaste } from "../../lib/pending-attachments";
+import { TRANSCRIPT_CONTENT_PADDING } from "../../lib/transcript-layout";
 import { ComposerReplyPreview } from "./chat-context";
 import type { PendingAttachment } from "./chat-shared";
 import { previewMessageText } from "./chat-shared";
@@ -716,7 +717,7 @@ const ComposerBody = memo(function Composer({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`relative z-30 m-0 min-w-0 border-0 ${docked ? "p-0" : "px-3 pb-4 pt-0 md:px-[max(1.5rem,calc((100%_-_60rem)/2))] md:pb-6"} [&>*]:pointer-events-auto ${fileDragActive ? "pointer-events-auto" : "pointer-events-none"} ${
+      className={`relative z-30 m-0 min-w-0 border-0 ${docked ? "p-0" : `${TRANSCRIPT_CONTENT_PADDING} pb-4 pt-0 md:pb-5`} [&>*]:pointer-events-auto ${fileDragActive ? "pointer-events-auto" : "pointer-events-none"} ${
         draggingFiles ? "rounded-[14px] ring-2 ring-inset ring-ring" : ""
       }`}
     >
@@ -886,8 +887,8 @@ const ComposerBody = memo(function Composer({
         ref={composerBarRef}
         data-testid="composer-bar"
         data-expanded={expanded}
-        className={`grid grid-cols-[auto_minmax(0,1fr)_auto] content-end items-center rounded-[26px] border border-border pe-2.5 ps-3 transition-colors focus-within:border-input ${
-          docked ? "bg-card" : "bg-background dark:bg-card"
+        className={`grid grid-cols-[auto_minmax(0,1fr)_auto] content-end items-center border border-border pe-2.5 ps-3 transition-colors focus-within:border-ring/60 ${
+          docked ? "rounded-[26px] bg-card" : "rounded-[18px] bg-card shadow-sm"
         } ${
           expanded
             ? "gap-x-2 gap-y-2 pb-[9px] pt-3"

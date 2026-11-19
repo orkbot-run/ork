@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type {
   AgentSkillCatalogEntry,
@@ -99,11 +103,37 @@ export function ShellSidePanel({
     await refreshBots().catch(() => undefined);
   }
 
+  const panelActions = (
+    <>
+      {active &&
+      panel === "computer" &&
+      !computerOpen &&
+      computerPanelNeedsMaintenance(computer?.state, booting) ? (
+        <ComputerMaintenanceActions
+          botId={active.id}
+          computer={computer}
+          onChanged={async () => {
+            await refreshThread(active.id);
+          }}
+        />
+      ) : null}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label={t`Close panel`}
+        onClick={() => setPanel(null)}
+      >
+        <X size={16} strokeWidth={1.8} />
+      </Button>
+    </>
+  );
+
   return (
     <ResizableSidePanel open={open} panel={panel ?? "closed"}>
       {open ? (
-        <div className="rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]">
-          {panel !== "routine" &&
+        <div className="rk-scroll h-full w-full overflow-y-auto px-4 py-4">
+          {!(botTab && active) &&
+          panel !== "routine" &&
           panel !== "create-group" &&
           panel !== "group-settings" &&
           panel !== "import-agent" ? (
@@ -113,28 +143,7 @@ export function ShellSidePanel({
                   <Trans>Group</Trans>
                 </span>
               ) : null}
-              <div className="ml-auto flex gap-1">
-                {active &&
-                panel === "computer" &&
-                !computerOpen &&
-                computerPanelNeedsMaintenance(computer?.state, booting) ? (
-                  <ComputerMaintenanceActions
-                    botId={active.id}
-                    computer={computer}
-                    onChanged={async () => {
-                      await refreshThread(active.id);
-                    }}
-                  />
-                ) : null}
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t`Close panel`}
-                  onClick={() => setPanel(null)}
-                >
-                  <X size={16} strokeWidth={1.8} />
-                </Button>
-              </div>
+              <div className="ml-auto flex gap-1">{panelActions}</div>
             </div>
           ) : null}
           {panel === "create-group" ? (
@@ -197,6 +206,7 @@ export function ShellSidePanel({
               }}
               computer={computerPanel}
               routines={routinesPanel}
+              headerActions={panelActions}
               focusModel={modelFocusRequest}
               onOpenConnections={() => openSettings("models")}
               memoryProviderConfigured={memoryProviderConfigured}

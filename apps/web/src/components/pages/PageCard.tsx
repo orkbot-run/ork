@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited page preview behavior is preserved; card styling is an Ork addition.
+
 import { Trans, useLingui } from "@lingui/react/macro";
+import { ArrowUpRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatRelativeTime } from "../../lib/relative-time";
 import { PageFrame } from "./PageFrame";
@@ -156,16 +161,14 @@ export function PageCard({
     <div
       data-testid="page-card"
       data-deleted={onOpen === undefined || undefined}
-      className="relative w-full max-w-[561px] overflow-hidden pointer-coarse:min-[900px]:max-w-[639px] rounded-[24px] bg-card ring-[0.5px] ring-border has-focus-visible:ring-2 has-focus-visible:ring-ring data-deleted:bg-transparent data-deleted:opacity-70"
+      className="group/page-card relative w-full max-w-[561px] overflow-hidden rounded-2xl bg-card ring-1 ring-border has-focus-visible:ring-2 has-focus-visible:ring-ring data-deleted:bg-transparent data-deleted:opacity-70 pointer-coarse:min-[900px]:max-w-[639px]"
     >
       {onOpen ? <PagePreview document={document} title={title} failed={failed} /> : null}
-      <div className="flex h-[73px] items-center gap-[14px] border-t border-foreground/[0.04] px-5">
+      <div className="flex min-h-[73px] items-center gap-3 border-t border-border px-4 py-3 group-has-focus-visible/page-card:bg-muted/70 group-hover/page-card:bg-muted/70">
         <PageTileIcon />
-        <div className="min-w-0">
-          <div className="relative top-[1px] truncate text-[15px] leading-[21px] text-foreground">
-            {title}
-          </div>
-          <div className="truncate text-[14px] leading-[20px] text-muted-foreground">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold text-foreground">{title}</div>
+          <div className="truncate text-xs text-muted-foreground">
             {onOpen === undefined ? (
               <Trans>Page · Deleted</Trans>
             ) : updated ? (
@@ -181,13 +184,16 @@ export function PageCard({
             )}
           </div>
         </div>
+        {onOpen ? (
+          <ArrowUpRight size={17} aria-hidden="true" className="shrink-0 text-muted-foreground" />
+        ) : null}
       </div>
       {onOpen ? (
         <button
           type="button"
           aria-label={t`Open ${title}`}
           onClick={onOpen}
-          className="absolute inset-0 rounded-[24px] outline-none"
+          className="absolute inset-0 rounded-2xl outline-none"
         />
       ) : null}
     </div>

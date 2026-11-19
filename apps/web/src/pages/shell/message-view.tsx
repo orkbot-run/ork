@@ -45,6 +45,7 @@ import {
   shouldRenderToolCard,
   toolStepCount,
 } from "../../lib/tool-activity-view";
+import { CHAT_BOT_TEXT_SURFACE, CHAT_USER_TEXT_SURFACE } from "../../lib/transcript-layout";
 import { ReplyLine } from "./chat-context";
 import { FALLBACK_BOT_COLOR, previewMessageText } from "./chat-shared";
 import { ComputerCard } from "./computer-card";
@@ -575,7 +576,7 @@ export const MessageView = memo(function MessageView({
                 <div
                   data-testid="message-user-bubble"
                   data-quote-message-id={quoteMessageId}
-                  className="max-w-full whitespace-pre-wrap wrap-anywhere rounded-[20px] bg-chat-user px-[18px] py-3 text-body1 text-chat-user-foreground"
+                  className={cn(CHAT_USER_TEXT_SURFACE, "whitespace-pre-wrap wrap-anywhere")}
                   dir="auto"
                 >
                   <LinkifiedText onOpenPage={openPage}>{block.text}</LinkifiedText>
@@ -590,11 +591,7 @@ export const MessageView = memo(function MessageView({
                 key={i}
                 className="relative flex w-fit max-w-full justify-start [@media(hover:none)]:w-full [@media(hover:none)]:flex-wrap"
               >
-                <div
-                  data-testid="message-bot-bubble"
-                  className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-body1 text-foreground"
-                  dir="auto"
-                >
+                <div data-testid="message-bot-bubble" className={CHAT_BOT_TEXT_SURFACE} dir="auto">
                   <div data-quote-message-id={quoteMessageId}>
                     <ChatMarkdown renderMention={renderMention} onOpenPage={openPage}>
                       {block.text}

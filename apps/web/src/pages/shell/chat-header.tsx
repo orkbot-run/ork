@@ -5,7 +5,7 @@
 import { useLingui } from "@lingui/react/macro";
 import type { Bot, Group, ThreadSnapshot } from "@orkbot/contracts";
 import { BotAvatar, Button, GroupAvatar } from "@orkbot/ui-web";
-import { Gift, Menu, Phone } from "lucide-react";
+import { Gift, Menu, PanelRight, Phone } from "lucide-react";
 import { useState } from "react";
 import { IconTooltip } from "../../components/IconTooltip";
 import { InviteDialog } from "../../components/InviteDialog";
@@ -49,7 +49,7 @@ export function ChatHeader({
           size="icon-lg"
           aria-label={t`Open navigation`}
           onClick={onOpenNavigation}
-          className="app-no-drag md:hidden"
+          className="app-no-drag rounded-xl md:hidden"
         >
           <Menu strokeWidth={1.7} className="size-[19px]" />
         </Button>
@@ -59,7 +59,7 @@ export function ChatHeader({
         data-testid="bot-settings-trigger"
         aria-expanded={panelOpen}
         onClick={onTogglePanel}
-        className="app-no-drag h-auto min-w-0 gap-2 py-1 ps-1 pe-3.5"
+        className="app-no-drag h-auto min-w-0 gap-2 rounded-xl py-1.5 ps-2 pe-2.5 aria-expanded:border-ring/45 aria-expanded:bg-accent"
       >
         {inGroup ? (
           <GroupAvatar members={activeSnapshot?.members ?? activeGroup?.members ?? []} size={26} />
@@ -74,11 +74,17 @@ export function ChatHeader({
           />
         ) : null}
         <span className="min-w-0">
-          <span className="block truncate text-[15px] font-medium text-foreground" dir="auto">
+          <span className="block truncate text-sm font-semibold text-foreground" dir="auto">
             {inGroup
               ? (activeGroup?.name ?? activeSnapshot?.groupName ?? t`Group`)
               : (active?.name ?? t`Select a bot`)}
           </span>
+        </span>
+        <span
+          aria-hidden="true"
+          className="@min-[32rem]/chat:flex ms-1 hidden border-s border-border ps-2 text-muted-foreground"
+        >
+          <PanelRight className="size-4" strokeWidth={1.7} />
         </span>
       </Button>
       <div className="flex items-center justify-self-end gap-2">
@@ -92,7 +98,7 @@ export function ChatHeader({
               onClick={() => onCall(active)}
               data-active={inCall ? "" : undefined}
               data-voice-ready={voiceReady ? "" : undefined}
-              className="app-no-drag"
+              className="app-no-drag rounded-xl"
             >
               <Phone strokeWidth={1.6} className="size-[17px]" />
             </Button>
@@ -105,7 +111,7 @@ export function ChatHeader({
               size="icon-lg"
               aria-label={t`Invite a friend`}
               onClick={() => setInviteOpen(true)}
-              className="app-no-drag"
+              className="app-no-drag rounded-xl"
             >
               <Gift strokeWidth={1.6} className="size-[17px]" />
             </Button>

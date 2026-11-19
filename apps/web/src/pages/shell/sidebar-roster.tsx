@@ -101,6 +101,7 @@ export function SidebarRoster({
   return (
     <>
       {sidebarGroups.map((group, groupIndex) => {
+        const quickAccess = !mini && (group.key === "pinned" || group.key.endsWith(":pinned"));
         const collapsed = Boolean(group.title) && collapsedSidebarSections.has(group.key);
         const groupBotIds = group.bots.flatMap((item) =>
           item.kind === "bot" ? [item.chat.id] : [],
@@ -264,7 +265,10 @@ export function SidebarRoster({
                 ) : null}
               </div>
             ) : null}
-            <CollapsibleContent className="flex flex-col gap-0.5">
+            <CollapsibleContent
+              data-roster-quick-access={quickAccess ? "true" : undefined}
+              className={`flex flex-col gap-0.5 ${quickAccess ? "md:grid md:grid-cols-3 md:gap-1.5 md:pb-2" : ""}`}
+            >
               {group.bots.map((item) => {
                 const selected =
                   (item.kind === "bot" && !inGroup && active?.id === item.chat.id) ||
@@ -404,12 +408,14 @@ export function SidebarRoster({
                         : compact
                           ? "w-full min-h-11 gap-2 rounded-xl px-2.5 py-1.5"
                           : "w-full gap-3 rounded-xl px-2.5 py-[10px]"
-                    } text-start ${
-                      item.kind === "bot" ? "cursor-grab active:cursor-grabbing" : ""
-                    } ${
+                    } text-start transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring motion-reduce:transition-none ${
+                      quickAccess
+                        ? "md:h-full md:min-h-24 md:flex-col md:justify-start md:gap-2 md:rounded-2xl md:px-1.5 md:py-3 md:text-center"
+                        : ""
+                    } ${item.kind === "bot" ? "cursor-grab active:cursor-grabbing" : ""} ${
                       selected || rosterDropKey === rowDropKey
-                        ? "bg-sidebar-accent"
-                        : "group-hover/row:bg-accent"
+                        ? `bg-sidebar-accent ${quickAccess ? "md:ring-1 md:ring-inset md:ring-sidebar-border" : ""}`
+                        : `group-hover/row:bg-accent ${quickAccess ? "md:bg-card/60 md:hover:bg-sidebar-accent" : ""}`
                     }`}
                   >
                     {mini ? (
@@ -457,9 +463,15 @@ export function SidebarRoster({
                       avatar
                     )}
                     {!mini ? (
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-1.5">
-                          <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                      <div
+                        className={`min-w-0 flex-1 ${quickAccess ? "md:w-full md:flex-none" : ""}`}
+                      >
+                        <div
+                          className={`flex items-center justify-between gap-1.5 ${quickAccess ? "md:justify-center" : ""}`}
+                        >
+                          <div
+                            className={`flex min-w-0 items-center gap-1.5 overflow-hidden ${quickAccess ? "md:justify-center" : ""}`}
+                          >
                             <span
                               dir="auto"
                               data-roster-bot-name={item.kind === "bot" ? "" : undefined}
@@ -480,11 +492,13 @@ export function SidebarRoster({
                               </span>
                             ) : null}
                           </div>
-                          <div className="flex shrink-0 items-center gap-1.5">
+                          <div
+                            className={`flex shrink-0 items-center gap-1.5 ${quickAccess && !item.chat.unread ? "md:hidden" : ""}`}
+                          >
                             {!compact ? (
                               <span
                                 data-roster-time
-                                className="text-label text-faint-foreground tabular-nums"
+                                className={`text-label text-faint-foreground tabular-nums ${quickAccess ? "md:hidden" : ""}`}
                               >
                                 {formatRosterTime(item.chat.updatedAt)}
                               </span>
@@ -509,7 +523,7 @@ export function SidebarRoster({
                                     ? item.chat.status
                                     : undefined
                               }
-                              className={`mt-0.5 flex items-center gap-1 text-[11.5px] ${
+                              className={`mt-0.5 flex items-center gap-1 text-[11.5px] ${quickAccess ? "md:justify-center" : ""} ${
                                 rowError
                                   ? "font-medium text-destructive"
                                   : workStatusLabel
@@ -525,7 +539,7 @@ export function SidebarRoster({
                           <div
                             dir="auto"
                             data-roster-preview={!workStatusLabel ? "true" : undefined}
-                            className={`mt-1 truncate text-label ${
+                            className={`mt-1 truncate text-label ${quickAccess && !workStatusLabel ? "md:hidden" : ""} ${
                               workStatusLabel
                                 ? "font-semibold text-status-working"
                                 : item.chat.unread
@@ -543,7 +557,7 @@ export function SidebarRoster({
                 return (
                   <div
                     key={`${item.kind}:${item.chat.id}`}
-                    className="group/row relative"
+                    className="group/row relative min-w-0"
                     style={{
                       opacity: item.kind === "bot" && draggedBotId === item.chat.id ? 0.55 : 1,
                     }}

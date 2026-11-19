@@ -42,7 +42,7 @@ import {
   Toggle,
 } from "@orkbot/ui-web";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Settings, X } from "lucide-react";
+import { Download, FileText, Monitor, Repeat2, Settings, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { ErrorBoundary, SectionLoadFailed } from "../../components/ErrorBoundary";
@@ -66,6 +66,8 @@ const KnowledgeSection = lazyComponent(() =>
 );
 
 const rowLabelClass = "text-sm text-foreground";
+const panelTabClass =
+  "h-auto min-w-fit flex-1 flex-col gap-1.5 rounded-lg px-2 py-2 text-xs data-active:border-border motion-reduce:transition-none";
 
 /** The advanced fields one Save sends, in the order their saved snapshot keeps them. */
 function advancedValues(bot: Bot) {
@@ -116,6 +118,7 @@ export function BotSettings({
   onTabChange,
   computer,
   routines,
+  headerActions,
   memoryProviderConfigured,
   onSave,
   onExport,
@@ -128,6 +131,7 @@ export function BotSettings({
   onTabChange?: (tab: BotPanelTab) => void;
   computer?: ReactNode;
   routines?: ReactNode;
+  headerActions?: ReactNode;
   focusModel?: number;
   onOpenConnections?: () => void;
   /** Unused: the skill sections read and save the shared cached skill list. */
@@ -542,15 +546,18 @@ export function BotSettings({
   }
 
   return (
-    <div data-testid="bot-settings">
-      <div data-testid="bot-profile-header" className="flex flex-col items-center pb-5 text-center">
-        <div className="flex justify-center pb-4">
+    <div data-testid="bot-settings" className="min-w-0">
+      <div
+        data-testid="bot-profile-header"
+        className="mb-5 flex min-w-0 items-center gap-3 rounded-2xl border border-border/60 bg-card p-3"
+      >
+        <div className="shrink-0">
           <AvatarStudioPopover
             value={color}
             identity={bot.id}
             avatarSeed={bot.avatarSeed}
             status={bot.status}
-            size={76}
+            size={56}
             avatarSet={avatarSet}
             onChange={(newColor, nextAvatarSet) => {
               setColor(newColor);
@@ -562,31 +569,43 @@ export function BotSettings({
             }}
           />
         </div>
-        <InlineProfileField
-          label={t`Name`}
-          editLabel={t`Edit name`}
-          value={name}
-          maxLength={BOT_NAME_MAX_LENGTH}
-          className="text-xl font-semibold"
-          onCommit={(value) => {
-            if (!value.trim()) return;
-            setName(value.trim());
-            void enqueueSave({ name: value });
-          }}
-        />
+        <div className="min-w-0 flex-1">
+          <InlineProfileField
+            label={t`Name`}
+            editLabel={t`Edit name`}
+            value={name}
+            maxLength={BOT_NAME_MAX_LENGTH}
+            className="text-start text-lg font-semibold leading-snug tracking-tight"
+            onCommit={(value) => {
+              if (!value.trim()) return;
+              setName(value.trim());
+              void enqueueSave({ name: value });
+            }}
+          />
+        </div>
+        {headerActions ? (
+          <div className="flex shrink-0 items-center gap-0.5 self-start">{headerActions}</div>
+        ) : null}
       </div>
       <Tabs value={tab} onValueChange={(next) => onTabChange?.(next as BotPanelTab)}>
-        <TabsList className="w-full">
-          <TabsTrigger value="computer">
+        <TabsList
+          aria-label={name}
+          className="h-auto! w-full justify-start gap-1 overflow-x-auto rounded-xl bg-muted/50 p-1"
+        >
+          <TabsTrigger value="computer" className={panelTabClass}>
+            <Monitor aria-hidden="true" className="size-4" />
             <Trans>Computer</Trans>
           </TabsTrigger>
-          <TabsTrigger value="routines">
+          <TabsTrigger value="routines" className={panelTabClass}>
+            <Repeat2 aria-hidden="true" className="size-4" />
             <Trans>Routines</Trans>
           </TabsTrigger>
-          <TabsTrigger value="pages">
+          <TabsTrigger value="pages" className={panelTabClass}>
+            <FileText aria-hidden="true" className="size-4" />
             <Trans>Pages</Trans>
           </TabsTrigger>
-          <TabsTrigger value="settings">
+          <TabsTrigger value="settings" className={panelTabClass}>
+            <Settings aria-hidden="true" className="size-4" />
             <Trans>Advanced</Trans>
           </TabsTrigger>
         </TabsList>
@@ -972,7 +991,7 @@ function InlineProfileField({
       aria-label={label}
       value={draft}
       maxLength={maxLength}
-      className={`h-auto border-transparent bg-transparent p-0 text-center shadow-none ${className}`}
+      className={`h-auto border-transparent bg-transparent p-0 shadow-none ${className}`}
       onChange={(event) => setDraft(event.target.value)}
       onBlur={commit}
       onKeyDown={(event) => {

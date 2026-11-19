@@ -50,7 +50,7 @@ import {
 } from "../../lib/quote-selection";
 import type { createSpaceRpc } from "../../lib/rpc";
 import { messageHasVisibleBlocks } from "../../lib/tool-activity-view";
-import { TRANSCRIPT_CONTENT_PADDING } from "../../lib/transcript-layout";
+import { CHAT_USER_TEXT_SURFACE, TRANSCRIPT_CONTENT_PADDING } from "../../lib/transcript-layout";
 import { transcriptIsNearEnd, transcriptMovedDown } from "../../lib/transcript-scroll";
 import { TimeSeparator, UnreadDivider } from "./chat-context";
 import type { ImportSetupTarget } from "./import-setup-card";
@@ -731,12 +731,7 @@ export const Transcript = memo(function Transcript({
             data-testid="outgoing-message"
             className="flex flex-col items-end gap-1"
           >
-            <div
-              className={cn(
-                bubbleFrameWidth("user"),
-                "rounded-[20px] bg-chat-user px-[18px] py-3 text-body1 text-chat-user-foreground",
-              )}
-            >
+            <div className={cn(bubbleFrameWidth("user"), CHAT_USER_TEXT_SURFACE)}>
               {message.text ? (
                 <p className="whitespace-pre-wrap break-words">{message.text}</p>
               ) : null}
