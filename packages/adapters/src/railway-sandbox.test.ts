@@ -153,6 +153,40 @@ const reconnect = {
 };
 
 describe("Railway sandbox lifecycle", () => {
+  it("records the raw create response before the SDK can poll and rolls back if persistence fails", async () => {
+    const api = backboard();
+    const failure = new Error("record unavailable");
+    const recordCreated = vi.fn(async (ref: { kind: string; providerRef: string }) => {
+      expect(ref).toEqual({ kind: "railway", providerRef: "created-1" });
+      expect(api.operations).toEqual(["RailwaySandboxCreate"]);
+      throw failure;
+    });
+    await expect(
+      provider.provision({ botId: "bot", homePath: "/unused", recordCreated }, ctx),
+    ).rejects.toThrow("record unavailable");
+    expect(recordCreated).toHaveBeenCalledOnce();
+    expect(api.sandboxes.get("created-1")?.status).toBe("DESTROYING");
+    expect(api.created).toHaveLength(1);
+  });
+
+  it("records only new Railway IDs and deletes a sandbox when recording fails", async () => {
+    const recordCreated = vi.fn(async () => {});
+    const request = { botId: "bot", homePath: "/unused", recordCreated };
+    const ref = await provider.provision(request, ctx);
+    expect(recordCreated).toHaveBeenCalledExactlyOnceWith({
+      kind: "railway",
+      providerRef: ref.providerRef,
+    });
+    await provider.provision(
+      { ...request, providerKind: "railway", providerRef: ref.providerRef },
+      ctx,
+    );
+    expect(recordCreated).toHaveBeenCalledOnce();
+    const failure = new Error("record unavailable");
+    recordCreated.mockRejectedValueOnce(failure);
+    await expect(provider.provision(request, ctx)).rejects.toBe(failure);
+    expect(sandbox.destroy).toHaveBeenCalledOnce();
+  });
   it.each<{
     name: string;
     stored?: Partial<SandboxInfo>;

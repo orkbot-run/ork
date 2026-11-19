@@ -50,6 +50,13 @@ vi.mock("@orkbot/db", async (importOriginal) => ({
   planComputerSize: vi.fn(async () => "standard"),
 }));
 
+// The durable cleanup queue itself is exercised with a real database in its PostgreSQL suite.
+vi.mock("./computer-orphan-cleanup.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./computer-orphan-cleanup.js")>()),
+  orphanCleanupInProgress: vi.fn(async () => null),
+  finishOrphanRegistration: vi.fn(async () => true),
+}));
+
 const context = {
   operationId: "test",
   traceId: "test",
@@ -1157,7 +1164,10 @@ describe("computer provisioning", () => {
             kind: "boat",
             updatedAt: expect.any(Date),
           },
-          data: sameName ? { state: "error", restorePending: true } : { state: "running" },
+          data: {
+            bootHeartbeatAt: null,
+            ...(sameName ? { state: "error", restorePending: true } : { state: "running" }),
+          },
         });
         const marks = vi
           .mocked(prisma.computer.updateMany)
@@ -1317,7 +1327,9 @@ describe("computer provisioning", () => {
         vi.mocked(sandbox.prepare).mock.invocationCallOrder[1]!,
       );
       expect(updateMany).toHaveBeenLastCalledWith(
-        expect.objectContaining({ data: { state: "error", restorePending: true } }),
+        expect.objectContaining({
+          data: { state: "error", restorePending: true, bootHeartbeatAt: null },
+        }),
       );
     } finally {
       await rm(dataDir, { recursive: true, force: true });
@@ -1459,6 +1471,7 @@ describe("computer provisioning", () => {
         await expect(started).resolves.toEqual(ref);
         const activation = {
           state: "running",
+          bootHeartbeatAt: null,
           providerRef: next.providerRef,
           kind: next.kind,
           restorePending: false,
@@ -1806,6 +1819,7 @@ describe("computer provisioning", () => {
           },
           data: {
             state: unsafeStop ? "quarantined" : "error",
+            bootHeartbeatAt: null,
             providerRef: "new-provider-1",
             kind: "e2b",
             restorePending: true,

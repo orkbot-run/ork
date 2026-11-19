@@ -278,6 +278,7 @@ export class RemoteDesktopSandboxProvider implements SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      recordCreated?: (computer: Pick<ComputerRef, "kind" | "providerRef">) => Promise<void>;
     },
     _context: AdapterContext,
   ): Promise<ComputerRef> {
@@ -311,6 +312,14 @@ export class RemoteDesktopSandboxProvider implements SandboxProvider {
     ).catch((error: unknown) => {
       throw this.startupError(error);
     });
+    try {
+      await request.recordCreated?.({ kind: this.config.id, providerRef: desktop.sandboxId });
+    } catch (error) {
+      await this.config.sdk
+        .kill(desktop.sandboxId, { apiKey: this.config.apiKey })
+        .catch(() => undefined);
+      throw error;
+    }
     this.boxes.set(desktop.sandboxId, desktop);
     this.lastTouchedAt.set(desktop.sandboxId, Date.now());
     return {

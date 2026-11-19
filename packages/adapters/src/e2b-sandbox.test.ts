@@ -34,6 +34,39 @@ const context = {
 };
 
 describe("E2B computer backend", () => {
+  it("records only new machine IDs and kills a machine when recording fails", async () => {
+    const desktop = { sandboxId: "created-id" } as E2BDesktop;
+    const kill = vi.fn(async () => true);
+    const sdk = {
+      create: vi.fn(async () => desktop),
+      connect: vi.fn(async () => desktop),
+      kill,
+    } as unknown as E2BSandboxSdk;
+    const provider = new E2BSandboxProvider("test-key", sdk);
+    const recordCreated = vi.fn(async () => {});
+    await provider.provision({ botId: "bot", homePath: "/unused", recordCreated }, context);
+    expect(recordCreated).toHaveBeenCalledExactlyOnceWith({
+      kind: "e2b",
+      providerRef: "created-id",
+    });
+    await provider.provision(
+      {
+        botId: "bot",
+        homePath: "/unused",
+        providerKind: "e2b",
+        providerRef: "created-id",
+        recordCreated,
+      },
+      context,
+    );
+    expect(recordCreated).toHaveBeenCalledOnce();
+    const failure = new Error("record unavailable");
+    recordCreated.mockRejectedValueOnce(failure);
+    await expect(
+      provider.provision({ botId: "bot", homePath: "/unused", recordCreated }, context),
+    ).rejects.toBe(failure);
+    expect(kill).toHaveBeenCalledExactlyOnceWith("created-id", { apiKey: "test-key" });
+  });
   it("bills while running", () => {
     expect(new E2BSandboxProvider("test-key").billsWhileRunning()).toBe(true);
   });

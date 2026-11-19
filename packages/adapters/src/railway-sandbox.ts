@@ -141,6 +141,7 @@ export class RailwaySandboxProvider implements SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      recordCreated?: (computer: Pick<ComputerRef, "kind" | "providerRef">) => Promise<void>;
     },
     context: AdapterContext,
   ): Promise<ComputerRef> {
@@ -173,8 +174,9 @@ export class RailwaySandboxProvider implements SandboxProvider {
         ...this.options,
         fetch: async (input, init) => {
           // Finish the bounded request so cancellation cannot hide a created sandbox's ID.
-          const response = await railwayFetch(input, init, (id) => {
+          const response = await railwayFetch(input, init, async (id) => {
             createdId = id;
+            await request.recordCreated?.({ kind: "railway", providerRef: id });
           });
           context.signal.throwIfAborted();
           return response;
@@ -199,7 +201,10 @@ export class RailwaySandboxProvider implements SandboxProvider {
           "[railway] created the sandbox with the plan's idle timeout, which can destroy idle computers before they are saved",
         );
       }
-      createdId = sandbox.id;
+      if (!createdId) {
+        createdId = sandbox.id;
+        await request.recordCreated?.({ kind: "railway", providerRef: createdId });
+      }
       assertPrivateNetwork(sandbox);
     } catch (error) {
       if (
@@ -208,7 +213,10 @@ export class RailwaySandboxProvider implements SandboxProvider {
       ) {
         createdId = error.id;
       }
-      if (createdId) await this.destroy(this.ref(createdId, request.botId, true), context);
+      if (createdId)
+        await this.destroy(this.ref(createdId, request.botId, true), context).catch(
+          () => undefined,
+        );
       throw railwayStartupError(railway, error);
     }
     if (context.signal.aborted) {
@@ -664,7 +672,7 @@ class RailwayWebSocket extends WebSocket {
 async function railwayFetch(
   input: Parameters<typeof fetch>[0],
   init?: RequestInit,
-  onCreated?: (id: string) => void,
+  onCreated?: (id: string) => Promise<void>,
 ): Promise<Response> {
   if (String(input) !== RAILWAY_API) throw new Error("Invalid Railway API endpoint");
   const deadline = AbortSignal.timeout(30_000);
@@ -681,7 +689,7 @@ async function railwayFetch(
   // GraphQL can return a created resource alongside errors. Preserve its ID before
   // sanitizing the response so a failed create can still clean it up.
   const createdId = body.data?.sandboxCreate?.id;
-  if (typeof createdId === "string") onCreated?.(createdId);
+  if (typeof createdId === "string") await onCreated?.(createdId);
   // Never attach upstream error bodies (which may echo credentials) to SDK errors. Keep only a
   // coarse code so a missing sandbox or a full sandbox cap stays distinguishable.
   const failed = !response.ok || body.errors?.length || !body.data;

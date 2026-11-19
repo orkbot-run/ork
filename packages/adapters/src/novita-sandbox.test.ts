@@ -46,6 +46,25 @@ async function execute(
 }
 
 describe("Novita computer backend", () => {
+  it("records the exact new Novita ID and removes it if recording fails", async () => {
+    const { provider, sdk, machines } = fakeNovita();
+    const recordCreated = vi.fn(async () => {});
+    const ref = await provider.provision({ ...request, recordCreated }, ctx);
+    expect(recordCreated).toHaveBeenCalledExactlyOnceWith({
+      kind: "novita",
+      providerRef: ref.providerRef,
+    });
+    await provider.provision(
+      { ...request, providerKind: "novita", providerRef: ref.providerRef, recordCreated },
+      ctx,
+    );
+    expect(recordCreated).toHaveBeenCalledOnce();
+    const failure = new Error("record unavailable");
+    recordCreated.mockRejectedValueOnce(failure);
+    await expect(provider.provision({ ...request, recordCreated }, ctx)).rejects.toBe(failure);
+    expect(sdk.kill).toHaveBeenCalledOnce();
+    expect(machines.size).toBe(1);
+  });
   it("has its own provider identity and uses an auto-pausing desktop template", async () => {
     const { provider, sdk, computer } = await started();
     expect(provider.describe()).toMatchObject({

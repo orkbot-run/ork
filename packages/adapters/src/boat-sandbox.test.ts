@@ -135,6 +135,29 @@ function reconnect(provider: BoatSandboxProvider, computer: ComputerRef, savedAt
 }
 
 describe("BoatSandboxProvider", () => {
+  it("records only new Boat IDs and deletes a computer when recording fails", async () => {
+    const api = new FakeBoatApi();
+    const remove = vi.spyOn(api, "deleteSandbox");
+    const provider = new BoatSandboxProvider({ apiKey: "test-key" }, api);
+    const recordCreated = vi.fn(async () => {});
+    const request = { botId: "bot-a", homePath: "/unused", recordCreated };
+    const ref = await provider.provision(request, context);
+    expect(recordCreated).toHaveBeenCalledExactlyOnceWith({
+      kind: "boat",
+      providerRef: ref.providerRef,
+    });
+    await provider.provision(
+      { ...request, providerKind: "boat", providerRef: ref.providerRef },
+      context,
+    );
+    expect(recordCreated).toHaveBeenCalledOnce();
+    remove.mockClear();
+    const failure = new Error("record unavailable");
+    recordCreated.mockRejectedValueOnce(failure);
+    await expect(provider.provision({ ...request, botId: "other" }, context)).rejects.toBe(failure);
+    expect(remove).toHaveBeenCalledOnce();
+    expect(remove).toHaveBeenCalledWith(expect.any(String));
+  });
   describe("computer sizes", () => {
     it("creates a new computer on the machine type for its size", async () => {
       const api = new FakeBoatApi();

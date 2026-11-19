@@ -417,6 +417,7 @@ export class CreateOSSandboxProvider implements SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      recordCreated?: (computer: Pick<ComputerRef, "kind" | "providerRef">) => Promise<void>;
     },
     context: AdapterContext,
   ): Promise<ComputerRef> {
@@ -457,6 +458,7 @@ export class CreateOSSandboxProvider implements SandboxProvider {
     });
     if (!created?.id) throw new Error("CreateOS did not return a sandbox id");
     try {
+      await request.recordCreated?.({ kind: "createos", providerRef: created.id });
       const settled = await this.waitUntilSettled(created.id, context);
       if (settled.status !== "running") throw new Error(`CreateOS sandbox is ${settled.status}`);
     } catch (error) {

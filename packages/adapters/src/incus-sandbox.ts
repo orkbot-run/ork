@@ -213,6 +213,7 @@ export class IncusSandboxProvider implements SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      recordCreated?: (computer: Pick<ComputerRef, "kind" | "providerRef">) => Promise<void>;
     },
     context: AdapterContext,
   ): Promise<ComputerRef> {
@@ -234,6 +235,10 @@ export class IncusSandboxProvider implements SandboxProvider {
     // A new name for every start, as the Daytona provider does: a later start never adopts an
     // instance that an abandoned one created, so that one can be deleted without a race.
     const name = `orkbot-${randomUUID()}`;
+    if (request.recordCreated) {
+      await request.recordCreated({ kind: "incus", providerRef: name });
+      signal.throwIfAborted();
+    }
     await this.create(name, request.botId, signal);
     try {
       await this.waitForReady(name, request.botId, context);
@@ -367,6 +372,14 @@ export class IncusSandboxProvider implements SandboxProvider {
 
   async destroy(computer: ComputerRef, _context: AdapterContext): Promise<void> {
     await this.removeOwned(instanceName(computer), computer.botId);
+  }
+
+  async destroyUncommitted(computer: ComputerRef, _connection: string, context: AdapterContext) {
+    const name = instanceName(computer);
+    // Incus may still create the instance after Ork stops waiting for the original POST.
+    if (await this.creation(name, context.signal))
+      throw new Error("Incus is still creating the instance");
+    await this.removeOwned(name, computer.botId);
   }
 
   private async removeOwned(name: string, botId: string): Promise<void> {

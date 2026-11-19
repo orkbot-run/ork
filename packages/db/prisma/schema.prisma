@@ -1559,6 +1559,7 @@ model Computer {
   /// The machine at `providerRef` came from a start whose restore never finished, so it holds no
   /// full copy of the saved home: nothing is saved from it, and the next start restores it.
   restorePending          Boolean                  @default(false)
+  bootHeartbeatAt         DateTime?
   /// Object storage only: random id naming the home's objects, its data key (wrapped by the
   /// space key) and the revision stored there. Deleting the computer deletes the key.
   homeStorageId           String?                  @unique
@@ -1594,7 +1595,30 @@ model Computer {
   homeDeletionNotice      HomeDeletionNotice?
 
   @@index([spaceId, scope])
+  @@index([kind, providerRef], map: "computers_kind_provider_ref_idx")
   @@map("computers")
+}
+
+/// An allocated machine that has yet to be attached to a computer. Survives computer deletion.
+model ComputerOrphanCleanup {
+  kind               String
+  providerRef        String
+  connection         String
+  providerInstanceId String    @default("")
+  computerId         String
+  homeKey            String
+  spaceId            String
+  userId             String
+  attempts           Int       @default(0)
+  nextAttemptAt      DateTime  @default(now())
+  leaseId            String?
+  leaseExpiresAt     DateTime?
+  failedAt           DateTime?
+
+  @@id([kind, providerRef, connection, providerInstanceId])
+  @@index([computerId, leaseExpiresAt], map: "computer_orphan_cleanup_computer_lease_idx")
+  @@index([failedAt, nextAttemptAt], map: "computer_orphan_cleanup_due_idx")
+  @@map("computer_orphan_cleanup")
 }
 
 /// Hosted billing only: a stopped computer whose saved home is due for deletion after its plan

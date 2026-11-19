@@ -90,6 +90,7 @@ import {
   RunJobPublisher,
   RunStarter,
   reconcileCloudAgents,
+  reconcileComputerOrphans,
   reconcileComputerUpdates,
   reconcileMediaVideos,
   reconcilePurchases,
@@ -896,6 +897,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
         reconcilePurchases: () => reconcilePurchases({ prisma, jobs, paymentWallet }),
         reconcileMediaVideos: () => reconcileMediaVideos({ prisma, jobs, mediaGeneration }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
+        reconcileComputerOrphans: () => reconcileComputerOrphans({ prisma, sandbox }),
         reconcileStrategicInitiatives: createStrategicInitiativeReconciler({
           prisma,
           jobs,

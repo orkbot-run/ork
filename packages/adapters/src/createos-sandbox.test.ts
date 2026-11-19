@@ -262,6 +262,20 @@ function createosBotProfile(botId: string) {
 }
 
 describe("CreateOSSandboxProvider", () => {
+  it("records creation before readiness polling and deletes on record failure", async () => {
+    const fixture = createosFixture({ statuses: ["creating", "running"] });
+    const failure = new Error("record unavailable");
+    const recordCreated = vi.fn(async (ref: { kind: string; providerRef: string }) => {
+      expect(ref).toEqual({ kind: "createos", providerRef: "sbx-1" });
+      expect(fixture.calls).not.toContain("GET /v1/sandboxes/sbx-1");
+      throw failure;
+    });
+    await expect(
+      provider(fixture).provision({ botId: "bot-a", homePath: "/unused", recordCreated }, context),
+    ).rejects.toBe(failure);
+    expect(recordCreated).toHaveBeenCalledOnce();
+    expect(fixture.calls).toContain("DELETE /v1/sandboxes/sbx-1");
+  });
   it("creates a sandbox and waits until it runs", async () => {
     const fixture = createosFixture({ statuses: ["creating", "running"] });
     const ref = await provider(fixture).provision({ botId: "bot-a", homePath: "/unused" }, context);

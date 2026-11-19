@@ -163,6 +163,9 @@ export class KubernetesSandboxProvider implements SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      recordCreated?: (
+        computer: Pick<ComputerRef, "kind" | "providerRef"> & { providerInstanceId?: string },
+      ) => Promise<void>;
     },
     context: AdapterContext,
   ): Promise<ComputerRef> {
@@ -190,12 +193,14 @@ export class KubernetesSandboxProvider implements SandboxProvider {
     }
 
     let fresh = false;
+    let createdUid: string | undefined;
     if (!pod) {
       try {
-        await (await this.clients()).core.createNamespacedPod({
+        const created = await (await this.clients()).core.createNamespacedPod({
           namespace: this.namespace,
           body: this.pod(podName, request.botId),
         });
+        createdUid = created.metadata?.uid;
         fresh = true;
       } catch (error) {
         if (!isApiStatus(error, 409)) throw error;
@@ -207,9 +212,19 @@ export class KubernetesSandboxProvider implements SandboxProvider {
     }
 
     try {
+      if (fresh && request.recordCreated) {
+        if (!createdUid) throw new Error("Kubernetes create response is missing the pod UID");
+        await request.recordCreated({
+          kind: "kubernetes",
+          providerRef: podName,
+          providerInstanceId: createdUid,
+        });
+      }
       await this.waitForReady(podName, context.signal);
     } catch (error) {
-      if (fresh) await this.deletePod(podName).catch(() => undefined);
+      // A persisted cleanup must never delete a later pod that reused this name.
+      if (fresh && (createdUid || !request.recordCreated))
+        await this.deletePod(podName, createdUid).catch(() => undefined);
       throw error;
     }
     return {
@@ -360,6 +375,16 @@ export class KubernetesSandboxProvider implements SandboxProvider {
 
   async destroy(computer: ComputerRef, _context: AdapterContext): Promise<void> {
     await this.deletePod(this.podId(computer));
+  }
+
+  async destroyUncommitted(
+    computer: ComputerRef,
+    _connection: string,
+    _context: AdapterContext,
+    providerInstanceId?: string,
+  ): Promise<void> {
+    if (!providerInstanceId) throw new Error("Kubernetes orphan cleanup requires the pod UID");
+    await this.deletePod(this.podId(computer), providerInstanceId);
   }
 
   private async clients(): Promise<KubernetesSandboxSdk> {
@@ -531,7 +556,7 @@ export class KubernetesSandboxProvider implements SandboxProvider {
     }
   }
 
-  private async deletePod(name: string): Promise<void> {
+  private async deletePod(name: string, uid?: string): Promise<void> {
     try {
       // Cancellation must not skip cleanup, so only the request deadline bounds it.
       await this.request(AbortSignal.timeout(REQUEST_TIMEOUT_MS), (core, options) =>
@@ -541,12 +566,18 @@ export class KubernetesSandboxProvider implements SandboxProvider {
             namespace: this.namespace,
             gracePeriodSeconds: 0,
             propagationPolicy: "Background",
+            ...(uid ? { body: { preconditions: { uid } } } : {}),
           },
           options,
         ),
       );
     } catch (error) {
-      if (!isApiStatus(error, 404)) throw error;
+      if (isApiStatus(error, 404)) return;
+      if (uid && isApiStatus(error, 409)) {
+        const current = await this.readPod(name, AbortSignal.timeout(REQUEST_TIMEOUT_MS));
+        if (!current || (current.metadata?.uid && current.metadata.uid !== uid)) return;
+      }
+      throw error;
     }
   }
 

@@ -152,6 +152,13 @@ export interface SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      /** The provider selected for this startup's admission and machine tracking. */
+      expectedKind?: ComputerRef["kind"];
+      /** Persist a new machine's identity before starting or preparing it. */
+      recordCreated?: (
+        computer: Pick<ComputerRef, "kind" | "providerRef"> & { providerInstanceId?: string },
+        connection?: string,
+      ) => Promise<void>;
       /**
        * When the saved workspace a replacement would restore was read from the computer. A
        * provider that can only bring `providerRef` back from an older snapshot of its own
@@ -167,6 +174,13 @@ export interface SandboxProvider {
     },
     context: AdapterContext,
   ): Promise<ComputerRef>;
+  /** Delete an uncommitted machine through the connection that allocated it. */
+  destroyUncommitted?(
+    computer: ComputerRef,
+    connection: string,
+    context: AdapterContext,
+    providerInstanceId?: string,
+  ): Promise<void>;
   /**
    * The kind provision() would return now, without starting anything. Only providers that
    * choose between kinds at provision time implement it. `homeKey` names the computer when the

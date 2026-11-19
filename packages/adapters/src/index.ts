@@ -61,6 +61,7 @@ export * from "./computer-disk.js";
 export * from "./computer-frame-image.js";
 export * from "./computer-idle.js";
 export * from "./computer-lifecycle.js";
+export { reconcileComputerOrphans } from "./computer-orphan-cleanup.js";
 export * from "./computer-provider-descriptor.js";
 export * from "./computer-provider-registry.js";
 export * from "./computer-screens.js";

@@ -34,6 +34,7 @@ import {
   loadComputerOwnerSettings,
   loadComputerProviderSelection,
 } from "./configured-sandbox.js";
+import { credentialDigest } from "./credential-digest.js";
 import { assertHostCommandsAllowed, DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { HostComputerSandbox } from "./host-computer-sandbox.js";
 import type { SandboxProviderOptions } from "./sandbox-factory.js";
@@ -60,6 +61,13 @@ export async function createRunSandbox(
     base,
     () => loadComputerProviderSelection(prisma, secrets, true),
     {
+      primaryIdentity: `primary:${credentialDigest(
+        JSON.stringify(
+          Object.entries(opts)
+            .filter(([key, value]) => kind && key.startsWith(kind) && typeof value === "string")
+            .sort(([first], [second]) => first.localeCompare(second)),
+        ),
+      )}`,
       onSecretChange: secrets.onChange?.bind(secrets),
       loadOwn: (homeKey) => loadComputerOwnerSettings(prisma, secrets, homeKey, true),
       loadOwnForUser: (userId) => loadAccountComputerSettings(prisma, secrets, userId, true),
@@ -210,15 +218,7 @@ export class HostAwareSandbox implements SandboxProvider {
     return { ...(await active), start: (await next).start };
   }
 
-  async provision(
-    request: {
-      botId: string;
-      homePath: string;
-      providerRef?: string;
-      providerKind?: ComputerRef["kind"];
-    },
-    context: AdapterContext,
-  ) {
+  async provision(request: Parameters<SandboxProvider["provision"]>[0], context: AdapterContext) {
     const provider = (await this.hostEnabled()) ? this.host : this.isolated;
     const providerKind = provider.describe().id;
     return provider.provision(

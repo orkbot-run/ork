@@ -35,7 +35,7 @@ const context: AdapterContext = {
 };
 
 const readyPod: V1Pod = {
-  metadata: { name: "pod", labels: { "orkbot-bot-id": "bot-a" } },
+  metadata: { name: "pod", uid: "original-uid", labels: { "orkbot-bot-id": "bot-a" } },
   status: {
     phase: "Running",
     podIP: "10.0.0.8",
@@ -86,6 +86,92 @@ function successfulExec(stdoutText = "", stderrText = "", code = 0) {
 }
 
 describe("KubernetesSandboxProvider", () => {
+  it("deletes an uncommitted pod only with its original UID precondition", async () => {
+    const remove = vi.fn().mockResolvedValue({ status: "Success" });
+    const provider = providerFor({ deleteNamespacedPod: remove });
+    await provider.destroyUncommitted(computer, "connection", context, "original-uid");
+    expect(remove).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ name: "pod", body: { preconditions: { uid: "original-uid" } } }),
+      expect.anything(),
+    );
+  });
+
+  it("preserves a replacement pod when the original UID no longer matches", async () => {
+    const replacement = { ...readyPod, metadata: { ...readyPod.metadata, uid: "replacement-uid" } };
+    const remove = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error("UID precondition failed"), { code: 409 }));
+    const read = vi.fn().mockResolvedValue(replacement);
+    const provider = providerFor({ deleteNamespacedPod: remove, readNamespacedPod: read });
+    await expect(
+      provider.destroyUncommitted(computer, "connection", context, "original-uid"),
+    ).resolves.toBeUndefined();
+    expect(remove).toHaveBeenCalledOnce();
+    expect(remove).toHaveBeenCalledWith(
+      expect.objectContaining({ body: { preconditions: { uid: "original-uid" } } }),
+      expect.anything(),
+    );
+    expect(read).toHaveBeenCalledOnce();
+    expect(replacement.metadata.uid).toBe("replacement-uid");
+  });
+
+  it("does not swallow deletion conflicts for a still matching UID", async () => {
+    const conflict = Object.assign(new Error("other conflict"), { code: 409 });
+    const remove = vi.fn().mockRejectedValue(conflict);
+    const provider = providerFor({ deleteNamespacedPod: remove });
+    await expect(
+      provider.destroyUncommitted(computer, "connection", context, "original-uid"),
+    ).rejects.toBe(conflict);
+  });
+
+  it("requires the UID for queued cleanup without issuing a name-only delete", async () => {
+    const remove = vi.fn();
+    const provider = providerFor({ deleteNamespacedPod: remove });
+    await expect(provider.destroyUncommitted(computer, "connection", context)).rejects.toThrow(
+      "requires the pod UID",
+    );
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("refuses to persist a created pod without an immutable UID", async () => {
+    const recordCreated = vi.fn();
+    const remove = vi.fn();
+    const provider = providerFor({
+      readNamespacedPod: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error("missing"), { code: 404 })),
+      createNamespacedPod: vi.fn().mockResolvedValue({ metadata: { name: "pod" } }),
+      deleteNamespacedPod: remove,
+    });
+    await expect(
+      provider.provision({ botId: "bot-a", homePath: "/unused", recordCreated }, context),
+    ).rejects.toThrow("missing the pod UID");
+    expect(recordCreated).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("records a created pod before polling and deletes it on record failure", async () => {
+    const read = vi.fn().mockRejectedValueOnce(Object.assign(new Error("missing"), { code: 404 }));
+    const remove = vi.fn().mockResolvedValue({ status: "Success" });
+    const provider = providerFor({ readNamespacedPod: read, deleteNamespacedPod: remove });
+    const failure = new Error("record unavailable");
+    const recordCreated = vi.fn(async () => {
+      throw failure;
+    });
+    await expect(
+      provider.provision({ botId: "bot-a", homePath: "/unused", recordCreated }, context),
+    ).rejects.toBe(failure);
+    expect(recordCreated).toHaveBeenCalledExactlyOnceWith({
+      kind: "kubernetes",
+      providerRef: expect.stringMatching(/^orkbot-/),
+      providerInstanceId: "original-uid",
+    });
+    expect(read).toHaveBeenCalledOnce();
+    expect(remove).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ body: { preconditions: { uid: "original-uid" } } }),
+      expect.anything(),
+    );
+  });
   it("passes the shared offline sandbox workspace contract", async () => {
     const files = new Map<string, { content: Buffer; executable: boolean }>();
     let exportedNames: string[] = [];

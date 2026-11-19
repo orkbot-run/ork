@@ -84,6 +84,7 @@ import {
   RunStarter,
   RunWorkerHost,
   reconcileCloudAgents,
+  reconcileComputerOrphans,
   reconcileComputerUpdates,
   reconcileMediaVideos,
   reconcilePurchases,
@@ -468,6 +469,7 @@ async function main() {
       reconcilePurchases: () => reconcilePurchases({ prisma, jobs, paymentWallet }),
       reconcileMediaVideos: () => reconcileMediaVideos({ prisma, jobs, mediaGeneration }),
       reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
+      reconcileComputerOrphans: () => reconcileComputerOrphans({ prisma, sandbox }),
       reconcileRoutineRetryNotices: inMemoryJobs
         ? undefined
         : createRoutineRetryNoticeReconciler(pool, (runId) =>
