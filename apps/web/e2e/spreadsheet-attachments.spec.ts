@@ -34,6 +34,14 @@ test("Excel files can be attached and uploaded without losing their bytes", asyn
   await expect(
     page.getByTestId("transcript").getByText("Here are the current statements", { exact: true }),
   ).toBeVisible();
+  // The optimistic message appears before the uploads finish; wait for both
+  // artifacts before checking their contents.
+  await expect
+    .poll(async () => {
+      const artifacts = await rpc<Artifact[]>(page, "artifacts/list", { botId: activeBotId(page) });
+      return files.map((file) => artifacts.some((artifact) => artifact.name === file.name));
+    })
+    .toEqual([true, true]);
   const artifacts = await rpc<Artifact[]>(page, "artifacts/list", { botId: activeBotId(page) });
   for (const [index, file] of files.entries()) {
     const artifact = artifacts.find((item) => item.name === file.name);

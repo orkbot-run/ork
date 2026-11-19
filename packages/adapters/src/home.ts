@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Workspace cleanup is an Ork addition.
+
 import { randomUUID } from "node:crypto";
 import { constants, createWriteStream } from "node:fs";
 import {
@@ -371,6 +376,13 @@ export function resolveAgentHomePath(home: AgentHomeStore, homeKey: string, data
 export async function removeAgentHome(home: AgentHomeStore, homeKey: string, dataDir = "./data") {
   if (home instanceof LocalAgentHomeStore) return home.remove(homeKey);
   await removeTree(resolveAgentHomePath(home, homeKey, dataDir));
+}
+
+/** Permanently removes the stored home; a provider without deletion support must fail closed. */
+export async function purgeAgentHome(home: AgentHomeStore, homeKey: string): Promise<void> {
+  if (home.purge) return home.purge(homeKey);
+  if (home instanceof LocalAgentHomeStore) return home.remove(homeKey);
+  throw new Error("This home storage provider cannot permanently delete a home");
 }
 
 /**

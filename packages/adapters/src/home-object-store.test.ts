@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Workspace cleanup tests are Ork additions.
+
 import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,7 +13,7 @@ import type { PrismaClient, SpaceKeyRecord, SpaceKeyStore } from "@orkbot/db";
 import { ContentDecryptionError, ContentKeyRing, LocalKeyProvider } from "@orkbot/db";
 import { afterEach, describe, expect, it } from "vitest";
 import { checkpointComputerWorkspace, restoreComputerWorkspace } from "./computer-workspace.js";
-import { LocalAgentHomeStore } from "./home.js";
+import { LocalAgentHomeStore, purgeAgentHome } from "./home.js";
 import {
   createAgentHomeStore,
   HomeSaveConflictError,
@@ -56,7 +61,7 @@ function fakeComputers(rows: ComputerRow[]) {
     Object.fromEntries(
       Object.keys(select).map((field) => [field, row[field as keyof ComputerRow]]),
     );
-  return {
+  const prisma = {
     computer: {
       findUnique: async ({
         where,
@@ -88,7 +93,12 @@ function fakeComputers(rows: ComputerRow[]) {
         return { count: updated.length };
       },
     },
-  } as unknown as Pick<PrismaClient, "computer">;
+  };
+  return {
+    ...prisma,
+    $transaction: async (work: (tx: unknown) => Promise<unknown>) =>
+      work({ ...prisma, $queryRaw: async () => [] }),
+  } as unknown as Pick<PrismaClient, "computer" | "$transaction">;
 }
 
 function memoryRing() {
@@ -814,6 +824,60 @@ describe("ObjectAgentHomeStore", () => {
 
     await expect(readdir(path.join(root, "homes"))).resolves.toEqual(["team-2"]);
     await expect(readdir(path.join(root, "home-revisions"))).resolves.toEqual(["team-2.txt"]);
+  });
+
+  it("permanently removes every stored revision of only the requested home", async () => {
+    const { store, storage, rows } = await setup(["bot-1", "bot-2"]);
+    await store.commit("bot-1", await staged({ "a.txt": "remove" }), context);
+    await store.commit("bot-2", await staged({ "b.txt": "keep" }), context);
+    await store.hydrate("bot-1");
+    const prefix = `homes/${rows[0]!.homeStorageId}/`;
+    const otherPrefix = `homes/${rows[1]!.homeStorageId}/`;
+    storage.objects.set(`${prefix}old`, { bytes: Buffer.from("old"), lastModified: new Date(0) });
+    await purgeAgentHome(store, "bot-1");
+    expect([...storage.objects.keys()].some((key) => key.startsWith(prefix))).toBe(false);
+    expect([...storage.objects.keys()].some((key) => key.startsWith(otherPrefix))).toBe(true);
+    await expect(stat(store.pathFor("bot-1"))).rejects.toMatchObject({ code: "ENOENT" });
+    await purgeAgentHome(store, "bot-1");
+  });
+
+  it("keeps the local copy and reports failure when remote home removal fails", async () => {
+    const { store, storage } = await setup(["bot-1"]);
+    await store.commit("bot-1", await staged({ "a.txt": "retry" }), context);
+    await store.hydrate("bot-1");
+    const remove = storage.delete.bind(storage);
+    storage.delete = async () => {
+      throw new Error("storage unavailable");
+    };
+    await expect(purgeAgentHome(store, "bot-1")).rejects.toThrow("storage unavailable");
+    expect(await readFile(path.join(store.pathFor("bot-1"), "a.txt"), "utf8")).toBe("retry");
+    expect(storage.objects.size).toBe(1);
+    storage.delete = remove;
+    await purgeAgentHome(store, "bot-1");
+    expect(storage.objects.size).toBe(0);
+  });
+
+  it("sweeps late uploads by a deleted home's recorded id without touching a live home", async () => {
+    const { store, storage, rows } = await setup(["bot-1", "bot-2"]);
+    await store.commit("bot-1", await staged({ "a.txt": "remove" }), context);
+    await store.commit("bot-2", await staged({ "b.txt": "keep" }), context);
+    const removedId = rows[0]!.homeStorageId!;
+    const liveId = rows[1]!.homeStorageId!;
+    await expect(store.purgeStorageIds([removedId])).rejects.toThrow("still belongs");
+    rows.splice(0, 1);
+    await store.purgeStorageIds([removedId]);
+    storage.objects.set(`homes/${removedId}/late-upload`, {
+      bytes: Buffer.from("late"),
+      lastModified: new Date(),
+    });
+    await store.purgeStorageIds([removedId]);
+    expect([...storage.objects.keys()].some((key) => key.startsWith(`homes/${removedId}/`))).toBe(
+      false,
+    );
+    expect([...storage.objects.keys()].some((key) => key.startsWith(`homes/${liveId}/`))).toBe(
+      true,
+    );
+    await expect(store.purgeStorageIds(["../outside"])).rejects.toThrow("Invalid home storage id");
   });
 
   it("deletes nothing when the database knows none of the stored homes", async () => {

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Workspace cleanup tests are Ork additions.
+
 import { randomBytes, randomUUID } from "node:crypto";
 import type { PrismaClient, SpaceKeyRecord, SpaceKeyStore } from "@orkbot/db";
 import {
@@ -75,6 +80,36 @@ describePostgres("agent home storage records (PostgreSQL)", () => {
     });
     expect(finished.count).toBe(1);
     expect((await records.load(homeKey))?.revision).toBe("rev-1");
+  });
+
+  it("does not create or publish home revisions once its Space is claimed for deletion", async () => {
+    const homeKey = `home-records-${randomUUID()}`;
+    const secondKey = `home-records-${randomUUID()}`;
+    await system.computer.createMany({
+      data: [homeKey, secondKey].map((key) => ({
+        spaceId: identity.spaceId,
+        userId: identity.userId,
+        scopeKey: key,
+        homeKey: key,
+        kind: "fake",
+      })),
+    });
+    const records = new PrismaAgentHomeRecords(db.prisma, memoryRing());
+    const saved = await records.create(homeKey);
+    await system.space.update({
+      where: { id: identity.spaceId },
+      data: { deletingAt: new Date(), deletionClaimId: randomUUID() },
+    });
+    try {
+      expect(await records.advance(homeKey, saved!.storageId, null, "late-revision")).toBe(false);
+      expect(await records.create(secondKey)).toBeUndefined();
+      expect((await records.load(homeKey))?.revision).toBeNull();
+    } finally {
+      await system.space.update({
+        where: { id: identity.spaceId },
+        data: { deletingAt: null, deletionClaimId: null },
+      });
+    }
   });
 });
 

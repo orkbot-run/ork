@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Workspace cleanup is an Ork addition.
+
 import type { Hash } from "node:crypto";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readdir, stat } from "node:fs/promises";
@@ -15,8 +20,10 @@ import {
   contentEncryptionOf,
   decryptText,
   encryptText,
+  lockSpaceForWork,
   openArtifact,
   runAsSystem,
+  SpaceDeletionInProgressError,
   sealArtifact,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -97,6 +104,42 @@ export class ObjectAgentHomeStore extends LocalAgentHomeStore {
     private readonly limits: HomeArchiveLimits = DEFAULT_HOME_ARCHIVE_LIMITS,
   ) {
     super(root);
+  }
+
+  /** Permanently delete every revision before the computer row loses its storage id. */
+  async purge(homeKey: string): Promise<void> {
+    await this.withBotWrite(homeKey, async () => {
+      if (this.readers.has(homeKey)) throw new Error("Agent home is still in use");
+      const stored = await this.records.load(homeKey);
+      if (stored) {
+        if (!/^[a-f0-9]{32}$/.test(stored.storageId)) throw new Error("Invalid home storage id");
+        const prefix = `${HOMES_PREFIX}${stored.storageId}/`;
+        const keys: string[] = [];
+        for await (const object of this.storage.list(prefix)) {
+          if (!object.key.startsWith(prefix)) throw new Error("Invalid home object key");
+          keys.push(object.key);
+        }
+        await this.storage.delete(keys);
+      }
+      await this.removeCopy(homeKey);
+    });
+  }
+
+  /** A deletion receipt retains these ids after the computer rows are gone. */
+  async purgeStorageIds(storageIds: readonly string[]): Promise<void> {
+    if (storageIds.some((id) => !/^[a-f0-9]{32}$/.test(id)))
+      throw new Error("Invalid home storage id");
+    if ((await this.records.revisions(storageIds)).size > 0)
+      throw new Error("Cannot purge a home that still belongs to a computer");
+    for (const storageId of new Set(storageIds)) {
+      const prefix = `${HOMES_PREFIX}${storageId}/`;
+      const keys: string[] = [];
+      for await (const object of this.storage.list(prefix)) {
+        if (!object.key.startsWith(prefix)) throw new Error("Invalid home object key");
+        keys.push(object.key);
+      }
+      await this.storage.delete(keys);
+    }
   }
 
   override describe() {
@@ -517,7 +560,7 @@ export class ObjectAgentHomeStore extends LocalAgentHomeStore {
 /** Data keys live on the home's computer row, wrapped by the space's content key. */
 export class PrismaAgentHomeRecords implements AgentHomeRecords {
   constructor(
-    private readonly prisma: Pick<PrismaClient, "computer">,
+    private readonly prisma: Pick<PrismaClient, "computer" | "$transaction">,
     private readonly ring: Pick<ContentKeyRing, "current" | "byId">,
   ) {}
 
@@ -553,12 +596,23 @@ export class PrismaAgentHomeRecords implements AgentHomeRecords {
     for (let attempt = 0; attempt < 5; attempt++) {
       const row = await this.row(homeKey);
       if (!row) return false;
-      const { count } = await runAsSystem(reason, () =>
-        this.prisma.computer.updateMany({
-          where: { ...where, id: row.id, updatedAt: row.updatedAt },
-          data: { ...data, updatedAt: row.updatedAt },
-        }),
-      );
+      let count: number;
+      try {
+        ({ count } = await runAsSystem(reason, () =>
+          this.prisma.$transaction(async (tx) => {
+            // Serialize key creation/publication with the Space deletion claim. This
+            // guarantees the cleanup manifest sees every storage id that can be used.
+            await lockSpaceForWork(tx, row.spaceId);
+            return tx.computer.updateMany({
+              where: { ...where, id: row.id, updatedAt: row.updatedAt },
+              data: { ...data, updatedAt: row.updatedAt },
+            });
+          }),
+        ));
+      } catch (error) {
+        if (error instanceof SpaceDeletionInProgressError) return false;
+        throw error;
+      }
       if (count === 1) return true;
       const current = await this.row(homeKey);
       if (!current || current.updatedAt.getTime() === row.updatedAt.getTime()) return false;

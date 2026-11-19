@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Workspace cleanup is an Ork addition.
+
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
@@ -122,6 +127,12 @@ export class LocalArtifactStore implements ArtifactStore {
 
   async remove(id: string, context: AdapterContext) {
     await rm(this.file(context.spaceId, id), { force: true });
+  }
+
+  async purgeSpace(context: AdapterContext): Promise<void> {
+    context.signal.throwIfAborted();
+    if (!/^[a-zA-Z0-9_-]+$/.test(context.spaceId)) throw new Error("Invalid space id");
+    await rm(path.join(this.root, "artifacts", context.spaceId), { recursive: true, force: true });
   }
 
   /** False when the artifact directory is missing, for example when the volume is not mounted. */

@@ -3,6 +3,13 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  Checklist: "チェックリスト",
+  "Computer screen preview": "コンピューター画面のプレビュー",
+  "Computer screen preview unavailable": "コンピューター画面をプレビューできません",
+  "This computer request is no longer waiting":
+    "このコンピューターのリクエストは回答待ちではありません",
+  "You do not have access to this computer request":
+    "このコンピューターのリクエストにアクセスする権限がありません",
   "Organization settings": "組織の設定",
   "Personal models": "個人のモデル",
   "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them.":

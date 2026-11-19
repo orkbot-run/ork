@@ -16,6 +16,8 @@ import {
   IDENTITY_ACCESS_PURPOSE,
   IDENTITY_ACCESS_SECONDS,
   IDENTITY_ENROLLMENT_PURPOSE,
+  IDENTITY_LIFECYCLE_PURPOSE,
+  IDENTITY_LIFECYCLE_SECONDS,
   IDENTITY_LOGIN_PURPOSE,
   IDENTITY_LOGIN_SECONDS,
   IDENTITY_PROJECTION_PURPOSE,
@@ -27,6 +29,7 @@ import {
   installationRoutesInputSchema,
   personalServerMessage,
   RELAY_SERVER_PURPOSE,
+  workspaceLifecycleOperationSchema,
 } from "@orkbot/contracts";
 import { readBoundedJsonResponse } from "@orkbot/core";
 import type { InstallationIdentity, Prisma, PrismaClient } from "@orkbot/db";
@@ -66,6 +69,7 @@ type AuthorityPurpose =
   | typeof IDENTITY_LOGIN_PURPOSE
   | typeof IDENTITY_ACCESS_PURPOSE
   | typeof IDENTITY_PROJECTION_PURPOSE
+  | typeof IDENTITY_LIFECYCLE_PURPOSE
   | typeof INSTALLATION_TRANSPORT_LEASE_PURPOSE;
 
 type InstallationPath =
@@ -75,6 +79,9 @@ type InstallationPath =
   | "/servers/transport-lease"
   | "/servers/transport-release"
   | "/workspaces/acknowledge"
+  | "/workspaces/lifecycle/pending"
+  | "/workspaces/lifecycle/acknowledge"
+  | "/workspaces/lifecycle/report"
   | "/enrollments/acknowledge";
 
 /** One durable installation key is shared by enrollment, request proofs and native transport. */
@@ -536,6 +543,7 @@ export class InstallationClient {
         IDENTITY_LOGIN_PURPOSE,
         IDENTITY_ACCESS_PURPOSE,
         IDENTITY_PROJECTION_PURPOSE,
+        IDENTITY_LIFECYCLE_PURPOSE,
         INSTALLATION_TRANSPORT_LEASE_PURPOSE,
       ].includes(purpose)
     )
@@ -551,11 +559,13 @@ export class InstallationClient {
       requiredClaims: ["iss", "aud", "sub", "purpose", "iat", "exp", "jti"],
     });
     const lifetime =
-      purpose === INSTALLATION_TRANSPORT_LEASE_PURPOSE
-        ? INSTALLATION_TRANSPORT_LEASE_SECONDS
-        : [IDENTITY_ENROLLMENT_PURPOSE, IDENTITY_LOGIN_PURPOSE].includes(purpose)
-          ? IDENTITY_LOGIN_SECONDS
-          : IDENTITY_ACCESS_SECONDS;
+      purpose === IDENTITY_LIFECYCLE_PURPOSE
+        ? IDENTITY_LIFECYCLE_SECONDS
+        : purpose === INSTALLATION_TRANSPORT_LEASE_PURPOSE
+          ? INSTALLATION_TRANSPORT_LEASE_SECONDS
+          : [IDENTITY_ENROLLMENT_PURPOSE, IDENTITY_LOGIN_PURPOSE].includes(purpose)
+            ? IDENTITY_LOGIN_SECONDS
+            : IDENTITY_ACCESS_SECONDS;
     const now = Math.floor(Date.now() / 1000);
     if (
       payload.purpose !== purpose ||
@@ -710,6 +720,70 @@ export class InstallationClient {
       configuration,
     );
     if (response.ok !== true) throw failure("Transport ownership was not released");
+  }
+
+  /** Fetch only operations authorized for this installation and this particular request. */
+  async pendingWorkspaceLifecycle(configuration: InstallationConfiguration) {
+    const { response, nonce } = await this.signedRequest(
+      "/workspaces/lifecycle/pending",
+      {},
+      configuration,
+    );
+    const claims = await this.verify(response.grant, IDENTITY_LIFECYCLE_PURPOSE, configuration);
+    if (
+      claims.sub !== configuration.serverId ||
+      claims.nonce !== nonce ||
+      claims.organization_id !== configuration.organizationId ||
+      claims.binding_version !== configuration.bindingVersion ||
+      claims.installation_key !== configuration.keyFingerprint ||
+      !Array.isArray(claims.operations) ||
+      claims.operations.length > 32
+    )
+      throw failure("Workspace lifecycle proof does not match this installation");
+    const operations = claims.operations.map((operation) =>
+      workspaceLifecycleOperationSchema.parse(operation),
+    );
+    if (
+      new Set(operations.map((operation) => operation.operationId)).size !== operations.length ||
+      new Set(operations.map((operation) => operation.workspaceId)).size !== operations.length
+    )
+      throw failure("Duplicate workspace lifecycle operation");
+    const current = await this.configuration();
+    if (
+      !current ||
+      Object.entries(configuration).some(
+        ([name, value]) => current[name as keyof InstallationConfiguration] !== value,
+      )
+    )
+      throw failure("Installation binding changed");
+    return operations;
+  }
+
+  async acknowledgeWorkspaceLifecycle(
+    operationId: string,
+    configuration: InstallationConfiguration,
+  ) {
+    if (!UUID.test(operationId)) throw failure("Invalid workspace lifecycle operation");
+    const { response } = await this.signedRequest(
+      "/workspaces/lifecycle/acknowledge",
+      { operationId },
+      configuration,
+    );
+    if (response.ok !== true) throw failure("Workspace lifecycle was not acknowledged");
+  }
+
+  async reportWorkspaceLifecycleError(
+    operationId: string,
+    code: "external_memory" | "nonpersistent_storage" | "cleanup_failed" | "archive_failed",
+    configuration: InstallationConfiguration,
+  ) {
+    if (!UUID.test(operationId)) throw failure("Invalid workspace lifecycle operation");
+    const { response } = await this.signedRequest(
+      "/workspaces/lifecycle/report",
+      { operationId, code },
+      configuration,
+    );
+    if (response.ok !== true) throw failure("Workspace lifecycle issue was not reported");
   }
 
   async signedRequest(path: InstallationPath, body: unknown, expected?: InstallationConfiguration) {

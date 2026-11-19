@@ -289,6 +289,44 @@ describe("spawned bot archival", () => {
 });
 
 describe("destroyBot", () => {
+  it("keeps the computer row when permanent home cleanup fails", async () => {
+    const transaction = vi.fn();
+    const purge = vi.fn().mockRejectedValue(new Error("home storage unavailable"));
+    const prisma = {
+      computer: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "computer-1",
+          homeKey: "home-1",
+          kind: "docker",
+          providerRef: "container-1",
+        }),
+      },
+      run: {
+        findMany: vi.fn().mockResolvedValue([]),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      routine: { findMany: vi.fn().mockResolvedValue([]) },
+      $transaction: transaction,
+    } as unknown as PrismaClient;
+    const destroy = vi.fn().mockResolvedValue(undefined);
+    await expect(
+      destroyBot(
+        {
+          prisma,
+          sandbox: { destroy } as unknown as SandboxProvider,
+          home: { purge } as unknown as AgentHomeStore,
+          jobs: { cancel: vi.fn() } as unknown as JobPublisher,
+        },
+        { id: "bot-1", spaceId: "workspace-1", userId: "user-1", name: "Gone", archivedAt: null },
+        context,
+        { deleteMemories: true, strictTeardown: true, purgeHome: true },
+      ),
+    ).rejects.toThrow("home storage unavailable");
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(purge).toHaveBeenCalledWith("home-1");
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
   it("starts no transcript or row cleanup when destruction returns after cancellation", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "orkbot-cancel-delete-"));
     let finishDestroy!: () => void;

@@ -9,11 +9,24 @@ export const IDENTITY_LOGIN_PURPOSE = "ork-server-login-v2";
 export const IDENTITY_ACCESS_PURPOSE = "ork-workspace-access-v2";
 export const IDENTITY_ENROLLMENT_PURPOSE = "ork-server-enrollment-v2";
 export const IDENTITY_PROJECTION_PURPOSE = "ork-workspace-projection-v2";
+export const IDENTITY_LIFECYCLE_PURPOSE = "ork-workspace-lifecycle-v1";
+export const IDENTITY_LIFECYCLE_SECONDS = 60;
 export const IDENTITY_LOGIN_SECONDS = 60;
 export const IDENTITY_ACCESS_SECONDS = 300;
 export const identityAudience = (serverId: string) => `urn:ork:server:${serverId}`;
 const id = z.uuid();
 const positive = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
+export const workspaceLifecycleOperationSchema = z
+  .object({
+    workspaceId: id,
+    operationId: id,
+    permissionVersion: positive,
+    kind: z.enum(["archive", "delete"]),
+    localOrganizationId: z.string().min(1).max(200).nullable(),
+    localWorkspaceId: z.string().min(1).max(200).nullable(),
+  })
+  .strict();
+export type WorkspaceLifecycleOperation = z.infer<typeof workspaceLifecycleOperationSchema>;
 export const workspaceAccessRoleSchema = z.enum(["admin", "member"]);
 
 export const workspaceProjectionSchema = z

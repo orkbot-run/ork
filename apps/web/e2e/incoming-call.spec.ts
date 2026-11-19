@@ -10,10 +10,12 @@ test("incoming calls show answer and decline controls in both themes", async ({
 }, testInfo) => {
   await signup(page, `incoming-call-${Date.now()}@orkbot.test`, "password12", "Caller");
   await completeOnboarding(page);
-  await page.route("**/rpc/spaces/list", async (route) => {
+  // The initial roster comes from bootstrap; subsequent refreshes use spaces.list.
+  const addIncomingCall = async (route: import("@playwright/test").Route) => {
     const response = await route.fetch();
     const body = await response.json();
-    const bot = body.json.current.bots[0];
+    const bots = body.json.current?.bots ?? body.json.bots;
+    const bot = bots?.[0];
     if (bot)
       bot.incomingCall = {
         callId: "00000000-0000-4000-8000-000000000001",
@@ -22,7 +24,9 @@ test("incoming calls show answer and decline controls in both themes", async ({
         expiresAt: new Date(Date.now() + 45000).toISOString(),
       };
     await route.fulfill({ response, json: body });
-  });
+  };
+  await page.route("**/rpc/spaces/list", addIncomingCall);
+  await page.route("**/rpc/bootstrap", addIncomingCall);
   await page.reload();
   const call = page.getByTestId("incoming-call");
   await expect(call.getByRole("button", { name: "Decline", exact: true })).toBeVisible();

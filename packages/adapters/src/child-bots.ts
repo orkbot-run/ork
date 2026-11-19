@@ -45,7 +45,7 @@ import {
   teamBrowserProfileName,
   withCleanupDeadline,
 } from "./computer-workspace.js";
-import { removeAgentHome, removeAgentHomeFolders } from "./home.js";
+import { purgeAgentHome, removeAgentHome, removeAgentHomeFolders } from "./home.js";
 import { forgetPageShareSecrets } from "./page-share-secrets.js";
 import { removePiBotSessions } from "./pi-session.js";
 import { isSandboxGoneError } from "./sandbox-errors.js";
@@ -393,6 +393,8 @@ export async function destroyBot(
     /** Fail before deleting anything when the provider cannot confirm the sandbox is gone,
      * so the computer row keeps its handle for a retry. */
     strictTeardown?: boolean;
+    /** Remove durable home revisions before the computer record disappears. */
+    purgeHome?: boolean;
   },
 ) {
   context.signal.throwIfAborted();
@@ -435,6 +437,10 @@ export async function destroyBot(
     const destroyed = deps.sandbox.destroy(toComputerRef(dedicated), context);
     await (options.strictTeardown ? destroyed : destroyed.catch(() => undefined));
   }
+  context.signal.throwIfAborted();
+  // A permanent workspace deletion must remove stored revisions while the computer row
+  // still identifies them. A failed purge leaves the row in place for a retry.
+  if (options.purgeHome && dedicated) await purgeAgentHome(deps.home, dedicated.homeKey);
   context.signal.throwIfAborted();
   // Keep the bot deletion transaction from committing if raw transcript cleanup fails.
   await removePiBotSessions(deps.dataDir, bot.userId, bot.id);

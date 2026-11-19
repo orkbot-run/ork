@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Managed workspace cleanup is an Ork addition.
 
 import type {
   AdapterContext,
@@ -13,6 +14,7 @@ import type {
 import {
   destroyBot,
   forgetPageShareSecrets,
+  purgeAgentHome,
   removeAgentHome,
   toComputerRef,
 } from "@orkbot/adapters";
@@ -26,11 +28,19 @@ import {
   recordComputerRunEnd,
   releaseSpaceDeletionClaim,
   renewSpaceDeletionClaim,
+  runAsSystem,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
   SpaceDeletionInProgressError,
+  workspaceAdmissionBinding,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { rehomeItemsLeaving } from "./availability.js";
+import type { ManagedSpaceClaim } from "./workspace-lifecycle-deletion.js";
+import {
+  claimManagedSpace,
+  deleteClaimedManagedSpace,
+  renewManagedSpace,
+} from "./workspace-lifecycle-deletion.js";
 
 /** Bound for one bot or sandbox teardown. Providers may ignore the abort signal,
  * so without a deadline a hung destroy would keep the deletion claim renewed
@@ -61,36 +71,43 @@ export async function deleteSpaceWithContent(
   actor: Pick<Actor, "spaceId" | "userId">,
   spaceId: string,
   signal?: AbortSignal,
+  managed?: ManagedSpaceClaim,
 ): Promise<{ activeSpaceId: string }> {
+  if (managed && managed.spaceId !== spaceId) throw new Error("Workspace deletion scope changed");
   let claimId: string | null = null;
   let claimActive = false;
   let claimHealthy = true;
   let claimReleasable = false;
   let claimRenewal: ReturnType<typeof setInterval> | null = null;
   const deleteInput = { currentSpaceId: actor.spaceId, userId: actor.userId, spaceId };
-  const context = (botId?: string): AdapterContext => ({
+  const context = (botId?: string, userId = actor.userId): AdapterContext => ({
     operationId: `spaces.remove:${spaceId}`,
     traceId: `spaces.remove:${spaceId}`,
     spaceId,
-    userId: actor.userId,
+    userId,
     ...(botId ? { botId } : {}),
-    signal: new AbortController().signal,
+    signal: signal ?? new AbortController().signal,
   });
   try {
     // Claim before teardown. Bot and group creation take the same lifecycle lock
     // and reject the Space until deletion finishes or this claim is released.
-    const claim = await claimSpaceDeletionForMember(deps.prisma, deleteInput);
-    claimId = claim.claimId;
+    const claim = managed
+      ? await claimManagedSpace(deps.prisma, managed)
+      : await claimSpaceDeletionForMember(deps.prisma, deleteInput);
+    if ("missing" in claim && claim.missing) return { activeSpaceId: actor.spaceId };
+    claimId = managed ? managed.claimId : (claim as { claimId: string }).claimId;
     claimActive = true;
     // A recovered worker can safely finish deletion, but cannot know whether the
     // previous worker still has teardown in flight. Keep the Space claimed on
     // failure so content cannot reuse it.
-    claimReleasable = !claim.recovered;
+    claimReleasable = !managed && !claim.recovered;
     const claimedInput = { ...deleteInput, claimId };
     const assertClaim = async () => {
       if (!claimHealthy) throw new SpaceDeletionInProgressError();
       try {
-        const renewed = await renewSpaceDeletionClaim(deps.prisma, claimedInput);
+        const renewed = managed
+          ? await renewManagedSpace(deps.prisma, managed)
+          : await renewSpaceDeletionClaim(deps.prisma, claimedInput);
         if (!renewed) {
           claimHealthy = false;
           claimReleasable = false;
@@ -110,6 +127,7 @@ export async function deleteSpaceWithContent(
     // Teardown may reach a remote service even when it fails. From the first one,
     // only a finished deletion may unblock the Space; a stale recovery must finish it.
     const teardown = async (work: () => Promise<unknown>, timeoutMessage: string) => {
+      signal?.throwIfAborted();
       await assertClaim();
       claimReleasable = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -129,16 +147,91 @@ export async function deleteSpaceWithContent(
       } finally {
         if (timer !== undefined) clearTimeout(timer);
       }
+      signal?.throwIfAborted();
       await assertClaim();
     };
 
+    // Legacy personal Spaces can share integrations and credentials with other Spaces.
+    // Centrally managed workspace admissions have no cross-workspace sharing.
+    const managedWorkspace =
+      managed ??
+      (await runAsSystem("check the claimed workspace admission", () =>
+        workspaceAdmissionBinding(deps.prisma, spaceId),
+      ));
+    const purgeSecrets = async () => {
+      // These rows are scoped to this Space; account and organization credentials are untouched.
+      const where = { spaceId, space: { deletionClaimId: claimId } };
+      const [secrets, botSecrets, vault, modelSessions, mcpSessions, messaging] = await runAsSystem(
+        "find every member's secrets in a claimed workspace",
+        () =>
+          Promise.all([
+            deps.prisma.secret.findMany({
+              where: {
+                OR: [
+                  where,
+                  { pageShare: { is: { spaceId, space: { deletionClaimId: claimId } } } },
+                ],
+              },
+              select: { id: true, ciphertext: true },
+            }),
+            deps.prisma.botSecret.findMany({ where, select: { id: true, ciphertext: true } }),
+            deps.prisma.vaultCredential.findMany({ where, select: { id: true, ciphertext: true } }),
+            deps.prisma.modelOAuthSession.findMany({
+              where,
+              select: { id: true, ciphertext: true },
+            }),
+            deps.prisma.mcpOAuthSession.findMany({
+              where,
+              select: { id: true, oauthCiphertext: true },
+            }),
+            deps.prisma.messagingInstallation.findMany({
+              where,
+              select: { id: true, ciphertext: true },
+            }),
+          ]),
+      );
+      const rows = [
+        ...secrets,
+        ...botSecrets,
+        ...vault,
+        ...modelSessions,
+        ...mcpSessions.map(({ id, oauthCiphertext }) => ({ id, ciphertext: oauthCiphertext })),
+        ...messaging,
+      ];
+      if (rows.length && !deps.secrets) throw new Error("Secret storage is unavailable");
+      for (const row of rows) {
+        await teardown(
+          () =>
+            deps.secrets!.delete(row.ciphertext, {
+              recordId: row.id,
+              signal: AbortSignal.timeout(10_000),
+            }),
+          "Space secret purge timed out",
+        );
+      }
+    };
+    if (managedWorkspace) {
+      // Keep references until remote cleanup has succeeded and can safely be retried.
+      await purgeSecrets();
+      const artifacts = await deps.prisma.artifact.findMany({
+        where: { spaceId, space: { deletionClaimId: claimId } },
+        select: { storageKey: true },
+      });
+      for (const artifact of artifacts) {
+        await teardown(
+          () => deps.artifacts.remove(artifact.storageKey, context()),
+          "Space artifact purge timed out",
+        );
+      }
+    }
     for (const bot of await listClaimedSpaceBots(deps.prisma, claimedInput)) {
       try {
         await teardown(
           () =>
-            destroyBot({ ...deps, secretStore: deps.secrets }, bot, context(bot.id), {
+            destroyBot({ ...deps, secretStore: deps.secrets }, bot, context(bot.id, bot.userId), {
               deleteMemories: true,
               strictTeardown: true,
+              purgeHome: Boolean(managedWorkspace),
             }),
           "Space bot teardown timed out",
         );
@@ -169,14 +262,34 @@ export async function deleteSpaceWithContent(
       });
       await recordComputerRunEnd(deps.prisma, computer, "deleted");
     }
+    // Other computers can still own stored revisions even after their provider stopped.
+    // Purge while their database rows still identify the remote storage, and keep the
+    // claim on failure so a retry can finish without making the Space usable again.
+    if (managedWorkspace) {
+      const homes = await deps.prisma.computer.findMany({
+        where: { spaceId, space: { deletionClaimId: claimId } },
+        select: { homeKey: true },
+      });
+      for (const home of homes) {
+        await teardown(() => purgeAgentHome(deps.home, home.homeKey), "Space home purge timed out");
+      }
+      // Catch remaining Space-owned secrets before their database rows cascade away.
+      await purgeSecrets();
+      // Sweep the whole storage namespace, including files without a surviving database row.
+      if (!deps.artifacts.purgeSpace)
+        throw new Error("This artifact storage provider cannot permanently delete a space");
+      await teardown(() => deps.artifacts.purgeSpace!(context()), "Space artifact purge timed out");
+    }
     await assertClaim();
     claimActive = false;
     if (claimRenewal) {
       clearInterval(claimRenewal);
       claimRenewal = null;
     }
-    await rehomeItemsLeaving(deps.prisma, spaceId);
-    const deleted = await deleteClaimedSpaceForMember(deps.prisma, claimedInput);
+    if (!managed) await rehomeItemsLeaving(deps.prisma, spaceId);
+    const deleted = managed
+      ? await deleteClaimedManagedSpace(deps.prisma, managed)
+      : await deleteClaimedSpaceForMember(deps.prisma, claimedInput);
     // Rows are gone; leftover stored files are unreachable, so cleanup failures only log.
     const cleanup = await Promise.allSettled([
       ...deleted.artifactKeys.map((storageKey) => deps.artifacts.remove(storageKey, context())),

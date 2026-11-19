@@ -49,16 +49,14 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   await expectCardWidth(computerCard, 340);
   await captureScreenshot(page, testInfo, "08-protected-input-request");
   await computerCard.getByTestId("computer-card-open").click();
-  await page
-    .getByTestId("computer-chrome")
-    .getByRole("button", { name: "Take control", exact: true })
-    .click();
+  // The card's Take control action acquires the lease before opening the screen.
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Skip", exact: true }).last()).toBeVisible();
-  await expect(page.getByRole("button", { name: "I’m done", exact: true }).last()).toBeVisible();
+  const computerChrome = page.getByTestId("computer-chrome");
+  await expect(computerChrome.getByRole("button", { name: "Skip", exact: true })).toBeVisible();
+  await expect(computerChrome.getByRole("button", { name: "I’m done", exact: true })).toBeVisible();
   if (process.env.SANDBOX_PROVIDER === "boat") await waitForBoatFramebuffer(page);
   await captureScreenshot(page, testInfo, "09-computer-takeover-outcomes");
-  await page.getByRole("button", { name: "I’m done", exact: true }).last().click();
+  await computerChrome.getByRole("button", { name: "I’m done", exact: true }).click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
   await page.getByRole("button", { name: "Close computer" }).click();
   await expect(page.getByText(/signed in|session stays/i).first()).toBeVisible({
@@ -99,7 +97,7 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
     .getByRole("button", { name: "Take control", exact: true })
     .click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
-  await page.getByRole("button", { name: "Skip", exact: true }).last().click();
+  await computerChrome.getByRole("button", { name: "Skip", exact: true }).click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
   await page.getByRole("button", { name: "Close computer" }).click();
   await expect(page.getByText(/login was skipped/i).last()).toBeVisible({

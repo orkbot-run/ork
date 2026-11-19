@@ -3,6 +3,13 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  Checklist: "Checkliste",
+  "Computer screen preview": "Vorschau des Computerbildschirms",
+  "Computer screen preview unavailable": "Vorschau des Computerbildschirms nicht verfügbar",
+  "This computer request is no longer waiting":
+    "Diese Computeranfrage wartet nicht mehr auf eine Antwort",
+  "You do not have access to this computer request":
+    "Du hast keinen Zugriff auf diese Computeranfrage",
   "Organization settings": "Organisationseinstellungen",
   "Personal models": "Persönliche Modelle",
   "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them.":

@@ -2575,6 +2575,34 @@ model CentralWorkspaceBinding {
   @@map("central_workspace_bindings")
 }
 
+/// Durable receipt for a server-side lifecycle operation. It must survive deletion of
+/// the workspace and its binding so Accounts can safely retry a lost acknowledgement.
+model WorkspaceLifecycleReceipt {
+  operationId String @id
+  workspaceId String
+  serverId String
+  centralOrganizationId String
+  keyFingerprint String
+  bindingVersion Int
+  permissionVersion Int
+  kind String
+  localOrganizationId String
+  rootSpaceId String
+  spaceIds Json
+  homeKeys Json @default("[]")
+  homeStorageIds Json @default("[]")
+  state String @default("pending")
+  claimId String?
+  claimUntil DateTime?
+  lastSweepAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workspaceId])
+  @@index([serverId, state, lastSweepAt])
+  @@map("workspace_lifecycle_receipts")
+}
+
 /// Each native product session is scoped to one exact central workspace and admission revision.
 model CentralSessionBinding {
   sessionId String @id

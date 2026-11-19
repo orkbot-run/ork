@@ -2,8 +2,75 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { PrismaClient } from "@orkbot/db";
+import { generateKeyPair, SignJWT } from "jose";
 import { expect, it, vi } from "vitest";
 import { InstallationClient, InstallationRequestError } from "./installation-client.js";
+
+it("accepts lifecycle instructions only for the current request and installation", async () => {
+  const keys = await generateKeyPair("RS256");
+  const configuration = {
+    serverId: "10000000-0000-4000-8000-000000000001",
+    organizationId: "20000000-0000-4000-8000-000000000001",
+    bindingVersion: 1,
+    keyFingerprint: "f".repeat(64),
+  };
+  const operation = {
+    workspaceId: "30000000-0000-4000-8000-000000000001",
+    operationId: "40000000-0000-4000-8000-000000000001",
+    permissionVersion: 2,
+    kind: "archive",
+    localOrganizationId: "local-org",
+    localWorkspaceId: "local-space",
+  };
+  const client = new InstallationClient({} as PrismaClient, {
+    issuer: "https://accounts.example.test",
+    encryptionKey: "fixture-encryption-key-32-characters",
+    keys: async () => keys.publicKey,
+  });
+  const current = vi.spyOn(client, "configuration").mockResolvedValue(configuration);
+  const now = Math.floor(Date.now() / 1000);
+  const grant = async (override: Record<string, unknown> = {}) =>
+    new SignJWT({
+      purpose: "ork-workspace-lifecycle-v1",
+      nonce: "fresh-nonce",
+      organization_id: configuration.organizationId,
+      binding_version: configuration.bindingVersion,
+      installation_key: configuration.keyFingerprint,
+      operations: [operation],
+      ...override,
+    })
+      .setProtectedHeader({ alg: "RS256" })
+      .setIssuer("https://accounts.example.test")
+      .setAudience(`urn:ork:server:${configuration.serverId}`)
+      .setSubject(configuration.serverId)
+      .setJti("50000000-0000-4000-8000-000000000001")
+      .setIssuedAt(now)
+      .setExpirationTime(now + 60)
+      .sign(keys.privateKey);
+  const signed = vi.spyOn(client, "signedRequest");
+  const respond = async (override: Record<string, unknown> = {}) =>
+    signed.mockResolvedValueOnce({
+      response: { grant: await grant(override) },
+      nonce: "fresh-nonce",
+      startedAt: 0,
+    });
+  await respond();
+  await expect(client.pendingWorkspaceLifecycle(configuration)).resolves.toEqual([operation]);
+  for (const invalid of [
+    { nonce: "replayed-nonce" },
+    { organization_id: "other" },
+    { binding_version: 2 },
+    { installation_key: "a".repeat(64) },
+    { operations: [operation, operation] },
+    { operations: [{ ...operation, kind: "restore" }] },
+  ]) {
+    await respond(invalid);
+    await expect(client.pendingWorkspaceLifecycle(configuration)).rejects.toThrow();
+  }
+  current.mockResolvedValueOnce({ ...configuration, bindingVersion: 2 });
+  await respond();
+  await expect(client.pendingWorkspaceLifecycle(configuration)).rejects.toThrow("binding changed");
+});
 
 it("only resumes locally pending or ready enrollment", async () => {
   const findUnique = vi.fn().mockResolvedValue(null);

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Workspace cleanup tests are Ork additions.
+
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -51,6 +56,52 @@ function setup(encryptWrites = true) {
 }
 
 describe("object artifacts", () => {
+  it("purges a workspace's local and remote files, including orphaned objects", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-artifact-purge-"));
+    dirs.push(root);
+    const { storage, store: remote } = setup();
+    const local = new LocalArtifactStore(root);
+    const combined = new DeploymentArtifactStore(local, remote);
+    const removedLocal = await local.put(artifact(), context("space-1"));
+    const keptLocal = await local.put(artifact(), context("space-2"));
+    const removedRemote = await remote.put(artifact(), context("space-1"));
+    const keptRemote = await remote.put(artifact(), context("space-2"));
+    storage.objects.set("artifacts/space-1/orphan", {
+      bytes: Buffer.from("orphan"),
+      lastModified: new Date(0),
+    });
+    await combined.purgeSpace(context("space-1"));
+    await expect(local.get(removedLocal.id, context("space-1"))).rejects.toThrow();
+    await expect(remote.get(removedRemote.id, context("space-1"))).rejects.toThrow();
+    expect(storage.objects.has("artifacts/space-1/orphan")).toBe(false);
+    expect(Buffer.from(await local.get(keptLocal.id, context("space-2")))).toEqual(
+      artifact().bytes,
+    );
+    expect(Buffer.from(await remote.get(keptRemote.id, context("space-2")))).toEqual(
+      artifact().bytes,
+    );
+    await combined.purgeSpace(context("space-1"));
+  });
+
+  it("reports a remote storage failure so cleanup can be retried", async () => {
+    const { store, storage } = setup();
+    await store.put(artifact(), context("space-1"));
+    const remove = storage.delete.bind(storage);
+    storage.delete = async () => {
+      throw new Error("storage unavailable");
+    };
+    await expect(store.purgeSpace(context("space-1"))).rejects.toThrow("storage unavailable");
+    expect(storage.objects.size).toBe(1);
+    storage.delete = remove;
+    await store.purgeSpace(context("space-1"));
+    expect(storage.objects.size).toBe(0);
+  });
+
+  it("refuses traversal in workspace cleanup", async () => {
+    const { store } = setup();
+    await expect(store.purgeSpace(context("../other"))).rejects.toThrow("Invalid space id");
+  });
+
   it.each([0, 20, 200_000])("encrypts and reads %i bytes through another replica", async (size) => {
     const { store, keys, storage } = setup(false);
     const bytes = Buffer.alloc(size, 65);

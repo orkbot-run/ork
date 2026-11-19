@@ -227,5 +227,6 @@ export * from "./web-limits.js";
 export * from "./web-provider-factory.js";
 export * from "./web-ssrf.js";
 export * from "./web-tools.js";
+export * from "./workspace-lifecycle.js";
 export * from "./workspace-model-policy.js";
 export * from "./wrapped-env.js";

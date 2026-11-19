@@ -234,6 +234,7 @@ import { mountAuditExportRoute } from "#modules/security/audit-export";
 import { cspReportRoutes } from "#modules/security/csp-report";
 import { createAuthResponseAudit } from "#modules/security/security-audit";
 import { createPendingServerUpdates, createServerUpdates } from "#modules/server-updates/service";
+import { startWorkspaceLifecycle } from "#modules/spaces/workspace-lifecycle";
 import { installationHttpListener } from "#modules/transport/installation-http";
 import { startInstallationRelay } from "#modules/transport/installation-relay";
 import { createSpeechSummarizer } from "#modules/voice/speech-summary";
@@ -1798,6 +1799,23 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
           !env.desktopAccountKey,
         )
       : undefined;
+  const stopWorkspaceLifecycle =
+    installation && workspaceAuthority && !env.desktopAccountKey
+      ? startWorkspaceLifecycle(
+          {
+            installation,
+            prisma,
+            sandbox,
+            home,
+            jobs,
+            artifacts,
+            dataDir: env.dataDir,
+            secrets,
+            messagingInstallations,
+          },
+          (error) => logger.error("Workspace lifecycle operation failed", error),
+        )
+      : undefined;
   const installationTransport = installation
     ? new InstallationTransport({
         origin: env.webOrigin,
@@ -1846,6 +1864,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       installationTransport?.close();
       await stopInstallationRelay?.();
       await stopServerClaim?.();
+      await settleWithTimeout(stopWorkspaceLifecycle?.(), REQUEST_DRAIN_MS);
       await stopWorkspaceAuthority?.();
       serverAI?.dispose();
       // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
