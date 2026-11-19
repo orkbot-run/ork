@@ -5,7 +5,7 @@
 import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { Bot, BotSection, Group, Me, Space, ThreadSnapshot } from "@orkbot/contracts";
+import type { Bot, BotSection, Group, Space, ThreadSnapshot } from "@orkbot/contracts";
 import { threadSnoozeState } from "@orkbot/core";
 import {
   BotAvatar,
@@ -36,7 +36,7 @@ import { useRedrawAtMidnight } from "./use-redraw-at-midnight";
 export function SidebarRoster({
   sidebarGroups,
   collapsedSidebarSections,
-  bootstrapMe,
+  currentSpaceId,
   botSections,
   spaces,
   rosterDropKey,
@@ -68,7 +68,7 @@ export function SidebarRoster({
     typeof sidebarGroupsForSpaces<Space["bots"][number], Space["groups"][number]>
   >;
   collapsedSidebarSections: ReadonlySet<string>;
-  bootstrapMe: Pick<Me, "spaceId"> | null | undefined;
+  currentSpaceId: string | undefined;
   botSections: BotSection[];
   spaces: Space[];
   rosterDropKey: string | null;
@@ -107,14 +107,14 @@ export function SidebarRoster({
         );
         const hasSpaceActions = group.canOpenSpaceSettings;
         const headerDropTarget: RosterDropTarget | null =
-          group.spaceId === bootstrapMe?.spaceId &&
+          group.spaceId === currentSpaceId &&
           !group.emptySpaceId &&
           (group.sectionId || group.key.endsWith("unassigned"))
             ? { kind: "section", sectionId: group.sectionId }
             : null;
         const headerDropKey = `header:${group.key}`;
         const section = group.sectionId
-          ? (group.spaceId === bootstrapMe?.spaceId
+          ? (group.spaceId === currentSpaceId
               ? botSections
               : (spaces.find((space) => space.id === group.spaceId)?.botSections ?? [])
             ).find((item) => item.id === group.sectionId)
@@ -290,7 +290,7 @@ export function SidebarRoster({
                       : item.chat.preview ||
                         item.chat.members.map((member) => member.name).join(", ")));
                 const rowDropTarget: RosterDropTarget | null =
-                  item.chat.spaceId !== bootstrapMe?.spaceId
+                  item.chat.spaceId !== currentSpaceId
                     ? null
                     : item.kind === "bot"
                       ? { kind: "bot", chat: item.chat }
@@ -549,7 +549,7 @@ export function SidebarRoster({
                     }}
                   >
                     <ContextMenu
-                      disabled={item.chat.spaceId !== bootstrapMe?.spaceId}
+                      disabled={item.chat.spaceId !== currentSpaceId}
                       open={botMenu?.kind === item.kind && botMenu.id === item.chat.id}
                       // A sibling row's menu may already own the state; only clear our own.
                       onOpenChange={(open) =>

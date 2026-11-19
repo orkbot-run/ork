@@ -31,6 +31,40 @@ test("shows the Ork loading screen while the session is starting", async ({ page
   }
 });
 
+test("shows the workspace roster when startup has to load the chat separately", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `roster-recovery-${Date.now()}@orkbot.test`, "password12", "Roster Recovery");
+  await completeOnboarding(page);
+  const chief = activeBotId(page);
+  const scout = await rpc<{ id: string }>(page, "bots/create", {
+    name: "Scout",
+    description: "",
+    notifyOnFinish: true,
+    computerMode: "team",
+  });
+  await page.route("**/rpc/bootstrap", (route) => route.abort());
+  let release = () => {};
+  const thread = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/rpc/threads/get", async (route) => {
+    await thread;
+    await route.continue();
+  });
+
+  try {
+    await page.reload();
+    const sidebar = page.getByTestId("bots-sidebar");
+    await expect(sidebar.locator(`[data-roster-bot-id="${chief}"]`)).toBeVisible();
+    await expect(sidebar.locator(`[data-roster-bot-id="${scout.id}"]`)).toBeVisible();
+    await captureScreenshot(page, testInfo, "workspace-roster-before-thread");
+  } finally {
+    release();
+  }
+  await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
+});
+
 test("switches chats in the same workspace while the server is slow", async ({
   page,
 }, testInfo) => {

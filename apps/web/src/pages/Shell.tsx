@@ -177,6 +177,7 @@ function SpaceShell() {
     botsRef,
     botSections,
     spaces,
+    rosterSpaceId,
     canCreateSpace,
     setSpaces,
     archivedBots,
@@ -281,7 +282,7 @@ function SpaceShell() {
   const miniSidebar = botsSidebarCollapsed && !isMobileSidebar;
   const [botMenu, setBotMenu] = useState<{ kind: "bot" | "group"; id: string } | null>(null);
   const closeBotMenu = useCallback(() => setBotMenu(null), []);
-  const currentSpaceId = selectedSpaceId() ?? bootstrapMe?.spaceId ?? null;
+  const currentSpaceId = rosterSpaceId ?? shellSpaceId ?? undefined;
   // null: settings follow the space the app is showing.
   const settingsSpaceId = overlay?.kind === "settings" ? overlay.spaceId : null;
   const settingsSpace =
@@ -563,12 +564,12 @@ function SpaceShell() {
     () =>
       spaces.length > 0
         ? spaces.map((space) =>
-            space.id === bootstrapMe?.spaceId ? { ...space, bots, groups, botSections } : space,
+            space.id === currentSpaceId ? { ...space, bots, groups, botSections } : space,
           )
-        : bootstrapMe
+        : currentSpaceId
           ? [
               {
-                id: bootstrapMe.spaceId,
+                id: currentSpaceId,
                 name: "Personal",
                 isDefault: true,
                 hasContent: true,
@@ -580,7 +581,7 @@ function SpaceShell() {
               },
             ]
           : [],
-    [bootstrapMe, botSections, bots, groups, spaces],
+    [currentSpaceId, botSections, bots, groups, spaces],
   );
   const snoozeDeadlines = useMemo(
     () =>
@@ -609,7 +610,7 @@ function SpaceShell() {
   const snoozedChats = useMemo(
     () =>
       allSidebarSpaces
-        .filter((space) => space.id === bootstrapMe?.spaceId)
+        .filter((space) => space.id === currentSpaceId)
         .flatMap((space) => [
           ...space.bots
             .filter((bot) => threadSnoozeState(bot.snoozedUntil, snoozeNow) === "snoozed")
@@ -630,15 +631,15 @@ function SpaceShell() {
               until: group.snoozedUntil!,
             })),
         ]),
-    [allSidebarSpaces, bootstrapMe?.spaceId, snoozeNow],
+    [allSidebarSpaces, currentSpaceId, snoozeNow],
   );
   const sidebarGroups = useMemo(
     () =>
       sidebarGroupsForSpaces(sidebarSpaces, miniSidebar ? "" : search.query, {
         pinned: t`Pinned`,
         unassigned: t`Unassigned`,
-      }).filter((group) => group.spaceId === bootstrapMe?.spaceId),
-    [sidebarSpaces, search.query, miniSidebar, t, bootstrapMe?.spaceId],
+      }).filter((group) => group.spaceId === currentSpaceId),
+    [sidebarSpaces, search.query, miniSidebar, t, currentSpaceId],
   );
   // The Dock badge ignores the roster search box: a filter must not hide unread chats.
   const unreadChatCount = useMemo(
@@ -647,7 +648,7 @@ function SpaceShell() {
   );
   useDesktopBadge(userId ? unreadChatCount : 0);
   const { openSpaceChat, preloadSpaceChat, pendingSpaceId } = useOpenSpaceChat({
-    bootstrapSpaceId: bootstrapMe?.spaceId,
+    bootstrapSpaceId: currentSpaceId,
     userId,
     navigate,
     navigationRevision,
@@ -810,9 +811,7 @@ function SpaceShell() {
   const { sending, sendError, stopRun } = composer;
   function openChatSettings(kind: "bot" | "group", id: string) {
     const destKey =
-      userId && bootstrapMe?.spaceId
-        ? rightPanelStorageKey(userId, bootstrapMe.spaceId, kind, id)
-        : null;
+      userId && currentSpaceId ? rightPanelStorageKey(userId, currentSpaceId, kind, id) : null;
     rightPanel.openPanelInChat(destKey, kind === "bot" ? "settings" : "group-settings", () =>
       navigate(kind === "bot" ? `/app/${id}` : `/app/g/${id}`),
     );
@@ -826,7 +825,7 @@ function SpaceShell() {
   useRightPanelRestore({
     rightPanel,
     userId,
-    spaceId: bootstrapMe?.spaceId,
+    spaceId: currentSpaceId,
     inGroup,
     panelTarget: inGroup ? activeGroup?.id : active?.id,
     activeId: active?.id,
@@ -1038,7 +1037,7 @@ function SpaceShell() {
     const result = await rpc.spaces.remove({ spaceId });
     if (!alive.current) return;
     setPanel(null);
-    const effectiveSpaceId = selectedSpaceId() ?? bootstrapMe?.spaceId;
+    const effectiveSpaceId = selectedSpaceId() ?? currentSpaceId;
     if (effectiveSpaceId === spaceId) {
       // The auth boundary changed, so reload like a space switch.
       if (selectSpace(result.activeSpaceId)) {
@@ -1075,7 +1074,7 @@ function SpaceShell() {
         bot={contextBot}
         group={contextGroup}
         sections={botSections}
-        spaceId={bootstrapMe?.spaceId}
+        spaceId={currentSpaceId}
         onClose={closeBotMenu}
         refreshBots={refreshBots}
         read={read}
@@ -1130,7 +1129,7 @@ function SpaceShell() {
           allSidebarSpaces.length ? (
             <WorkspaceRail
               spaces={allSidebarSpaces}
-              activeId={bootstrapMe?.spaceId ?? shellSpaceId ?? undefined}
+              activeId={currentSpaceId}
               pendingId={pendingSpaceId}
               onPrepare={(spaceId) => {
                 const path = workspaceChatPath(spaceId);
@@ -1156,7 +1155,7 @@ function SpaceShell() {
             mini={miniSidebar}
             sidebarGroups={sidebarGroups}
             collapsedSidebarSections={collapsedSidebarSections}
-            bootstrapMe={bootstrapMe}
+            currentSpaceId={currentSpaceId}
             botSections={botSections}
             spaces={spaces}
             rosterDropKey={rosterDrop.rosterDropKey}
