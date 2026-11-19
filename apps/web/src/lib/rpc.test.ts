@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache material; native revocation retry regressions are PolyForm-covered. See LICENSE.md.
 
+import type { AiRecipient } from "@orkbot/contracts";
 import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { ORPCError } from "@orpc/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -19,12 +20,18 @@ import {
 } from "./rpc.js";
 
 const notify = vi.hoisted(() => vi.fn());
-const authState = vi.hoisted(() => ({ sessionId: "fixture-session" }));
+const authState = vi.hoisted(() => ({ sessionId: "fixture-session", userId: "fixture-user" }));
 vi.mock("./auth", () => ({
   authClient: {
     $store: {
       notify,
-      atoms: { session: { get: () => ({ data: { session: { id: authState.sessionId } } }) } },
+      atoms: {
+        session: {
+          get: () => ({
+            data: { session: { id: authState.sessionId }, user: { id: authState.userId } },
+          }),
+        },
+      },
     },
   },
 }));
@@ -33,6 +40,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   notify.mockClear();
   authState.sessionId = "fixture-session";
+  authState.userId = "fixture-user";
 });
 
 describe("signed-out responses", () => {
@@ -425,7 +433,9 @@ describe("space-bound clients", () => {
 });
 
 describe("send disclosure boundaries", () => {
-  function setup() {
+  const first = { key: "first", name: "First", use: "model", detail: "", allowed: false } as const;
+  const second = { ...first, key: "second", name: "Second" };
+  function setup(recipients = (_check: number): AiRecipient[] => [first, second]) {
     const values = new Map([["orkbot:space-id", "space-a"]]);
     vi.stubGlobal("window", {
       location: { origin: "https://app.example.test" },
@@ -450,10 +460,7 @@ describe("send disclosure boundaries", () => {
             ? {
                 scope: "account-space",
                 version: "fixture-version",
-                recipients: [
-                  { key: "first", name: "First", use: "model", detail: "", allowed: false },
-                  { key: "second", name: "Second", use: "model", detail: "", allowed: false },
-                ],
+                recipients: recipients(calls.length),
               }
             : {},
         });
@@ -467,6 +474,52 @@ describe("send disclosure boundaries", () => {
     text: "Draft",
     clientNonce: "nonce",
   };
+  it("checks disclosure again when the same account refreshes its session before the prompt", async () => {
+    const calls = setup((check) => {
+      if (check === 1) {
+        authState.sessionId = "refreshed-session";
+        return [first];
+      }
+      return [second];
+    });
+    const stop = subscribeAiConsent(() => undefined);
+    try {
+      const request = rpc.threads.sendWithRoutines(input).catch((error: unknown) => error);
+      await vi.waitFor(() => expect(currentAiConsentPrompt()?.recipient.key).toBe("second"));
+      expect(calls.map((call) => call.path)).toEqual([
+        "/rpc/aiConsent/status",
+        "/rpc/aiConsent/status",
+      ]);
+      answerAiConsent(currentAiConsentPrompt()!, true);
+      expect(await request).not.toBeInstanceOf(Error);
+      expect(calls.map((call) => call.path)).toEqual([
+        "/rpc/aiConsent/status",
+        "/rpc/aiConsent/status",
+        "/rpc/aiConsent/allow",
+        "/rpc/threads/sendWithRoutines",
+      ]);
+      expect(calls[2]?.body.keys).toEqual(["second"]);
+      expect(calls[3]?.body.clientNonce).toBe(input.clientNonce);
+    } finally {
+      stop();
+    }
+  });
+
+  it("stops before prompting when the signed-in account changes during disclosure", async () => {
+    const calls = setup(() => {
+      authState.sessionId = "other-session";
+      authState.userId = "other-user";
+      return [first];
+    });
+    const stop = subscribeAiConsent(() => undefined);
+    try {
+      await expect(rpc.threads.sendWithRoutines(input)).rejects.toBeInstanceOf(Error);
+      expect(currentAiConsentPrompt()).toBeNull();
+      expect(calls.map((call) => call.path)).toEqual(["/rpc/aiConsent/status"]);
+    } finally {
+      stop();
+    }
+  });
   it("does not send or grant when the first recipient is declined", async () => {
     const calls = setup();
     const stop = subscribeAiConsent(() => undefined);

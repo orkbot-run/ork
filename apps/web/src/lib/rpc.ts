@@ -229,33 +229,56 @@ const displayLink = {
     const spaceId =
       options.context.spaceId === undefined ? selectedSpaceId() : options.context.spaceId;
     const generation = spaceSelectionGeneration;
-    const session = () =>
-      authClient.$store.atoms.session?.get().data?.session?.id as string | undefined;
-    const identity = uses.length ? session() : undefined;
+    const session = () => authClient.$store.atoms.session?.get().data;
+    const originalSession = uses.length ? session() : undefined;
+    const userId = originalSession?.user?.id;
+    let identity = originalSession?.session?.id;
     const origin = typeof window === "undefined" ? "" : window.location.origin;
+    const sameScope = () =>
+      generation === spaceSelectionGeneration &&
+      origin === window.location.origin &&
+      !isLeavingSession() &&
+      !sessionChangedUnderPage();
     const assertContext = () => {
+      const current = session();
       if (
         !identity ||
-        session() !== identity ||
-        generation !== spaceSelectionGeneration ||
-        origin !== window.location.origin ||
-        isLeavingSession() ||
-        sessionChangedUnderPage()
+        current?.session?.id !== identity ||
+        current?.user?.id !== userId ||
+        !sameScope()
       )
         throw new AiConsentBlocked();
     };
     const boundOptions = { ...options, context: { ...options.context, spaceId } };
     if (uses.length) {
       assertContext();
+      const readStatus = () =>
+        link.call(
+          ["aiConsent", "status"],
+          { ...target, uses },
+          boundOptions,
+        ) as Promise<AiConsentStatus>;
       await ensureAiDataConsent({
         uses,
-        coalesceKey: JSON.stringify([origin, identity, generation, spaceId]),
+        get coalesceKey() {
+          return JSON.stringify([origin, identity, generation, spaceId]);
+        },
         status: async () => {
-          const status = (await link.call(
-            ["aiConsent", "status"],
-            { ...target, uses },
-            boundOptions,
-          )) as AiConsentStatus;
+          let status = await readStatus();
+          const refreshed = session();
+          // A replacement session for the same account can arrive while this read is pending.
+          // Discard the old result and check again before any prompt, grant or message dispatch.
+          if (
+            userId &&
+            refreshed?.user?.id === userId &&
+            refreshed.session?.id &&
+            refreshed.session.id !== identity &&
+            sameScope() &&
+            !options.context.isCurrent
+          ) {
+            identity = refreshed.session.id;
+            status = await readStatus();
+          }
           assertContext();
           return status;
         },
