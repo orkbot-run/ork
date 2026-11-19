@@ -39,6 +39,7 @@ type Startup = {
   phase: "checking" | "opening" | "idle" | "failed";
   serverId?: string;
   kind?: Server["kind"];
+  workspace?: boolean;
   message?: string;
 };
 type Screen =
@@ -824,7 +825,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
           ? {
               id: startup.serverId,
               local: startup.kind === "local",
-              command: "connect_saved_server",
+              command: startup.workspace ? "connect_workspace" : "connect_saved_server",
             }
           : null;
         errorMessage(startup.message);
@@ -1011,7 +1012,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     target.addEventListener(event, listener);
     cleanups.push(() => target.removeEventListener(event, listener));
   };
-  async function continueAccount(version: number, value: Account) {
+  async function continueAccount(version: number, value: Account, restoreConnection = false) {
     if (!current(version)) return;
     account = value;
     accountEpoch++;
@@ -1030,6 +1031,20 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       startupScreen();
       if (startup.phase === "failed") await loadServers(version);
       return;
+    }
+    if (restoreConnection) {
+      try {
+        if ((await transport.invoke<boolean>("restore_connection")) === true) return;
+      } catch (error) {
+        if (!current(version)) return;
+        await loadServers(version);
+        if (current(version)) {
+          show("servers");
+          errorMessage(error);
+        }
+        return;
+      }
+      if (!current(version)) return;
     }
     const entries = await loadServers(version);
     if (!current(version)) return;
@@ -1161,6 +1176,10 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("organization-next", "click", () => {
     if (!selectedOrganization() || operation) return;
     directoryStage = "servers";
+    if (workspaceEntries.length === 1) {
+      void connect("connect_workspace", { id: workspaceEntries[0]!.id });
+      return;
+    }
     show("servers");
   });
   on("new-organization", "click", () => {
@@ -1399,6 +1418,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       }
       cleanups.push(stopWorkspaceLinks);
       const state = await transport.invoke<{
+        serverUrl?: string | null;
         startup?: Startup;
         pendingServer?: string;
         pendingWorkspace?: WorkspaceLink;
@@ -1414,7 +1434,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       // Restoring a verified session never opens browser sign-in. New users continue explicitly.
       const restored = await transport.invoke<Account | null>("setup_accounts_session");
       if (!current(version)) return;
-      if (restored) await continueAccount(version, restored);
+      if (restored) await continueAccount(version, restored, Boolean(state?.serverUrl));
       else show("welcome", false);
     },
     "welcome",

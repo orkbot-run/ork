@@ -82,6 +82,7 @@ async function setup(
   options: {
     session?: unknown;
     startup?: unknown;
+    serverUrl?: string;
     pendingServer?: string;
     pendingWorkspace?: unknown;
     initializingServer?: string;
@@ -97,6 +98,7 @@ async function setup(
     if (command === "setup_state")
       return {
         startup: options.startup ?? { phase: "idle" },
+        serverUrl: options.serverUrl,
         pendingServer: options.pendingServer,
         pendingWorkspace: options.pendingWorkspace,
         initializingServer: options.initializingServer,
@@ -271,6 +273,40 @@ describe("bundled desktop setup", () => {
     expect(invoke.mock.calls.map(([name]) => name)).not.toContain("setup_accounts_sign_in");
   });
 
+  it("restores the saved organization before displaying a picker", async () => {
+    const restore = deferred<unknown>();
+    const { invoke } = await setup({
+      serverUrl: "https://studio.example.com",
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "restore_connection") return restore.promise;
+        return undefined;
+      },
+    });
+    expect(screen()).toBe("checking");
+    expect(invoke).toHaveBeenCalledWith("restore_connection");
+    expect(invoke).not.toHaveBeenCalledWith("workspace_catalog");
+    restore.resolve(true);
+    await flush();
+    expect(invoke).not.toHaveBeenCalledWith("workspace_catalog");
+  });
+
+  it("continues straight into an organization with one available server", async () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [];
+        if (name === "workspace_catalog")
+          return catalogFixture([{ id, name: "Studio", url: "https://studio.example.com" }]);
+        return undefined;
+      },
+    });
+    node("organization-next").click();
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("connect_workspace", { id });
+  });
+
   it("offers company workspaces and opens the selected workspace", async () => {
     const { invoke } = await setup({
       invoke: async (name) => {
@@ -413,6 +449,11 @@ describe("bundled desktop setup", () => {
         id: "11111111-1111-4111-8111-111111111111",
         name: "Studio server",
         url: "https://studio.example.com",
+      },
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        name: "Second server",
+        url: "https://second.example.com",
       },
     ]);
     const { invoke } = await setup({

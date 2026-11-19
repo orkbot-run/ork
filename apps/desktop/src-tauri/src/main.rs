@@ -2379,6 +2379,8 @@ struct Startup {
     #[serde(skip_serializing_if = "Option::is_none")]
     kind: Option<server_directory::Kind>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    workspace: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<String>,
 }
 
@@ -2388,6 +2390,7 @@ impl Startup {
             phase: "checking",
             server_id: None,
             kind: None,
+            workspace: None,
             message: None,
         }
     }
@@ -3658,6 +3661,7 @@ async fn restore_personal_server(
             server_id: Some(credential.selection.target.workspace_id.clone()),
             kind: (choice.mode == settings::InstanceMode::New)
                 .then_some(server_directory::Kind::Local),
+            workspace: Some(true),
             message: None,
         },
     );
@@ -3707,8 +3711,16 @@ async fn restore_saved_server(
     };
     require_account(&state, &authorization)?;
     if catalog.has_organizations() {
+        let identity = authorization.account.identity();
+        let remembered = state
+            .setup
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?
+            .as_ref()
+            .filter(|setup| setup.belongs_to(identity))
+            .and_then(|setup| setup.workspace.clone());
         let Some(workspace) =
-            catalog.initial_workspace(&state.directory, authorization.account.identity())?
+            catalog.initial_workspace(&state.directory, identity, remembered.as_ref())?
         else {
             return Ok(false);
         };
@@ -3734,6 +3746,7 @@ async fn restore_saved_server(
                 server_id: Some(workspace.id.clone()),
                 kind: (mode == settings::InstanceMode::New)
                     .then_some(server_directory::Kind::Local),
+                workspace: Some(true),
                 message: None,
             },
         );
@@ -3797,6 +3810,7 @@ async fn restore_saved_server(
             phase: "opening",
             server_id: Some(server.id.clone()),
             kind: Some(server.kind),
+            workspace: None,
             message: None,
         },
     );
@@ -3848,41 +3862,56 @@ fn show_active_or_setup(app: &tauri::AppHandle) {
         state.restoring.store(false, Ordering::SeqCst);
         return;
     };
-    update_startup(app, Startup::checking());
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let restored = restore_saved_server(&app, &window, intent).await;
-        app.state::<DesktopState>()
-            .restoring
-            .store(false, Ordering::SeqCst);
-        if app
-            .state::<DesktopState>()
-            .restore_intent
-            .load(Ordering::SeqCst)
-            != intent
-        {
-            // A late activation may have hidden the picker requested by Change Server or logout.
-            let _ = show_setup(&app);
-            return;
-        }
-        let startup = match &restored {
-            Err(error) => Startup {
-                phase: "failed",
-                message: Some(error.clone()),
-                ..app
-                    .state::<DesktopState>()
-                    .startup
-                    .lock()
-                    .map(|value| value.clone())
-                    .unwrap_or_else(|_| Startup::idle())
-            },
-            _ => Startup::idle(),
-        };
-        update_startup(&app, startup);
-        if !matches!(restored, Ok(true)) && !focus_active(&app) {
-            let _ = show_setup(&app);
-        }
+        let _ = finish_restore(&app, &window, intent).await;
     });
+}
+
+#[tauri::command]
+async fn restore_connection(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<bool, String> {
+    require_setup(&window)?;
+    let Some(intent) = begin_restore(&state) else {
+        return Ok(false);
+    };
+    finish_restore(&app, &window, intent).await
+}
+
+async fn finish_restore(
+    app: &tauri::AppHandle,
+    window: &WebviewWindow,
+    intent: u64,
+) -> Result<bool, String> {
+    let state = app.state::<DesktopState>();
+    update_startup(app, Startup::checking());
+    let restored = restore_saved_server(app, window, intent).await;
+    state.restoring.store(false, Ordering::SeqCst);
+    if state.restore_intent.load(Ordering::SeqCst) != intent {
+        // A late activation may have hidden the picker requested by Change Server or logout.
+        let _ = show_setup(app);
+        return Ok(false);
+    }
+    let startup = match &restored {
+        Err(error) => Startup {
+            phase: "failed",
+            message: Some(error.clone()),
+            ..state
+                .startup
+                .lock()
+                .map(|value| value.clone())
+                .unwrap_or_else(|_| Startup::idle())
+        },
+        _ => Startup::idle(),
+    };
+    update_startup(app, startup);
+    if !matches!(restored, Ok(true)) && !focus_active(app) {
+        let _ = show_setup(app);
+    }
+    restored
 }
 
 fn menu_event(app: &tauri::AppHandle, action: menu::MenuAction) {
@@ -4034,6 +4063,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             setup_state,
             setup_accounts_session,
+            restore_connection,
             setup_accounts_sign_in,
             setup_accounts_logout,
             list_servers,
@@ -4976,6 +5006,7 @@ mod tests {
         ] {
             for command in [
                 "setup_accounts_session",
+                "restore_connection",
                 "list_servers",
                 "list_workspaces",
                 "workspace_catalog",

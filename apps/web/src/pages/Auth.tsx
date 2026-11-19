@@ -26,6 +26,7 @@ import { Server } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { IconTooltip } from "../components/IconTooltip";
+import { PageLoading } from "../components/PageLoading";
 import { PasskeySignIn } from "../components/PasskeySignIn";
 import { signInWithNativeAccounts } from "../lib/accounts-login";
 import { authClient } from "../lib/auth";
@@ -70,6 +71,14 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   const ssoName = reset?.accountsLogin ? "Ork Accounts" : reset?.sso?.name;
   const [capabilityError, setCapabilityError] = useState(false);
   const [capabilityAttempt, setCapabilityAttempt] = useState(0);
+  const [automaticAccountsFailed, setAutomaticAccountsFailed] = useState(false);
+  const automaticAccountsRequest = useRef<Promise<void> | undefined>(undefined);
+  const automaticAccounts =
+    mode !== "forgot" &&
+    !sent &&
+    !searchParams.has("error") &&
+    !automaticAccountsFailed &&
+    Boolean(desktopBridge()?.accounts?.signInToServer);
   const [codeSent, setCodeSent] = useState(false);
   const [code, setCode] = useState("");
   const useCode = Boolean(reset?.passwordAuth && reset.emailCode) && mode !== "forgot";
@@ -109,6 +118,25 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       active = false;
     };
   }, [mode, capabilityAttempt]);
+
+  useEffect(() => {
+    if (!automaticAccounts || !reset?.accountsLogin) return;
+    let current = true;
+    automaticAccountsRequest.current ??= signInWithNativeAccounts();
+    void automaticAccountsRequest.current.then(
+      () => {
+        if (!current) return;
+        // The managed renderer profile already belongs to this account and workspace.
+        authClient.$store.notify("$sessionSignal");
+      },
+      () => {
+        if (current) setAutomaticAccountsFailed(true);
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [automaticAccounts, reset?.accountsLogin]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -270,6 +298,10 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     } catch {
       setError(t`Could not continue`);
     }
+  }
+
+  if (automaticAccounts && !capabilityError && (!reset || reset.accountsLogin)) {
+    return <PageLoading />;
   }
 
   if (!sent && !reset && !capabilityError) {

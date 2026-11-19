@@ -91,6 +91,7 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "setup_state",
             "setup_accounts_session",
+            "restore_connection",
             "setup_accounts_sign_in",
             "setup_accounts_logout",
             "list_servers",

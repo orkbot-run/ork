@@ -392,16 +392,27 @@ impl WorkspaceCatalog {
         &self,
         directory: &Path,
         identity: (&str, &str),
+        remembered: Option<&WorkspaceTarget>,
     ) -> Result<Option<Workspace>, String> {
-        let organization = self
-            .organizations
-            .iter()
-            .find(|row| Some(&row.id) == self.default_organization_id.as_ref())
-            .or_else(|| (self.organizations.len() == 1).then(|| &self.organizations[0]));
+        let organization = if let Some(remembered) = remembered {
+            self.organizations
+                .iter()
+                .find(|row| row.id == remembered.organization_id)
+        } else {
+            self.organizations
+                .iter()
+                .find(|row| Some(&row.id) == self.default_organization_id.as_ref())
+                .or_else(|| (self.organizations.len() == 1).then(|| &self.organizations[0]))
+        };
         let Some(organization) = organization else {
             return Ok(None);
         };
-        let previous = workspace_history(directory, identity, &organization.id)?;
+        let history = if remembered.is_none() {
+            workspace_history(directory, identity, &organization.id)?
+        } else {
+            None
+        };
+        let previous = remembered.or(history.as_ref());
         let choices: Vec<_> = organization
             .servers
             .iter()
@@ -416,7 +427,7 @@ impl WorkspaceCatalog {
         let choice = choices
             .iter()
             .find(|(server, workspace)| {
-                previous.as_ref().is_some_and(|prior| {
+                previous.is_some_and(|prior| {
                     prior.server_id == server.id && prior.workspace_id == workspace.id
                 })
             })
@@ -1613,17 +1624,17 @@ mod tests {
         let decode =
             |value: serde_json::Value| serde_json::from_value::<WorkspaceCatalog>(value).unwrap();
         assert!(decode(value.clone())
-            .initial_workspace(directory.path(), identity)
+            .initial_workspace(directory.path(), identity, None)
             .unwrap()
             .is_none());
         value["defaultOrganizationId"] = serde_json::json!(other);
         assert!(decode(value.clone())
-            .initial_workspace(directory.path(), identity)
+            .initial_workspace(directory.path(), identity, None)
             .unwrap()
             .is_none());
         value["defaultOrganizationId"] = serde_json::json!(DEVICE);
         let target = decode(value.clone())
-            .initial_workspace(directory.path(), identity)
+            .initial_workspace(directory.path(), identity, None)
             .unwrap()
             .unwrap()
             .target
@@ -1631,8 +1642,51 @@ mod tests {
         remember_workspace(directory.path(), identity, &target).unwrap();
         value["organizations"][0]["servers"][0]["routes"] = serde_json::json!([]);
         assert!(decode(value)
-            .initial_workspace(directory.path(), identity)
+            .initial_workspace(directory.path(), identity, None)
             .is_err());
+    }
+
+    #[test]
+    fn startup_prefers_the_device_last_workspace_over_the_accounts_default() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = ("https://accounts.example.test", "user-a");
+        let mut value = workspace_catalog();
+        let default_organization = "00000000-0000-4000-8000-000000000002";
+        value["defaultOrganizationId"] = serde_json::json!(default_organization);
+        value["organizations"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "id": default_organization,
+                "name": "Default",
+                "type": "shared",
+                "role": "admin",
+                "servers": [],
+            }));
+        let catalog: WorkspaceCatalog = serde_json::from_value(value.clone()).unwrap();
+        let remembered = catalog
+            .clone()
+            .workspaces()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .target
+            .unwrap();
+        assert!(catalog
+            .initial_workspace(directory.path(), identity, None)
+            .unwrap()
+            .is_none());
+        let restored = catalog
+            .initial_workspace(directory.path(), identity, Some(&remembered))
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored.target, Some(remembered.clone()));
+        value["organizations"][0]["servers"][0]["workspaces"][0]["canOpen"] = false.into();
+        let revoked: WorkspaceCatalog = serde_json::from_value(value).unwrap();
+        assert!(revoked
+            .initial_workspace(directory.path(), identity, Some(&remembered))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -1648,7 +1702,7 @@ mod tests {
             .push(second);
         let catalog: WorkspaceCatalog = serde_json::from_value(value).unwrap();
         assert!(catalog
-            .initial_workspace(directory.path(), identity)
+            .initial_workspace(directory.path(), identity, None)
             .unwrap()
             .is_none());
         let selected = catalog.clone().workspaces().unwrap().pop().unwrap();
@@ -1660,14 +1714,14 @@ mod tests {
         .unwrap();
         assert_eq!(
             catalog
-                .initial_workspace(directory.path(), identity)
+                .initial_workspace(directory.path(), identity, None)
                 .unwrap()
                 .unwrap()
                 .id,
             selected.id
         );
         assert!(catalog
-            .initial_workspace(directory.path(), (identity.0, "other-account"))
+            .initial_workspace(directory.path(), (identity.0, "other-account"), None)
             .unwrap()
             .is_none());
         assert_eq!(catalog.discovery_servers().unwrap().len(), 1);

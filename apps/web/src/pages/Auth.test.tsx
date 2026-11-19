@@ -227,6 +227,49 @@ it("signs in through the native Accounts proof without server OIDC", async () =>
   expect(clearSpaceSelection).toHaveBeenCalledOnce();
 });
 
+it("opens a managed workspace without offering a second sign-in", async () => {
+  window.orkbotDesktop = {
+    accounts: { signInToServer: vi.fn() },
+  } as unknown as NonNullable<Window["orkbotDesktop"]>;
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue({
+    ...capabilities,
+    sso: null,
+    accountsLogin: true,
+  });
+  let finish!: () => void;
+  vi.mocked(signInWithNativeAccounts).mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  await render("up", false);
+  expect(signInWithNativeAccounts).toHaveBeenCalledOnce();
+  expect(host.textContent).not.toContain("Continue with Ork Accounts");
+  await act(async () => finish());
+  expect(authClient.$store.notify).toHaveBeenCalledWith("$sessionSignal");
+  expect(clearSpaceSelection).not.toHaveBeenCalled();
+});
+
+it("offers manual sign-in if the managed workspace cannot authenticate automatically", async () => {
+  window.orkbotDesktop = {
+    accounts: { signInToServer: vi.fn() },
+    server: { change: vi.fn() },
+  } as unknown as NonNullable<Window["orkbotDesktop"]>;
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue({
+    ...capabilities,
+    sso: null,
+    accountsLogin: true,
+  });
+  vi.mocked(signInWithNativeAccounts)
+    .mockRejectedValueOnce(new Error("Could not continue"))
+    .mockResolvedValueOnce(undefined);
+  await render("in", false);
+  expect(signInWithNativeAccounts).toHaveBeenCalledOnce();
+  await act(async () => button("Continue with Ork Accounts").click());
+  expect(signInWithNativeAccounts).toHaveBeenCalledTimes(2);
+  expect(authClient.$store.notify).toHaveBeenCalledWith("$sessionSignal");
+});
+
 it.each(["REGISTRATION_CLOSED", "SSO_UNAVAILABLE", undefined])(
   "forces provider login only when retrying a registration refusal (%s)",
   async (error) => {
