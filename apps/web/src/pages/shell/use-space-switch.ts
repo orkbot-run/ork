@@ -127,7 +127,7 @@ export function useOpenSpaceChat({
       const previousEffective = selectedSpaceId() ?? bootstrapSpaceId;
       // Persist the active space (including primary) so voice/RPC headers match the chat.
       if (previousEffective === spaceId) {
-        if (selectSpace(spaceId)) navigate(path);
+        if (selectSpace(spaceId, bootstrapSpaceId)) navigate(path);
         return;
       }
       const reload = () => {

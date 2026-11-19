@@ -19,8 +19,72 @@ test("shows the Ork loading screen while the session is starting", async ({ page
     await page.goto("/app");
     const loading = page.locator('[data-orkbot-app-state="session-pending"]');
     await expect(loading.getByRole("status")).toHaveText("Loading…");
-    await expect(loading.locator('img[src="/icon-192.png"]')).toBeVisible();
+    const icon = loading.locator("img");
+    await expect(icon).toBeVisible();
+    await expect(icon).toHaveAttribute("src", /^data:image\/png;base64,/);
+    await expect
+      .poll(() => icon.evaluate((image: HTMLImageElement) => image.naturalWidth))
+      .toBe(192);
     await captureScreenshot(page, testInfo, "workspace-loading");
+  } finally {
+    release();
+  }
+});
+
+test("switches chats in the same workspace while the server is slow", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `chat-switch-${Date.now()}@orkbot.test`, "password12", "Chat Switcher");
+  await completeOnboarding(page);
+  const chief = activeBotId(page);
+  const scout = await rpc<{ id: string }>(page, "bots/create", {
+    name: "Scout",
+    description: "",
+    notifyOnFinish: true,
+    computerMode: "team",
+  });
+  const chiefMessage = "Chief keeps a cached conversation";
+  await rpc(page, "threads/send", { botId: chief, text: chiefMessage });
+  await rpc(page, "threads/stop", { botId: chief });
+  await page.evaluate(() => localStorage.removeItem("orkbot:space-id"));
+  await page.reload();
+  await expect(
+    page.getByTestId("transcript").getByText(chiefMessage, { exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("orkbot:space-id"))).toBeNull();
+
+  let release = () => {};
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let modelChecks = 0;
+  await page.route("**/rpc/me", async (route) => {
+    modelChecks++;
+    await pending;
+    await route.continue();
+  });
+  await page.route("**/rpc/threads/get", async (route) => {
+    await pending;
+    await route.continue();
+  });
+  await page.evaluate(() => {
+    document.querySelector('[data-testid="bots-sidebar"]')?.setAttribute("data-switch-marker", "");
+  });
+  const sidebar = page.getByTestId("bots-sidebar");
+  try {
+    await page.locator(`[data-roster-bot-id="${scout.id}"]`).click();
+    await expect(page.getByPlaceholder("Message Scout")).toBeVisible();
+    await expect(sidebar).toHaveAttribute("data-switch-marker", "");
+    expect(await page.evaluate(() => localStorage.getItem("orkbot:space-id"))).toBeTruthy();
+
+    await page.locator(`[data-roster-bot-id="${chief}"]`).click();
+    await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
+    await expect(
+      page.getByTestId("transcript").getByText(chiefMessage, { exact: true }),
+    ).toBeVisible();
+    await expect(sidebar).toHaveAttribute("data-switch-marker", "");
+    expect(modelChecks).toBe(0);
+    await captureScreenshot(page, testInfo, "chat-switch-in-place");
   } finally {
     release();
   }

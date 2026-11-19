@@ -51,7 +51,10 @@ export function selectedSpaceId(): string | null {
 /** Fired after the selected Space changes, so per-organization state (billing) can reload. */
 export const SPACE_SELECTED_EVENT = "orkbot:space-selected";
 
-export function selectSpace(id: string): boolean {
+/** The authenticated shell can provide its effective default when no selection is saved yet. */
+export function selectSpace(id: string, defaultSpaceId?: string): boolean {
+  const previous = selectedSpaceId();
+  if (previous === id) return true;
   let selected: boolean;
   try {
     window.localStorage.setItem(SPACE_STORAGE_KEY, id);
@@ -64,7 +67,7 @@ export function selectSpace(id: string): boolean {
       selected = false;
     }
   }
-  if (selected) {
+  if (selected && (previous ?? defaultSpaceId) !== id) {
     spaceSelectionGeneration += 1;
     cancelAiConsentPrompts();
     window.dispatchEvent(new Event(SPACE_SELECTED_EVENT));

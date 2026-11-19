@@ -262,6 +262,26 @@ describe("space selection storage", () => {
     expect(dispatchEvent).toHaveBeenCalledWith(
       expect.objectContaining({ type: SPACE_SELECTED_EVENT }),
     );
+    expect(selectSpace("space-support")).toBe(true);
+    expect(dispatchEvent).toHaveBeenCalledOnce();
+  });
+
+  it("persists the current server-selected workspace without announcing a workspace switch", () => {
+    const items = new Map<string, string>();
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => items.get(key) ?? null,
+        setItem: (key: string, value: string) => items.set(key, value),
+      },
+      dispatchEvent,
+    });
+
+    expect(selectSpace("space-support", "space-support")).toBe(true);
+    expect(selectedSpaceId()).toBe("space-support");
+    expect(dispatchEvent).not.toHaveBeenCalled();
+    expect(selectSpace("space-other", "space-support")).toBe(true);
+    expect(dispatchEvent).toHaveBeenCalledOnce();
   });
 
   it("treats an already-persisted selection as success when writes fail", () => {
