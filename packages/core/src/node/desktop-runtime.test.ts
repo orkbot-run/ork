@@ -132,6 +132,15 @@ function fixture() {
 }
 
 describe("shared Linux desktop lifecycle", () => {
+  it("uses shorter VNC update intervals only while the user controls the screen", () => {
+    const control = interactiveScreenCommand(true, "control");
+    expect(control).toMatch(/x11vnc .* -wait 8 -defer 4 /);
+
+    const viewer = ensureScreenCommand(0, "bot", "view");
+    expect(viewer).toMatch(/x11vnc .* -viewonly /);
+    expect(viewer).not.toMatch(/x11vnc .* -(?:wait|defer) \d/);
+  });
+
   it("defaults to a loopback gateway without environment options", () => {
     expect(ensureScreenCommand(0, "bot", "view")).toContain("127.0.0.1:6080 8>&-");
     expect(interactiveScreenCommand(true, "control")).toContain("127.0.0.1:6080 8>&-");
