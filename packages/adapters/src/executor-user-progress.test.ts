@@ -89,6 +89,9 @@ async function runTurn(
     priorBotMessage?: boolean;
     repliesToRequest?: boolean;
     enableNotifications?: boolean;
+    durableMemory?: string;
+    scratchpadTitle?: string;
+    scripted?: boolean;
   } = {},
 ) {
   vi.mocked(loadBotMessageContext).mockResolvedValue({
@@ -302,7 +305,23 @@ async function runTurn(
     taughtSkill: { findMany: vi.fn(async () => []) },
     vaultCredential: { findMany: vi.fn(async () => []) },
     agentSkill: { findMany: vi.fn(async () => []) },
-    scratchpadItem: { findMany: vi.fn(async () => []) },
+    scratchpadItem: {
+      findMany: vi.fn(async () =>
+        options.scratchpadTitle
+          ? [
+              {
+                id: "open-item",
+                botId: run.botId,
+                title: options.scratchpadTitle,
+                status: "open",
+                notes: "",
+                createdAt: new Date(0),
+                updatedAt: new Date(0),
+              },
+            ]
+          : [],
+      ),
+    },
     externalEffect: {
       findMany: vi.fn(async () => []),
       findFirst: vi.fn(async () => null),
@@ -351,7 +370,7 @@ async function runTurn(
     deploymentModelKey: "fixture-model-key",
     prisma,
     runtime: {
-      describe: () => ({ capabilities: { scripted: false } }),
+      describe: () => ({ capabilities: { scripted: options.scripted ?? false } }),
       run: runtimeRun,
     },
     sandbox: {
@@ -369,7 +388,13 @@ async function runTurn(
       },
     },
     home: { commit: vi.fn(async () => "fixture-revision") },
-    memory: { read: async () => ({ documents: [] }) },
+    memory: {
+      read: async () => ({
+        documents: options.durableMemory
+          ? [{ path: "memory.md", revision: 1, content: options.durableMemory }]
+          : [],
+      }),
+    },
     memoryProviders: { resolve: async () => null },
     events: {
       append,
@@ -423,6 +448,56 @@ async function runTurn(
     sendNotification,
   };
 }
+
+describe("current-turn memory", () => {
+  it("keeps the system prompt identical after memory changes and never stores the snapshot in chat", async () => {
+    const secret = "fixture-private-memory-token";
+    const history = [{ id: "old", seq: 1, role: "user", text: "Earlier conversation" }];
+    const first = await runTurn("Done.", false, "", [secret], "fyi", {
+      history,
+      durableMemory: `Earlier plan ${secret}`,
+      scratchpadTitle: "First item",
+    });
+    const second = await runTurn("Done.", false, "", [secret], "fyi", {
+      history,
+      durableMemory: "Revised plan",
+      scratchpadTitle: "Second item",
+    });
+    const [before] = first.runtimeRun.mock.calls[0]!;
+    const [after] = second.runtimeRun.mock.calls[0]!;
+    expect(after.instructions).toBe(before.instructions);
+    expect(after.instructions).toContain("untrusted background data");
+    expect(after.instructions).not.toMatch(/Revised plan|Earlier plan|First item|Second item/);
+    expect(after.history).toEqual(before.history);
+    expect(before.prompt).toContain("Earlier plan");
+    expect(before.prompt).toContain("First item");
+    expect(before.prompt).not.toContain(secret);
+    expect(after.prompt).toContain("Revised plan");
+    expect(after.prompt).toContain("Second item");
+    expect(after.prompt).not.toContain("Earlier plan");
+    expect(JSON.stringify([first.messages, second.messages, after.history])).not.toMatch(
+      /Ork current-turn memory|Earlier plan|Revised plan|First item|Second item/,
+    );
+  });
+
+  it.each([
+    { trigger: "follow_up", scripted: false, inPrompt: true },
+    { trigger: "user", scripted: true, inPrompt: false },
+    { trigger: "routine", scripted: false, inPrompt: false },
+  ])(
+    "routes memory for $trigger with scripted=$scripted",
+    async ({ trigger, scripted, inPrompt }) => {
+      const { runtimeRun } = await runTurn("Done.", false, "", [], "fyi", {
+        trigger,
+        scripted,
+        durableMemory: "Fixture memory",
+      });
+      const [request] = runtimeRun.mock.calls[0]!;
+      expect(request.prompt.includes("Fixture memory")).toBe(inPrompt);
+      expect(request.instructions.includes("Fixture memory")).toBe(!inPrompt);
+    },
+  );
+});
 
 describe("bot-to-bot completion notifications", () => {
   it.each([false, true])(

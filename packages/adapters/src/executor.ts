@@ -166,6 +166,7 @@ import { restoreTurnCheckpointEffects, settleRunningHelpers } from "./run-contex
 import { APPROVED_EFFECT_REPLAY_ORDER, buildApprovalContinuation } from "./run-effects.js";
 import {
   BOT_DIRECTORY_LIMIT,
+  currentTurnMemoryBlock,
   dockerComputerToolInstruction,
   persistentComputerInstruction,
   runIdentityInstruction,
@@ -2106,6 +2107,17 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               ? {}
               : { "run.connector_discovery_ms": connectorDiscoveryMs }),
           });
+          const turnMemoryInPrompt =
+            !scripted && (run.trigger === "user" || run.trigger === "follow_up");
+          const redactedMemoryContext = memoryContext
+            ? redactSecrets(memoryContext, runSecrets)
+            : undefined;
+          const redactedScratchpadContext = scratchpadContext
+            ? redactSecrets(scratchpadContext, runSecrets)
+            : undefined;
+          const turnMemory = turnMemoryInPrompt
+            ? currentTurnMemoryBlock(redactedMemoryContext, redactedScratchpadContext)
+            : undefined;
           const runtimeEvents = deps.runtime.run(
             {
               botId: bot.id,
@@ -2145,7 +2157,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                   operationId: runId,
                 });
               },
-              prompt,
+              // Only the active runtime prompt receives the snapshot. History comes from stored chat.
+              prompt: turnMemory ? `${prompt}\n\n${turnMemory}` : prompt,
               ...(speakers &&
               (run.trigger === "user" ||
                 (run.trigger === "follow_up" && sourceMessage?.role === "user"))
@@ -2160,12 +2173,9 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                   ? [groupContext, GROUP_UNADDRESSED_REPLY_GUIDANCE].filter(Boolean).join("\n")
                   : groupContext,
                 messagingContext,
-                redactedMemoryContext: memoryContext
-                  ? redactSecrets(memoryContext, runSecrets)
-                  : undefined,
-                redactedScratchpadContext: scratchpadContext
-                  ? redactSecrets(scratchpadContext, runSecrets)
-                  : undefined,
+                redactedMemoryContext,
+                redactedScratchpadContext,
+                turnMemoryInPrompt,
                 redactedTicketContext: ticketContext
                   ? redactSecrets(ticketContext, runSecrets)
                   : undefined,
