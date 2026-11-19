@@ -751,6 +751,7 @@ export const PL_MESSAGES: Record<string, string> = {
   "Could not switch computer": "Nie udało się zmienić komputera",
   "I’m done": "Gotowe",
   "Open computer": "Otwórz komputer",
+  Checklist: "Lista kroków",
   "Open in full window": "Otwórz w pełnym oknie",
   Release: "Zwolnij",
   Skip: "Pomiń",

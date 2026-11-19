@@ -5,6 +5,7 @@
 
 import type { Message, ToolCall } from "@earendil-works/pi-ai";
 import type { AgentRunModel } from "@orkbot/adapter-kit";
+import type { RoutineChecklist } from "@orkbot/contracts";
 import { withoutThinkingFrom } from "./thinking-signatures.js";
 
 export interface ComputerModeSelection {
@@ -27,6 +28,7 @@ export interface TurnCheckpoint {
   version: 1;
   /** Credential-free role state; absent on legacy checkpoints. */
   computerMode?: ComputerModeCheckpoint;
+  routineChecklist?: RoutineChecklist;
   provider: string;
   model: string;
   systemPrompt: string;

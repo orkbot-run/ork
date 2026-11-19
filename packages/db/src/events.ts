@@ -20,9 +20,11 @@ import {
   BOT_SECRET_VALUE_MAX_LENGTH,
   encodeLoginSecret,
   hasThinkingActivityMarker,
+  LEGACY_ROUTINE_CHECKLIST_EVENT_TYPE,
   loginAnswerValue,
   MessageBlock as MessageBlockSchema,
   normalizeOneTimeCode,
+  ROUTINE_CHECKLIST_EVENT_TYPE,
   ThreadActivityPayloadSchema,
 } from "@orkbot/contracts";
 import {
@@ -2311,6 +2313,12 @@ export async function* followThreadEvents(
         batchSize = events.length;
         for (const event of events) {
           seq = event.seq;
+          // Routine history owns the checklist snapshot. It is not chat content.
+          if (
+            event.type === LEGACY_ROUTINE_CHECKLIST_EVENT_TYPE ||
+            event.type === ROUTINE_CHECKLIST_EVENT_TYPE
+          )
+            continue;
           yield mapProductEvent(event);
         }
       } while (batchSize === EVENT_BATCH_SIZE && !signal?.aborted);

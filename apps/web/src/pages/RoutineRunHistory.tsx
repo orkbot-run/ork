@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Routine continuation changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { RoutineRun, RoutineRunCursor } from "@orkbot/contracts";
 import {
@@ -119,6 +123,32 @@ function RunRow({ run }: { run: RoutineRun }) {
         </Link>
       ) : (
         <div className={lineClass}>{line}</div>
+      )}
+      {run.checklist && (
+        <details className="pb-2">
+          <summary className="w-fit cursor-pointer">
+            <Trans>Checklist</Trans>
+          </summary>
+          <ol className="mt-2 list-decimal space-y-1.5 pl-5">
+            {run.checklist.steps.map((step) => (
+              <li key={step.id}>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+                  <span className="text-foreground">{step.text}</span>
+                  <span>
+                    {step.status === "done"
+                      ? t`Done`
+                      : step.status === "blocked"
+                        ? t`Blocked`
+                        : step.status === "skipped"
+                          ? t`Skipped`
+                          : t`Pending`}
+                  </span>
+                </div>
+                {step.reason && <p>{step.reason}</p>}
+              </li>
+            ))}
+          </ol>
+        </details>
       )}
       {run.status === "failed" && run.error ? (
         <div className="-mt-1 pb-2 text-destructive">

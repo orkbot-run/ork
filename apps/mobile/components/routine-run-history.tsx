@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Routine continuation changes follow LICENSE.md.
+
 import type { RoutineRun } from "@orkbot/contracts";
 import { formatRoutineRunAt } from "@orkbot/core";
 import { useRouter } from "expo-router";
@@ -91,22 +95,53 @@ function RunRow({
   onPress: (() => void) | undefined;
 }) {
   const { locale, t } = useI18n();
+  const [showChecklist, setShowChecklist] = useState(false);
   const failure = useRunError(error);
   const title = formatRoutineRunAt(run, dateLocaleForUi(locale));
   return (
-    <SettingsRow
-      accessibilityRole={onPress ? "button" : undefined}
-      title={title}
-      detail={failure?.summary ?? routineRunLateLabel(run)}
-      value={
-        run.status !== "completed"
-          ? activityStatusLabel(run.status)
-          : run.messageId
-            ? undefined
-            : t("No reply")
-      }
-      chevron={onPress ? "right" : undefined}
-      onPress={onPress}
-    />
+    <>
+      <SettingsRow
+        accessibilityRole={onPress ? "button" : undefined}
+        title={title}
+        detail={failure?.summary ?? routineRunLateLabel(run)}
+        value={
+          run.status !== "completed"
+            ? activityStatusLabel(run.status)
+            : run.messageId
+              ? undefined
+              : t("No reply")
+        }
+        chevron={onPress ? "right" : undefined}
+        onPress={onPress}
+      />
+      {run.checklist && (
+        <>
+          <SettingsRow
+            title={t("Checklist")}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showChecklist }}
+            chevron={showChecklist ? "down" : "right"}
+            onPress={() => setShowChecklist((visible) => !visible)}
+          />
+          {showChecklist &&
+            run.checklist.steps.map((step, index) => (
+              <SettingsRow
+                key={step.id}
+                title={`${index + 1}. ${step.text}`}
+                value={
+                  step.status === "done"
+                    ? t("Done")
+                    : step.status === "blocked"
+                      ? t("Blocked")
+                      : step.status === "skipped"
+                        ? t("Skipped")
+                        : t("Pending")
+                }
+                detail={step.reason ?? undefined}
+              />
+            ))}
+        </>
+      )}
+    </>
   );
 }

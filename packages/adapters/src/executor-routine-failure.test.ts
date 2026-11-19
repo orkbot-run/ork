@@ -144,7 +144,10 @@ async function failRun(scenario: Scenario) {
       }),
     },
     chatGroup: { findMany: vi.fn(async () => []) },
-    event: { count: vi.fn(async () => scenario.toolCalls ?? 0) },
+    event: {
+      count: vi.fn(async () => scenario.toolCalls ?? 0),
+      findFirst: vi.fn(async () => null),
+    },
     bot: {
       findUniqueOrThrow: vi.fn(async () => ({
         id: run.botId,

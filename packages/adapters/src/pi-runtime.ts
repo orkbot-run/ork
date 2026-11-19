@@ -31,6 +31,13 @@ import {
 } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
 import {
+  ACTION_CONTINUATION_PROMPT,
+  hasUnfinishedActionPromise,
+  isInteractionBoundary,
+  MAX_ACTION_CONTINUATIONS,
+} from "./action-continuation.js";
+import {
+  DENIED_ACTION_ERROR,
   isTerminatingReplyResult,
   terminatingReplyText,
   uncertainEffectResult,
@@ -88,6 +95,7 @@ import { PiJsonlSessionRecorder } from "./pi-session.js";
 import { withPiTelemetry } from "./pi-telemetry.js";
 import { withPiThinkingActivity } from "./pi-thinking-activity.js";
 import { observedPiStream } from "./pi-usage.js";
+import { createRoutineChecklist } from "./routine-checklist.js";
 import type { RuntimeContextDecision } from "./runtime-context.js";
 import { createRuntimeContextPolicy } from "./runtime-context.js";
 import { deliverFinishedShells } from "./shell-command-stream.js";
@@ -241,7 +249,21 @@ export class PiAgentRuntime implements AgentRuntime {
     const work = withPiTelemetry(request, async (span) => {
       let trackedBudget: ToolCallBudget | undefined;
       let resumeHost: ToolHost | undefined;
+      let actionContinuations = 0;
+      let checklistContinuations = 0;
+      let continuationsFollowedByTool = 0;
+      let continuationAwaitingTool = false;
       try {
+        const routineChecklist = createRoutineChecklist(
+          request,
+          request.turnCheckpoint
+            ? restoreTurnCheckpoint(request.turnCheckpoint, request.model).routineChecklist
+            : undefined,
+        );
+        if (routineChecklist) {
+          await routineChecklist.persist();
+          request = routineChecklist.request;
+        }
         const savedMode = request.turnCheckpoint
           ? restoreTurnCheckpoint(request.turnCheckpoint, request.model).computerMode
           : undefined;
@@ -737,6 +759,7 @@ export class PiAgentRuntime implements AgentRuntime {
             pendingToolCallId: toolCallId,
             executionMode: sequential ? ("sequential" as const) : ("parallel" as const),
             messages: messages as Message[],
+            ...(routineChecklist ? { routineChecklist: routineChecklist.snapshot() } : {}),
             historyMessageIds: [...representedHistoryIds],
           };
           await request.onCheckpoint(() => {
@@ -774,6 +797,18 @@ export class PiAgentRuntime implements AgentRuntime {
         let toolCalls = 0;
         let toolActivityShowing = false;
         let silentToolContinuations = 0;
+        let consecutiveActionContinuations = 0;
+        let admittedTools = host.toolCallBudget.count;
+        let approvalDenied = false;
+        const recordApprovalDenial = (details: unknown) => {
+          if (
+            details &&
+            typeof details === "object" &&
+            "error" in details &&
+            details.error === DENIED_ACTION_ERROR
+          )
+            approvalDenied = true;
+        };
         // A reply cut off by a dropped connection continues in the same bubble: no turn break,
         // and a continuation that starts by repeating the end of the cut text loses that repeat.
         let joinCutReply: { tail: string; held: string; requested: boolean } | undefined;
@@ -797,6 +832,7 @@ export class PiAgentRuntime implements AgentRuntime {
         // it counts as the final reply, including when the completed message omits it.
         let streamedBeforePendingFinal = 0;
         agent.subscribe(async (event) => {
+          if (event.type === "tool_execution_end") recordApprovalDenial(event.result.details);
           if (event.type === "tool_execution_end" && isTerminatingReplyResult(event.result)) {
             terminatedReply = terminatingReplyText(event.result) ?? terminatedReply;
           }
@@ -875,6 +911,16 @@ export class PiAgentRuntime implements AgentRuntime {
             }
           }
           if (event.type === "turn_end") {
+            // Pi reports tool starts before argument validation. Count only calls
+            // admitted by the runtime's tool budget.
+            if (host.toolCallBudget.count > admittedTools && !host.toolCallBudget.exceeded) {
+              admittedTools = host.toolCallBudget.count;
+              consecutiveActionContinuations = 0;
+              if (continuationAwaitingTool) {
+                continuationsFollowedByTool += 1;
+                continuationAwaitingTool = false;
+              }
+            }
             const messageText =
               event.message.role === "assistant" ? assistantText(event.message) : "";
             const hasToolCalls = messageHasToolCall(event.message);
@@ -902,6 +948,8 @@ export class PiAgentRuntime implements AgentRuntime {
                 // another model turn that would hide the error.
                 !providerFailureText(event.message) &&
                 !host.pausePending &&
+                !approvalDenied &&
+                !routineChecklist?.needsContinuation() &&
                 silentToolContinuations < MAX_SILENT_TOOL_CONTINUATIONS
               ) {
                 silentToolContinuations += 1;
@@ -936,6 +984,40 @@ export class PiAgentRuntime implements AgentRuntime {
                 content: USER_STEERING_CONTINUATION_PROMPT,
                 timestamp: Date.now(),
               });
+            }
+            // Only a successful, text-only final turn is eligible. Existing recovery,
+            // steering and interaction boundaries keep priority over automatic nudges.
+            if (
+              event.message.role === "assistant" &&
+              event.message.stopReason === "stop" &&
+              !hasToolCalls &&
+              !hasToolResults &&
+              !agent.hasQueuedMessages() &&
+              !host.pausePending &&
+              !host.toolCallBudget.exceeded &&
+              !terminatedReply &&
+              !outputCutFailed &&
+              !signal.aborted &&
+              !approvalDenied &&
+              !providerFailureText(event.message) &&
+              !isInteractionBoundary(messageText) &&
+              consecutiveActionContinuations < MAX_ACTION_CONTINUATIONS
+            ) {
+              let prompt: string | undefined;
+              if (routineChecklist?.needsContinuation()) {
+                prompt = await routineChecklist.continuationPrompt();
+                checklistContinuations += 1;
+                consecutiveActionContinuations += 1;
+              } else if (hasUnfinishedActionPromise(messageText)) {
+                consecutiveActionContinuations += 1;
+                actionContinuations += 1;
+                prompt = ACTION_CONTINUATION_PROMPT;
+              }
+              if (prompt) {
+                continuationAwaitingTool = true;
+                if (messageText.trim()) queue.push({ type: "turn", narration: true });
+                agent.followUp({ role: "user", content: prompt, timestamp: Date.now() });
+              }
             }
           }
           if (event.type === "message_end" && event.message.role === "assistant") {
@@ -1079,6 +1161,7 @@ export class PiAgentRuntime implements AgentRuntime {
                     isError: true,
                   };
                 }
+                recordApprovalDenial(result.details);
                 agent.state.messages.push({
                   role: "toolResult",
                   toolCallId: call.id,
@@ -1264,6 +1347,7 @@ export class PiAgentRuntime implements AgentRuntime {
             queue.push({ type: "text", text: streamed });
           }
         }
+        if (!host.pausePending && !signal.aborted) await routineChecklist?.finish();
         queue.push(streamed.trim() ? { type: "done", text: streamed } : { type: "done" });
       } catch (error) {
         span?.setStatus({ status: "error" });
@@ -1278,6 +1362,15 @@ export class PiAgentRuntime implements AgentRuntime {
                 : new Error(message),
         );
       } finally {
+        const continuationTelemetry = {
+          "run.action_continuations": actionContinuations,
+          "run.checklist_continuations": checklistContinuations,
+          "run.continuations_followed_by_tool": continuationsFollowedByTool,
+          "run.continuation_tool_followed": continuationsFollowedByTool > 0,
+        };
+        span?.setAttributes(continuationTelemetry);
+        if (actionContinuations || checklistContinuations)
+          getLogger().info("run.automatic_continuation", continuationTelemetry);
         stopThinking();
         signal.removeEventListener("abort", stopThinking);
         queue.close();

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Routine continuation changes follow LICENSE.md.
+
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import type { AgentRunRequest, AgentRuntimeEvent, AgentSteeringMessage } from "@orkbot/adapter-kit";
@@ -405,7 +409,7 @@ it.each(["user", "webhook"] as const)(
           { type: "toolCall", id: "call-1", name: "list_files", arguments: { path: "first" } },
         ]),
       )
-      .mockImplementationOnce(() => reply(primary, "First checked. I'll check the second next."))
+      .mockImplementationOnce(() => reply(primary, "First checked."))
       .mockImplementationOnce(() =>
         toolCalls(primary, [
           { type: "toolCall", id: "call-2", name: "list_files", arguments: { path: "second" } },

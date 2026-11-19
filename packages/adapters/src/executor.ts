@@ -13,7 +13,14 @@ import {
   SandboxUnresponsiveError,
 } from "@orkbot/adapter-kit";
 import type { MessageBlock, ModelRoleChoice, RunStatus } from "@orkbot/contracts";
-import { disabledBuiltinToolSet, ThinkingLevelSchema } from "@orkbot/contracts";
+import {
+  disabledBuiltinToolSet,
+  LEGACY_ROUTINE_CHECKLIST_EVENT_TYPE,
+  ROUTINE_CHECKLIST_EVENT_TYPE,
+  ROUTINE_CHECKLIST_META_KIND,
+  routineChecklistFromEvent,
+  ThinkingLevelSchema,
+} from "@orkbot/contracts";
 import {
   assertTransition,
   botMessageAllowsSilence,
@@ -143,6 +150,7 @@ import { restoreComputerModels } from "./pi-runtime-computer-mode.js";
 import { loadPurchaseRedactions } from "./purchase-service.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
 import { backOffRoutineAfterAccountError } from "./routine-backoff.js";
+import { redactRoutineChecklist } from "./routine-checklist.js";
 import { lateRoutineRunDueAt, lateRoutineRunInstruction } from "./routine-lateness.js";
 import { lazyRunComputer } from "./run-computer.js";
 import type {
@@ -2038,6 +2046,22 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           getLogger().info("run.model_dispatched", {
             "run.setup_ms": Math.round(performance.now() - setupStarted),
           });
+          // A new lease on a fresh run cannot have a saved checklist yet.
+          const routineChecklistEvent =
+            run.routineId && (run.leaseFence > 0 || turnCheckpoint)
+              ? await deps.prisma.event.findFirst({
+                  where: {
+                    runId,
+                    threadId: thread.id,
+                    spaceId: run.spaceId,
+                    type: {
+                      in: [ROUTINE_CHECKLIST_EVENT_TYPE, LEGACY_ROUTINE_CHECKLIST_EVENT_TYPE],
+                    },
+                  },
+                  orderBy: { seq: "desc" },
+                  select: { payload: true },
+                })
+              : null;
           const runtimeEvents = deps.runtime.run(
             {
               botId: bot.id,
@@ -2045,6 +2069,23 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               threadId: thread.id,
               runId,
               routineId: run.routineId,
+              routineChecklist: routineChecklistFromEvent(routineChecklistEvent?.payload),
+              onRoutineChecklist: run.routineId
+                ? async (checklist) => {
+                    await deps.events.append({
+                      spaceId: run.spaceId,
+                      threadId: thread.id,
+                      botId: bot.id,
+                      runId,
+                      type: ROUTINE_CHECKLIST_EVENT_TYPE,
+                      lease: { owner: workerId, fence },
+                      payload: {
+                        kind: ROUTINE_CHECKLIST_META_KIND,
+                        checklist: redactRoutineChecklist(checklist, runSecrets),
+                      },
+                    });
+                  }
+                : undefined,
               sourceMessageId: run.sourceMessageId,
               onUsage: async (event) => {
                 await recordUsage(deps.prisma, event, {

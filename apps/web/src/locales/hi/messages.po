@@ -1132,6 +1132,7 @@ msgid "Block"
 msgstr "ब्लॉक करें"
 
 #: src/lib/ticket-status.ts
+#: src/pages/RoutineRunHistory.tsx
 msgid "Blocked"
 msgstr ""
 
@@ -1449,6 +1450,10 @@ msgstr ""
 #: src/pages/HostComputerPrompt.tsx
 msgid "Checking…"
 msgstr ""
+
+#: src/pages/RoutineRunHistory.tsx
+msgid "Checklist"
+msgstr "जाँच सूची"
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose a bot color or upload an image"
@@ -3028,6 +3033,7 @@ msgstr "खाता नहीं है?"
 #: src/components/ToolActivityDisclosure.tsx
 #: src/lib/ticket-status.ts
 #: src/pages/ActivityList.tsx
+#: src/pages/RoutineRunHistory.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 #: src/pages/shell/import-setup-card.tsx
 #: src/pages/shell/message-view.tsx
@@ -5139,6 +5145,7 @@ msgstr ""
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
+#: src/pages/RoutineRunHistory.tsx
 msgid "Pending"
 msgstr ""
 
@@ -6383,6 +6390,7 @@ msgstr ""
 msgid "Skip or deploy key"
 msgstr "छोड़ें या डिप्लॉय कुंजी दें"
 
+#: src/pages/RoutineRunHistory.tsx
 #: src/pages/shell/message-view.tsx
 msgid "Skipped"
 msgstr ""

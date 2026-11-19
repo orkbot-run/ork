@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved; durable checklist coverage is an Ork addition.
 
 import type { Actor } from "@orkbot/contracts";
 import { RoutineHistorySchema } from "@orkbot/contracts";
@@ -20,14 +21,58 @@ function fixture() {
   const routine = vi.fn().mockResolvedValue({ botId: "bot-1" });
   const runs = vi.fn().mockResolvedValue([]);
   const messages = vi.fn().mockResolvedValue([]);
+  const checklistEvents = vi.fn().mockResolvedValue([]);
   const prisma = {
     routine: { findFirst: routine },
     run: { findMany: runs },
-    $queryRaw: messages,
+    $queryRaw: (query: { sql: string }) =>
+      query.sql.includes("JOIN LATERAL") ? checklistEvents(query) : messages(query),
   } as unknown as PrismaClient;
-  return { prisma, routine, runs, messages };
+  return { prisma, routine, runs, messages, checklistEvents };
 }
 describe("routine history", () => {
+  it("projects only the latest valid checklist belonging to the run's own thread", async () => {
+    const { prisma, runs, checklistEvents } = fixture();
+    runs.mockResolvedValue([
+      {
+        id: "run-1",
+        botId: "bot-1",
+        threadId: "thread-1",
+        thread: { groupId: null },
+        status: "completed",
+        createdAt: at,
+        startedAt: at,
+        completedAt: at,
+      },
+    ]);
+    const checklist = {
+      continuationRequested: true,
+      steps: [
+        { id: 1, text: "Read report", status: "done", reason: null },
+        { id: 2, text: "Save summary", status: "blocked", reason: "Destination unavailable" },
+      ],
+    };
+    checklistEvents.mockResolvedValue([
+      { runId: "run-1", threadId: "thread-1", payload: checklist },
+    ]);
+    const history = await listRoutineRuns(prisma, actor, "routine-1");
+    expect(history.runs[0]?.checklist).toEqual(checklist);
+    expect(RoutineHistorySchema.parse(history)).toEqual(history);
+    expect(checklistEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining("ORDER BY e.seq DESC LIMIT 1"),
+        values: expect.arrayContaining([actor.spaceId, actor.userId, "run-1"]),
+      }),
+    );
+    checklistEvents.mockResolvedValue([
+      { runId: "run-1", threadId: "foreign-thread", payload: checklist },
+    ]);
+    expect((await listRoutineRuns(prisma, actor, "routine-1")).runs[0]?.checklist).toBeUndefined();
+    checklistEvents.mockResolvedValue([
+      { runId: "run-1", threadId: "thread-1", payload: { steps: [] } },
+    ]);
+    expect((await listRoutineRuns(prisma, actor, "routine-1")).runs[0]?.checklist).toBeUndefined();
+  });
   it("refuses missing, foreign or archived routines before reading runs", async () => {
     const { prisma, routine, runs, messages } = fixture();
     routine.mockResolvedValue(null);

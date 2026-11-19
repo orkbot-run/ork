@@ -1133,6 +1133,7 @@ msgid "Block"
 msgstr "封鎖"
 
 #: src/lib/ticket-status.ts
+#: src/pages/RoutineRunHistory.tsx
 msgid "Blocked"
 msgstr "受阻"
 
@@ -1450,6 +1451,10 @@ msgstr ""
 #: src/pages/HostComputerPrompt.tsx
 msgid "Checking…"
 msgstr "正在檢查…"
+
+#: src/pages/RoutineRunHistory.tsx
+msgid "Checklist"
+msgstr "檢查清單"
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Choose a bot color or upload an image"
@@ -3029,6 +3034,7 @@ msgstr "還沒有帳號？"
 #: src/components/ToolActivityDisclosure.tsx
 #: src/lib/ticket-status.ts
 #: src/pages/ActivityList.tsx
+#: src/pages/RoutineRunHistory.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 #: src/pages/shell/import-setup-card.tsx
 #: src/pages/shell/message-view.tsx
@@ -5140,6 +5146,7 @@ msgstr "已暫停"
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
+#: src/pages/RoutineRunHistory.tsx
 msgid "Pending"
 msgstr "待處理"
 
@@ -6384,6 +6391,7 @@ msgstr ""
 msgid "Skip or deploy key"
 msgstr "跳過或使用部署金鑰"
 
+#: src/pages/RoutineRunHistory.tsx
 #: src/pages/shell/message-view.tsx
 msgid "Skipped"
 msgstr ""

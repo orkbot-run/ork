@@ -75,6 +75,45 @@ export function providerQuotaResetAt(text: string, now = Date.now()): number | u
   return resetAt !== undefined && resetAt - now > PROVIDER_QUOTA_MIN_RESET_MS ? resetAt : undefined;
 }
 
+export const ROUTINE_CHECKLIST_META_KIND = "routine-checklist";
+/** Reuse the existing wire type so older clients can ignore checklist checkpoints. */
+export const ROUTINE_CHECKLIST_EVENT_TYPE = "run.checkpointed";
+export const LEGACY_ROUTINE_CHECKLIST_EVENT_TYPE = "run.routine_checklist";
+
+export const RoutineChecklistStepSchema = z
+  .object({
+    id: z.number().int().positive(),
+    text: z.string().min(1).max(4000),
+    status: z.enum(["pending", "done", "blocked", "skipped"]),
+    reason: z.string().trim().min(1).max(1000).nullable(),
+  })
+  .superRefine((step, ctx) => {
+    if ((step.status === "blocked" || step.status === "skipped") && !step.reason)
+      ctx.addIssue({ code: "custom", path: ["reason"], message: "A reason is required" });
+  });
+export const RoutineChecklistSchema = z
+  .object({
+    steps: z.array(RoutineChecklistStepSchema).min(2).max(100),
+    continuationRequested: z.boolean(),
+  })
+  .superRefine((checklist, ctx) => {
+    if (new Set(checklist.steps.map((step) => step.id)).size !== checklist.steps.length)
+      ctx.addIssue({ code: "custom", path: ["steps"], message: "Step IDs must be unique" });
+  });
+export type RoutineChecklist = z.infer<typeof RoutineChecklistSchema>;
+
+export function routineChecklistFromEvent(payload: unknown): RoutineChecklist | undefined {
+  const value =
+    payload &&
+    typeof payload === "object" &&
+    "kind" in payload &&
+    payload.kind === ROUTINE_CHECKLIST_META_KIND &&
+    "checklist" in payload
+      ? payload.checklist
+      : payload;
+  return RoutineChecklistSchema.safeParse(value).data;
+}
+
 export const RoutineRunSchema = z.object({
   id: Id,
   botId: Id,
@@ -87,6 +126,8 @@ export const RoutineRunSchema = z.object({
   lateSince: IsoDate.nullable(),
   completedAt: IsoDate.nullable(),
   messageId: Id.nullable(),
+  /** Structured outcomes recorded during this occurrence; absent for legacy/simple routines. */
+  checklist: RoutineChecklistSchema.optional(),
 });
 export type RoutineRun = z.infer<typeof RoutineRunSchema>;
 

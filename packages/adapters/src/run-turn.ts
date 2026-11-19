@@ -195,6 +195,12 @@ export async function consumeRunEvents(
       if (event.type === "text") {
         await streamText(ctx, event);
       } else if (event.type === "turn") {
+        if (event.narration) {
+          recordExplicitNoResponse(reply, reply.assistantTurnText);
+          reply.assistantTurnText = "";
+          await flushProgress(ctx);
+          await publishMidTurnNarration(ctx);
+        }
         reply.assistantTurnBreakPending = true;
       } else if (event.type === "steered") {
         await onSteered(ctx, event);

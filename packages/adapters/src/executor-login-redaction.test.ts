@@ -110,7 +110,7 @@ async function runAfterFill(
       }),
     },
     routine: { findUnique: vi.fn(async () => ({ notify: false, nextRunAt: null })) },
-    event: { count: vi.fn(async () => 0) },
+    event: { count: vi.fn(async () => 0), findFirst: vi.fn(async () => null) },
     bot: {
       findUniqueOrThrow: vi.fn(async () => ({
         id: run.botId,

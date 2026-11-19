@@ -10,6 +10,7 @@ import type {
   ModelApiProtocol,
   ModelRoutingValues,
   PurchaseCardField,
+  RoutineChecklist,
   SandboxKind,
 } from "@orkbot/contracts";
 
@@ -559,6 +560,10 @@ export interface AgentRunRequest {
   threadId: string;
   runId: string;
   routineId?: string | null;
+  /** Durable checklist snapshot from the current routine occurrence. */
+  routineChecklist?: RoutineChecklist;
+  /** Awaited and fenced persistence before another model turn or tool result. */
+  onRoutineChecklist?: (checklist: RoutineChecklist) => Promise<void>;
   sourceMessageId?: string | null;
   prompt: string;
   /** Group threads: the label ("User") the model sees on the prompt, the same as on history. */
@@ -695,7 +700,7 @@ export type AgentRuntimeEvent =
   /** Explicit provider reasoning lifecycle only; never contains reasoning text. */
   | { type: "thinking"; active: boolean }
   /** A new assistant message starts; its text does not continue the previous text. */
-  | { type: "turn" }
+  | { type: "turn"; narration?: true }
   /** Messages sent while the bot worked were handed to the model before this turn. */
   | {
       type: "steered";

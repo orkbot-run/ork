@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Routine continuation changes follow LICENSE.md.
+
 import { i18n } from "@lingui/core";
 import type { ProductEvent, RoutineHistory, RoutineRun, ThreadSnapshot } from "@orkbot/contracts";
 import { runThreadSubscription } from "@orkbot/core";
@@ -62,6 +66,39 @@ const run: RoutineRun = {
 const page = (runs: RoutineRun[], nextCursor: RoutineHistory["nextCursor"] = null) => ({
   runs,
   nextCursor,
+});
+
+it("shows the outcome and reason for each routine step", async () => {
+  routines.history.mockResolvedValue(
+    page([
+      {
+        ...run,
+        checklist: {
+          continuationRequested: true,
+          steps: [
+            { id: 1, text: "Read calendar", status: "done", reason: null },
+            { id: 2, text: "Read mail", status: "blocked", reason: "Account unavailable" },
+            { id: 3, text: "Write summary", status: "skipped", reason: "No mail to summarize" },
+          ],
+        },
+      },
+    ]),
+  );
+  const view = await mounted();
+  try {
+    await view.settled(() => expect(view.rows()).toHaveLength(1));
+    const details = view.container.querySelector("details")!;
+    expect(details.open).toBe(false);
+    await act(async () => details.querySelector("summary")!.click());
+    expect(details.open).toBe(true);
+    expect([...details.querySelectorAll("li")].map((row) => row.textContent)).toEqual([
+      "Read calendarDone",
+      "Read mailBlockedAccount unavailable",
+      "Write summarySkippedNo mail to summarize",
+    ]);
+  } finally {
+    await view.close();
+  }
 });
 
 afterEach(() => {

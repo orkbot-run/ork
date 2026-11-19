@@ -212,7 +212,27 @@ test("run history links runs that replied and marks silent ones", async ({ page 
         json: {
           runs: [
             run(0, "running"),
-            run(1, "completed", { messageId: `message-${stamp}` }),
+            run(1, "completed", {
+              messageId: `message-${stamp}`,
+              checklist: {
+                continuationRequested: true,
+                steps: [
+                  { id: 1, text: "Read the current price", status: "done", reason: null },
+                  {
+                    id: 2,
+                    text: "Compare yesterday's price",
+                    status: "blocked",
+                    reason: "No price history",
+                  },
+                  {
+                    id: 3,
+                    text: "Send the update",
+                    status: "skipped",
+                    reason: "Comparison unavailable",
+                  },
+                ],
+              },
+            }),
             run(2, "completed"),
             run(3, "failed", { error: "504: request timed out" }),
             run(4, "completed", {
@@ -240,6 +260,11 @@ test("run history links runs that replied and marks silent ones", async ({ page 
   await expect(history.getByText("No reply", { exact: true })).toHaveCount(2);
   await expect(rows.nth(4)).toContainText("Started 40m late");
   await expect(history.getByText(/Started .* late/)).toHaveCount(1);
+  const checklist = rows.nth(1).locator("details");
+  await expect(checklist.getByText("No price history")).toBeHidden();
+  await checklist.getByText("Checklist", { exact: true }).click();
+  await expect(checklist.getByRole("listitem")).toHaveCount(3);
+  await expect(checklist.getByText("No price history")).toBeVisible();
   await history.scrollIntoViewIfNeeded();
   await captureScreenshot(page, testInfo, "routine-run-history-states");
 });

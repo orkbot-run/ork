@@ -444,6 +444,10 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
       fakeAgentState.followUpMessages.push(message);
     }
 
+    hasQueuedMessages() {
+      return fakeAgentState.followUpMessages.length > 0;
+    }
+
     abort() {
       this.aborted = true;
       // Mirror pi-agent-core: abort settles the run with an errorMessage that
