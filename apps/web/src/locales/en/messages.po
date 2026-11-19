@@ -1504,6 +1504,10 @@ msgstr "Choose how people in your organization will connect models."
 msgid "Choose how to use Ork"
 msgstr "Choose how to use Ork"
 
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Choose workspace"
+msgstr "Choose workspace"
+
 #: src/components/vault/VaultItemEditor.tsx
 msgid "City"
 msgstr "City"
@@ -2337,6 +2341,10 @@ msgstr "Could not log out. Try again."
 #: src/pages/Paywall.tsx
 msgid "Could not open billing"
 msgstr "Could not open billing"
+
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Could not open the workspace picker. Try again."
+msgstr "Could not open the workspace picker. Try again."
 
 #: src/components/pages/PagesList.tsx
 msgid "Could not pin this page. Try again."
@@ -7014,6 +7022,10 @@ msgstr "This subscription sign-in is not available in Ork yet. Use a deployment 
 msgid "This week"
 msgstr "This week"
 
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "This workspace was closed or your access was removed."
+msgstr "This workspace was closed or your access was removed."
+
 #: src/lib/cron.ts
 msgid "Thursday"
 msgstr "Thursday"
@@ -7655,6 +7667,10 @@ msgstr "Workspace model"
 #: src/pages/model-settings/workspace-ai-account-form.tsx
 msgid "Workspace monthly budget (USD)"
 msgstr "Workspace monthly budget (USD)"
+
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Workspace unavailable"
+msgstr "Workspace unavailable"
 
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"

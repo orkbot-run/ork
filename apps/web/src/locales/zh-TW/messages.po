@@ -1505,6 +1505,10 @@ msgstr ""
 msgid "Choose how to use Ork"
 msgstr "選擇 Ork 的使用方式"
 
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Choose workspace"
+msgstr ""
+
 #: src/components/vault/VaultItemEditor.tsx
 msgid "City"
 msgstr ""
@@ -2338,6 +2342,10 @@ msgstr "無法登出，請再試一次。"
 #: src/pages/Paywall.tsx
 msgid "Could not open billing"
 msgstr "無法開啟帳務頁面"
+
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Could not open the workspace picker. Try again."
+msgstr ""
 
 #: src/components/pages/PagesList.tsx
 msgid "Could not pin this page. Try again."
@@ -7015,6 +7023,10 @@ msgstr "此訂閱登入在 Ork 中尚不可用。請使用部署憑證或選擇�
 msgid "This week"
 msgstr "本週"
 
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "This workspace was closed or your access was removed."
+msgstr ""
+
 #: src/lib/cron.ts
 msgid "Thursday"
 msgstr "週四"
@@ -7656,6 +7668,10 @@ msgstr ""
 #: src/pages/model-settings/workspace-ai-account-form.tsx
 msgid "Workspace monthly budget (USD)"
 msgstr "工作區每月預算（美元）"
+
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Workspace unavailable"
+msgstr ""
 
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"
