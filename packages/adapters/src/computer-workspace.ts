@@ -323,6 +323,8 @@ export async function checkpointComputerWorkspace(
   record?: {
     prisma: Pick<PrismaClient, "botDeletion" | "computer">;
     computer: { id: string; scope: string; spaceId: string };
+    /** Reuse a confirmed mount from the run checkpoint's direct path. */
+    homeMounted?: true;
     /** Called once the export has finished, just before the files are stored. */
     onExported?: () => void;
   },
@@ -341,7 +343,7 @@ export async function checkpointComputerWorkspace(
   if (before?.restorePending || before?.state === "booting") return undefined;
   if (
     home instanceof LocalAgentHomeStore &&
-    (await homeIsMounted(home, sandbox, computer, context))
+    (record?.homeMounted ?? (await homeIsMounted(home, sandbox, computer, context)))
   ) {
     return home.revise(homeKey);
   }
@@ -410,6 +412,9 @@ export async function checkpointRunComputerWorkspace(
   if (computerRecord.scope !== "team" || computer.kind === "docker") {
     return checkpointAndRecordComputerWorkspace(deps, computerRecord, computer, context);
   }
+  if (await homeIsMounted(deps.home, deps.sandbox, computer, context)) {
+    return checkpointAndRecordComputerWorkspace(deps, computerRecord, computer, context, true);
+  }
   const now = new Date();
   const ownLease = context.screenLeaseId ? parseScreenLeaseId(context.screenLeaseId) : undefined;
   const claimed = await deps.prisma.computer.updateMany({
@@ -450,6 +455,7 @@ export async function checkpointAndRecordComputerWorkspace(
   computerRecord: { id: string; homeKey: string; scope: string; spaceId: string },
   computer: ComputerRef,
   context: AdapterContext,
+  homeMounted?: true,
 ): Promise<string | undefined> {
   const checkpointedAt = new Date();
   const revision = await checkpointComputerWorkspace(
@@ -458,7 +464,7 @@ export async function checkpointAndRecordComputerWorkspace(
     computerRecord.homeKey,
     computer,
     context,
-    { prisma: deps.prisma, computer: computerRecord },
+    { prisma: deps.prisma, computer: computerRecord, homeMounted },
   );
   if (revision === undefined) return undefined;
   await deps.prisma.computer.updateMany({

@@ -153,16 +153,18 @@ not bill while running, so `COMPUTER_MAX_ACTIVE_MS` does not apply to them;
 
 ### Mounted home (optional)
 
-By default each computer's home is copied in when it starts and saved back when it stops. Set
-`KUBERNETES_SANDBOX_HOME_CLAIM` to the PersistentVolumeClaim that holds the API's `DATA_DIR` to
-mount `homes/<home key>` from it at the workspace instead, so the home is never copied, like a
-local Docker computer. The claim must be in the computer namespace, so in practice the computers
-run in the API's namespace. Because a ReadWriteOnce volume is attached to one node,
+By default each computer's home is copied in when it starts and saved back when it stops. On k3s,
+set `KUBERNETES_SANDBOX_HOME_CLAIM` to the PersistentVolumeClaim mounted at `DATA_DIR` by the API
+and worker. The computer mounts `homes/<home key>` from that claim as its workspace. A run
+checkpoint records the revision directly for both dedicated and Team Computers, while teammates
+can keep using a Team Computer. The claim must be in the computer namespace, so in practice the
+computers run in the API's namespace. Because a ReadWriteOnce volume is attached to one node,
 `KUBERNETES_SANDBOX_HOME_COLOCATE_NAMESPACE` and `KUBERNETES_SANDBOX_HOME_COLOCATE_LABELS` (a JSON
 object) are required with it and become a required pod affinity to the pods that hold the volume,
-for example `{"app":"orkbot-api"}`. The pod gets `fsGroup: 1000`. An existing pod without the home
-volume keeps copying its files until it is stopped; its next fresh pod mounts the saved home. This applies only to the local home store; with
-`OBJECT_STORAGE_BUCKET` set, the home claim is ignored and homes are copied as usual.
+for example `{"app":"orkbot-api"}`. The pod gets `fsGroup: 1000`. When switching an existing
+installation, stop each computer through Ork after configuring the claim. Ork saves the current
+workspace from an existing pod before stopping it. Its next pod mounts that saved home. This
+applies to the local home store. With `OBJECT_STORAGE_BUCKET` set, Ork still copies the workspace.
 
 The API and worker service account needs this in the computer namespace:
 
