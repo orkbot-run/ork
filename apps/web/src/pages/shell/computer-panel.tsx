@@ -22,6 +22,7 @@ type ComputerPanelProps = {
   /** Changes to load the screen again in a new frame. */
   screenFrameKey?: string;
   screenFrameRef: (frame: HTMLIFrameElement | null) => void;
+  onFrameError?: (message: string) => void;
   computerScreenError: ReactNode;
   computerBooting: ReactNode;
   booting: boolean;
@@ -82,6 +83,7 @@ function ComputerPreview({
   embeddedScreenUrl,
   screenFrameKey,
   screenFrameRef,
+  onFrameError,
   computerScreenError,
   computerBooting,
   booting,
@@ -164,9 +166,10 @@ function ComputerPreview({
         ) : computerCapabilitiesFor(computer, computerCapabilities).screen &&
           computer?.state === "running" &&
           embeddedScreenUrl &&
+          !computerBooting &&
           !computerScreenError ? (
           embeddedScreenUrl === COMPUTER_FRAME_SOURCE ? (
-            <NativeComputerScreen key={screenFrameKey} botId={bot.id} />
+            <NativeComputerScreen key={screenFrameKey} botId={bot.id} onFrameError={onFrameError} />
           ) : (
             <iframe
               key={screenFrameKey}

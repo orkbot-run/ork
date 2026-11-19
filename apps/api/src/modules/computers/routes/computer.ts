@@ -49,7 +49,7 @@ import {
   ComputerCommandSchema,
   foldComputerCommands,
 } from "@orkbot/contracts";
-import { ACTIVE_RUN_STATUSES, scrollDirection } from "@orkbot/core";
+import { ACTIVE_RUN_STATUSES, requestDeadline, scrollDirection, withAbort } from "@orkbot/core";
 import { addScreenProxyCapability } from "@orkbot/core/node/screen-capability";
 import type { ComputerRunEnd, Prisma, PrismaClient } from "@orkbot/db";
 import {
@@ -76,6 +76,7 @@ import {
 } from "../computer-status.js";
 
 const MAX_COMPUTER_TEXT_FILE_BYTES = 2 * 1024 * 1024;
+const COMPUTER_FRAME_CAPTURE_TIMEOUT_MS = 8_000;
 
 /** Each command writes a running and a done event, so this keeps about 100 commands. */
 const COMPUTER_COMMAND_HISTORY_EVENTS = 200;
@@ -158,10 +159,15 @@ export function computerRoutes(ctx: RouterContext) {
         );
         const signal = context.signal ?? adapter.signal;
         signal.throwIfAborted();
-        const observation = await deps.sandbox.observe(toComputerRef(computer), {
-          ...adapter,
+        const capture = requestDeadline(
+          COMPUTER_FRAME_CAPTURE_TIMEOUT_MS,
+          "The screen did not respond.",
           signal,
-        });
+        );
+        const observation = await withAbort(
+          deps.sandbox.observe(toComputerRef(computer), { ...adapter, signal: capture.signal }),
+          capture.signal,
+        ).finally(capture.dispose);
         const frame = await computerFrame(
           JSON.stringify([
             context.actor.spaceId,
@@ -194,15 +200,24 @@ export function computerRoutes(ctx: RouterContext) {
         if (!bot.computer) throw new IsolationError();
         if (bot.computer.state === "running" && bot.computer.providerRef) {
           try {
-            await ensureComputerWorkspaceLayout(
-              deps.sandbox,
-              toComputerRef(bot.computer),
-              parseComputerMode(bot.computer.scope),
-              bot.id,
-              computerContext(context.actor, bot.id, "boot"),
-            );
-            scheduleComputerSleep(deps.jobs, bot.computer.id);
-            return computerStatus(deps, context.actor, input.botId);
+            const ref = toComputerRef(bot.computer);
+            const ctx = computerContext(context.actor, bot.id, "boot");
+            // Team layout setup checks the provider by executing a command. Dedicated
+            // layout setup is a no-op, so confirm it is alive before returning early.
+            if (
+              parseComputerMode(bot.computer.scope) === "team" ||
+              (await deps.sandbox.isRunning?.(ref, ctx)) === true
+            ) {
+              await ensureComputerWorkspaceLayout(
+                deps.sandbox,
+                ref,
+                parseComputerMode(bot.computer.scope),
+                bot.id,
+                ctx,
+              );
+              scheduleComputerSleep(deps.jobs, bot.computer.id);
+              return computerStatus(deps, context.actor, input.botId);
+            }
           } catch (error) {
             await clearGoneSandbox(deps, bot.computer, error);
           }

@@ -41,6 +41,7 @@ type ComputerOverlayProps = {
   /** Changes to load the screen again in a new frame. */
   screenFrameKey?: string;
   screenFrameRef: (frame: HTMLIFrameElement | null) => void;
+  onFrameError?: (message: string) => void;
   computerScreenError: ReactNode;
   computerBooting: ReactNode;
   onStopTeaching: () => void | Promise<void>;
@@ -68,6 +69,7 @@ export function ComputerOverlay({
   embeddedScreenUrl,
   screenFrameKey,
   screenFrameRef,
+  onFrameError,
   computerScreenError,
   computerBooting,
   onStopTeaching,
@@ -204,12 +206,14 @@ export function ComputerOverlay({
           ) : computerCapabilitiesFor(computer).screen &&
             computer?.state === "running" &&
             embeddedScreenUrl &&
+            !computerBooting &&
             !computerScreenError ? (
             <>
               {embeddedScreenUrl === COMPUTER_FRAME_SOURCE ? (
                 <NativeComputerScreen
                   key={screenFrameKey}
                   botId={bot.id}
+                  onFrameError={onFrameError}
                   interactive={
                     hasControl && !recordingSkill && computerCapabilitiesFor(computer).control
                   }

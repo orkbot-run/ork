@@ -127,6 +127,26 @@ test("native computer images and control stay on authenticated HTTP", async ({
   await chrome.getByRole("button", { name: "Release control", exact: true }).click();
   await expect(controls).toHaveCount(0);
   await expect(image).toBeVisible();
+
+  await page.route("**/rpc/computer/frame", (route) =>
+    route.fulfill({
+      status: 409,
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: { defined: false, code: "CONFLICT", status: 409, message: "Desktop stopped" },
+      }),
+    }),
+  );
+  const retry = page
+    .getByRole("alert")
+    .filter({ hasText: "Desktop stopped" })
+    .getByRole("button", { name: "Retry screen" });
+  await expect(retry).toBeVisible();
+  await page.unroute("**/rpc/computer/frame");
+  const boot = page.waitForResponse((response) => response.url().endsWith("/rpc/computer/boot"));
+  await retry.click();
+  expect((await boot).ok()).toBe(true);
+  await expect(image).toBeVisible();
 });
 
 test("an active Team bot must be stopped before user takeover", async ({ page }, testInfo) => {

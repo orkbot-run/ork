@@ -14,9 +14,11 @@ import { TeachCaptureOverlay } from "./teach/TeachCaptureOverlay";
 export function NativeComputerScreen({
   botId,
   interactive = false,
+  onFrameError,
 }: {
   botId: string;
   interactive?: boolean;
+  onFrameError?: (message: string) => void;
 }) {
   const { t } = useLingui();
   const session = authClient.useSession();
@@ -60,6 +62,10 @@ export function NativeComputerScreen({
   }, [botId, scope, onError]);
   const frame = value?.scope === scope && scope.isCurrent() ? value.frame : null;
   const error = failure?.scope === scope ? failure.error : null;
+  const message = error ? errorText(error, t`Could not load the desktop.`) : null;
+  useEffect(() => {
+    if (message && scope.isCurrent()) onFrameError?.(message);
+  }, [message, onFrameError, scope]);
   return (
     <div className="relative grid h-full w-full place-items-center overflow-hidden bg-background">
       {frame ? (
@@ -84,7 +90,7 @@ export function NativeComputerScreen({
         </>
       ) : (
         <span className="px-6 text-center text-sm text-muted-foreground">
-          {error ? errorText(error, t`Could not load the desktop.`) : t`Connecting…`}
+          {message ?? t`Connecting…`}
         </span>
       )}
     </div>

@@ -66,8 +66,8 @@ import type { OutgoingMessage } from "./use-composer-actions";
 /** Bubbles stop at a readable line length instead of stretching with wide windows. */
 export function bubbleFrameWidth(role: ThreadMessage["role"]) {
   return role === "user"
-    ? "max-w-[min(84%,calc(100%_-_8rem),39rem)] [@media(hover:none)]:max-w-[min(84%,39rem)]"
-    : "max-w-[min(88%,calc(100%_-_8rem),39rem)] [@media(hover:none)]:max-w-[min(88%,39rem)]";
+    ? "max-w-[min(84%,39rem)] @min-[30rem]/transcript:[@media(hover:hover)_and_(pointer:fine)]:max-w-[min(84%,calc(100%_-_8rem),39rem)]"
+    : "max-w-[min(88%,39rem)] @max-[30rem]/transcript:max-w-full @min-[30rem]/transcript:[@media(hover:hover)_and_(pointer:fine)]:max-w-[min(88%,calc(100%_-_8rem),39rem)]";
 }
 
 function TranscriptSkeleton() {
@@ -673,7 +673,7 @@ export const Transcript = memo(function Transcript({
             following.current = false;
           }
         }}
-        className={`rk-scroll isolate flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto scroll-pt-16 scroll-pb-7 pt-20 pb-12 md:pt-[84px] md:pb-13 ${TRANSCRIPT_CONTENT_PADDING}`}
+        className={`rk-scroll @container/transcript isolate flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto scroll-pt-16 scroll-pb-7 pt-20 pb-12 md:pt-[84px] md:pb-13 ${TRANSCRIPT_CONTENT_PADDING}`}
         style={
           userBubble
             ? ({
