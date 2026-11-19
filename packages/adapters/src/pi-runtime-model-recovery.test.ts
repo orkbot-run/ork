@@ -1,4 +1,4 @@
-import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
+import type { AssistantMessage, AssistantMessageEvent, Model } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import type * as Core from "@orkbot/core";
@@ -30,7 +30,7 @@ vi.mock("./pi-openai-compatible-provider.js", () => ({
   registerOpenAiCompatibleRuntime: (models: unknown) => models,
 }));
 
-import { PiAgentRuntime } from "./pi-runtime.js";
+import { MISSING_TOOL_FINAL_RESPONSE_ERROR, PiAgentRuntime } from "./pi-runtime.js";
 import { continuationOverlap, continuationRepeat } from "./pi-runtime-fallback.js";
 
 // A plain model with a card ceiling above the 4k completion default, and a reasoning model
@@ -951,4 +951,216 @@ it("stops the public thinking marker immediately when an active provider turn is
     { type: "thinking", active: true },
     { type: "thinking", active: false },
   ]);
+});
+
+describe("normal empty completions", () => {
+  const empty = (target: Model<"openai-completions">, thinking = false) =>
+    stream(message(target, thinking ? [{ type: "thinking", thinking: "discard me" }] : [], "stop"));
+
+  it.each([false, true])(
+    "retries empty output twice with cancellable backoff (thinking=%s)",
+    async (thinking) => {
+      providerState.stream
+        .mockImplementationOnce(() => empty(plain, thinking))
+        .mockImplementationOnce(() => empty(plain, thinking))
+        .mockImplementation(() => reply(plain));
+      const events = await run(request(plain));
+      expect(sentContexts()[1]).toBe(sentContexts()[0]);
+      expect(sentContexts()[2]).toBe(sentContexts()[0]);
+      expect(providerState.delay.mock.calls.map(([delay]) => delay)).toEqual([2_000, 8_000]);
+      expect(events.at(-1)).toEqual({ type: "done", text: "Recovered." });
+    },
+  );
+
+  it("uses a configured backup after two empty retries", async () => {
+    providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
+      target.id === plain.id ? empty(target) : reply(target),
+    );
+    const events = await run(
+      request(plain, {}, [{ provider: backup.provider, id: backup.id, apiKey: "backup-key" }]),
+    );
+    expect(providerState.stream.mock.calls.map(([target]) => target.id)).toEqual([
+      plain.id,
+      plain.id,
+      plain.id,
+      backup.id,
+    ]);
+    expect(events.at(-1)).toEqual({ type: "done", text: "Recovered." });
+  });
+
+  it("renders the configured empty message after exhaustion", async () => {
+    providerState.stream.mockImplementation(() => empty(plain));
+    const input = { ...request(plain), emptyResponseText: "Empty response fixture." };
+    const events = await run(input);
+    expect(providerState.stream).toHaveBeenCalledTimes(3);
+    expect(events.at(-1)).toEqual({ type: "done", text: "Empty response fixture." });
+  });
+
+  it.each([false, true])(
+    "preserves intentional silent completion (thinking=%s)",
+    async (thinking) => {
+      providerState.stream.mockImplementation(() => empty(plain, thinking));
+      const events = await run({ ...request(plain), allowSilentEmpty: true });
+      expect(providerState.stream).toHaveBeenCalledOnce();
+      expect(providerState.delay).not.toHaveBeenCalled();
+      expect(events.at(-1)).toEqual({ type: "done" });
+    },
+  );
+
+  it("does not stack empty retries onto explicit missing-tool-reply follow-ups", async () => {
+    providerState.stream
+      .mockImplementationOnce(() => toolCall(plain, "authorized"))
+      .mockImplementation(() => empty(plain));
+    const input = request(plain);
+    await expect(run(input)).rejects.toThrow(MISSING_TOOL_FINAL_RESPONSE_ERROR);
+    expect(input.executeTool).toHaveBeenCalledOnce();
+    expect(providerState.stream).toHaveBeenCalledTimes(7);
+    expect(providerState.delay.mock.calls.map(([delay]) => delay)).toEqual([2_000, 8_000]);
+  });
+
+  it("restores normal empty retries when a recovery follow-up starts new tool work", async () => {
+    providerState.stream
+      .mockImplementationOnce(() => toolCall(plain, "first"))
+      .mockImplementationOnce(() => empty(plain))
+      .mockImplementationOnce(() => empty(plain))
+      .mockImplementationOnce(() => empty(plain))
+      .mockImplementationOnce(() => toolCall(plain, "second"))
+      .mockImplementationOnce(() => empty(plain))
+      .mockImplementationOnce(() => empty(plain))
+      .mockImplementation(() => reply(plain));
+    const input = request(plain);
+    const events = await run(input);
+    expect(input.executeTool).toHaveBeenCalledTimes(2);
+    expect(providerState.stream).toHaveBeenCalledTimes(8);
+    expect(providerState.delay.mock.calls.map(([delay]) => delay)).toEqual([
+      2_000, 8_000, 2_000, 8_000,
+    ]);
+    expect(events.at(-1)).toEqual({ type: "done", text: "Recovered." });
+  });
+
+  it("preserves intentional silence after dispatched tool work", async () => {
+    providerState.stream
+      .mockImplementationOnce(() => toolCall(plain, "dispatched"))
+      .mockImplementation(() => empty(plain));
+    const input = { ...request(plain), allowSilentEmpty: true };
+    const events = await run(input);
+    expect(input.executeTool).toHaveBeenCalledOnce();
+    expect(providerState.delay).not.toHaveBeenCalled();
+    expect(events.at(-1)).toEqual({ type: "done" });
+    expect(texts(events)).toEqual([]);
+  });
+
+  it("stops during empty-response backoff", async () => {
+    const controller = new AbortController();
+    providerState.stream.mockImplementation(() => empty(plain));
+    providerState.delay.mockImplementation(async () => controller.abort());
+    await expect(run(request(plain), controller.signal)).rejects.toThrow(/abort|stop/i);
+    expect(providerState.stream).toHaveBeenCalledOnce();
+  });
+});
+
+function interruptedTool(ended: boolean) {
+  const call = {
+    type: "toolCall" as const,
+    id: "rejected",
+    name: "write_effect",
+    arguments: { value: "rejected" },
+  };
+  const partial = message(plain, [call], "stop");
+  const failure = { ...partial, stopReason: "error" as const, errorMessage: "terminated" };
+  const result = new AssistantMessageEventStream();
+  result.push({ type: "start", partial: { ...partial, content: [] } });
+  result.push({ type: "toolcall_start", contentIndex: 0, partial });
+  result.push({ type: "toolcall_delta", contentIndex: 0, delta: '{"value":"rejected', partial });
+  if (ended) result.push({ type: "toolcall_end", contentIndex: 0, toolCall: call, partial });
+  result.push({ type: "error", reason: "error", error: failure });
+  result.end(failure);
+  return result;
+}
+
+describe("interrupted buffered tool calls", () => {
+  it.each([false, true])(
+    "discards an interrupted call before execution (ended=%s)",
+    async (ended) => {
+      providerState.stream
+        .mockImplementationOnce(() => interruptedTool(ended))
+        .mockImplementation(() => reply(plain));
+      const input = request(plain);
+      const events = await run(input);
+      expect(input.executeTool).not.toHaveBeenCalled();
+      expect(JSON.stringify(events)).not.toContain("rejected");
+      expect(sentContexts()[1]).toBe(sentContexts()[0]);
+      expect(events.at(-1)).toEqual({ type: "done", text: "Recovered." });
+    },
+  );
+
+  it.each([
+    { ended: false, throws: true },
+    { ended: true, throws: true },
+    { ended: true, throws: false },
+  ])(
+    "recovers an iterator interruption with a buffered call (ended=$ended, throws=$throws)",
+    async ({ ended, throws }) => {
+      providerState.stream
+        .mockImplementationOnce(() => {
+          const interrupted = interruptedTool(ended);
+          return new (class extends AssistantMessageEventStream {
+            override async *[Symbol.asyncIterator](): AsyncGenerator<AssistantMessageEvent> {
+              for await (const event of interrupted) {
+                if (event.type === "error") {
+                  if (throws) throw new TypeError("terminated");
+                  this.end(event.error);
+                  return;
+                }
+                yield event;
+              }
+            }
+          })();
+        })
+        .mockImplementation(() => reply(plain));
+      const input = request(plain);
+      const events = await run(input);
+      expect(input.executeTool).not.toHaveBeenCalled();
+      expect(JSON.stringify(events)).not.toContain("rejected");
+      expect(sentContexts()[1]).toBe(sentContexts()[0]);
+      expect(events.at(-1)).toEqual({ type: "done", text: "Recovered." });
+    },
+  );
+
+  it("keeps previously authorized effects when a later buffered call is retried", async () => {
+    providerState.stream
+      .mockImplementationOnce(() => toolCall(plain, "authorized"))
+      .mockImplementationOnce(() => interruptedTool(true))
+      .mockImplementation(() => reply(plain));
+    const input = request(plain);
+    await run(input);
+    expect(input.executeTool).toHaveBeenCalledOnce();
+    expect(sentContexts()[2]).toBe(sentContexts()[1]);
+  });
+
+  it("exhausts the existing recovery allowance without emitting tools", async () => {
+    providerState.stream.mockImplementation(() => interruptedTool(true));
+    const input = request(plain);
+    const observed: AgentRuntimeEvent[] = [];
+    const consume = async () => {
+      for await (const event of new PiAgentRuntime().run(input, {
+        signal: new AbortController().signal,
+      }))
+        observed.push(event);
+    };
+    await expect(consume()).rejects.toThrow("terminated");
+    expect(providerState.stream).toHaveBeenCalledTimes(4);
+    expect(input.executeTool).not.toHaveBeenCalled();
+    expect(JSON.stringify(observed)).not.toContain("rejected");
+  });
+
+  it("stops during buffered-call backoff", async () => {
+    const controller = new AbortController();
+    providerState.stream.mockImplementation(() => interruptedTool(true));
+    providerState.delay.mockImplementation(async () => controller.abort());
+    const input = request(plain);
+    await expect(run(input, controller.signal)).rejects.toThrow(/abort|stop/i);
+    expect(providerState.stream).toHaveBeenCalledOnce();
+    expect(input.executeTool).not.toHaveBeenCalled();
+  });
 });

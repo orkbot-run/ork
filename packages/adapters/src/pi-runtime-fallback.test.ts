@@ -510,7 +510,7 @@ describe("Pi runtime transient model retries", () => {
     "Request timed out.",
     "Connection error.",
     MODEL_STREAM_IDLE_TIMEOUT_MESSAGE,
-  ])("does not retry after a tool call starts even if %s omits it", async (error) => {
+  ])("switches safely after a buffered tool call even if %s omits it", async (error) => {
     const failure = message(primary, [], "error", error);
     providerState.stream.mockImplementation(() => {
       const result = new AssistantMessageEventStream();
@@ -520,9 +520,14 @@ describe("Pi runtime transient model retries", () => {
       result.end(failure);
       return result;
     });
+    providerState.stream
+      .mockImplementationOnce(providerState.stream.getMockImplementation()!)
+      .mockImplementation(() =>
+        stream(backupA, message(backupA, [{ type: "text", text: "Recovered." }], "stop")),
+      );
     const input = request([{ provider: backupA.provider, id: backupA.id, apiKey: "backup-key" }]);
-    await expect(run(input)).rejects.toThrow(error);
-    expect(providerState.stream).toHaveBeenCalledOnce();
+    expect((await run(input)).at(-1)).toEqual({ type: "done", text: "Recovered." });
+    expect(providerState.stream).toHaveBeenCalledTimes(2);
     expect(providerState.delay).not.toHaveBeenCalled();
     expect(input.executeTool).not.toHaveBeenCalled();
   });

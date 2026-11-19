@@ -929,6 +929,7 @@ export class PiAgentRuntime implements AgentRuntime {
             // Text in a turn that also contains a tool call is narration, not a final
             // response. Keep the run alive until a later text-only turn answers the user.
             if (hasToolCalls && hasToolResults && !host.pausePending) {
+              fallbackState.continuingSilentToolReply = false;
               toolWorkPendingFinal = true;
               silentToolContinuations = 0;
               streamedBeforePendingFinal = streamed.length;
@@ -953,6 +954,8 @@ export class PiAgentRuntime implements AgentRuntime {
                 silentToolContinuations < MAX_SILENT_TOOL_CONTINUATIONS
               ) {
                 silentToolContinuations += 1;
+                // This bounded follow-up is already recovery; avoid stacking empty retries on it.
+                fallbackState.continuingSilentToolReply = true;
                 agent.followUp({
                   role: "user",
                   content: request.allowSilentEmpty
@@ -1069,6 +1072,7 @@ export class PiAgentRuntime implements AgentRuntime {
             }
             limitContinuation = undefined;
             if (cutBy) {
+              fallbackState.continuingCutReply = true;
               limitContinuation = cutBy === "limit" ? { tail, start: streamed.length } : undefined;
               joinCutReply = { tail, held: "", requested: cutBy === "limit" };
               agent.followUp({
