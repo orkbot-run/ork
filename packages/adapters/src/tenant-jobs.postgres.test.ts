@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited tests are preserved; Ork fixture workers declare the current run reader protocol.
+
 import type {
   AgentHomeStore,
   AgentRuntime,
@@ -6,7 +11,7 @@ import type {
   SecretStore,
 } from "@orkbot/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
-import { createDb, runAsSystem, runAsTenant } from "@orkbot/db";
+import { createDb, declareRunReaderVersion, runAsSystem, runAsTenant } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createBackgroundJobHandlers } from "./background-job-handlers.js";
 import type { createRunExecutor } from "./executor.js";
@@ -113,9 +118,12 @@ describePostgres("tenant-scoped background jobs (PostgreSQL)", () => {
     const continueRun = vi.fn(
       async (runId: string, _workerId?: string, onRunStarted?: () => void) => {
         if (claim) {
-          const claimed = await prisma.run.updateMany({
-            where: { id: runId, status: "queued" },
-            data: { status: "running" },
+          const claimed = await prisma.$transaction(async (tx) => {
+            await declareRunReaderVersion(tx);
+            return tx.run.updateMany({
+              where: { id: runId, status: "queued" },
+              data: { status: "running" },
+            });
           });
           if (claimed.count !== 1) return;
         }

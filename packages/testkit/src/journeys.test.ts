@@ -29,6 +29,7 @@ import {
   appendEvent,
   createThreadEvents,
   createThreadMessage,
+  declareRunReaderVersion,
   RunHistoryWriteError,
   runAsSystem,
 } from "@orkbot/db";
@@ -1535,6 +1536,10 @@ describeJourneys("required product journeys", () => {
       notifyOnFinish: false,
     });
     const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+    const [initialEvents, initialMessages] = await Promise.all([
+      prisma.event.count({ where: { threadId: thread.id } }),
+      prisma.message.count({ where: { threadId: thread.id } }),
+    ]);
 
     await runAsSystem("background job run.continue", () =>
       Promise.all(
@@ -1565,8 +1570,12 @@ describeJourneys("required product journeys", () => {
       prisma.event.findMany({ where: { threadId: thread.id }, orderBy: { seq: "asc" } }),
       prisma.message.findMany({ where: { threadId: thread.id }, orderBy: { seq: "asc" } }),
     ]);
-    expect(events.map((row) => row.seq)).toEqual(Array.from({ length: 40 }, (_, i) => i));
-    expect(messages.map((row) => row.seq)).toEqual(Array.from({ length: 40 }, (_, i) => i));
+    expect(events.map((row) => row.seq)).toEqual(
+      Array.from({ length: initialEvents + 40 }, (_, i) => i),
+    );
+    expect(messages.map((row) => row.seq)).toEqual(
+      Array.from({ length: initialMessages + 40 }, (_, i) => i),
+    );
   });
 
   it("6: fake and desktop executor run the same graphical task", async () => {
@@ -1639,9 +1648,12 @@ describeJourneys("required product journeys", () => {
     );
     const afterFirst = connector.records.length;
     expect(afterFirst).toBeGreaterThan(before);
-    await prisma.run.update({
-      where: { id: sent.runId },
-      data: { status: "running", completedAt: null },
+    await prisma.$transaction(async (tx) => {
+      await declareRunReaderVersion(tx);
+      await tx.run.update({
+        where: { id: sent.runId },
+        data: { status: "running", completedAt: null },
+      });
     });
     await runAsSystem("background job run.continue", () =>
       executor.continueRun(sent.runId, "retry"),
@@ -1861,6 +1873,7 @@ describeJourneys("required product journeys", () => {
     const snap = await rpc<Snap>(app, cookie, "threads/get", { botId: parent.id });
     expect(JSON.stringify(snap.messages)).toMatch(/child_bot|Scout/);
 
+    await rpc(app, cookie, "bots/update", { botId: scout!.id, replyMode: "chat" });
     await sendAndWait(app, cookie, scout!.id, "spawn a bot named Nested");
     const afterNested = await rpc<Bot[]>(app, cookie, "bots/list");
     const nested = afterNested.find((bot) => bot.name === "Nested");
@@ -1929,6 +1942,7 @@ describeJourneys("required product journeys", () => {
         where: { botId: { in: [parent.id, scout!.id] }, status: { in: [...ACTIVE_RUN_STATUSES] } },
       })) === 0;
     await waitForDatabase(settled);
+    await rpc(app, cookie, "bots/update", { botId: scout!.id, replyMode: "chat" });
     const before = await prisma.bot.findUniqueOrThrow({
       where: { id: scout!.id },
       select: { instructions: true },
@@ -4397,7 +4411,13 @@ async function rpc<T>(app: App, cookie: string, proc: string, body: unknown = {}
   if (res.status >= 400 || parsed.error) {
     throw new Error(`${proc} ${res.status}: ${parsed.error?.message ?? text}`);
   }
-  return discardBotIntroFromCreate(botIntroHarness, cookie, proc, parsed.json as T);
+  const result = await discardBotIntroFromCreate(botIntroHarness, cookie, proc, parsed.json as T);
+  if (proc === "bots/create") {
+    // These legacy scripted journeys use text before tool calls as their reply. Explicit-mode
+    // defaults and final replies have dedicated reply-mode and bot-settings coverage.
+    return rpc<T>(app, cookie, "bots/update", { botId: (result as Bot).id, replyMode: "chat" });
+  }
+  return result;
 }
 
 async function answerPendingApproval(

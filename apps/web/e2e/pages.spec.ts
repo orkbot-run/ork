@@ -77,6 +77,8 @@ test("a bot's page shows in its reply, opens full screen and updates", async ({
   await page.setViewportSize({ width: 1280, height: 860 });
   await signup(page, `pages-${Date.now()}@orkbot.test`, "password12", "Page Owner");
   await completeOnboarding(page);
+  // The scripted page author introduces its card before calling the tool.
+  await rpc(page, "bots/update", { botId: activeBotId(page), replyMode: "chat" });
 
   const title = "Test dashboard (example data)";
   await send(

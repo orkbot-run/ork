@@ -6,7 +6,7 @@ import { EncryptedSecretStore, ScriptedAgentRuntime } from "@orkbot/adapters";
 import type { createApp } from "@orkbot/api/app";
 import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { resolveEncryptionKey } from "@orkbot/core";
-import { answerRunInput, runAsSystem, runAsTenant } from "@orkbot/db";
+import { answerRunInput, declareRunReaderVersion, runAsSystem, runAsTenant } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { discardBotIntroFromCreate } from "./discard-bot-intro.js";
 import { asSystem } from "./system-db.js";
@@ -141,13 +141,16 @@ describeIntegration("reusable credential lifecycle", () => {
               where: { runId, kind: "request_secret", status: "approved" },
               data: { status: "intended" },
             });
-            await db.run.update({
-              where: { id: runId },
-              data: {
-                status: "running",
-                leaseOwner: "interrupted-worker",
-                leaseExpiresAt: new Date(Date.now() - 60_000),
-              },
+            await db.$transaction(async (tx) => {
+              await declareRunReaderVersion(tx);
+              await tx.run.update({
+                where: { id: runId },
+                data: {
+                  status: "running",
+                  leaseOwner: "interrupted-worker",
+                  leaseExpiresAt: new Date(Date.now() - 60_000),
+                },
+              });
             });
             await runAsSystem("background job run.continue", () =>
               handles.executor.continueRun(runId, "recovery-worker"),

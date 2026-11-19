@@ -9,11 +9,13 @@ import {
   releaseComputerExecutionLease,
 } from "@orkbot/adapters";
 import type { createApp } from "@orkbot/api/app";
+import type { BotReplyMode } from "@orkbot/contracts";
 import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { approvalEffectKey } from "@orkbot/core/node/approval-effect-key";
 import {
   createThreadEvents,
   createThreadMessage,
+  declareRunReaderVersion,
   loadRunHistoryMessages,
   runAsSystem,
   runAsTenant,
@@ -120,7 +122,8 @@ describeIntegration("run executor lifecycle", () => {
 
   it("records an uncertain result without replaying an interrupted external effect", async () => {
     const prompt = "write this to the destination crm as a note";
-    const seeded = await seedRun("uncertain-effect", prompt);
+    // This script writes a tool result with no separate final assistant turn.
+    const seeded = await seedRun("uncertain-effect", prompt, { replyMode: "chat" });
     const args = { collection: "notes", title: "Ork result", body: prompt };
     const executionId = approvalEffectKey(seeded.run.id, "destination.write", args);
     await db.externalEffect.create({
@@ -449,9 +452,12 @@ describeIntegration("run executor lifecycle", () => {
 
     const lease = { leaseOwner: "failure-worker", leaseFence: 1 };
     async function startContinuation(runId: string) {
-      const run = await db.run.update({
-        where: { id: runId },
-        data: { status: "running", ...lease },
+      const run = await db.$transaction(async (tx) => {
+        await declareRunReaderVersion(tx);
+        return tx.run.update({
+          where: { id: runId },
+          data: { status: "running", ...lease },
+        });
       });
       const attempt = await db.attempt.create({
         data: { runId, fence: lease.leaseFence, status: "running" },
@@ -1318,6 +1324,7 @@ describeIntegration("run executor lifecycle", () => {
       leaseExpiresAt?: Date;
       startedAt?: Date;
       completedAt?: Date;
+      replyMode?: BotReplyMode;
     } = {},
     computerMode?: "team" | "dedicated",
   ) {
@@ -1330,6 +1337,9 @@ describeIntegration("run executor lifecycle", () => {
       instructions: "",
       notifyOnFinish: false,
     });
+    if (runState.replyMode) {
+      await rpc(cookie, "bots/update", { botId: bot.id, replyMode: runState.replyMode });
+    }
     if (computerMode) await rpc(cookie, "bots/setComputer", { botId: bot.id, mode: computerMode });
     const thread = await db.thread.findUniqueOrThrow({ where: { botId: bot.id } });
     const task = await db.task.create({

@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AdapterContext, JobPublisher } from "@orkbot/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
-import { asSystem, createDb, provisionMessagingIdentity, runAsSystem } from "@orkbot/db";
+import {
+  asSystem,
+  createDb,
+  declareRunReaderVersion,
+  provisionMessagingIdentity,
+  runAsSystem,
+} from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { sleepComputerIfIdle } from "./computer-idle.js";
 import {
@@ -603,13 +609,16 @@ describePostgres("Team Computer takeover recovery (PostgreSQL)", () => {
     });
     const observed = await prisma.run.findUniqueOrThrow({ where: { id: run.id } });
     expect(takeoverContinuePlan(observed).heldForTakeover).toBe(false);
-    const claimed = await prisma.run.updateMany({
-      where: { id: run.id, status: "running", leaseExpiresAt: { lte: new Date() } },
-      data: {
-        leaseOwner: "worker-2",
-        leaseFence: 2,
-        leaseExpiresAt: new Date(Date.now() + 60_000),
-      },
+    const claimed = await prisma.$transaction(async (tx) => {
+      await declareRunReaderVersion(tx);
+      return tx.run.updateMany({
+        where: { id: run.id, status: "running", leaseExpiresAt: { lte: new Date() } },
+        data: {
+          leaseOwner: "worker-2",
+          leaseFence: 2,
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        },
+      });
     });
     expect(claimed.count).toBe(1);
     const recoveryInput = { ...input, workerId: "worker-2", runFence: 2 };

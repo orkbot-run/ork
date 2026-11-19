@@ -40,6 +40,8 @@ describePostgres("direct run dispatch (PostgreSQL)", () => {
         { signupsEnabled: undefined, signupAllowlist: undefined },
       ),
     );
+    // Some scenarios intentionally claim runs as a previous-release worker.
+    await system.bot.update({ where: { id: identity.botId }, data: { replyMode: "chat" } });
   });
   afterAll(async () => {
     if (identity) {

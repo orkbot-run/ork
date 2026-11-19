@@ -5,12 +5,13 @@
 import type { SandboxProvider } from "@orkbot/adapter-kit";
 import { FakeSandboxProvider } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
-import type { ThreadEvents } from "@orkbot/db";
+import type { Prisma, ThreadEvents } from "@orkbot/db";
 import {
   appendEventInTransaction,
   createDb,
   createGroupRepos,
   createRepos,
+  declareRunReaderVersion,
   provisionMessagingIdentity,
   runAsSystem,
   runAsTenant,
@@ -36,6 +37,12 @@ describe.skipIf(!enabled)("working bot visibility (PostgreSQL)", () => {
     const actor: Actor = { ...identity, email: "fixture@example.test", isDeploymentOwner: false };
     try {
       await runAsTenant(actor, async () => {
+        // Fixture transitions simulate a worker that supports the current run protocol.
+        const updateRun = (args: Prisma.RunUpdateArgs) =>
+          prisma.$transaction(async (tx) => {
+            await declareRunReaderVersion(tx);
+            return tx.run.update(args);
+          });
         const repos = createRepos(prisma);
         const groups = createGroupRepos(prisma);
         const input = { title: "", description: "", instructions: "", notifyOnFinish: true };
@@ -102,10 +109,10 @@ describe.skipIf(!enabled)("working bot visibility (PostgreSQL)", () => {
         };
         await assertRosterStatus("running");
         for (const status of ["waiting_input", "waiting_takeover", "leased"] as const) {
-          await prisma.run.update({ where: { id: running.id }, data: { status } });
+          await updateRun({ where: { id: running.id }, data: { status } });
           await assertRosterStatus(status);
         }
-        await prisma.run.update({ where: { id: running.id }, data: { status: "running" } });
+        await updateRun({ where: { id: running.id }, data: { status: "running" } });
         const snapshot = await threadSnapshot(
           { prisma, sandbox: new FakeSandboxProvider() },
           target,
@@ -133,7 +140,7 @@ describe.skipIf(!enabled)("working bot visibility (PostgreSQL)", () => {
           run: null,
           activeRuns: [],
         });
-        await prisma.run.update({
+        await updateRun({
           where: { id: peerRun.id },
           data: { status: "failed", error: "Sample failure" },
         });
@@ -143,13 +150,13 @@ describe.skipIf(!enabled)("working bot visibility (PostgreSQL)", () => {
           run: null,
           activeRuns: [],
         });
-        await prisma.run.update({ where: { id: running.id }, data: { status: "completed" } });
+        await updateRun({ where: { id: running.id }, data: { status: "completed" } });
         // Background work must not override queued conversational work.
         await prisma.run.create({
           data: { ...scope, taskId: task.id, status: "running", trigger: "tickets" },
         });
         await assertRosterStatus("queued");
-        await prisma.run.update({ where: { id: running.id }, data: { status: "running" } });
+        await updateRun({ where: { id: running.id }, data: { status: "running" } });
         await stopThreadRuns(
           {
             prisma,

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -34,6 +34,7 @@ import {
   asSystem,
   createDb,
   createThreadEvents,
+  declareRunReaderVersion,
   endTakeoverWaits,
   expireStuckRun,
   runAsSystem,
@@ -85,6 +86,13 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
 
   const endWaits = (runIds: string[]) =>
     runAsSystem("test takeover wait", () => endTakeoverWaits(prisma, runIds));
+
+  // Fixture transitions simulate a worker that supports the current run protocol.
+  const updateRun = (args: Prisma.RunUpdateArgs) =>
+    system.$transaction(async (tx) => {
+      await declareRunReaderVersion(tx);
+      return tx.run.update(args);
+    });
 
   async function setup(mode: "opened" | "unopened" = "opened", trigger = "user") {
     const id = randomUUID();
@@ -171,7 +179,7 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
       const attempt = await system.attempt.create({
         data: { runId: run.id, fence: 1, status: "running" },
       });
-      await system.run.update({
+      await updateRun({
         where: { id: run.id },
         data: {
           status: "running",
@@ -417,7 +425,7 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
     expect(
       (await fixture.cardAction("release", { messageId: old.id, reason: "done" })).status,
     ).toBe(200);
-    await system.run.update({
+    await updateRun({
       where: { id: fixture.run.id },
       data: { status: "running", leaseOwner: "fixture-worker", leaseFence: 2, checkpoint: null },
     });
@@ -470,7 +478,7 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
         const attempt = await system.attempt.create({
           data: { runId: fixture.run.id, fence: 1, status: "running" },
         });
-        await system.run.update({
+        await updateRun({
           where: { id: fixture.run.id },
           data: { status: "running", leaseOwner: "fixture-worker", leaseFence: 1 },
         });
@@ -862,7 +870,7 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
       });
       const threadId = group.thread!.id;
       await system.task.updateMany({ where: { id: fixture.run.taskId }, data: { threadId } });
-      await system.run.update({ where: { id: fixture.run.id }, data: { threadId } });
+      await updateRun({ where: { id: fixture.run.id }, data: { threadId } });
       const card = await system.message.create({
         data: {
           threadId,
@@ -1137,7 +1145,7 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
       where: { runId: fixture.run.id },
       data: { claimedAt: new Date() },
     });
-    await system.run.update({
+    await updateRun({
       where: { id: fixture.run.id },
       data: { status: "waiting_takeover", checkpoint: null },
     });
@@ -1184,7 +1192,7 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
     });
     const threadId = group.thread!.id;
     await system.task.update({ where: { id: run.taskId }, data: { threadId } });
-    await system.run.update({ where: { id: run.id }, data: { threadId } });
+    await updateRun({ where: { id: run.id }, data: { threadId } });
     const benTask = await system.task.create({
       data: { spaceId, userId, botId: ben.id, threadId, prompt: "Sign in.", status: "running" },
     });
@@ -1323,7 +1331,7 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
       const { ada, run, computer } = fixture;
       // Ada's run is executing and has not taken its computer yet.
       await system.computerExecutionLease.delete({ where: { id: fixture.adaLease.id } });
-      await system.run.update({
+      await updateRun({
         where: { id: run.id },
         data: {
           status: "running",
@@ -1363,7 +1371,7 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
       const attempt = await system.attempt.create({
         data: { runId: fixture.run.id, fence: 1, status: "running" },
       });
-      const run = await system.run.update({
+      const run = await updateRun({
         where: { id: fixture.run.id },
         data: { status: "running", leaseOwner: "worker", leaseFence: 1 },
       });

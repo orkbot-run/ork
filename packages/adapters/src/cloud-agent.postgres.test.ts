@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited tests are preserved; Ork fixture workers declare the current run reader protocol.
+
 import { randomUUID } from "node:crypto";
 import type { AdapterContext, BackgroundJob, JobPublisher } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
@@ -5,6 +10,7 @@ import {
   asSystem,
   clearThread,
   createDb,
+  declareRunReaderVersion,
   RunHistoryWriteError,
   runAsSystem,
   runAsTenant,
@@ -255,9 +261,12 @@ describePostgres("cloud agent lifecycle and recovery (PostgreSQL + Cursor emulat
 
   it("does not launch from an attempt a newer claim superseded", async () => {
     const h = await setup();
-    await asSystem(prisma).run.update({
-      where: { id: h.run.id },
-      data: { status: "running", leaseOwner: "worker-2", leaseFence: 2 },
+    await asSystem(prisma).$transaction(async (tx) => {
+      await declareRunReaderVersion(tx);
+      await tx.run.update({
+        where: { id: h.run.id },
+        data: { status: "running", leaseOwner: "worker-2", leaseFence: 2 },
+      });
     });
     await expect(
       runAsSystem("agent run tool call", () =>

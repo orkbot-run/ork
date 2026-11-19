@@ -15,6 +15,7 @@ import {
   asSystem,
   createDb,
   createThreadEvents,
+  declareRunReaderVersion,
   provisionMessagingIdentity,
   runAsSystem,
   runAsTenant,
@@ -215,9 +216,12 @@ postgres("routine checklist persistence (PostgreSQL)", () => {
         },
       });
       fence = 2;
-      await system.run.update({
-        where: { id: run.id },
-        data: { status: "running", leaseOwner: "checklist-worker", leaseFence: fence },
+      await system.$transaction(async (tx) => {
+        await declareRunReaderVersion(tx);
+        await tx.run.update({
+          where: { id: run.id },
+          data: { status: "running", leaseOwner: "checklist-worker", leaseFence: fence },
+        });
       });
       const restored = await system.run.findUniqueOrThrow({
         where: { id: run.id },

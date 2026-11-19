@@ -19,6 +19,8 @@ test("A change asks without an approval model, and approvals settings shape what
   const stamp = Date.now();
   await signup(page, `action-approvals-${stamp}@orkbot.test`, "password12", "Approval UI");
   await completeOnboarding(page, testInfo);
+  // The destination script narrates before the tool runs and has no separate final reply.
+  await rpc(page, "bots/update", { botId: activeBotId(page), replyMode: "chat" });
 
   await requestDestinationWrite(page, "write this to the destination crm as a note");
   const allowOnce = page.getByRole("button", { name: "Allow once", exact: true });

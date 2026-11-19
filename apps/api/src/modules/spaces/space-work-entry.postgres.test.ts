@@ -124,7 +124,11 @@ describePostgres("Space deletion work admission (PostgreSQL)", () => {
     identity = { userId, spaceId, botId, threadId };
     deletionSpaceId = spaceId;
     actor = { userId, spaceId, email: "fixture@example.test", isDeploymentOwner: false };
-    const bot = await prisma.bot.findUniqueOrThrow({ where: { id: identity.botId } });
+    // These fixtures start as legacy runs so tests can exercise upgrading the reader protocol.
+    const bot = await prisma.bot.update({
+      where: { id: identity.botId },
+      data: { replyMode: "chat" },
+    });
     computerId = bot.computerId!;
     await prisma.computer.update({
       where: { id: computerId },
@@ -141,6 +145,7 @@ describePostgres("Space deletion work admission (PostgreSQL)", () => {
         name: "Sender",
         color: "blue",
         computerId,
+        replyMode: "chat",
       },
     });
     const senderThread = await prisma.thread.create({

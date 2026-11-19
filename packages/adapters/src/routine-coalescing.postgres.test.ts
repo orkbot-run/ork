@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited tests are preserved; Ork fixture workers declare the current run reader protocol.
+
 import { randomUUID } from "node:crypto";
 import type { BackgroundJob } from "@orkbot/adapter-kit";
 import { ONCE_ROUTINE_CRON } from "@orkbot/core";
@@ -6,6 +11,7 @@ import {
   appendEvent,
   asSystem,
   createDb,
+  declareRunReaderVersion,
   provisionMessagingIdentity,
   runAsSystem,
 } from "@orkbot/db";
@@ -289,15 +295,18 @@ describePostgres("routine timer coalescing (PostgreSQL)", () => {
             published.push(job.name);
             if (job.name !== "run.continue") return;
             // Emulate the independent dispatcher winning before notification fails.
-            const dispatched = await system.run.update({
-              where: { id: job.payload.runId },
-              data: {
-                status,
-                leaseFence: 1,
-                ...(status === "leased"
-                  ? { leaseOwner: "fixture-worker" }
-                  : { completedAt: new Date() }),
-              },
+            const dispatched = await system.$transaction(async (tx) => {
+              await declareRunReaderVersion(tx);
+              return tx.run.update({
+                where: { id: job.payload.runId },
+                data: {
+                  status,
+                  leaseFence: 1,
+                  ...(status === "leased"
+                    ? { leaseOwner: "fixture-worker" }
+                    : { completedAt: new Date() }),
+                },
+              });
             });
             if (status === "completed") {
               await system.task.update({

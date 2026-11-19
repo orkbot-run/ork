@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { createDb, createThreadEvents, RunHistoryWriteError, runAsSystem } from "@orkbot/db";
+import {
+  createDb,
+  createThreadEvents,
+  declareRunReaderVersion,
+  RunHistoryWriteError,
+  runAsSystem,
+} from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { claimEffect, recordEffect } from "./run-effects.js";
@@ -88,7 +94,13 @@ postgres("tool effects under the run lease (PostgreSQL)", () => {
     });
   const takeOver = (owner: string, fence: number) =>
     fixture(() =>
-      prisma.run.update({ where: { id: run.id }, data: { leaseOwner: owner, leaseFence: fence } }),
+      prisma.$transaction(async (tx) => {
+        await declareRunReaderVersion(tx);
+        return tx.run.update({
+          where: { id: run.id },
+          data: { leaseOwner: owner, leaseFence: fence },
+        });
+      }),
     );
   const effectCount = (idempotencyKey: string) =>
     fixture(() => prisma.externalEffect.count({ where: { idempotencyKey } }));
