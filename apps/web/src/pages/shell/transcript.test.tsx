@@ -10,7 +10,7 @@ import type { ComponentProps, ReactNode, RefObject } from "react";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { markAfterPaint } from "../../lib/performance";
 import { rpc } from "../../lib/rpc";
 import { Transcript } from "./transcript";
@@ -55,6 +55,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -300,4 +301,104 @@ it("marks local outgoing paint and new agent output without counting loaded hist
   });
   expect(markAfterPaint).toHaveBeenCalledWith("ork.chat.agent-output-painted");
   expect(markAfterPaint).toHaveBeenCalledWith("ork.chat.agent-text-painted");
+});
+
+describe("following a newly sent reply", () => {
+  function sendFixture() {
+    vi.stubGlobal("CSS", { escape: (id: string) => id });
+    const old = textMessage("older-reply", "bot", "Old reply");
+    render(baseProps([old]));
+    const scroller = scrollRef.current!;
+    scroller.style.scrollPaddingTop = "64px";
+    Object.defineProperties(scroller, {
+      clientHeight: { value: 500 },
+      scrollHeight: { value: 2_000 },
+    });
+    vi.mocked(scroller.scrollTo).mockImplementation(
+      (options?: ScrollToOptions | number, y?: number) => {
+        scroller.scrollTop = Math.min((typeof options === "number" ? y : options?.top) ?? 0, 1_500);
+      },
+    );
+    const sent = { ...textMessage("new-question", "user", "New question"), clientNonce: "sent" };
+    let replyHeight = 200;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const id = this.dataset.messageId;
+      if (id === "older-reply") return new DOMRect(0, -300, 300, 900);
+      if (id === "progress:run" || id === "final-reply")
+        return new DOMRect(0, 1_100 - scroller.scrollTop, 300, replyHeight);
+      return new DOMRect(0, 0, 700, 500);
+    });
+    render({
+      ...baseProps([old]),
+      followRequest: 1,
+      outgoingMessages: [
+        {
+          clientNonce: "sent",
+          threadKey: "bot",
+          spaceId: undefined,
+          userId: undefined,
+          text: "New question",
+          attachments: [],
+          sending: true,
+        },
+      ],
+    });
+    const progress: ThreadMessage = {
+      ...liveMessage("First part"),
+      runId: "run",
+      blocks: [{ kind: "progress" as const, text: "First part", streaming: true }],
+    };
+    return {
+      scroller,
+      update: (height: number, messages: ThreadMessage[] = [progress], running = true) => {
+        replyHeight = height;
+        render({ ...baseProps([old, sent, ...messages]), followRequest: 1, running });
+      },
+    };
+  }
+
+  it("pins a growing live response and keeps its position when the saved reply replaces it", () => {
+    const { scroller, update } = sendFixture();
+    update(200);
+    expect(scroller.scrollTop).toBe(1_500);
+    update(700);
+    expect(scroller.scrollTop).toBe(1_036);
+    act(() => {
+      scroller.dispatchEvent(new Event("scroll"));
+      scroller.dispatchEvent(new Event("scrollend"));
+    });
+    update(1_050);
+    expect(scroller.scrollTop).toBe(1_036);
+    update(1_050, [{ ...textMessage("final-reply", "bot", "Final text"), runId: "run" }], false);
+    expect(scroller.scrollTop).toBe(1_036);
+    const button = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Jump to latest"]',
+    )!;
+    expect(button.getAttribute("aria-hidden")).toBe("false");
+    act(() => button.click());
+    expect(scroller.scrollTop).toBe(1_500);
+  });
+
+  it("disarms after a short reply so later background messages follow normally", () => {
+    const { scroller, update } = sendFixture();
+    const reply = { ...textMessage("final-reply", "bot", "Short"), runId: "run" };
+    update(200, [reply], false);
+    expect(scroller.scrollTop).toBe(1_500);
+    update(1_000, [reply, textMessage("other-reply", "bot", "Background reply")], false);
+    expect(scroller.scrollTop).toBe(1_500);
+  });
+
+  it("does not pull the viewport back after a reader scrolls away from the pinned text", () => {
+    const { scroller, update } = sendFixture();
+    update(700);
+    expect(scroller.scrollTop).toBe(1_036);
+    act(() => {
+      scroller.scrollTop = 1_140;
+      scroller.dispatchEvent(new Event("scroll"));
+    });
+    update(1_050);
+    expect(scroller.scrollTop).toBe(1_140);
+  });
 });

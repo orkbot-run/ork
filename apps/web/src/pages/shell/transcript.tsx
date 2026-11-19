@@ -52,7 +52,11 @@ import {
 import type { createSpaceRpc } from "../../lib/rpc";
 import { messageHasVisibleBlocks } from "../../lib/tool-activity-view";
 import { CHAT_USER_TEXT_SURFACE, TRANSCRIPT_CONTENT_PADDING } from "../../lib/transcript-layout";
-import { transcriptIsNearEnd, transcriptMovedDown } from "../../lib/transcript-scroll";
+import {
+  longReplyScrollTop,
+  transcriptIsNearEnd,
+  transcriptMovedDown,
+} from "../../lib/transcript-scroll";
 import { TimeSeparator, UnreadDivider } from "./chat-context";
 import type { ImportSetupTarget } from "./import-setup-card";
 import { MessageView } from "./message-view";
@@ -195,6 +199,12 @@ export const Transcript = memo(function Transcript({
   const lastScrollTop = useRef<number | null>(null);
   const autoScrollTimer = useRef<number | undefined>(undefined);
   const jumpButtonRef = useRef<HTMLButtonElement>(null);
+  const replyFollow = useRef<{
+    nonce: string;
+    existingLiveRows: Set<string>;
+    sentSeq?: number;
+    held?: { id: string; runId?: string; top: number };
+  } | null>(null);
   const [expandedPeerMarkers, setExpandedPeerMarkers] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -370,7 +380,12 @@ export const Transcript = memo(function Transcript({
   // latest message, so new messages keep following; scrolling away beyond it does not.
   const followIfNearEnd = useCallback(() => {
     const element = scrollRef.current;
-    if (element && !jumpScrolling.current && transcriptIsNearEnd(element)) {
+    if (
+      element &&
+      !replyFollow.current?.held &&
+      !jumpScrolling.current &&
+      transcriptIsNearEnd(element)
+    ) {
       following.current = true;
     }
   }, [scrollRef]);
@@ -426,6 +441,7 @@ export const Transcript = memo(function Transcript({
   const jumpToLatest = useCallback(() => {
     const element = scrollRef.current;
     if (!element) return;
+    replyFollow.current = null;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     following.current = true;
     autoScrolling.current = !reducedMotion;
@@ -465,6 +481,7 @@ export const Transcript = memo(function Transcript({
     );
     if (!element || !row) return;
     scrolledJump.current = scrollRequest.nonce;
+    replyFollow.current = null;
     following.current = false;
     autoScrolling.current = false;
     jumpScrolling.current = true;
@@ -491,15 +508,67 @@ export const Transcript = memo(function Transcript({
   useLayoutEffect(() => {
     if (followedRequest.current === followRequest) return;
     followedRequest.current = followRequest;
+    const nonce = outgoingMessages.at(-1)?.clientNonce;
+    replyFollow.current = nonce
+      ? {
+          nonce,
+          existingLiveRows: new Set(
+            messages.filter((message) => message.id.startsWith("progress:")).map(({ id }) => id),
+          ),
+        }
+      : null;
     snapToEnd();
-  }, [followRequest, snapToEnd]);
+  }, [followRequest, messages, outgoingMessages, snapToEnd]);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
+    const follow = replyFollow.current;
+    if (element && follow && (following.current || follow.held)) {
+      follow.sentSeq ??= messages.find((message) => message.clientNonce === follow.nonce)?.seq;
+      const sentSeq = follow.sentSeq;
+      const held = follow.held;
+      const reply =
+        (held && messageById.get(held.id)) ??
+        (sentSeq === undefined
+          ? undefined
+          : messages.findLast(
+              (message) =>
+                message.role === "bot" &&
+                message.seq > sentSeq &&
+                !follow.existingLiveRows.has(message.id) &&
+                (!held || (held.runId && message.runId === held.runId)) &&
+                message.blocks.some(
+                  (block) =>
+                    block.kind === "text" ||
+                    (block.kind === "progress" && block.streaming && !block.activity),
+                ),
+            ));
+      const row = reply && element.querySelector(`[data-message-id="${CSS.escape(reply.id)}"]`);
+      if (row) {
+        const top = longReplyScrollTop(
+          {
+            top: element.getBoundingClientRect().top,
+            height: element.clientHeight,
+            scrollTop: element.scrollTop,
+          },
+          row.getBoundingClientRect(),
+          Number.parseFloat(getComputedStyle(element).scrollPaddingTop) || 0,
+        );
+        if (top !== undefined) {
+          follow.held = { id: reply.id, runId: reply.runId, top };
+          following.current = false;
+          autoScrolling.current = false;
+          if (Math.abs(element.scrollTop - top) > 1) element.scrollTo({ top, behavior: "auto" });
+          setAtEnd(false);
+          return;
+        }
+      }
+      if (!running && (reply || held)) replyFollow.current = null;
+    }
     if (following.current) snapToEnd();
     // Content can grow below a reader who is not following without any scroll event.
     else if (element) setAtEnd(transcriptIsNearEnd(element));
-  }, [messages, running, scrollRef, snapToEnd]);
+  }, [messageById, messages, running, scrollRef, snapToEnd]);
 
   useLayoutEffect(() => {
     const button = jumpButtonRef.current;
@@ -512,6 +581,7 @@ export const Transcript = memo(function Transcript({
     const wasFollowing = following.current;
     // Prepend must not race the messages-driven snap-to-end follow path.
     following.current = false;
+    replyFollow.current = null;
     autoScrolling.current = false;
     const pending = onLoadOlder();
     if (!pending) return;
@@ -555,7 +625,21 @@ export const Transcript = memo(function Transcript({
           following.current = false;
         }}
         onScrollEnd={followIfNearEnd}
+        onPointerUp={(event) => {
+          const held = replyFollow.current?.held;
+          const target = event.target;
+          if (
+            held &&
+            event.button === 0 &&
+            target instanceof Element &&
+            target.closest("[data-message-id]")?.getAttribute("data-message-id") === held.id &&
+            !target.closest("button, a, input, textarea, select") &&
+            !window.getSelection()?.toString()
+          )
+            jumpToLatest();
+        }}
         onWheel={(event) => {
+          if (event.deltaY && replyFollow.current?.held) replyFollow.current = null;
           if (event.deltaY < 0) {
             lastScrollTop.current = event.currentTarget.scrollTop;
             autoScrolling.current = false;
@@ -563,6 +647,12 @@ export const Transcript = memo(function Transcript({
           }
         }}
         onScroll={(event) => {
+          const held = replyFollow.current?.held;
+          if (held) {
+            // Ignore the scroll event from our own pin, including fractional pixel rounding.
+            if (Math.abs(event.currentTarget.scrollTop - held.top) <= 1) return;
+            replyFollow.current = null;
+          }
           const scrolledDown = transcriptMovedDown(
             lastScrollTop.current,
             event.currentTarget.scrollTop,
