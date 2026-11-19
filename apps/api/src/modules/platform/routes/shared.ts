@@ -40,9 +40,10 @@ function hostCredentials(active: boolean, provider: string) {
     : { hostCredentialProvider: null, hostCredentialSource: null };
 }
 
-export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
-  const [user, setup, admin] = await Promise.all([
-    deps.prisma.user.findUniqueOrThrow({
+/** The roster needs the saved account Ork, but not model setup or computer diagnostics. */
+export function loadMeDto(deps: RouterDeps, actor: Actor) {
+  const profileReady = deps.prisma.user
+    .findUniqueOrThrow({
       where: { id: actor.userId },
       select: {
         email: true,
@@ -52,11 +53,29 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
         locale: true,
         botAvatarSet: true,
       },
-    }),
+    })
+    .then(async (user) => {
+      await syncPrimaryOrk(deps.prisma, actor, user.orkAvatar);
+      return user;
+    });
+  const me = buildMeDto(deps, actor, profileReady);
+  return { profileReady, me };
+}
+
+export function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
+  return loadMeDto(deps, actor).me;
+}
+
+async function buildMeDto(
+  deps: RouterDeps,
+  actor: Actor,
+  profileReady: ReturnType<typeof loadMeDto>["profileReady"],
+): Promise<Me> {
+  const [user, setup, admin] = await Promise.all([
+    profileReady,
     modelSetup(deps, actor),
     isAdmin(deps, actor.userId),
   ]);
-  await syncPrimaryOrk(deps.prisma, actor, user.orkAvatar);
   // Where the deployment runs computers once an admin's choice in Settings applies.
   const sandboxProvider = effectiveSandboxProvider(setup.settings, deps.env.sandboxProvider);
   const [capabilities, accountSettings] = await Promise.all([

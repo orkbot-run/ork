@@ -1,4 +1,4 @@
-import type { AppBootstrap } from "@orkbot/contracts";
+import type { AppBootstrap, Space } from "@orkbot/contracts";
 import { ATTACHMENT_MAX_BYTES, attachmentMaxBytes } from "@orkbot/contracts";
 import { displayIdentityResult } from "@orkbot/core";
 import { initialBootstrapTarget } from "./bootstrap-target";
@@ -22,12 +22,21 @@ export function subscribeTicketBoardEnabled(listener: () => void) {
   };
 }
 
+export type WorkspaceNavigationSpace = Pick<Space, "id" | "name" | "isDefault" | "bots" | "groups">;
+
+export type WorkspaceNavigationPreview = {
+  userId: string;
+  spaces: readonly WorkspaceNavigationSpace[];
+};
+
 let primedBootstrap: {
   botId?: string;
   spaceId?: string;
   promise: Promise<AppBootstrap>;
   /** What this space showed last time, painted while the fresh bootstrap loads. */
   seed?: AppBootstrap;
+  /** Previously authorized navigation data. Never used as identity or chat content. */
+  preview?: WorkspaceNavigationPreview;
 } | null = null;
 
 const initialTarget = initialBootstrapTarget(
@@ -99,8 +108,9 @@ export function primeSpaceBootstrap(
   botId?: string,
   seed?: AppBootstrap,
   promise = preloadSpaceBootstrap(spaceId, botId),
+  preview?: WorkspaceNavigationPreview,
 ): Promise<AppBootstrap> {
-  const entry = { botId, spaceId, promise, seed };
+  const entry = { botId, spaceId, promise, seed, preview };
   primedBootstrap = entry;
   void promise.then(
     (bootstrap) => {

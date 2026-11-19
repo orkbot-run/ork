@@ -6,14 +6,19 @@ import type { AppBootstrap } from "@orkbot/contracts";
 import { Button } from "@orkbot/ui-web";
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
+import type { WorkspaceNavigationPreview } from "../lib/bootstrap";
 import { peekInitialBootstrap, peekSelectedSpaceBootstrap } from "../lib/bootstrap";
 import { modelSetupDeferred } from "../lib/model-setup-preference";
 import { captureRpcContext, SPACE_SELECTED_EVENT } from "../lib/rpc";
+import { WorkspaceOpening } from "../pages/shell/workspace-opening";
 import { PageLoading } from "./PageLoading";
 
 /** Check the selected workspace before opening any application screen. */
 export function ModelSetupGate() {
-  const [check, setCheck] = useState<{ bootstrap?: Promise<AppBootstrap> } | null>(null);
+  const [check, setCheck] = useState<{
+    bootstrap?: Promise<AppBootstrap>;
+    opening?: { spaceId: string; preview: WorkspaceNavigationPreview };
+  } | null>(null);
   const [state, setState] = useState<"loading" | "open" | "setup" | "error">("loading");
 
   useEffect(() => {
@@ -24,7 +29,13 @@ export function ModelSetupGate() {
         me?.managedModelSetupRequired === false ||
         (me?.managedModelSetupRequired === true && modelSetupDeferred(me));
       setState(ready ? "open" : "loading");
-      setCheck({ bootstrap: primed?.promise });
+      setCheck({
+        bootstrap: primed?.promise,
+        opening:
+          primed?.spaceId && primed.preview
+            ? { spaceId: primed.spaceId, preview: primed.preview }
+            : undefined,
+      });
     };
     window.addEventListener(SPACE_SELECTED_EVENT, recheck);
     return () => window.removeEventListener(SPACE_SELECTED_EVENT, recheck);
@@ -45,6 +56,14 @@ export function ModelSetupGate() {
     void me
       .then(async (identity) => {
         if (!active || !context.isCurrent()) return;
+        const opening = check?.opening;
+        if (
+          opening &&
+          (identity.spaceId !== opening.spaceId || identity.userId !== opening.preview.userId)
+        ) {
+          setState("error");
+          return;
+        }
         let needsSetup = identity.managedModelSetupRequired;
         if (needsSetup === undefined) {
           // Older deployments still carry the managed setup decision on this RPC.
@@ -63,7 +82,8 @@ export function ModelSetupGate() {
     };
   }, [check]);
 
-  if (state === "loading") return <PageLoading />;
+  if (state === "loading")
+    return check?.opening ? <WorkspaceOpening {...check.opening} /> : <PageLoading />;
   if (state === "setup") return <Navigate to="/onboarding/model" replace />;
   if (state === "error")
     return (

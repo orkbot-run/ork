@@ -249,7 +249,7 @@ it("prepares a workspace without selecting it and reuses the pending request on 
   expect(pendingSpaceId).toBeNull();
   const prepared = state.preload.mock.results[0]!.value;
   act(() => open("new-space", "/app/new"));
-  expect(state.prime).toHaveBeenCalledWith("new-space", "target", undefined, prepared);
+  expect(state.prime).toHaveBeenCalledWith("new-space", "target", undefined, prepared, undefined);
   await ready();
   act(() => expect(commits[0]!()).toBe(true));
   expect(navigate).toHaveBeenCalledExactlyOnceWith("/app/new");
@@ -274,7 +274,13 @@ it("warms the next workspace before any input and reuses it when clicked later",
   const prepared = state.preload.mock.results[0]!.value;
   act(() => vi.advanceTimersByTime(30_000));
   await act(async () => open("new-space", "/app/new"));
-  expect(state.prime).toHaveBeenCalledExactlyOnceWith("new-space", "target", undefined, prepared);
+  expect(state.prime).toHaveBeenCalledExactlyOnceWith(
+    "new-space",
+    "target",
+    undefined,
+    prepared,
+    undefined,
+  );
   act(() => expect(commits[0]!()).toBe(true));
   expect(navigate).toHaveBeenCalledExactlyOnceWith("/app/new");
 });
@@ -285,6 +291,22 @@ it("cancels an unused preload when intent changes", () => {
   act(() => preload("second-space", "/app/second"));
   expect(signal.aborted).toBe(true);
   expect(state.select).not.toHaveBeenCalled();
+});
+
+it("selects a known rail destination before its cold bootstrap settles", async () => {
+  const spaces = [{ id: "new-space", name: "New space", isDefault: false, bots: [], groups: [] }];
+  act(() => open("new-space", "/app/new", spaces));
+  expect(pendingSpaceId).toBeNull();
+  expect(state.prime).toHaveBeenCalledExactlyOnceWith("new-space", "target", undefined, undefined, {
+    userId: "user",
+    spaces,
+  });
+  expect(commits).toHaveLength(1);
+  act(() => expect(commits[0]!()).toBe(true));
+  expect(state.select).toHaveBeenCalledWith("new-space");
+  expect(navigate).toHaveBeenCalledExactlyOnceWith("/app/new");
+  await ready();
+  expect(commits).toHaveLength(1);
 });
 
 it("clears workspace progress on browser history cancellation before bootstrap settles", async () => {

@@ -4,6 +4,7 @@
 
 import type { AppBootstrap } from "@orkbot/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { WorkspaceNavigationSpace } from "../../lib/bootstrap";
 import {
   discardPrimedBootstrap,
   preloadSpaceBootstrap,
@@ -12,19 +13,31 @@ import {
 import { initialBootstrapTarget } from "../../lib/bootstrap-target";
 import { getSnapshot as getCallSnapshot } from "../../lib/call-session";
 import { leaveOrganization } from "../../lib/organizations";
-import { queryClient, spaceSeedKey } from "../../lib/query";
+import { lastChatKey, lastChatOf, queryClient, spaceSeedKey } from "../../lib/query";
 import { selectedSpaceId, selectSpace } from "../../lib/rpc";
 import { remountShellForSpace, spaceSwitchDecision } from "../../lib/space-switch";
 import { speaker } from "../../lib/tts";
 import { readShellOverlay, searchString, withShellOverlay } from "../shell-overlay";
 import type { useShellNavigation } from "./use-shell-navigation";
+import { firstThreadRoute } from "./use-shell-navigation";
 
 const PRELOAD_MAX_AGE_MS = 60_000;
 const BACKGROUND_PRELOAD_DELAY_MS = 400;
 
+export function workspaceChatPath(userId: string | null, space: WorkspaceNavigationSpace): string {
+  const seed =
+    space.bots.length || space.groups.length
+      ? space
+      : queryClient.getQueryData(spaceSeedKey(userId, space.id));
+  const lastChat = lastChatOf(seed, queryClient.getQueryData(lastChatKey(userId, space.id)));
+  if (lastChat?.groupId) return `/app/g/${lastChat.groupId}`;
+  if (lastChat?.botId) return `/app/${lastChat.botId}`;
+  return firstThreadRoute(seed?.bots ?? [], seed?.groups ?? []);
+}
+
 /**
- * Opens a chat in any of the user's spaces, including another organization's; another space loads
- * first, then the shell remounts into it.
+ * Opens a chat in any of the user's spaces. The workspace rail can select a known destination
+ * immediately and show its authorized navigation while the model gate checks the new scope.
  */
 export function useOpenSpaceChat({
   bootstrapSpaceId,
@@ -136,7 +149,7 @@ export function useOpenSpaceChat({
   }, [backgroundPath, backgroundSpaceId, preloadSpaceChat, userId]);
 
   const openSpaceChat = useCallback(
-    (spaceId: string, path: string) => {
+    (spaceId: string, path: string, spaces?: readonly WorkspaceNavigationSpace[]) => {
       closeMobileSidebar();
       const request = ++spaceSwitchRequest.current;
       setPendingSpace(null);
@@ -159,9 +172,8 @@ export function useOpenSpaceChat({
         overlayRevision.current === startedOverlay
           ? path
           : `${path}${searchString(withShellOverlay(new URLSearchParams(), readShellOverlay(new URLSearchParams(window.location.search))))}`;
-      // Another space is an auth boundary: its bootstrap is loaded first, under that
-      // space's header, then the shell remounts so none of this space's state survives.
-      // A call in progress, or a page outside the shell, still reloads.
+      // Each space gets its own bootstrap and shell. A call in progress, or a page
+      // outside the shell, still reloads.
       const target = initialBootstrapTarget(path, false);
       if (!target || getCallSnapshot()) {
         reload();
@@ -195,11 +207,14 @@ export function useOpenSpaceChat({
         preload.botId === target.botId &&
         Date.now() - preload.startedAt < PRELOAD_MAX_AGE_MS;
       if (!matchingPreload) preload?.controller.abort();
+      const preview =
+        userId && spaces?.some((space) => space.id === spaceId) ? { userId, spaces } : undefined;
       const primed = primeSpaceBootstrap(
         spaceId,
         target.botId,
         cached,
         matchingPreload ? preload.promise : undefined,
+        preview,
       );
       const remount = () =>
         remountShellForSpace(() => {
@@ -220,7 +235,7 @@ export function useOpenSpaceChat({
           navigate(destination());
           return true;
         });
-      if (cached) {
+      if (cached || preview) {
         remount();
         return;
       }

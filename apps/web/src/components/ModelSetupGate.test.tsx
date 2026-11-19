@@ -29,6 +29,9 @@ vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children?: ReactNode }) => children,
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts[0] }),
 }));
+vi.mock("../pages/shell/workspace-opening", () => ({
+  WorkspaceOpening: ({ spaceId }: { spaceId: string }) => <div>Opening {spaceId}</div>,
+}));
 
 import { deferModelSetup } from "../lib/model-setup-preference";
 import { ModelSetupGate } from "./ModelSetupGate";
@@ -146,6 +149,53 @@ it("keeps a visited workspace open while rechecking its setup from the shared bo
   expect(api.me).toHaveBeenCalledOnce();
   await act(async () => resolve({ me: { managedModelSetupRequired: true } }));
   expect(host.textContent).toContain("Model setup");
+});
+
+it("shows the selected navigation immediately while preserving the new workspace model gate", async () => {
+  api.me.mockResolvedValue({ managedModelSetupRequired: false });
+  await render();
+  let resolve!: (value: unknown) => void;
+  api.selectedBootstrap.mockReturnValue({
+    spaceId: "other",
+    preview: { userId: "user", spaces: [] },
+    promise: new Promise((complete) => {
+      resolve = complete;
+    }),
+  });
+  await act(async () => window.dispatchEvent(new Event("space-selected")));
+  expect(host.textContent).toContain("Opening other");
+  expect(host.textContent).not.toContain("App content");
+  await act(async () =>
+    resolve({ me: { userId: "user", spaceId: "other", managedModelSetupRequired: true } }),
+  );
+  expect(host.textContent).toContain("Model setup");
+});
+
+it("ignores the late identity of a workspace left while opening", async () => {
+  api.me.mockResolvedValue({ managedModelSetupRequired: false });
+  await render();
+  let resolveOlder!: (value: unknown) => void;
+  api.selectedBootstrap.mockReturnValueOnce({
+    spaceId: "older",
+    preview: { userId: "user", spaces: [] },
+    promise: new Promise((resolve) => {
+      resolveOlder = resolve;
+    }),
+  });
+  api.selectedBootstrap.mockReturnValueOnce({
+    spaceId: "destination",
+    preview: { userId: "user", spaces: [] },
+    promise: Promise.resolve({
+      me: { userId: "user", spaceId: "destination", managedModelSetupRequired: false },
+    }),
+  });
+  await act(async () => window.dispatchEvent(new Event("space-selected")));
+  expect(host.textContent).toContain("Opening older");
+  await act(async () => window.dispatchEvent(new Event("space-selected")));
+  await act(async () =>
+    resolveOlder({ me: { userId: "user", spaceId: "older", managedModelSetupRequired: true } }),
+  );
+  expect(host.textContent).toContain("App content");
 });
 
 it("opens the deferred workspace and still requires setup for a different workspace", async () => {

@@ -231,8 +231,18 @@ test("workspace icons switch the roster and restore the previous chat without re
     await expect.poll(() => coldRequests).toBe(1);
     await expect(secondSpace).not.toHaveAttribute("aria-busy", "true");
     await secondSpace.click();
-    await expect(secondSpace).toHaveAttribute("aria-busy", "true");
-    await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
+    // Keep the network blocked until the destination is already active and visible.
+    await expect(secondSpace).toHaveAttribute("aria-current", "true");
+    await expect(page).toHaveURL(`/app/${scout.id}`);
+    const opening = page.getByTestId("workspace-opening");
+    await expect(opening.getByRole("heading", { name: "Scout", exact: true })).toBeVisible();
+    await expect(opening.getByTestId("bots-sidebar")).toContainText("Telescope");
+    await expect(page.getByPlaceholder("Message Chief")).toHaveCount(0);
+    await expect(page.getByPlaceholder("Message Scout")).toHaveCount(0);
+    expect(await page.evaluate(() => window.localStorage.getItem("orkbot:space-id"))).toBe(
+      space.id,
+    );
+    await captureScreenshot(page, testInfo, "space-switch-before-bootstrap");
   } finally {
     releaseCold();
   }

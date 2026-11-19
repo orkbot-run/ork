@@ -117,12 +117,12 @@ import { useReadAloud } from "./shell/use-read-aloud";
 import { useReportedUiLocale } from "./shell/use-reported-ui-locale";
 import { useRightPanel, useRightPanelRestore } from "./shell/use-right-panel";
 import { useRoutineEditor } from "./shell/use-routine-editor";
-import { firstThreadRoute, useShellNavigation } from "./shell/use-shell-navigation";
+import { useShellNavigation } from "./shell/use-shell-navigation";
 import { useSidebarExpansion } from "./shell/use-sidebar-expansion";
 import { useSidebarSearch } from "./shell/use-sidebar-search";
 import { useSnoozeClock } from "./shell/use-snooze-clock";
 import { useRosterDrop, useSpaceBootstrap, useSpaceRoster } from "./shell/use-space-roster";
-import { useOpenSpaceChat } from "./shell/use-space-switch";
+import { useOpenSpaceChat, workspaceChatPath } from "./shell/use-space-switch";
 import { cachedThreadSnapshot, useThreadState } from "./shell/use-thread-state";
 import { useThreadSync } from "./shell/use-thread-sync";
 import { WORKSPACE_RAIL_WIDTH, WorkspaceRail } from "./shell/workspace-rail";
@@ -655,7 +655,7 @@ function SpaceShell() {
             !queryClient.getQueryData(spaceSeedKey(userId, space.id)),
         )
       : undefined;
-  const backgroundPath = backgroundSpace && workspaceChatPath(backgroundSpace.id);
+  const backgroundPath = backgroundSpace && workspaceChatPath(userId ?? null, backgroundSpace);
   const { openSpaceChat, preloadSpaceChat, pendingSpaceId } = useOpenSpaceChat({
     bootstrapSpaceId: currentSpaceId,
     userId,
@@ -671,23 +671,6 @@ function SpaceShell() {
   useLayoutEffect(() => {
     openSpaceChatRef.current = openSpaceChat;
   }, [openSpaceChat]);
-  function workspaceChatPath(spaceId: string) {
-    const space = allSidebarSpaces.find((row) => row.id === spaceId);
-    if (!space) return;
-    // Older Accounts mappings return only navigation data until the Space is opened.
-    const seed =
-      space.bots.length || space.groups.length
-        ? space
-        : queryClient.getQueryData(spaceSeedKey(userId ?? null, spaceId));
-    const lastChat = lastChatOf(
-      seed,
-      queryClient.getQueryData(lastChatKey(userId ?? null, spaceId)),
-    );
-    if (lastChat?.groupId) return `/app/g/${lastChat.groupId}`;
-    if (lastChat?.botId) return `/app/${lastChat.botId}`;
-    return firstThreadRoute(seed?.bots ?? [], seed?.groups ?? []);
-  }
-
   const activeSnapshot = inGroup
     ? snapshot?.groupId === groupId
       ? snapshot
@@ -1145,12 +1128,13 @@ function SpaceShell() {
               activeId={currentSpaceId}
               pendingId={pendingSpaceId}
               onPrepare={(spaceId) => {
-                const path = workspaceChatPath(spaceId);
-                if (path) preloadSpaceChat(spaceId, path);
+                const space = allSidebarSpaces.find((row) => row.id === spaceId);
+                if (space) preloadSpaceChat(spaceId, workspaceChatPath(userId ?? null, space));
               }}
               onOpen={(spaceId) => {
-                const path = workspaceChatPath(spaceId);
-                if (path) openSpaceChat(spaceId, path);
+                const space = allSidebarSpaces.find((row) => row.id === spaceId);
+                if (space)
+                  openSpaceChat(spaceId, workspaceChatPath(userId ?? null, space), sidebarSpaces);
               }}
               onCreate={
                 createWorkspaceAllowed

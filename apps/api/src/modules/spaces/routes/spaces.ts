@@ -33,7 +33,7 @@ import { ORPCError } from "@orpc/server";
 import { otherSpaceOfBot } from "#modules/bots/bot-space";
 import type { RouterDeps } from "#modules/platform/router";
 import type { RouterContext } from "#modules/platform/routes/context";
-import { meDto } from "#modules/platform/routes/shared";
+import { loadMeDto } from "#modules/platform/routes/shared";
 import { listRoutinesDto } from "#modules/routines/routines";
 import { resolveThreadTarget, threadSnapshot } from "#modules/threads/thread-target";
 import { deleteSpaceWithContent } from "../space-deletion.js";
@@ -210,28 +210,37 @@ export function spacesRoutes(ctx: RouterContext) {
     },
     bootstrap: authed.bootstrap.handler(async ({ context, input }) => {
       const actor = context.actor;
-      // Profile synchronization assigns the saved account Ork before the roster is read.
-      const me = await meDto(deps, actor);
-      const [navigation, archivedBots, archivedGroups] = await Promise.all([
+      const identity = loadMeDto(deps, actor);
+      // Only the profile write must precede roster reads; model setup and computer
+      // diagnostics can finish while navigation and the selected thread are loaded.
+      const navigationReady = identity.profileReady.then(() =>
         spaceNavigationDto(deps, actor, repos, groupRepos, context.sessionId),
+      );
+      const entryReady = navigationReady.then(async (navigation) => {
+        const bots = navigation.current.bots;
+        const requested = bots.find((bot) => bot.id === input.botId);
+        const active = requested ?? bots[0];
+        const [thread, routines, botSpaceId] = await Promise.all([
+          active
+            ? resolveThreadTarget(deps.prisma, actor, { botId: active.id }).then((target) =>
+                threadSnapshot(deps, target),
+              )
+            : null,
+          active ? listRoutinesDto(deps, actor, active.id) : [],
+          input.botId && !requested ? otherSpaceOfBot(deps.prisma, actor, input.botId) : undefined,
+        ]);
+        return { thread, routines, botSpaceId };
+      });
+      // Attach every branch to the response immediately, including failure paths.
+      const [me, navigation, archivedBots, archivedGroups, entry] = await Promise.all([
+        identity.me,
+        navigationReady,
         repos.listBots(actor, { archived: true }),
         groupRepos.listGroups(actor, { archived: true }),
+        entryReady,
       ]);
       const { bots, groups, botSections } = navigation.current;
-      const requested = bots.find((bot) => bot.id === input.botId);
-      const botSpaceId =
-        input.botId && !requested
-          ? await otherSpaceOfBot(deps.prisma, actor, input.botId)
-          : undefined;
-      const active = requested ?? bots[0];
-      const [thread, routines] = active
-        ? await Promise.all([
-            resolveThreadTarget(deps.prisma, actor, { botId: active.id }).then((target) =>
-              threadSnapshot(deps, target),
-            ),
-            listRoutinesDto(deps, actor, active.id),
-          ])
-        : [null, []];
+      const { thread, routines, botSpaceId } = entry;
       return {
         me,
         bots,
