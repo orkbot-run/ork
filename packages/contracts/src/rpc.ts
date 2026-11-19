@@ -212,6 +212,11 @@ import { SettingsScopeSchema, SpaceSettingSchema, settingsScopeInput } from "./s
 import { SourcePresetInstallSchema, SourcePresetSchema } from "./source-presets.js";
 
 const botId = z.object({ botId: Id });
+const takeoverCard = botId.extend({ runId: Id, messageId: Id });
+const ordinaryComputerControl = botId.extend({
+  runId: z.undefined().optional(),
+  messageId: z.undefined().optional(),
+});
 const groupId = z.object({ groupId: Id });
 
 const threadTarget = z
@@ -873,6 +878,7 @@ export const appContract = {
     unsnooze: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
   },
   computer: {
+    takeoverPreview: oc.input(takeoverCard).output(ComputerFrameSchema.nullable()),
     frame: oc
       .input(z.object({ botId: Id, previous: ComputerFrameIdSchema.optional() }))
       .output(ComputerFrameSchema.nullable()),
@@ -888,15 +894,17 @@ export const appContract = {
       .output(z.object({ ok: z.literal(true) })),
     dismissUpdate: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
     dismissDiskWarning: oc.input(botId).output(z.object({ ok: z.literal(true) })),
-    takeover: oc.input(botId).output(z.object({ leaseId: Id, expiresAt: z.string() })),
+    takeover: oc
+      .input(z.union([takeoverCard, ordinaryComputerControl]))
+      .output(z.object({ leaseId: Id, expiresAt: z.string() })),
     release: oc
       .input(
-        z.object({
-          botId: Id,
-          reason: ComputerReleaseReasonSchema.optional(),
-        }),
+        z.union([
+          takeoverCard.extend({ reason: ComputerReleaseReasonSchema }),
+          ordinaryComputerControl.extend({ reason: ComputerReleaseReasonSchema.optional() }),
+        ]),
       )
-      .output(z.object({ ok: z.literal(true) })),
+      .output(z.object({ ok: z.literal(true), resolved: z.literal(true).optional() })),
     input: oc
       .input(
         z.object({

@@ -1692,7 +1692,7 @@ msgstr "Ukończono"
 
 #: src/pages/settings-nav.ts
 #: src/pages/shell/bot-panel.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Computer"
 msgstr "Komputer"
 
@@ -1729,6 +1729,14 @@ msgstr "Komputer jest uśpiony. Otwórz go, aby go wybudzić."
 #: src/pages/shell/computer-view.tsx
 msgid "Computer is stopped"
 msgstr "Komputer jest zatrzymany"
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview"
+msgstr "Podgląd ekranu komputera"
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview unavailable"
+msgstr "Podgląd ekranu komputera jest niedostępny"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Computer-use model"
@@ -2109,6 +2117,7 @@ msgstr "Nie udało się połączyć z ekranem komputera"
 #: src/lib/sso-flow.ts
 #: src/lib/user-error.ts
 #: src/pages/Auth.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "Nie udało się kontynuować"
@@ -3035,8 +3044,8 @@ msgstr "Nie masz konta?"
 #: src/pages/ActivityList.tsx
 #: src/pages/RoutineRunHistory.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Done"
 msgstr "Gotowe"
 
@@ -4011,6 +4020,7 @@ msgid "Loading plugins…"
 msgstr "Wczytywanie wtyczek…"
 
 #: src/components/ArtifactFileCard.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Loading preview…"
 msgstr "Wczytywanie podglądu…"
 
@@ -4523,8 +4533,8 @@ msgid "Needs takeover"
 msgstr "Wymaga przejęcia sterowania"
 
 #: src/lib/roster-status.ts
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Needs you"
 msgstr "Potrzebuje Cię"
 
@@ -4876,9 +4886,9 @@ msgstr "Wpisz tylko kod wysłany przez {codeHost}."
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-panel.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Open"
 msgstr "Otwórz"
 
@@ -6377,6 +6387,7 @@ msgstr "Umiejętności"
 msgid "Skills join the library all your bots share."
 msgstr "Umiejętności trafiają do biblioteki wspólnej dla wszystkich Twoich botów."
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-release-actions.tsx
 msgid "Skip"
 msgstr "Pomiń"
@@ -6391,7 +6402,7 @@ msgid "Skip or deploy key"
 msgstr "Pomiń lub użyj klucza wdrożenia"
 
 #: src/pages/RoutineRunHistory.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Skipped"
 msgstr "Pominięto"
 
@@ -6704,6 +6715,7 @@ msgstr "Systemowy"
 msgid "Table"
 msgstr "Tabela"
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Take control"
 msgstr "Przejmij sterowanie"
@@ -6889,6 +6901,10 @@ msgstr "Tej operacji nie można cofnąć."
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "ten komputer"
+
+#: src/pages/shell/computer-card.tsx
+msgid "This computer request is no longer waiting"
+msgstr "Ta prośba już nie czeka na odpowiedź"
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -7676,6 +7692,10 @@ msgstr "Możesz zamknąć to okno."
 #: src/components/call/VoiceChatCard.tsx
 msgid "You declined"
 msgstr "Połączenie odrzucone"
+
+#: src/pages/shell/computer-card.tsx
+msgid "You do not have access to this computer request"
+msgstr "Nie masz dostępu do tej prośby"
 
 #: src/components/InviteDialog.tsx
 msgid "You get a free month when they start their trial with a new card."

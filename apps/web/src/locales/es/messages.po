@@ -1692,7 +1692,7 @@ msgstr "Completado"
 
 #: src/pages/settings-nav.ts
 #: src/pages/shell/bot-panel.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Computer"
 msgstr "Computadora"
 
@@ -1729,6 +1729,14 @@ msgstr "La computadora está en reposo. Ábrela para despertarla."
 #: src/pages/shell/computer-view.tsx
 msgid "Computer is stopped"
 msgstr "La computadora está detenida"
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview"
+msgstr ""
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview unavailable"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Computer-use model"
@@ -2109,6 +2117,7 @@ msgstr "No se pudo conectar a la pantalla de la computadora"
 #: src/lib/sso-flow.ts
 #: src/lib/user-error.ts
 #: src/pages/Auth.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "No se pudo continuar"
@@ -3035,8 +3044,8 @@ msgstr "¿No tienes una cuenta?"
 #: src/pages/ActivityList.tsx
 #: src/pages/RoutineRunHistory.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Done"
 msgstr "Listo"
 
@@ -4011,6 +4020,7 @@ msgid "Loading plugins…"
 msgstr "Cargando plugins…"
 
 #: src/components/ArtifactFileCard.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Loading preview…"
 msgstr "Cargando vista previa…"
 
@@ -4523,8 +4533,8 @@ msgid "Needs takeover"
 msgstr "Necesita toma de control"
 
 #: src/lib/roster-status.ts
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Needs you"
 msgstr "Te necesita"
 
@@ -4876,9 +4886,9 @@ msgstr ""
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-panel.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Open"
 msgstr "Abrir"
 
@@ -6377,6 +6387,7 @@ msgstr "Habilidades"
 msgid "Skills join the library all your bots share."
 msgstr "Las habilidades se añaden a la biblioteca que comparten todos tus bots."
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-release-actions.tsx
 msgid "Skip"
 msgstr "Omitir"
@@ -6391,7 +6402,7 @@ msgid "Skip or deploy key"
 msgstr "Omitir o desplegar clave"
 
 #: src/pages/RoutineRunHistory.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Skipped"
 msgstr "Omitido"
 
@@ -6704,6 +6715,7 @@ msgstr "Sistema"
 msgid "Table"
 msgstr "Tabla"
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Take control"
 msgstr "Tomar el control"
@@ -6889,6 +6901,10 @@ msgstr "Esto no se puede deshacer."
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "esta computadora"
+
+#: src/pages/shell/computer-card.tsx
+msgid "This computer request is no longer waiting"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -7676,6 +7692,10 @@ msgstr "Puedes cerrar esta ventana."
 #: src/components/call/VoiceChatCard.tsx
 msgid "You declined"
 msgstr "Has rechazado la llamada"
+
+#: src/pages/shell/computer-card.tsx
+msgid "You do not have access to this computer request"
+msgstr ""
 
 #: src/components/InviteDialog.tsx
 msgid "You get a free month when they start their trial with a new card."

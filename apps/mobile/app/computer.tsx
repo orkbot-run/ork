@@ -86,7 +86,11 @@ export default function Computer() {
   const windowSize = useWindowDimensions();
   const stacked = stacksAtTextScale(windowSize.fontScale);
   const folds = useFoldRegions();
-  const { botId, name: nameParam } = useLocalSearchParams<{ botId?: string; name?: string }>();
+  const {
+    botId,
+    name: nameParam,
+    showScreen,
+  } = useLocalSearchParams<{ botId?: string; name?: string; showScreen?: string }>();
   const name = displayName(nameParam, t("Bot"));
   const foreground = useAppForeground();
   const [computer, setComputer] = useState<ComputerStatus | null>(null);
@@ -105,6 +109,7 @@ export default function Computer() {
   // The keyboard closes on the Release tap, not when the server answers.
   const [releasing, setReleasing] = useState(false);
   const autoBooted = useRef<string | null>(null);
+  const openedFromChat = useRef(false);
   const screenWebViewRef = useRef<WebView>(null);
   const nativeScreenRef = useRef<NativeComputerScreenControls | null>(null);
   const keyboardGate = useRef({
@@ -219,6 +224,7 @@ export default function Computer() {
   }, [refresh]);
 
   useEffect(() => {
+    openedFromChat.current = false;
     setComputer(null);
     setScreenUrl(null);
     setScreenError(null);
@@ -233,6 +239,20 @@ export default function Computer() {
     if (botId) refreshController.start();
     return () => refreshController.dispose();
   }, [botId, refreshController]);
+
+  useEffect(() => {
+    if (
+      showScreen !== "1" ||
+      !botId ||
+      readyBotId !== botId ||
+      computer?.state !== "running" ||
+      !hasControl ||
+      openedFromChat.current
+    )
+      return;
+    openedFromChat.current = true;
+    setComputerOpen(true);
+  }, [showScreen, botId, readyBotId, computer?.state, hasControl]);
 
   // The computer status poll and the live WebView are expensive; neither should
   // run while the app is in the background.

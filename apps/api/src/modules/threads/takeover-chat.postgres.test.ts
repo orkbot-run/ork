@@ -21,8 +21,10 @@ import {
   updateFleetGroup,
 } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
+import { ComputerFrameSchema } from "@orkbot/contracts";
 import {
   stuckWorkStatusMessage,
+  TAKEOVER_COMPUTER_DONE_STATE,
   TAKEOVER_COMPUTER_PENDING_STATE,
   TAKEOVER_COMPUTER_SKIPPED_STATE,
   TAKEOVER_WAIT_EXPIRE_AFTER_MS,
@@ -189,6 +191,7 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
           leaseFence: 1,
           reason: "Enter the fixture code",
           computerId: computer.id,
+          showCard: true,
         }),
       );
     }
@@ -211,6 +214,28 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
       env: { agentRuntime: "scripted" },
     } as unknown as RouterDeps;
     const handler = new RPCHandler(createRouter(deps));
+    const cardAction = async (
+      action: "takeoverPreview" | "takeover" | "release",
+      input: { runId?: string; messageId?: string; reason?: "done" | "skipped" } = {},
+      requestActor = actor,
+    ) => {
+      const card = await system.message.findFirst({
+        where: { runId: run.id },
+        orderBy: { seq: "desc" },
+        select: { id: true },
+      });
+      const { response } = await handler.handle(
+        new Request(`http://127.0.0.1/rpc/computer/${action}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            json: { botId: bot.id, runId: run.id, messageId: card?.id, ...input },
+          }),
+        }),
+        { prefix: "/rpc", context: { actor: requestActor } },
+      );
+      return response!;
+    };
     const send = async (input: Record<string, unknown> = {}) => {
       const { response } = await handler.handle(
         new Request("http://127.0.0.1/rpc/threads/send", {
@@ -252,10 +277,180 @@ describePostgres("chat replies during screen takeover (PostgreSQL)", () => {
       queuedStates,
       send,
       takeover,
+      cardAction,
       control,
       leaseId,
     };
   }
+
+  it("shows a frame only while its owner is waiting and discards a capture after Done", async () => {
+    const fixture = await setup("unopened");
+    const other = await setup();
+    const originalCard = await system.message.findFirstOrThrow({
+      where: { runId: fixture.run.id },
+    });
+    const target = { messageId: originalCard.id };
+    const denied = await fixture.cardAction("takeoverPreview", target, other.actor);
+    expect([403, 404]).toContain(denied.status);
+    const response = await fixture.cardAction("takeoverPreview", target);
+    expect(response.status).toBe(200);
+    expect(ComputerFrameSchema.safeParse((await response.json()).json).success).toBe(true);
+
+    const observe = fixture.sandbox.observe.bind(fixture.sandbox);
+    let started!: () => void;
+    let unblock!: () => void;
+    const capturing = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      unblock = resolve;
+    });
+    const capture = vi
+      .spyOn(fixture.sandbox, "observe")
+      .mockImplementationOnce(async (ref, ctx) => {
+        started();
+        await blocked;
+        return observe(ref, ctx);
+      });
+    try {
+      const preview = fixture.cardAction("takeoverPreview", target);
+      await capturing;
+      const release = await fixture.cardAction("release", { ...target, reason: "done" });
+      expect(release.status).toBe(200);
+      expect(await release.json()).toEqual({ json: { ok: true, resolved: true } });
+      unblock();
+      expect((await preview).status).toBe(409);
+      expect((await fixture.cardAction("takeoverPreview", target)).status).toBe(409);
+      const card = await system.message.findFirstOrThrow({ where: { runId: fixture.run.id } });
+      expect(card.blocks).toEqual([
+        { kind: "computer", state: TAKEOVER_COMPUTER_DONE_STATE, text: "Enter the fixture code" },
+      ]);
+      expect(fixture.queuedStates).toMatchObject([{ status: "queued", checkpoint: "takeover" }]);
+    } finally {
+      unblock();
+      capture.mockRestore();
+    }
+  });
+
+  it("does not let a different run's card take or release control", async () => {
+    const fixture = await setup("unopened");
+    const stale = { runId: randomUUID() };
+    expect((await fixture.cardAction("release", { ...stale, reason: "skipped" })).status).toBe(409);
+    expect((await fixture.cardAction("takeover", stale)).status).toBe(409);
+    expect((await fixture.cardAction("takeover")).status).toBe(200);
+    expect(await fixture.control()).toMatchObject({
+      controlBotId: fixture.bot.id,
+      controlHolder: "user",
+      controlRunId: fixture.run.id,
+    });
+    expect((await fixture.cardAction("release", { reason: "skipped" })).status).toBe(200);
+    expect(fixture.queuedStates).toMatchObject([
+      { status: "queued", checkpoint: "takeover-skipped" },
+    ]);
+  });
+
+  it("requires both card identifiers for card operations", async () => {
+    const fixture = await setup("unopened");
+    expect((await fixture.cardAction("takeoverPreview", { messageId: undefined })).status).toBe(
+      400,
+    );
+    expect((await fixture.cardAction("takeover", { runId: undefined })).status).toBe(400);
+    expect(
+      (await fixture.cardAction("release", { messageId: undefined, reason: "done" })).status,
+    ).toBe(400);
+    expect(
+      (await fixture.cardAction("release", { messageId: randomUUID(), reason: "done" })).status,
+    ).toBe(409);
+    expect((await fixture.cardAction("takeoverPreview")).status).toBe(200);
+    expect(fixture.queuedStates).toEqual([]);
+  });
+
+  it("drops a pending capture if its execution fence changes", async () => {
+    const fixture = await setup("unopened");
+    const capture = fixture.sandbox.observe.bind(fixture.sandbox);
+    const observe = vi
+      .spyOn(fixture.sandbox, "observe")
+      .mockImplementationOnce(async (ref, ctx) => {
+        const frame = await capture(ref, ctx);
+        await system.computerExecutionLease.updateMany({
+          where: { runId: fixture.run.id },
+          data: { fence: { increment: 1 } },
+        });
+        return frame;
+      });
+    try {
+      const response = await fixture.cardAction("takeoverPreview");
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ json: null });
+      expect(observe).toHaveBeenCalledOnce();
+    } finally {
+      observe.mockRestore();
+    }
+  });
+
+  it("keeps the held card pending when the provider cannot revoke control", async () => {
+    const fixture = await setup("unopened");
+    const grant = await fixture.cardAction("takeover");
+    expect(grant.status).toBe(200);
+    const revoke = vi
+      .spyOn(fixture.sandbox, "setScreenControl")
+      .mockRejectedValueOnce(new Error("Fixture revoke failed"));
+    try {
+      const response = await fixture.cardAction("release", { reason: "done" });
+      expect(response.ok).toBe(false);
+      expect(await fixture.control()).toMatchObject({
+        controlHolder: "user",
+        controlRunId: fixture.run.id,
+      });
+      expect(fixture.queuedStates).toEqual([]);
+      expect(revoke).toHaveBeenCalledOnce();
+      expect((await fixture.cardAction("release", { reason: "done" })).status).toBe(200);
+      expect(fixture.queuedStates).toMatchObject([{ status: "queued", checkpoint: "takeover" }]);
+    } finally {
+      revoke.mockRestore();
+    }
+  });
+
+  it("rejects an old card when the same run reaches another takeover", async () => {
+    const fixture = await setup("unopened");
+    const old = await system.message.findFirstOrThrow({ where: { runId: fixture.run.id } });
+    expect(
+      (await fixture.cardAction("release", { messageId: old.id, reason: "done" })).status,
+    ).toBe(200);
+    await system.run.update({
+      where: { id: fixture.run.id },
+      data: { status: "running", leaseOwner: "fixture-worker", leaseFence: 2, checkpoint: null },
+    });
+    const attempt = await system.attempt.create({
+      data: { runId: fixture.run.id, fence: 2, status: "running" },
+    });
+    await runAsSystem("test another takeover", () =>
+      fixture.events.pauseRunForTakeover({
+        spaceId: fixture.actor.spaceId,
+        threadId: fixture.thread.id,
+        botId: fixture.bot.id,
+        runId: fixture.run.id,
+        attemptId: attempt.id,
+        leaseOwner: "fixture-worker",
+        leaseFence: 2,
+        reason: "Confirm the new request",
+        computerId: fixture.computer.id,
+        showCard: true,
+      }),
+    );
+    const replacement = await system.message.findFirstOrThrow({
+      where: { runId: fixture.run.id, id: { not: old.id } },
+    });
+    expect((await fixture.cardAction("takeoverPreview", { messageId: old.id })).status).toBe(409);
+    expect((await fixture.cardAction("takeover", { messageId: old.id })).status).toBe(409);
+    expect(
+      (await fixture.cardAction("release", { messageId: old.id, reason: "skipped" })).status,
+    ).toBe(409);
+    expect((await fixture.cardAction("takeover", { messageId: replacement.id })).status).toBe(200);
+    expect(
+      (await fixture.cardAction("release", { messageId: replacement.id, reason: "done" })).status,
+    ).toBe(200);
+  });
 
   it.each(["waiting", "pause-during-revoke", "pause-after-handoff"] as const)(
     "skips the previous bot's takeover on a shared screen (%s)",

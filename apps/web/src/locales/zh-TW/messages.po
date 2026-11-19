@@ -1693,7 +1693,7 @@ msgstr "已完成"
 
 #: src/pages/settings-nav.ts
 #: src/pages/shell/bot-panel.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Computer"
 msgstr "電腦"
 
@@ -1730,6 +1730,14 @@ msgstr "電腦正在休眠，開啟即可喚醒。"
 #: src/pages/shell/computer-view.tsx
 msgid "Computer is stopped"
 msgstr "電腦已停止"
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview"
+msgstr ""
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview unavailable"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Computer-use model"
@@ -2110,6 +2118,7 @@ msgstr "無法連線至電腦螢幕"
 #: src/lib/sso-flow.ts
 #: src/lib/user-error.ts
 #: src/pages/Auth.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "無法繼續"
@@ -3036,8 +3045,8 @@ msgstr "還沒有帳號？"
 #: src/pages/ActivityList.tsx
 #: src/pages/RoutineRunHistory.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Done"
 msgstr "完成"
 
@@ -4012,6 +4021,7 @@ msgid "Loading plugins…"
 msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Loading preview…"
 msgstr "正在載入預覽…"
 
@@ -4524,8 +4534,8 @@ msgid "Needs takeover"
 msgstr "需要接管"
 
 #: src/lib/roster-status.ts
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Needs you"
 msgstr "需要你處理"
 
@@ -4877,9 +4887,9 @@ msgstr ""
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-panel.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Open"
 msgstr "開啟"
 
@@ -6378,6 +6388,7 @@ msgstr "技能"
 msgid "Skills join the library all your bots share."
 msgstr "技能會加入所有機器人共用的技能庫。"
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-release-actions.tsx
 msgid "Skip"
 msgstr "跳過"
@@ -6392,7 +6403,7 @@ msgid "Skip or deploy key"
 msgstr "跳過或使用部署金鑰"
 
 #: src/pages/RoutineRunHistory.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Skipped"
 msgstr ""
 
@@ -6705,6 +6716,7 @@ msgstr "系統"
 msgid "Table"
 msgstr "表格"
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Take control"
 msgstr "接管控制權"
@@ -6890,6 +6902,10 @@ msgstr "此操作無法復原。"
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "這臺電腦"
+
+#: src/pages/shell/computer-card.tsx
+msgid "This computer request is no longer waiting"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -7677,6 +7693,10 @@ msgstr "可以關閉此視窗。"
 #: src/components/call/VoiceChatCard.tsx
 msgid "You declined"
 msgstr "你已拒絕"
+
+#: src/pages/shell/computer-card.tsx
+msgid "You do not have access to this computer request"
+msgstr ""
 
 #: src/components/InviteDialog.tsx
 msgid "You get a free month when they start their trial with a new card."

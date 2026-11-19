@@ -1692,7 +1692,7 @@ msgstr "הושלם"
 
 #: src/pages/settings-nav.ts
 #: src/pages/shell/bot-panel.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Computer"
 msgstr "מחשב"
 
@@ -1729,6 +1729,14 @@ msgstr "המחשב במצב שינה. יש לפתוח אותו כדי להעיר
 #: src/pages/shell/computer-view.tsx
 msgid "Computer is stopped"
 msgstr "המחשב כבוי"
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview"
+msgstr ""
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview unavailable"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Computer-use model"
@@ -2109,6 +2117,7 @@ msgstr "לא ניתן להתחבר למסך המחשב"
 #: src/lib/sso-flow.ts
 #: src/lib/user-error.ts
 #: src/pages/Auth.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "לא ניתן להמשיך"
@@ -3035,8 +3044,8 @@ msgstr "אין חשבון?"
 #: src/pages/ActivityList.tsx
 #: src/pages/RoutineRunHistory.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Done"
 msgstr "הושלם"
 
@@ -4011,6 +4020,7 @@ msgid "Loading plugins…"
 msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Loading preview…"
 msgstr "טוען תצוגה מקדימה…"
 
@@ -4523,8 +4533,8 @@ msgid "Needs takeover"
 msgstr "נדרשת השתלטות"
 
 #: src/lib/roster-status.ts
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Needs you"
 msgstr "נדרשת פעולה"
 
@@ -4876,9 +4886,9 @@ msgstr ""
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-panel.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Open"
 msgstr "פתיחה"
 
@@ -6377,6 +6387,7 @@ msgstr "מיומנויות"
 msgid "Skills join the library all your bots share."
 msgstr "המיומנויות מצטרפות לספרייה שכל הבוטים שלך חולקים."
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-release-actions.tsx
 msgid "Skip"
 msgstr "דילוג"
@@ -6391,7 +6402,7 @@ msgid "Skip or deploy key"
 msgstr "דילוג או מפתח התקנה"
 
 #: src/pages/RoutineRunHistory.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Skipped"
 msgstr ""
 
@@ -6704,6 +6715,7 @@ msgstr "מערכת"
 msgid "Table"
 msgstr "טבלה"
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Take control"
 msgstr "השתלטות"
@@ -6889,6 +6901,10 @@ msgstr "לא ניתן לבטל פעולה זו."
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "המחשב הזה"
+
+#: src/pages/shell/computer-card.tsx
+msgid "This computer request is no longer waiting"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -7675,6 +7691,10 @@ msgstr "אפשר לסגור את החלון."
 
 #: src/components/call/VoiceChatCard.tsx
 msgid "You declined"
+msgstr ""
+
+#: src/pages/shell/computer-card.tsx
+msgid "You do not have access to this computer request"
 msgstr ""
 
 #: src/components/InviteDialog.tsx

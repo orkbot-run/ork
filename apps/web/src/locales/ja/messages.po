@@ -1692,7 +1692,7 @@ msgstr "完了"
 
 #: src/pages/settings-nav.ts
 #: src/pages/shell/bot-panel.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Computer"
 msgstr "コンピューター"
 
@@ -1729,6 +1729,14 @@ msgstr "コンピューターはスリープ中です。開くと起動します
 #: src/pages/shell/computer-view.tsx
 msgid "Computer is stopped"
 msgstr "コンピューターは停止しています"
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview"
+msgstr ""
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview unavailable"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Computer-use model"
@@ -2109,6 +2117,7 @@ msgstr "コンピューターの画面に接続できませんでした"
 #: src/lib/sso-flow.ts
 #: src/lib/user-error.ts
 #: src/pages/Auth.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "続行できませんでした"
@@ -3035,8 +3044,8 @@ msgstr "アカウントをお持ちでないですか？"
 #: src/pages/ActivityList.tsx
 #: src/pages/RoutineRunHistory.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Done"
 msgstr "完了"
 
@@ -4011,6 +4020,7 @@ msgid "Loading plugins…"
 msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Loading preview…"
 msgstr "プレビューを読み込み中…"
 
@@ -4523,8 +4533,8 @@ msgid "Needs takeover"
 msgstr "引き継ぎが必要"
 
 #: src/lib/roster-status.ts
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Needs you"
 msgstr "対応が必要"
 
@@ -4876,9 +4886,9 @@ msgstr ""
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-panel.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Open"
 msgstr "開く"
 
@@ -6377,6 +6387,7 @@ msgstr "スキル"
 msgid "Skills join the library all your bots share."
 msgstr "スキルはすべてのボットで共有するライブラリに追加されます。"
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-release-actions.tsx
 msgid "Skip"
 msgstr "スキップ"
@@ -6391,7 +6402,7 @@ msgid "Skip or deploy key"
 msgstr "スキップまたはデプロイキーを使用"
 
 #: src/pages/RoutineRunHistory.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Skipped"
 msgstr ""
 
@@ -6704,6 +6715,7 @@ msgstr "システム"
 msgid "Table"
 msgstr "テーブル"
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Take control"
 msgstr "操作を引き継ぐ"
@@ -6889,6 +6901,10 @@ msgstr "この操作は元に戻せません。"
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "このコンピューター"
+
+#: src/pages/shell/computer-card.tsx
+msgid "This computer request is no longer waiting"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -7676,6 +7692,10 @@ msgstr "このウィンドウを閉じても構いません。"
 #: src/components/call/VoiceChatCard.tsx
 msgid "You declined"
 msgstr "辞退しました"
+
+#: src/pages/shell/computer-card.tsx
+msgid "You do not have access to this computer request"
+msgstr ""
 
 #: src/components/InviteDialog.tsx
 msgid "You get a free month when they start their trial with a new card."

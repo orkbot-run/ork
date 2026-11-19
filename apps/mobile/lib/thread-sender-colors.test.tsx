@@ -181,7 +181,7 @@ it.each(["text", "image"] as const)(
 );
 
 it("keeps the bot name when opening a computer without a sender label", () => {
-  const opened: string[][] = [];
+  const opened: [string, string, boolean?][] = [];
   renderToStaticMarkup(
     <Bubble
       botId="bot-a"

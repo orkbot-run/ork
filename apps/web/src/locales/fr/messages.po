@@ -1692,7 +1692,7 @@ msgstr "Terminé"
 
 #: src/pages/settings-nav.ts
 #: src/pages/shell/bot-panel.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Computer"
 msgstr "Ordinateur"
 
@@ -1729,6 +1729,14 @@ msgstr "L'ordinateur est en veille. Ouvrez-le pour le réveiller."
 #: src/pages/shell/computer-view.tsx
 msgid "Computer is stopped"
 msgstr "L'ordinateur est arrêté"
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview"
+msgstr ""
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview unavailable"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Computer-use model"
@@ -2109,6 +2117,7 @@ msgstr "Impossible de se connecter à l'écran de l'ordinateur"
 #: src/lib/sso-flow.ts
 #: src/lib/user-error.ts
 #: src/pages/Auth.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "Impossible de continuer"
@@ -3035,8 +3044,8 @@ msgstr "Vous n'avez pas de compte ?"
 #: src/pages/ActivityList.tsx
 #: src/pages/RoutineRunHistory.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Done"
 msgstr "Terminé"
 
@@ -4011,6 +4020,7 @@ msgid "Loading plugins…"
 msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Loading preview…"
 msgstr "Chargement de l'aperçu…"
 
@@ -4523,8 +4533,8 @@ msgid "Needs takeover"
 msgstr "Nécessite une intervention"
 
 #: src/lib/roster-status.ts
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Needs you"
 msgstr "A besoin de vous"
 
@@ -4876,9 +4886,9 @@ msgstr ""
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-panel.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Open"
 msgstr "Ouvrir"
 
@@ -6377,6 +6387,7 @@ msgstr "Compétences"
 msgid "Skills join the library all your bots share."
 msgstr "Les compétences rejoignent la bibliothèque partagée par tous vos bots."
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-release-actions.tsx
 msgid "Skip"
 msgstr "Passer"
@@ -6391,7 +6402,7 @@ msgid "Skip or deploy key"
 msgstr "Passer ou clé de déploiement"
 
 #: src/pages/RoutineRunHistory.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Skipped"
 msgstr ""
 
@@ -6704,6 +6715,7 @@ msgstr "Système"
 msgid "Table"
 msgstr "Tableau"
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Take control"
 msgstr "Prendre le contrôle"
@@ -6889,6 +6901,10 @@ msgstr "Cette action est irréversible."
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "cet ordinateur"
+
+#: src/pages/shell/computer-card.tsx
+msgid "This computer request is no longer waiting"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -7676,6 +7692,10 @@ msgstr "Vous pouvez fermer cette fenêtre."
 #: src/components/call/VoiceChatCard.tsx
 msgid "You declined"
 msgstr "Vous avez refusé"
+
+#: src/pages/shell/computer-card.tsx
+msgid "You do not have access to this computer request"
+msgstr ""
 
 #: src/components/InviteDialog.tsx
 msgid "You get a free month when they start their trial with a new card."

@@ -48,6 +48,9 @@ import {
   SITE_SENDING_TOOLS,
   STEERING_CONTINUATION_PROMPT,
   sanitizeJsonValue,
+  TAKEOVER_COMPUTER_DONE_STATE,
+  TAKEOVER_COMPUTER_PENDING_STATE,
+  TAKEOVER_COMPUTER_SKIPPED_STATE,
 } from "@orkbot/core";
 import { urlSite } from "@orkbot/core/egress";
 import { approvalEffectKey } from "@orkbot/core/node/approval-effect-key";
@@ -162,6 +165,11 @@ export interface FinalizeComputerControlReleaseInput {
   botId: string;
   runId: string | null;
   leaseId: string | null;
+  /** Reject stale chat-card replies instead of releasing whichever run holds the lease now. */
+  requiredWaitingRunId?: string;
+  requiredWaitingMessageId?: string;
+  /** Revoke the exact screen lease after its card and lease have been fenced. */
+  revokeControl?: () => Promise<void>;
   holder: "bot" | "none";
   reason: "done" | "expired" | "released" | "skipped";
 }
@@ -314,6 +322,8 @@ export interface PauseRunForTakeover {
   leaseOwner: string;
   leaseFence: number;
   reason: string;
+  /** The worker publishes the chat card in the same commit as the wait. */
+  showCard?: true;
   /** Computer that should expose the pending takeover to the UI via controlRunId. */
   computerId: string;
 }
@@ -1540,11 +1550,24 @@ export async function pauseRunForTakeover(
     // A release can finish while the runtime is still preparing its pause. Keep its
     // checkpoint and continue instead of recreating a wait with no control lease.
     if (released) {
+      const skipped = run.checkpoint === "takeover-skipped";
       const seq = await settleReleasedTakeoverCardsInTransaction(tx, {
         ...input,
-        reason: run.checkpoint === "takeover-skipped" ? "skipped" : "done",
+        reason: skipped ? "skipped" : "done",
       });
-      return { threadId: input.threadId, seq, continuationRunId: input.runId };
+      const card = input.showCard
+        ? await publishTakeoverCard(
+            tx,
+            input,
+            skipped ? TAKEOVER_COMPUTER_SKIPPED_STATE : TAKEOVER_COMPUTER_DONE_STATE,
+          )
+        : null;
+      return {
+        threadId: input.threadId,
+        seq: card?.seq ?? seq,
+        continuationRunId: input.runId,
+        firstResponseRunId: card?.firstResponse ? input.runId : undefined,
+      };
     }
 
     const now = new Date();
@@ -1589,6 +1612,9 @@ export async function pauseRunForTakeover(
     });
     if (marked.count !== 1) throw new Error("Computer was not available to mark for takeover");
 
+    const card = input.showCard
+      ? await publishTakeoverCard(tx, input, TAKEOVER_COMPUTER_PENDING_STATE)
+      : null;
     const waitingEvent = await appendEventInTransaction(tx, {
       spaceId: input.spaceId,
       threadId: input.threadId,
@@ -1604,14 +1630,49 @@ export async function pauseRunForTakeover(
     await tx.event.deleteMany({
       where: { runId: input.runId, ...transientRunEventsWhere() },
     });
-    return { threadId: waitingEvent.threadId, seq: waitingEvent.seq, continuationRunId: null };
+    return {
+      threadId: waitingEvent.threadId,
+      seq: waitingEvent.seq,
+      continuationRunId: null,
+      firstResponseRunId: card?.firstResponse ? input.runId : undefined,
+    };
   }, THREAD_LOCK_TRANSACTION_OPTIONS);
 
   if (!committed) return false;
   if (committed.seq !== null) {
-    await notifyRealtime(realtime, committed.threadId, committed.seq);
+    await notifyCommittedEvent(
+      prisma,
+      realtime,
+      committed.threadId,
+      committed.seq,
+      committed.firstResponseRunId,
+    );
   }
   return committed.continuationRunId ? { continuationRunId: committed.continuationRunId } : true;
+}
+
+async function publishTakeoverCard(
+  tx: Prisma.TransactionClient,
+  input: PauseRunForTakeover,
+  state: string,
+) {
+  const blocks: MessageBlock[] = [{ kind: "computer", state, text: input.reason }];
+  const message = await createThreadMessageInTransaction(tx, {
+    threadId: input.threadId,
+    role: "bot",
+    blocks,
+    botId: input.botId,
+    runId: input.runId,
+    markUnread: true,
+  });
+  return appendEventInTransaction(tx, {
+    spaceId: input.spaceId,
+    threadId: input.threadId,
+    botId: input.botId,
+    type: "thread.message.created",
+    runId: input.runId,
+    payload: { messageId: message.id, seq: message.seq, role: "bot", blocks },
+  });
 }
 
 export async function finalizeComputerControlRelease(
@@ -1639,11 +1700,30 @@ export async function finalizeComputerControlRelease(
     const runThreadId = waiting?.threadId ?? null;
     if (runThreadId) {
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${runThreadId} FOR UPDATE`;
+      if (input.requiredWaitingRunId)
+        await tx.$queryRaw`SELECT id FROM runs WHERE id = ${controlRunId!} FOR UPDATE`;
       waiting = await tx.run.findUnique({
         where: { id: controlRunId! },
         select: { threadId: true, status: true },
       });
     }
+    if (
+      input.requiredWaitingRunId &&
+      (controlRunId !== input.requiredWaitingRunId || waiting?.status !== "waiting_takeover")
+    )
+      return null;
+    if (
+      input.requiredWaitingMessageId &&
+      (!runThreadId ||
+        !controlRunId ||
+        !(await isPendingTakeoverMessage(tx, {
+          messageId: input.requiredWaitingMessageId,
+          runId: controlRunId,
+          threadId: runThreadId,
+          botId: input.botId,
+        })))
+    )
+      return null;
     const cleared = await tx.computer.updateMany({
       where: input.leaseId
         ? {
@@ -1670,6 +1750,7 @@ export async function finalizeComputerControlRelease(
       },
     });
     if (cleared.count !== 1) return null;
+    await input.revokeControl?.();
 
     const checkpoint =
       input.reason === "skipped" || input.reason === "expired" ? "takeover-skipped" : "takeover";
@@ -1740,6 +1821,29 @@ export async function finalizeComputerControlRelease(
     await notifyRealtime(realtime, committed.threadId, committed.seq);
   }
   return { runId: committed.runId };
+}
+
+export async function isPendingTakeoverMessage(
+  prisma: Pick<Prisma.TransactionClient, "message">,
+  input: { messageId: string; runId: string; threadId: string; botId: string },
+): Promise<boolean> {
+  const message = await prisma.message.findFirst({
+    where: {
+      id: input.messageId,
+      runId: input.runId,
+      threadId: input.threadId,
+      botId: input.botId,
+      role: "bot",
+    },
+    select: { blocks: true },
+  });
+  const parsed = MessageBlockSchema.array().safeParse(message?.blocks);
+  return (
+    parsed.success &&
+    parsed.data.some(
+      (block) => block.kind === "computer" && block.state === TAKEOVER_COMPUTER_PENDING_STATE,
+    )
+  );
 }
 
 /**

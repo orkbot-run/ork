@@ -24,7 +24,6 @@ import {
   MISSING_TOOL_FINAL_RESPONSE_ERROR,
   redactSecrets,
   redactSecretsAfter,
-  TAKEOVER_COMPUTER_PENDING_STATE,
   userRunError,
   withoutLastToolStepNotes,
 } from "@orkbot/core";
@@ -522,13 +521,6 @@ async function pauseForTakeover(ctx: RunContext, event: RuntimeEvent<"takeover">
   }
   // Give the user a full idle period to answer before the computer may suspend.
   scheduleComputerSleep(deps.jobs, ctx.computer.stored.id);
-  await publishMessage(
-    deps,
-    run,
-    "bot",
-    [{ kind: "computer", state: TAKEOVER_COMPUTER_PENDING_STATE, text: safeReason }],
-    true,
-  );
   await ctx.computer.checkpoint.flush();
   if (!(await holdComputerExecutionLeaseForTakeover(deps.prisma, ctx.computer.lease))) {
     throw new Error("Computer lease expired before takeover");
@@ -545,8 +537,14 @@ async function pauseForTakeover(ctx: RunContext, event: RuntimeEvent<"takeover">
     leaseFence: fence,
     reason: safeReason,
     computerId: ctx.computer.stored.id,
+    showCard: true,
   });
   if (!paused) return;
+  if (run.trigger === "messaging" || run.trigger === "bot_message") {
+    void deps.messaging?.publishProgress?.(run.id).catch((error) => {
+      getLogger().error("messaging progress admission", error);
+    });
+  }
   if (typeof paused === "object") {
     await deps.jobs
       .enqueue(runContinueJob(paused.continuationRunId))

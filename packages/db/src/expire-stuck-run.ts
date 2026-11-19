@@ -45,6 +45,10 @@ export async function expireStuckRun(
   tx: Prisma.TransactionClient,
   input: ExpireStuckRunInput,
 ): Promise<ExpireStuckRunResult | null> {
+  // Takeover and release lock the computer before the thread. Use the same order.
+  if (input.status === "waiting_takeover" && (await userHasTakeoverScreen(tx, input.runId))) {
+    return null;
+  }
   await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
   const current = await tx.run.findUnique({
     where: { id: input.runId },
@@ -56,9 +60,6 @@ export async function expireStuckRun(
     current.status !== input.status ||
     current.updatedAt.getTime() !== input.updatedAt.getTime()
   ) {
-    return null;
-  }
-  if (input.status === "waiting_takeover" && (await userHasTakeoverScreen(tx, input.runId))) {
     return null;
   }
   const cancelled = await tx.run.updateMany({

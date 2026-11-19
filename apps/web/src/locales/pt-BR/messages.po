@@ -1692,7 +1692,7 @@ msgstr "Concluído"
 
 #: src/pages/settings-nav.ts
 #: src/pages/shell/bot-panel.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Computer"
 msgstr "Computador"
 
@@ -1729,6 +1729,14 @@ msgstr ""
 #: src/pages/shell/computer-view.tsx
 msgid "Computer is stopped"
 msgstr "O computador está parado"
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview"
+msgstr ""
+
+#: src/pages/shell/computer-card.tsx
+msgid "Computer screen preview unavailable"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Computer-use model"
@@ -2109,6 +2117,7 @@ msgstr ""
 #: src/lib/sso-flow.ts
 #: src/lib/user-error.ts
 #: src/pages/Auth.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "Não foi possível continuar"
@@ -3035,8 +3044,8 @@ msgstr "Não tem uma conta?"
 #: src/pages/ActivityList.tsx
 #: src/pages/RoutineRunHistory.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Done"
 msgstr "Concluído"
 
@@ -4011,6 +4020,7 @@ msgid "Loading plugins…"
 msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Loading preview…"
 msgstr "Carregando Visualização…"
 
@@ -4523,8 +4533,8 @@ msgid "Needs takeover"
 msgstr "Requer assumir o controle"
 
 #: src/lib/roster-status.ts
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Needs you"
 msgstr ""
 
@@ -4876,9 +4886,9 @@ msgstr ""
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-panel.tsx
 #: src/pages/shell/import-setup-card.tsx
-#: src/pages/shell/message-view.tsx
 msgid "Open"
 msgstr "Abrir"
 
@@ -6377,6 +6387,7 @@ msgstr "Habilidades"
 msgid "Skills join the library all your bots share."
 msgstr "As habilidades entram na biblioteca que todos os seus bots compartilham."
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-release-actions.tsx
 msgid "Skip"
 msgstr "Pular"
@@ -6391,7 +6402,7 @@ msgid "Skip or deploy key"
 msgstr "Ignorar ou implantar chave"
 
 #: src/pages/RoutineRunHistory.tsx
-#: src/pages/shell/message-view.tsx
+#: src/pages/shell/computer-card.tsx
 msgid "Skipped"
 msgstr ""
 
@@ -6704,6 +6715,7 @@ msgstr "Sistema"
 msgid "Table"
 msgstr "Tabela"
 
+#: src/pages/shell/computer-card.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Take control"
 msgstr "Assumir o controle"
@@ -6889,6 +6901,10 @@ msgstr "Essa ação não pode ser desfeita."
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "Este computador"
+
+#: src/pages/shell/computer-card.tsx
+msgid "This computer request is no longer waiting"
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -7675,6 +7691,10 @@ msgstr "Você pode fechar esta janela."
 
 #: src/components/call/VoiceChatCard.tsx
 msgid "You declined"
+msgstr ""
+
+#: src/pages/shell/computer-card.tsx
+msgid "You do not have access to this computer request"
 msgstr ""
 
 #: src/components/InviteDialog.tsx

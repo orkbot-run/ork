@@ -480,6 +480,10 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["computer/readFile", { botId: "missing-bot", path: "MEMORY.md" }],
       ["computer/screenUrl", { botId: "missing-bot" }],
       ["computer/frame", { botId: "missing-bot" }],
+      [
+        "computer/takeoverPreview",
+        { botId: "missing-bot", runId: "missing-run", messageId: "missing-card" },
+      ],
       ["computer/heartbeat", { botId: "missing-bot" }],
       ["computer/recover"],
       ["computer/reset"],
@@ -867,6 +871,10 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["computer/readFile", { botId: ownerBot.id, path: "PRIVATE.md" }],
       ["computer/screenUrl", { botId: ownerBot.id }],
       ["computer/frame", { botId: ownerBot.id }],
+      [
+        "computer/takeoverPreview",
+        { botId: ownerBot.id, runId: "other-run", messageId: "other-card" },
+      ],
       ["computer/heartbeat", { botId: ownerBot.id }],
       ["routines/list", { botId: ownerBot.id }],
       ["routines/create", routineInput(ownerBot.id)],

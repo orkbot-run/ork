@@ -407,8 +407,11 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
   );
 
   const openComputer = useCallback(
-    (id: string, botName: string) =>
-      router.push({ pathname: "/computer", params: { botId: id, name: botName } }),
+    (id: string, botName: string, showScreen?: boolean) =>
+      router.push({
+        pathname: "/computer",
+        params: { botId: id, name: botName, ...(showScreen ? { showScreen: "1" } : {}) },
+      }),
     [router],
   );
 
