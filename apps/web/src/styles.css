@@ -60,6 +60,12 @@ body,
   }
 }
 
+@keyframes rk-reveal-chat-skeleton {
+  to {
+    visibility: visible;
+  }
+}
+
 /* A page prints alone and light: the app under an open page, its popups and its backdrop stay
    off the paper, and the paper stays white past the page's end, whatever the app's theme. */
 @media print {

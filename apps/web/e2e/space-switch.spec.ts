@@ -71,17 +71,25 @@ test("switches chats in the same workspace while the server is slow", async ({
     document.querySelector('[data-testid="bots-sidebar"]')?.setAttribute("data-switch-marker", "");
   });
   const sidebar = page.getByTestId("bots-sidebar");
+  const transcript = page.getByTestId("transcript");
+  const skeleton = transcript.getByTestId("transcript-skeleton");
   try {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.locator(`[data-roster-bot-id="${scout.id}"]`).click();
     await expect(page.getByPlaceholder("Message Scout")).toBeVisible();
     await expect(sidebar).toHaveAttribute("data-switch-marker", "");
+    await expect(transcript).toHaveAttribute("aria-busy", "true");
+    await expect(skeleton).toBeVisible();
+    await expect(transcript.getByText(chiefMessage, { exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => localStorage.getItem("orkbot:space-id"))).toBeTruthy();
+    await captureScreenshot(page, testInfo, "chat-switch-skeleton");
 
     await page.locator(`[data-roster-bot-id="${chief}"]`).click();
     await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
     await expect(
       page.getByTestId("transcript").getByText(chiefMessage, { exact: true }),
     ).toBeVisible();
+    await expect(skeleton).toHaveCount(0);
     await expect(sidebar).toHaveAttribute("data-switch-marker", "");
     expect(modelChecks).toBe(0);
     await captureScreenshot(page, testInfo, "chat-switch-in-place");

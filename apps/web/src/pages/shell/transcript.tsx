@@ -25,7 +25,7 @@ import {
   voiceChatHoldsMessage,
 } from "@orkbot/core";
 import type { GroupAvatarMember } from "@orkbot/ui-web";
-import { Button, cn, Spinner } from "@orkbot/ui-web";
+import { Button, cn, Skeleton, Spinner } from "@orkbot/ui-web";
 import { ArrowDown } from "lucide-react";
 import type { CSSProperties, RefObject } from "react";
 import {
@@ -65,6 +65,30 @@ export function bubbleFrameWidth(role: ThreadMessage["role"]) {
     : "max-w-[min(88%,calc(100%_-_8rem),39rem)] [@media(hover:none)]:max-w-[min(88%,39rem)]";
 }
 
+function TranscriptSkeleton() {
+  return (
+    <div
+      aria-hidden="true"
+      data-testid="transcript-skeleton"
+      className="invisible flex flex-col gap-2.5 py-2 [animation:rk-reveal-chat-skeleton_0s_linear_160ms_forwards]"
+    >
+      <div className="flex flex-col gap-2.5 motion-safe:animate-pulse">
+        <Skeleton className="flex h-10 w-2/5 max-w-60 animate-none items-center self-end rounded-[20px] px-3.5">
+          <div className="h-2 w-3/4 rounded-full bg-foreground/10" />
+        </Skeleton>
+        <Skeleton className="flex w-4/5 max-w-96 animate-none flex-col gap-2.5 self-start rounded-[20px] px-3.5 py-3.5">
+          <div className="h-2 w-full rounded-full bg-foreground/10" />
+          <div className="h-2 w-4/5 rounded-full bg-foreground/10" />
+          <div className="h-2 w-1/2 rounded-full bg-foreground/10" />
+        </Skeleton>
+        <Skeleton className="flex h-10 w-1/3 max-w-48 animate-none items-center self-end rounded-[20px] px-3.5">
+          <div className="h-2 w-4/5 rounded-full bg-foreground/10" />
+        </Skeleton>
+      </div>
+    </div>
+  );
+}
+
 export const Transcript = memo(function Transcript({
   scrollRef,
   scrollRequest,
@@ -72,6 +96,7 @@ export const Transcript = memo(function Transcript({
   followRequest,
   artifactTarget,
   transcript,
+  loadingChat,
   outgoingMessages = [],
   showToolActivity,
   olderCursor,
@@ -113,6 +138,8 @@ export const Transcript = memo(function Transcript({
   followRequest: number;
   artifactTarget: ArtifactTarget;
   transcript: FoldedTranscript<ThreadMessage>;
+  /** A target without a local or freshly loaded snapshot. */
+  loadingChat?: string;
   outgoingMessages?: OutgoingMessage[];
   showToolActivity: boolean;
   olderCursor: number | null;
@@ -159,6 +186,7 @@ export const Transcript = memo(function Transcript({
   rpc: ReturnType<typeof createSpaceRpc>;
 }) {
   const { t } = useLingui();
+  const showSkeleton = Boolean(loadingChat) && outgoingMessages.length === 0;
   const [atEnd, setAtEnd] = useState(true);
   const following = useRef(true);
   const jumpScrolling = useRef(false);
@@ -493,9 +521,15 @@ export const Transcript = memo(function Transcript({
 
   return (
     <div className="relative flex min-h-0 flex-1">
+      {showSkeleton ? (
+        <span role="status" className="sr-only">
+          {t`Loading…`}
+        </span>
+      ) : null}
       <div
         ref={scrollRef}
         data-testid="transcript"
+        aria-busy={showSkeleton || undefined}
         onPointerDown={(event) => {
           lastScrollTop.current = event.currentTarget.scrollTop;
           autoScrolling.current = false;
@@ -545,6 +579,7 @@ export const Transcript = memo(function Transcript({
             : undefined
         }
       >
+        {showSkeleton ? <TranscriptSkeleton key={loadingChat} /> : null}
         {olderCursor != null ? (
           <Button
             variant="ghost"
