@@ -689,8 +689,7 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
             setMe(saved.me);
           }
           spaceActionRef.current.busy = false;
-          await refreshBots();
-          await loadActivity();
+          await Promise.all([refreshBots(), loadActivity()]);
         };
         const selected =
           spaceActionRef.current.recoveryId === spaceId

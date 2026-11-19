@@ -11,6 +11,7 @@ import { useOpenSpaceChat } from "./use-space-switch";
 
 const state = vi.hoisted(() => ({
   prime: vi.fn(),
+  preload: vi.fn(),
   discard: vi.fn(),
   select: vi.fn(),
   cached: vi.fn(),
@@ -20,6 +21,7 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("../../lib/bootstrap", () => ({
   primeSpaceBootstrap: state.prime,
+  preloadSpaceBootstrap: state.preload,
   discardPrimedBootstrap: state.discard,
 }));
 vi.mock("../../lib/bootstrap-target", () => ({
@@ -40,6 +42,7 @@ vi.mock("../../lib/space-switch", async (importOriginal) => ({
 
 let root: Root;
 let open: ReturnType<typeof useOpenSpaceChat>["openSpaceChat"];
+let preload: ReturnType<typeof useOpenSpaceChat>["preloadSpaceChat"];
 let pendingSpaceId: string | null;
 let pending: Array<() => void>;
 let commits: Array<() => boolean>;
@@ -48,7 +51,11 @@ let overlayRevision: { current: number };
 let navigate: ReturnType<typeof vi.fn>;
 
 function Harness() {
-  ({ openSpaceChat: open, pendingSpaceId } = useOpenSpaceChat({
+  ({
+    openSpaceChat: open,
+    preloadSpaceChat: preload,
+    pendingSpaceId,
+  } = useOpenSpaceChat({
     bootstrapSpaceId: "old-space",
     userId: "user",
     navigate: navigate as NavigateFunction,
@@ -74,7 +81,11 @@ beforeEach(() => {
   navigationRevision = { current: 0 };
   overlayRevision = { current: 0 };
   navigate = vi.fn();
-  state.prime.mockImplementation(() => new Promise<void>((resolve) => pending.push(resolve)));
+  state.prime.mockImplementation(
+    (_space, _bot, _seed, prepared) =>
+      prepared ?? new Promise<void>((resolve) => pending.push(resolve)),
+  );
+  state.preload.mockImplementation(() => new Promise<void>((resolve) => pending.push(resolve)));
   state.cached.mockReturnValue(undefined);
   state.call.mockReturnValue(null);
   state.select.mockReturnValue(true);
@@ -221,6 +232,30 @@ it("opens a cached workspace without showing uncached loading progress", () => {
   act(() => open("new-space", "/app/new"));
   expect(pendingSpaceId).toBeNull();
   expect(commits).toHaveLength(1);
+});
+
+it("prepares a workspace without selecting it and reuses the pending request on click", async () => {
+  act(() => {
+    preload("new-space", "/app/new");
+    preload("new-space", "/app/new");
+  });
+  expect(state.preload).toHaveBeenCalledOnce();
+  expect(state.select).not.toHaveBeenCalled();
+  expect(pendingSpaceId).toBeNull();
+  const prepared = state.preload.mock.results[0]!.value;
+  act(() => open("new-space", "/app/new"));
+  expect(state.prime).toHaveBeenCalledWith("new-space", "target", undefined, prepared);
+  await ready();
+  act(() => expect(commits[0]!()).toBe(true));
+  expect(navigate).toHaveBeenCalledExactlyOnceWith("/app/new");
+});
+
+it("cancels an unused preload when intent changes", () => {
+  act(() => preload("first-space", "/app/first"));
+  const signal = state.preload.mock.calls[0]![2] as AbortSignal;
+  act(() => preload("second-space", "/app/second"));
+  expect(signal.aborted).toBe(true);
+  expect(state.select).not.toHaveBeenCalled();
 });
 
 it("clears workspace progress on browser history cancellation before bootstrap settles", async () => {

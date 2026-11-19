@@ -49,6 +49,12 @@ export function peekInitialBootstrap(): Promise<AppBootstrap> | undefined {
   return primedBootstrap?.spaceId === undefined ? primedBootstrap?.promise : undefined;
 }
 
+/** The bootstrap shared by the model gate and shell for an in-place switch. */
+export function peekSelectedSpaceBootstrap() {
+  const primed = primedBootstrap;
+  return primed?.spaceId && primed.spaceId === selectedSpaceId() ? primed : undefined;
+}
+
 function primedFor(botId: string | undefined) {
   const primed = primedBootstrap;
   return primed &&
@@ -67,9 +73,14 @@ export function takeInitialBootstrap(botId?: string) {
   const primed = primedFor(botId);
   primedBootstrap = null;
   if (primed) {
-    if (primed.seed) applyCapabilities(primed.seed);
+    const seed = primed.seed;
+    if (seed) applyCapabilities(seed);
     return (
-      primed.spaceId === undefined ? primed.promise : primed.promise.then(applyCapabilities)
+      primed.spaceId === undefined
+        ? primed.promise
+        : primed.promise.then((bootstrap) =>
+            bootstrap === seed ? bootstrap : applyCapabilities(bootstrap),
+          )
     ).then(
       (value) => displayIdentityResult(["bootstrap"], value, identityLabels()) as AppBootstrap,
     );
@@ -87,11 +98,25 @@ export function primeSpaceBootstrap(
   spaceId: string,
   botId?: string,
   seed?: AppBootstrap,
+  promise = preloadSpaceBootstrap(spaceId, botId),
 ): Promise<AppBootstrap> {
-  const promise = requestBootstrap(botId, spaceId);
-  void promise.catch(() => undefined);
-  primedBootstrap = { botId, spaceId, promise, seed };
+  const entry = { botId, spaceId, promise, seed };
+  primedBootstrap = entry;
+  void promise.then(
+    (bootstrap) => {
+      if (!entry.seed) entry.seed = bootstrap;
+    },
+    () => undefined,
+  );
   return promise;
+}
+
+/** Fetches scoped data without changing selection, capabilities, or the primed shell. */
+export function preloadSpaceBootstrap(spaceId: string, botId?: string, signal?: AbortSignal) {
+  return requestBootstrap(botId, spaceId, signal).then((bootstrap) => {
+    if (bootstrap.me.spaceId !== spaceId) throw new Error("Workspace selection changed");
+    return bootstrap;
+  });
 }
 
 /** Drops a primed bootstrap nobody will take, so a later shell cannot take another space's. */
@@ -99,10 +124,12 @@ export function discardPrimedBootstrap(promise: Promise<AppBootstrap>): void {
   if (primedBootstrap?.promise === promise) primedBootstrap = null;
 }
 
-function requestBootstrap(botId?: string, spaceId?: string) {
+function requestBootstrap(botId?: string, spaceId?: string, signal?: AbortSignal) {
   markOnce("rk:renderer:bootstrap-request-start");
   const input = botId ? { botId } : {};
-  const request = spaceId ? rpc.bootstrap(input, { context: { spaceId } }) : rpc.bootstrap(input);
+  const request = spaceId
+    ? rpc.bootstrap(input, { context: { spaceId }, ...(signal ? { signal } : {}) })
+    : rpc.bootstrap(input);
   return request.then((bootstrap) => {
     markOnce("rk:renderer:bootstrap-response");
     return spaceId === undefined ? applyCapabilities(bootstrap) : bootstrap;

@@ -1,5 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 navigation is preserved. Workspace preloading follows LICENSE.md.
+
+import type { AppBootstrap } from "@orkbot/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { discardPrimedBootstrap, primeSpaceBootstrap } from "../../lib/bootstrap";
+import {
+  discardPrimedBootstrap,
+  preloadSpaceBootstrap,
+  primeSpaceBootstrap,
+} from "../../lib/bootstrap";
 import { initialBootstrapTarget } from "../../lib/bootstrap-target";
 import { getSnapshot as getCallSnapshot } from "../../lib/call-session";
 import { leaveOrganization } from "../../lib/organizations";
@@ -9,6 +18,8 @@ import { remountShellForSpace, spaceSwitchDecision } from "../../lib/space-switc
 import { speaker } from "../../lib/tts";
 import { readShellOverlay, searchString, withShellOverlay } from "../shell-overlay";
 import type { useShellNavigation } from "./use-shell-navigation";
+
+const PRELOAD_MAX_AGE_MS = 15_000;
 
 /**
  * Opens a chat in any of the user's spaces, including another organization's; another space loads
@@ -30,6 +41,14 @@ export function useOpenSpaceChat({
   closeMobileSidebar: () => void;
 }) {
   const spaceSwitchRequest = useRef(0);
+  const preloaded = useRef<{
+    userId: string;
+    spaceId: string;
+    botId: string | undefined;
+    startedAt: number;
+    controller: AbortController;
+    promise: Promise<AppBootstrap>;
+  } | null>(null);
   const [pendingSpace, setPendingSpace] = useState<{
     id: string;
     request: number;
@@ -56,9 +75,47 @@ export function useOpenSpaceChat({
       // A switch still loading when this shell goes away (another page, or a
       // newer switch) must not pull the user back to its space afterwards.
       spaceSwitchRequest.current += 1;
+      preloaded.current?.controller.abort();
+      preloaded.current = null;
       window.removeEventListener("popstate", onPopState);
     };
   }, []);
+  const preloadSpaceChat = useCallback(
+    (spaceId: string, path: string) => {
+      if (
+        !userId ||
+        spaceId === (selectedSpaceId() ?? bootstrapSpaceId) ||
+        getCallSnapshot() ||
+        queryClient.getQueryData(spaceSeedKey(userId, spaceId))
+      )
+        return;
+      const target = initialBootstrapTarget(path, false);
+      if (!target) return;
+      const current = preloaded.current;
+      if (
+        current?.userId === userId &&
+        current.spaceId === spaceId &&
+        current.botId === target.botId &&
+        Date.now() - current.startedAt < PRELOAD_MAX_AGE_MS
+      )
+        return;
+      current?.controller.abort();
+      const controller = new AbortController();
+      const promise = preloadSpaceBootstrap(spaceId, target.botId, controller.signal);
+      preloaded.current = {
+        userId,
+        spaceId,
+        botId: target.botId,
+        startedAt: Date.now(),
+        controller,
+        promise,
+      };
+      void promise.catch(() => {
+        if (preloaded.current?.promise === promise) preloaded.current = null;
+      });
+    },
+    [bootstrapSpaceId, userId],
+  );
   const openSpaceChat = useCallback(
     (spaceId: string, path: string) => {
       closeMobileSidebar();
@@ -109,19 +166,29 @@ export function useOpenSpaceChat({
         }
       };
       const cached = queryClient.getQueryData(spaceSeedKey(userId ?? null, spaceId));
-      const primed = primeSpaceBootstrap(spaceId, target.botId, cached);
+      const preload = preloaded.current;
+      preloaded.current = null;
+      const matchingPreload =
+        !cached &&
+        preload &&
+        preload.userId === userId &&
+        preload.spaceId === spaceId &&
+        preload.botId === target.botId &&
+        Date.now() - preload.startedAt < PRELOAD_MAX_AGE_MS;
+      if (!matchingPreload) preload?.controller.abort();
+      const primed = primeSpaceBootstrap(
+        spaceId,
+        target.botId,
+        cached,
+        matchingPreload ? preload.promise : undefined,
+      );
       const remount = () =>
         remountShellForSpace(() => {
           const action = decision();
           settlePending();
           if (action !== "commit") {
             discardPrimedBootstrap(primed);
-            if (action === "reload") {
-              // Leave the view-transition update before starting a full navigation.
-              window.setTimeout(() => {
-                if (current()) reload();
-              }, 0);
-            }
+            if (action === "reload") reload();
             return false;
           }
           if (!selectSpace(spaceId)) {
@@ -164,5 +231,5 @@ export function useOpenSpaceChat({
     },
     [bootstrapSpaceId, navigate, navigationRevision, overlayRevision, userId],
   );
-  return { openSpaceChat, pendingSpaceId: pendingSpace?.id ?? null };
+  return { openSpaceChat, preloadSpaceChat, pendingSpaceId: pendingSpace?.id ?? null };
 }

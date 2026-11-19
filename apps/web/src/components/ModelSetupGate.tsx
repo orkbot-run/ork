@@ -2,23 +2,29 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { Trans } from "@lingui/react/macro";
+import type { AppBootstrap } from "@orkbot/contracts";
 import { Button } from "@orkbot/ui-web";
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
-import { peekInitialBootstrap } from "../lib/bootstrap";
+import { peekInitialBootstrap, peekSelectedSpaceBootstrap } from "../lib/bootstrap";
 import { modelSetupDeferred } from "../lib/model-setup-preference";
 import { captureRpcContext, SPACE_SELECTED_EVENT } from "../lib/rpc";
 import { PageLoading } from "./PageLoading";
 
 /** Check the selected workspace before opening any application screen. */
 export function ModelSetupGate() {
-  const [revision, setRevision] = useState(0);
+  const [check, setCheck] = useState<{ bootstrap?: Promise<AppBootstrap> } | null>(null);
   const [state, setState] = useState<"loading" | "open" | "setup" | "error">("loading");
 
   useEffect(() => {
     const recheck = () => {
-      setState("loading");
-      setRevision((value) => value + 1);
+      const primed = peekSelectedSpaceBootstrap();
+      const me = primed?.seed?.me;
+      const ready =
+        me?.managedModelSetupRequired === false ||
+        (me?.managedModelSetupRequired === true && modelSetupDeferred(me));
+      setState(ready ? "open" : "loading");
+      setCheck({ bootstrap: primed?.promise });
     };
     window.addEventListener(SPACE_SELECTED_EVENT, recheck);
     return () => window.removeEventListener(SPACE_SELECTED_EVENT, recheck);
@@ -27,10 +33,9 @@ export function ModelSetupGate() {
   useEffect(() => {
     let active = true;
     const context = captureRpcContext();
-    setState("loading");
     // Startup already requested this identity with the shell bootstrap. Later workspace
     // changes and retries must read the current scope instead of reusing that first result.
-    const primed = revision === 0 ? peekInitialBootstrap() : undefined;
+    const primed = check ? check.bootstrap : peekInitialBootstrap();
     const me = primed
       ? primed.then(
           (bootstrap) => bootstrap.me,
@@ -56,7 +61,7 @@ export function ModelSetupGate() {
     return () => {
       active = false;
     };
-  }, [revision]);
+  }, [check]);
 
   if (state === "loading") return <PageLoading />;
   if (state === "setup") return <Navigate to="/onboarding/model" replace />;
@@ -66,7 +71,12 @@ export function ModelSetupGate() {
         <p>
           <Trans>Could not load model settings</Trans>
         </p>
-        <Button onClick={() => setRevision((value) => value + 1)}>
+        <Button
+          onClick={() => {
+            setState("loading");
+            setCheck({});
+          }}
+        >
           <Trans>Retry</Trans>
         </Button>
       </div>
