@@ -20,6 +20,7 @@ const received = (
   id: string,
   intent?: "request" | "question" | "result" | "status" | "fyi",
   peer = "peer",
+  name = "Peer",
 ) =>
   message(
     id,
@@ -27,7 +28,7 @@ const received = (
       {
         kind: "bot_message_received",
         fromBotId: peer,
-        fromBotName: "Peer",
+        fromBotName: name,
         text: "Request",
         intent,
       },
@@ -144,17 +145,37 @@ describe("peer exchanges", () => {
     expect(peerMessagesFrom(messages).map((m) => m.messageId)).toEqual(["m1", "m3"]);
   });
 
-  it("does not merge across a visible row or another peer", () => {
+  it("groups consecutive incoming receipts without crossing visible rows or opposite directions", () => {
     const messages = [
-      received("m1"),
-      message("m2", [{ kind: "ask", text: "Choose" }]),
-      received("m3"),
-      received("m4", undefined, "other"),
-      received("m5"),
+      received("m1", undefined, "a", "Scout"),
+      received("m2", undefined, "b", "Writer"),
+      received("m3", undefined, "a", "Researcher"),
+      sent("m4", "a", "Researcher"),
+      received("m5", undefined, "b", "Writer"),
+      received("m6", undefined, "a", "Researcher"),
+      message("m7", [{ kind: "ask", text: "Choose" }]),
+      received("m8", undefined, "a", "Researcher"),
+      received("m9", undefined, "a", "Researcher"),
     ];
-    expect(
-      peerExchangeLines(foldPeerReplies(messages, { includePeerReceipts: true })).lines.size,
-    ).toBe(4);
+    const { lines, lineOf } = peerExchangeLines(
+      foldPeerReplies(messages, { includePeerReceipts: true }),
+    );
+    expect([...lines.keys()]).toEqual(["m1", "m4", "m5", "m8"]);
+    expect(lines.get("m1")).toMatchObject({
+      count: 3,
+      direction: "received",
+      recipients: [
+        { peerBotId: "a", peerBotName: "Researcher" },
+        { peerBotId: "b", peerBotName: "Writer" },
+      ],
+    });
+    expect(lines.get("m8")).toEqual({
+      peerBotId: "a",
+      peerBotName: "Researcher",
+      count: 2,
+      direction: "received",
+    });
+    expect([...lineOf.values()]).toEqual(["m1", "m1", "m1", "m4", "m5", "m5", "m8", "m8"]);
   });
 
   it("groups consecutive outgoing receipts and preserves every receipt's jump target", () => {

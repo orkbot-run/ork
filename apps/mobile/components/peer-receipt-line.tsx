@@ -43,10 +43,10 @@ export function PeerReceiptLine({
 }) {
   const { locale } = useI18n();
   const styles = useThemedStyles(createStyles);
-  if (direction === "sent" && recipients && recipients.length > 1) {
+  if (recipients && recipients.length > 1) {
     const peers = new Map(recipients.map((recipient) => [recipient.peerBotId, recipient]));
     const parts = peerReceiptList(recipients, locale, (names) =>
-      peerExchangeLabel(1, "sent", names),
+      peerExchangeLabel(1, direction, names),
     );
     return (
       <View testID="peer-receipt-line" style={[styles.line, styles.groupedLine]}>
@@ -69,7 +69,7 @@ export function PeerReceiptLine({
               {...actionProps}
               accessible
               accessibilityRole={recipient.onPress ? "button" : undefined}
-              accessibilityLabel={peerExchangeLabel(1, "sent", recipient.peerBotName)}
+              accessibilityLabel={peerExchangeLabel(1, direction, recipient.peerBotName)}
               onPress={recipient.onPress}
               style={({ pressed }) => [styles.recipient, { opacity: pressed ? 0.6 : 1 }]}
             >

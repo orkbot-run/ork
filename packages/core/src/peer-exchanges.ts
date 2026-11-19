@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 peer projection is preserved. Outgoing receipt grouping is an Ork addition.
+// Inherited Apache-2.0 peer projection is preserved. Receipt grouping is an Ork addition.
 
 import type { MessageBlock } from "@orkbot/contracts";
 import { clampBotMessage } from "./bot-messages.js";
@@ -24,10 +24,7 @@ type Message = {
   blocks: readonly MessageBlock[];
 };
 
-function peerReceipt(blocks: readonly MessageBlock[]) {
-  const block = blocks.find(
-    (block) => block.kind === "bot_message_sent" || block.kind === "bot_message_received",
-  );
+function peerReceipt(block: MessageBlock) {
   if (block?.kind === "bot_message_sent")
     return { peerBotId: block.toBotId, peerBotName: block.toBotName, direction: "sent" as const };
   if (block?.kind === "bot_message_received")
@@ -64,9 +61,10 @@ export function unreturnedPeerReplies<T extends Message>(
     }
   }
   for (const marker of transcript.messages) {
-    const peer = peerReceipt(marker.blocks);
     const replies = transcript.folded.get(marker.id);
-    if (!peer || !replies) continue;
+    if (!replies) continue;
+    const peer = marker.blocks.map(peerReceipt).find((receipt) => receipt !== undefined);
+    if (!peer) continue;
     const echoes = marker.runId ? receipts.get(marker.runId)?.get(peer.peerBotId) : undefined;
     result.set(
       marker.id,
@@ -98,7 +96,14 @@ export function peerExchangeLines<T extends Message>(transcript: FoldedTranscrip
   const unreturned = unreturnedPeerReplies(transcript);
   let previous: PeerExchange | undefined;
   let firstId: string | undefined;
-  let outgoing: { id: string; recipients: PeerRecipient[]; count: number }[] = [];
+  let group:
+    | {
+        ids: string[];
+        peers: Map<string, PeerRecipient>;
+        count: number;
+        direction: PeerExchange["direction"];
+      }
+    | undefined;
 
   function addReceipt(id: string, exchange: PeerExchange, standalone: boolean) {
     if (standalone && previous?.peerBotId === exchange.peerBotId && firstId) {
@@ -114,50 +119,41 @@ export function peerExchangeLines<T extends Message>(transcript: FoldedTranscrip
     return id;
   }
 
-  function flushOutgoing() {
-    const first = outgoing[0];
-    if (!first) return;
-    const recipients = new Map<string, PeerRecipient>();
-    let count = 0;
-    for (const receipt of outgoing) {
-      count += receipt.count;
-      for (const peer of receipt.recipients) recipients.set(peer.peerBotId, peer);
-    }
-    const peers = [...recipients.values()];
-    const primary = peers[0]!;
-    const exchange: PeerExchange = { ...primary, count, direction: "sent" };
+  function flushGroup() {
+    if (!group) return;
+    const peers = [...group.peers.values()];
+    const exchange: PeerExchange = { ...peers[0]!, count: group.count, direction: group.direction };
     if (peers.length > 1) exchange.recipients = peers;
-    const line = addReceipt(first.id, exchange, !exchange.recipients);
-    for (const receipt of outgoing) lineOf.set(receipt.id, line);
-    outgoing = [];
+    const line = addReceipt(group.ids[0]!, exchange, peers.length === 1);
+    for (const id of group.ids) lineOf.set(id, line);
+    group = undefined;
   }
 
   for (const message of transcript.messages) {
-    const receipt = peerReceipt(message.blocks);
-    if (receipt && message.blocks.every((block) => block.kind === "bot_message_sent")) {
-      outgoing.push({
-        id: message.id,
-        recipients: message.blocks.map((block) => ({
-          peerBotId: block.toBotId,
-          peerBotName: block.toBotName,
-        })),
-        count: message.blocks.length + (unreturned.get(message.id)?.length ?? 0),
-      });
-      continue;
-    }
-    flushOutgoing();
+    const receipts = message.blocks.map(peerReceipt).filter((receipt) => receipt !== undefined);
+    const receipt = receipts[0];
     if (!receipt) {
+      flushGroup();
       previous = undefined;
       continue;
     }
-    const count =
-      message.blocks.filter(
-        (b) => b.kind === "bot_message_sent" || b.kind === "bot_message_received",
-      ).length + (unreturned.get(message.id)?.length ?? 0);
-    const standalone = message.blocks.every((block) => block.kind === "bot_message_received");
-    addReceipt(message.id, { ...receipt, count }, standalone);
+    const count = receipts.length + (unreturned.get(message.id)?.length ?? 0);
+    if (
+      receipts.length === message.blocks.length &&
+      receipts.every((peer) => peer.direction === receipt.direction)
+    ) {
+      if (group?.direction !== receipt.direction) flushGroup();
+      group ??= { ids: [], peers: new Map(), count: 0, direction: receipt.direction };
+      group.ids.push(message.id);
+      group.count += count;
+      for (const { peerBotId, peerBotName } of receipts)
+        group.peers.set(peerBotId, { peerBotId, peerBotName });
+      continue;
+    }
+    flushGroup();
+    addReceipt(message.id, { ...receipt, count }, false);
   }
-  flushOutgoing();
+  flushGroup();
   return { lines, lineOf };
 }
 

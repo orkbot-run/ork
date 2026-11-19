@@ -380,7 +380,7 @@ export const MessageView = memo(function MessageView({
                   key={i}
                   recipients={peerExchange.recipients}
                   locale={i18n.locale}
-                  label={(peer) => t`Messaged ${peer}`}
+                  label={(peer) => (sent ? t`Messaged ${peer}` : t`Message from ${peer}`)}
                   peerBot={peerBot}
                   onOpen={onOpenPeerMessages}
                 />

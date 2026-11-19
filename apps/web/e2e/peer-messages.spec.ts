@@ -7,62 +7,81 @@ import { createDb, createThreadMessageInTransaction } from "../../../packages/db
 import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
 
-test("groups consecutive outgoing receipts and opens each recipient", async ({
-  page,
-}, testInfo) => {
-  await signup(page, `peer-group-${Date.now()}@orkbot.test`, "password12", "Peer Group");
-  await completeOnboarding(page);
-  const chiefId = activeBotId(page);
-  const names = ["Researcher", "Operations coordinator", "Quality review agent"];
-  const recipients: { id: string; name: string }[] = [];
-  for (const name of names) {
-    const bot = await rpc<{ id: string }>(page, "bots/create", {
-      name,
-      description: "",
-      computerMode: "team",
-    });
-    recipients.push({ id: bot.id, name });
-  }
-  const { prisma, pool } = createDb(process.env.DATABASE_URL!);
-  const receiptIds: string[] = [];
-  try {
-    const { id: threadId } = await prisma.thread.findUniqueOrThrow({ where: { botId: chiefId } });
-    await prisma.$transaction(async (tx) => {
-      for (const { id, name } of recipients) {
-        const message = await createThreadMessageInTransaction(tx, {
-          threadId,
-          botId: chiefId,
-          role: "bot",
-          blocks: [
-            { kind: "bot_message_sent", toBotId: id, toBotName: name, text: `Task for ${name}` },
-          ],
-        });
-        receiptIds.push(message.id);
-      }
-    });
-  } finally {
-    await prisma.$disconnect();
-    await pool.end();
-  }
-  await page.reload();
-  const transcript = page.getByTestId("transcript");
-  const receipt = transcript.getByTestId("peer-receipt-group");
-  await expect(receipt).toHaveCount(1);
-  await expect(receipt).toHaveText(
-    "Messaged Researcher, Operations coordinator, and Quality review agent",
-  );
-  for (const id of receiptIds.slice(1)) {
-    await expect(transcript.locator(`[data-message-id="${id}"]`)).toHaveCount(0);
-  }
-  await captureScreenshot(page, testInfo, "peer-receipt-group");
-  await page.setViewportSize({ width: 390, height: 844 });
-  expect(await transcript.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
-  for (const name of names)
-    await expect(receipt.getByRole("button", { name, exact: true })).toBeVisible();
-  await receipt.getByRole("button", { name: names[1], exact: true }).click();
-  const view = page.getByTestId("peer-conversation-view");
-  await expect(view.getByText(`Task for ${names[1]}`, { exact: true })).toBeVisible();
-});
+for (const direction of ["sent", "received"] as const) {
+  test(`groups consecutive ${direction} receipts and opens each peer`, async ({
+    page,
+  }, testInfo) => {
+    await signup(
+      page,
+      `peer-group-${direction}-${Date.now()}@orkbot.test`,
+      "password12",
+      "Peer Group",
+    );
+    await completeOnboarding(page);
+    const chiefId = activeBotId(page);
+    const names = ["Researcher", "Operations coordinator", "Quality review agent"];
+    const recipients: { id: string; name: string }[] = [];
+    for (const name of names) {
+      const bot = await rpc<{ id: string }>(page, "bots/create", {
+        name,
+        description: "",
+        computerMode: "team",
+      });
+      recipients.push({ id: bot.id, name });
+    }
+    const { prisma, pool } = createDb(process.env.DATABASE_URL!);
+    const receiptIds: string[] = [];
+    try {
+      const { id: threadId } = await prisma.thread.findUniqueOrThrow({ where: { botId: chiefId } });
+      await prisma.$transaction(async (tx) => {
+        for (const { id, name } of recipients) {
+          const message = await createThreadMessageInTransaction(tx, {
+            threadId,
+            botId: chiefId,
+            role: "bot",
+            blocks: [
+              direction === "sent"
+                ? {
+                    kind: "bot_message_sent",
+                    toBotId: id,
+                    toBotName: name,
+                    text: `Task for ${name}`,
+                  }
+                : {
+                    kind: "bot_message_received",
+                    fromBotId: id,
+                    fromBotName: name,
+                    text: `Task for ${name}`,
+                  },
+            ],
+          });
+          receiptIds.push(message.id);
+        }
+      });
+    } finally {
+      await prisma.$disconnect();
+      await pool.end();
+    }
+    await page.reload();
+    const transcript = page.getByTestId("transcript");
+    const receipt = transcript.getByTestId("peer-receipt-group");
+    await expect(receipt).toHaveCount(1);
+    await expect(receipt).toHaveText(
+      `${direction === "sent" ? "Messaged" : "Message from"} Researcher, Operations coordinator, and Quality review agent`,
+    );
+    for (const id of receiptIds.slice(1)) {
+      await expect(transcript.locator(`[data-message-id="${id}"]`)).toHaveCount(0);
+    }
+    await captureScreenshot(page, testInfo, `peer-receipt-group-${direction}`);
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await transcript.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true);
+    for (const name of names)
+      await expect(receipt.getByRole("button", { name, exact: true })).toBeVisible();
+    await receipt.getByRole("button", { name: names[1], exact: true }).click();
+    const view = page.getByTestId("peer-conversation-view");
+    await expect(view.getByText(`Task for ${names[1]}`, { exact: true })).toBeVisible();
+  });
+}
 
 test("shows peer lines in transcript and opens view-only peer chat", async ({ page }, testInfo) => {
   const stamp = Date.now();
