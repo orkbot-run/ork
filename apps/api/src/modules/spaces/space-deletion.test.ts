@@ -30,6 +30,7 @@ vi.mock("@orkbot/db", async (original) => ({
   deleteClaimedSpaceForMember: lifecycle.remove,
   workspaceAdmissionBinding: lifecycle.admission,
 }));
+vi.mock("./availability.js", () => ({ rehomeItemsLeaving: vi.fn().mockResolvedValue(undefined) }));
 
 import { deleteSpaceWithContent } from "./space-deletion.js";
 
@@ -91,6 +92,12 @@ describe("workspace deletion storage cleanup", () => {
     lifecycle.bots.mockResolvedValue([]);
     lifecycle.computers.mockResolvedValue([]);
     lifecycle.admission.mockResolvedValue({ id: "central-workspace" });
+    lifecycle.remove.mockResolvedValue({
+      id: "active-space",
+      artifactKeys: [],
+      homeKeys: [],
+      pageShareSecrets: [],
+    });
   });
 
   it("keeps the workspace when a member's stored secret cannot be removed", async () => {
@@ -109,10 +116,11 @@ describe("workspace deletion storage cleanup", () => {
   it("does not purge potentially shared personal Space secrets", async () => {
     lifecycle.admission.mockResolvedValue(null);
     const deps = fixture({ secretFailure: true, artifactFailure: true });
-    await expect(deleteSpaceWithContent(deps, actor, "workspace")).rejects.toThrow(
-      "artifact storage unavailable",
-    );
+    await expect(deleteSpaceWithContent(deps, actor, "workspace")).resolves.toEqual({
+      activeSpaceId: "active-space",
+    });
     expect(deps.secrets.delete).not.toHaveBeenCalled();
+    expect(deps.artifacts.purgeSpace).not.toHaveBeenCalled();
   });
 
   it("purges pending sign-ins and messaging credentials before removing their rows", async () => {

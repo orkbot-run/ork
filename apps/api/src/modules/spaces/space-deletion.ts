@@ -209,18 +209,19 @@ export async function deleteSpaceWithContent(
         );
       }
     };
-    // Remove remote references before bot cascades can erase the records needed for retries.
-    if (managedWorkspace) await purgeSecrets();
-    // Verify all known storage backends are reachable before bot teardown removes their rows.
-    const artifacts = await deps.prisma.artifact.findMany({
-      where: { spaceId, space: { deletionClaimId: claimId } },
-      select: { storageKey: true },
-    });
-    for (const artifact of artifacts) {
-      await teardown(
-        () => deps.artifacts.remove(artifact.storageKey, context()),
-        "Space artifact purge timed out",
-      );
+    if (managedWorkspace) {
+      // Keep references until remote cleanup has succeeded and can safely be retried.
+      await purgeSecrets();
+      const artifacts = await deps.prisma.artifact.findMany({
+        where: { spaceId, space: { deletionClaimId: claimId } },
+        select: { storageKey: true },
+      });
+      for (const artifact of artifacts) {
+        await teardown(
+          () => deps.artifacts.remove(artifact.storageKey, context()),
+          "Space artifact purge timed out",
+        );
+      }
     }
     for (const bot of await listClaimedSpaceBots(deps.prisma, claimedInput)) {
       try {
@@ -229,7 +230,7 @@ export async function deleteSpaceWithContent(
             destroyBot({ ...deps, secretStore: deps.secrets }, bot, context(bot.id, bot.userId), {
               deleteMemories: true,
               strictTeardown: true,
-              purgeHome: true,
+              purgeHome: Boolean(managedWorkspace),
             }),
           "Space bot teardown timed out",
         );
@@ -263,19 +264,21 @@ export async function deleteSpaceWithContent(
     // Other computers can still own stored revisions even after their provider stopped.
     // Purge while their database rows still identify the remote storage, and keep the
     // claim on failure so a retry can finish without making the Space usable again.
-    const homes = await deps.prisma.computer.findMany({
-      where: { spaceId, space: { deletionClaimId: claimId } },
-      select: { homeKey: true },
-    });
-    for (const home of homes) {
-      await teardown(() => purgeAgentHome(deps.home, home.homeKey), "Space home purge timed out");
+    if (managedWorkspace) {
+      const homes = await deps.prisma.computer.findMany({
+        where: { spaceId, space: { deletionClaimId: claimId } },
+        select: { homeKey: true },
+      });
+      for (const home of homes) {
+        await teardown(() => purgeAgentHome(deps.home, home.homeKey), "Space home purge timed out");
+      }
+      // Catch remaining Space-owned secrets before their database rows cascade away.
+      await purgeSecrets();
+      // Sweep the whole storage namespace, including files without a surviving database row.
+      if (!deps.artifacts.purgeSpace)
+        throw new Error("This artifact storage provider cannot permanently delete a space");
+      await teardown(() => deps.artifacts.purgeSpace!(context()), "Space artifact purge timed out");
     }
-    // Catch remaining Space-owned secrets before their database rows cascade away.
-    if (managedWorkspace) await purgeSecrets();
-    // Sweep the whole storage namespace, including files without a surviving database row.
-    if (!deps.artifacts.purgeSpace)
-      throw new Error("This artifact storage provider cannot permanently delete a space");
-    await teardown(() => deps.artifacts.purgeSpace!(context()), "Space artifact purge timed out");
     await assertClaim();
     claimActive = false;
     if (claimRenewal) {
