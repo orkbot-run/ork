@@ -38,7 +38,7 @@ export function useInboxRoster(run: () => Promise<unknown>, enabled: boolean): v
         timer = setTimeout(() => void refresh(), ready ? READY_POLL_MS : INBOX_POLL_INTERVAL_MS);
     };
     const invalidate = () => {
-      if (!current() || !polling) return;
+      if (!current() || !polling || dirty) return;
       dirty = true;
       if (refreshing) return;
       clearTimer();
@@ -59,8 +59,10 @@ export function useInboxRoster(run: () => Promise<unknown>, enabled: boolean): v
         if (pendingRef.current === pending) pendingRef.current = null;
         refreshing = false;
         if (current()) {
-          if (dirty) invalidate();
-          else schedule();
+          if (dirty) {
+            dirty = false;
+            invalidate();
+          } else schedule();
         }
       }
     };

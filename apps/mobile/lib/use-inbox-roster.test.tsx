@@ -114,6 +114,17 @@ it("coalesces bursts and makes one trailing refresh for invalidations during a l
   expect(run).toHaveBeenCalledTimes(3);
 });
 
+it("does not postpone a queued refresh while frames keep arriving", async () => {
+  const run = vi.fn(async () => true);
+  await render(run);
+  await event(true);
+  await event();
+  await advance(50);
+  await event();
+  await advance(50);
+  expect(run).toHaveBeenCalledTimes(2);
+});
+
 it("refreshes on late readiness and reconnect, preserving queued invalidation on disconnect", async () => {
   const run = vi.fn(async () => true);
   await render(run);
