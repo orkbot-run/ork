@@ -67,6 +67,17 @@ function shown() {
 }
 
 describe("scoped reply mode saves", () => {
+  it("defaults an absent mode to updates and final reply while preserving saved chat", async () => {
+    expect(shown()).toBe("chat");
+    await act(async () =>
+      root.render(
+        <BotReplyModeSetting bot={{ ...bot, replyMode: undefined, updatedAt: "2026-01-02" }} />,
+      ),
+    );
+    expect(shown()).toBe("explicit");
+    expect(state.update).not.toHaveBeenCalled();
+  });
+
   it("finishes an already accepted queued choice after ordinary panel close", async () => {
     const first = deferred();
     state.update.mockReturnValueOnce(first.promise).mockResolvedValueOnce({ replyMode: "chat" });

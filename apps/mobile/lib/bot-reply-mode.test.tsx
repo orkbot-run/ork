@@ -109,6 +109,17 @@ function shown() {
 }
 
 describe("scoped reply mode saves", () => {
+  it("defaults an absent mode to updates and final reply while preserving saved chat", async () => {
+    expect(shown()).toBe("chat");
+    await act(async () =>
+      root.render(
+        <BotReplyModeSetting bot={{ ...bot, replyMode: undefined, updatedAt: "2026-01-02" }} />,
+      ),
+    );
+    expect(shown()).toBe("explicit");
+    expect(state.update).not.toHaveBeenCalled();
+  });
+
   it("releases the parent Save boundary when a renewed old server does not support reply modes", async () => {
     let flush: (() => Promise<void>) | undefined;
     const registerFlush = (next: typeof flush) => {

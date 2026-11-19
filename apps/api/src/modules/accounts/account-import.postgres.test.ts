@@ -431,7 +431,7 @@ describePostgres("account import (PostgreSQL)", () => {
     expect(child.fleetManagement).toBe(false);
     expect(child.dailyCheckIns).toBe(false);
     expect(child.replyMode).toBe("explicit");
-    expect(parent.replyMode).toBe("chat");
+    expect(parent.replyMode).toBe("explicit");
     expect(parent.dailyCheckIns).toBe(false);
     expect(child.disabledBuiltinTools).toEqual(["browser"]);
     const section = await system.botSection.findFirstOrThrow({ where: { spaceId } });

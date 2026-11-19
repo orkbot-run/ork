@@ -3,6 +3,7 @@
 
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { Bot, BotReplyMode } from "@orkbot/contracts";
+import { DEFAULT_BOT_REPLY_MODE } from "@orkbot/contracts";
 import { createQueuedSave } from "@orkbot/core";
 import { NativeSelect, NativeSelectOption } from "@orkbot/ui-web";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -22,7 +23,7 @@ export function BotReplyModeSetting({
   const acceptedVersion = useRef(bot.updatedAt);
   const owner = useRef(bot);
   owner.current = bot;
-  const [value, setValue] = useState<BotReplyMode>(bot.replyMode ?? "chat");
+  const [value, setValue] = useState<BotReplyMode>(bot.replyMode ?? DEFAULT_BOT_REPLY_MODE);
   const [error, setError] = useState<string | null>(null);
   const origin = useMemo(() => captureRpcContext(bot.spaceId), [bot.id, bot.spaceId]);
   const owned = () =>
@@ -31,7 +32,7 @@ export function BotReplyModeSetting({
   useLayoutEffect(() => {
     live.current = true;
     acceptedVersion.current = bot.updatedAt;
-    setValue(bot.replyMode ?? "chat");
+    setValue(bot.replyMode ?? DEFAULT_BOT_REPLY_MODE);
     setError(null);
     return () => {
       live.current = false;
@@ -39,7 +40,7 @@ export function BotReplyModeSetting({
   }, [origin]);
   const queue = useMemo(
     () =>
-      createQueuedSave<BotReplyMode>(bot.replyMode ?? "chat", {
+      createQueuedSave<BotReplyMode>(bot.replyMode ?? DEFAULT_BOT_REPLY_MODE, {
         save: async (replyMode) => {
           if (!owned()) throw new DOMException("Session changed", "AbortError");
           const next = await origin.client.bots.update({ botId: bot.id, replyMode });
@@ -65,8 +66,8 @@ export function BotReplyModeSetting({
   useEffect(() => {
     if (!saving && current() && bot.updatedAt > acceptedVersion.current) {
       acceptedVersion.current = bot.updatedAt;
-      queue.reset(bot.replyMode ?? "chat");
-      setValue(bot.replyMode ?? "chat");
+      queue.reset(bot.replyMode ?? DEFAULT_BOT_REPLY_MODE);
+      setValue(bot.replyMode ?? DEFAULT_BOT_REPLY_MODE);
     }
   }, [bot.replyMode, bot.updatedAt, queue, saving]);
   return (

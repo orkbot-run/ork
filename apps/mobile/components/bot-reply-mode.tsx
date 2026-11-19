@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { Bot, BotReplyMode } from "@orkbot/contracts";
+import { DEFAULT_BOT_REPLY_MODE } from "@orkbot/contracts";
 import { createQueuedSave } from "@orkbot/core";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Text, View } from "react-native";
@@ -40,7 +41,7 @@ export function BotReplyModeSetting({
   owner.current = bot;
   const [saving, setSaving] = useState(false);
   const acceptedVersion = useRef(bot.updatedAt);
-  const [value, setValue] = useState<BotReplyMode>(bot.replyMode ?? "chat");
+  const [value, setValue] = useState<BotReplyMode>(bot.replyMode ?? DEFAULT_BOT_REPLY_MODE);
   const [error, setError] = useState<string | null>(null);
   const [unsupported, setUnsupported] = useState(false);
   const baseOrigin = useMemo(
@@ -69,7 +70,7 @@ export function BotReplyModeSetting({
   useLayoutEffect(() => {
     live.current = true;
     acceptedVersion.current = snapshot.updatedAt;
-    setValue(snapshot.replyMode ?? "chat");
+    setValue(snapshot.replyMode ?? DEFAULT_BOT_REPLY_MODE);
     setError(null);
     setSaving(false);
     onSavingChange?.(false);
@@ -89,7 +90,7 @@ export function BotReplyModeSetting({
   );
   const queue = useMemo(
     () =>
-      createQueuedSave<BotReplyMode>(snapshot.replyMode ?? "chat", {
+      createQueuedSave<BotReplyMode>(snapshot.replyMode ?? DEFAULT_BOT_REPLY_MODE, {
         save: async (replyMode) => {
           if (!owned()) throw new Error("Session changed");
           const next = await origin.send("bots/update", { botId: bot.id, replyMode });
@@ -172,8 +173,8 @@ export function BotReplyModeSetting({
   useEffect(() => {
     if (!saving && current() && bot.updatedAt > acceptedVersion.current) {
       acceptedVersion.current = bot.updatedAt;
-      queue.reset(bot.replyMode ?? "chat");
-      setValue(bot.replyMode ?? "chat");
+      queue.reset(bot.replyMode ?? DEFAULT_BOT_REPLY_MODE);
+      setValue(bot.replyMode ?? DEFAULT_BOT_REPLY_MODE);
     }
   }, [bot.replyMode, bot.updatedAt, queue, saving]);
   if (unsupported) return null;

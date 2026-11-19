@@ -14,6 +14,7 @@ import type {
 } from "@orkbot/contracts";
 import {
   canonicalPiProviderId,
+  DEFAULT_BOT_REPLY_MODE,
   DEFAULT_NEW_BOT_AVATAR_SET,
   disabledBuiltinToolSet,
   InstructionVersionSchema,
@@ -144,7 +145,7 @@ function mapBot(
     avatarSet: resolveBotAvatarSet(bot.avatarSet),
     avatarSeed: bot.avatarSeed ?? null,
     notifyOnFinish: bot.notifyOnFinish,
-    replyMode: bot.replyMode === "explicit" ? "explicit" : "chat",
+    replyMode: bot.replyMode === "chat" ? "chat" : DEFAULT_BOT_REPLY_MODE,
     pinned: bot.pinned,
     sectionId: bot.sectionId,
     archivedAt: bot.archivedAt?.toISOString() ?? null,
@@ -682,7 +683,7 @@ export function createRepos(
               description: input.description,
               instructions: input.instructions,
               notifyOnFinish: input.notifyOnFinish,
-              replyMode: input.replyMode,
+              replyMode: input.replyMode ?? DEFAULT_BOT_REPLY_MODE,
               dailyCheckIns: input.dailyCheckIns,
               fleetManagement: input.fleetManagement,
               color: avatar.color,

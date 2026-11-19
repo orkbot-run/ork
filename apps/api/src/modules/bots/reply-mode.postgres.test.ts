@@ -31,14 +31,14 @@ postgres("immutable bot reply modes (PostgreSQL)", () => {
     await db?.pool.end();
   });
 
-  async function fixture(mode: "chat" | "explicit") {
+  async function fixture(mode?: "chat" | "explicit") {
     const identity = await provisionMessagingIdentity(
       system,
       { provider: "email", address: `reply-mode-${randomUUID()}@example.test` },
       { signupsEnabled: undefined, signupAllowlist: undefined },
     );
     const { spaceId, userId, botId, threadId } = identity;
-    await system.bot.update({ where: { id: botId }, data: { replyMode: mode } });
+    if (mode) await system.bot.update({ where: { id: botId }, data: { replyMode: mode } });
     const actor: Actor = {
       spaceId,
       userId,
@@ -71,6 +71,16 @@ postgres("immutable bot reply modes (PostgreSQL)", () => {
       });
     return { identity, actor, create, claim, botId };
   }
+
+  it("defaults a bot without an override to explicit and pins its new runs", async () => {
+    const f = await fixture();
+    // Exercise the database default too, independently of the repository's create payload.
+    await system.$executeRaw`UPDATE bots SET "replyMode" = DEFAULT WHERE id = ${f.botId}`;
+    expect(await system.bot.findUniqueOrThrow({ where: { id: f.botId } })).toMatchObject({
+      replyMode: "explicit",
+    });
+    expect(await f.create()).toMatchObject({ replyMode: "explicit", requiredReaderVersion: 2 });
+  });
 
   it("pins a legacy producer's explicit run and rejects readers zero and one", async () => {
     const f = await fixture("explicit");

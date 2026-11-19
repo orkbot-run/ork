@@ -32,7 +32,7 @@ import type {
   SettingsScope,
   VaultPutInput,
 } from "@orkbot/contracts";
-import { BotSecretAuth, resolveBotAvatarSet } from "@orkbot/contracts";
+import { BotSecretAuth, DEFAULT_BOT_REPLY_MODE, resolveBotAvatarSet } from "@orkbot/contracts";
 import { ACTIVE_RUN_STATUSES, displayName } from "@orkbot/core";
 import type { Prisma } from "@orkbot/db";
 import {
@@ -355,7 +355,7 @@ export function botsRoutes(ctx: RouterContext) {
             description: source.description,
             instructions: source.instructions,
             notifyOnFinish: source.notifyOnFinish,
-            replyMode: source.replyMode === "explicit" ? "explicit" : "chat",
+            replyMode: source.replyMode === "chat" ? "chat" : DEFAULT_BOT_REPLY_MODE,
             dailyCheckIns: source.dailyCheckIns,
             color: source.color,
             avatarSet: resolveBotAvatarSet(source.avatarSet),

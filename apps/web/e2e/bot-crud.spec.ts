@@ -126,7 +126,16 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await expect(settings.locator('label[for$="-model"]')).toHaveClass("sr-only");
   await expect(modelSelect).toBeVisible();
   const replyMode = settings.getByRole("combobox", { name: "Reply mode", exact: true });
-  await expect(replyMode).toHaveValue("chat");
+  await expect(replyMode).toHaveValue("explicit");
+  await replyMode.selectOption("chat");
+  await expect
+    .poll(async () => {
+      const bot = (await rpc(page, "bots/get", { botId: deletedBotPath.split("/").at(-1) })) as {
+        replyMode?: string;
+      };
+      return bot.replyMode;
+    })
+    .toBe("chat");
   await replyMode.selectOption("explicit");
   await expect
     .poll(async () => {

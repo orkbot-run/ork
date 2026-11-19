@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import type { AccountExportManifest, AccountExportRecord } from "@orkbot/contracts";
+import { DEFAULT_BOT_REPLY_MODE } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "./client.js";
 import { runAsTenant } from "./row-security.js";
 
@@ -156,7 +157,7 @@ async function* spaceRecords(
       avatarSet: bot.avatarSet,
       avatarSeed: bot.avatarSeed,
       notifyOnFinish: bot.notifyOnFinish,
-      replyMode: bot.replyMode === "explicit" ? "explicit" : "chat",
+      replyMode: bot.replyMode === "chat" ? "chat" : DEFAULT_BOT_REPLY_MODE,
       pinned: bot.pinned,
       position: bot.position,
       sectionId: bot.sectionId,

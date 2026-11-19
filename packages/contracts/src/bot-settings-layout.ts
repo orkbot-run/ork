@@ -7,6 +7,8 @@ import * as z from "zod";
 export const BotReplyModeSchema = z.enum(["chat", "explicit"]);
 export type BotReplyMode = z.infer<typeof BotReplyModeSchema>;
 
+export const DEFAULT_BOT_REPLY_MODE: BotReplyMode = "explicit";
+
 /** Shared section membership and order; surfaces omit unavailable capabilities. */
 export const BOT_SETTINGS_SECTIONS = {
   openWork: ["scratchpad"],

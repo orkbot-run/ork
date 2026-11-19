@@ -56,6 +56,19 @@ function reposFor(memoryScope: string | null) {
 }
 
 describe("createRepos.listBots", () => {
+  it.each([undefined, "chat", "explicit"] as const)(
+    "uses the new default only for missing reply modes (mode=%s)",
+    async (replyMode) => {
+      const prisma = {
+        bot: { findMany: vi.fn(async () => [{ ...baseBot, replyMode }]) },
+        run: { findMany: vi.fn(async () => []) },
+        $queryRaw: vi.fn(async () => []),
+      };
+      const bots = await createRepos(prisma as unknown as PrismaClient).listBots(actor);
+      expect(bots[0]?.replyMode).toBe(replyMode ?? "explicit");
+    },
+  );
+
   it.each([undefined, "organic", "orkbot"])(
     "normalizes legacy sets on reload without changing identity or saved colors (set=%s)",
     async (avatarSet) => {
