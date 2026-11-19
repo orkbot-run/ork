@@ -3,7 +3,7 @@ import { limitMcpResponseBody, McpResponseTooLargeError } from "./mcp-response-l
 
 const MAX = 64;
 
-function streamed(chunks: string[], headers: Record<string, string>): Response {
+function streamed(chunks: string[], headers: Record<string, string>, status = 200): Response {
   const encoder = new TextEncoder();
   return new Response(
     new ReadableStream({
@@ -12,7 +12,7 @@ function streamed(chunks: string[], headers: Record<string, string>): Response {
         controller.close();
       },
     }),
-    { headers },
+    { headers, status },
   );
 }
 
@@ -65,6 +65,24 @@ describe("limitMcpResponseBody", () => {
       MAX,
     );
     await expect(limited.text()).resolves.toBe(event + event + crlfEvent + event);
+  });
+
+  it("counts the whole body of a failed response with event-stream headers", async () => {
+    const event = `data: ${"x".repeat(40)}\n\n`;
+    const limited = limitMcpResponseBody(streamed([event, event], sse, 503), streamRequest, MAX);
+    expect(limited.status).toBe(503);
+    await expect(limited.text()).rejects.toThrow(McpResponseTooLargeError);
+  });
+
+  it("rejects an oversized declared length for an event-stream error before reading", () => {
+    const response = streamed(
+      ["data: bad request\n\n"],
+      { ...sse, "content-length": String(MAX + 1) },
+      400,
+    );
+    expect(() => limitMcpResponseBody(response, streamRequest, MAX)).toThrow(
+      McpResponseTooLargeError,
+    );
   });
 
   it("fails an event that grows past the limit, even across chunks", async () => {
