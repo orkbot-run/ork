@@ -6798,6 +6798,11 @@ msgstr "Przeglądarka ciągle traci dostęp do mikrofonu. Uruchom dyktowanie pon
 msgid "The computer service cannot start computers for this account."
 msgstr "Usługa komputerów nie może uruchomić komputerów dla tego konta."
 
+#. js-lingui-explicit-id
+#: src/lib/run-error.ts
+msgid "The computer stopped responding. Try again."
+msgstr "Komputer przestał odpowiadać. Spróbuj ponownie."
+
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "Upłynął czas połączenia."

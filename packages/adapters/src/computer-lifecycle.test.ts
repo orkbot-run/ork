@@ -1307,6 +1307,8 @@ describe("computer provisioning", () => {
           context,
         ),
       ).rejects.toThrow();
+      expect(sandbox.stop).toHaveBeenCalledWith(resumed, context, { discardUnsaved: true });
+      expect(sandbox.provision).toHaveBeenCalledTimes(2);
       const markIndex = updateMany.mock.calls.findIndex(
         ([args]) => args.data.restorePending === true,
       );

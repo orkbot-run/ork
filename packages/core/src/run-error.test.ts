@@ -2,7 +2,11 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
 
-import { COMPUTER_ACCOUNT_REFUSED_ERROR, COMPUTER_RATE_LIMIT_ERROR } from "@orkbot/contracts";
+import {
+  COMPUTER_ACCOUNT_REFUSED_ERROR,
+  COMPUTER_RATE_LIMIT_ERROR,
+  COMPUTER_UNRESPONSIVE_ERROR,
+} from "@orkbot/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   APPROVED_ACTION_NOT_RUN_ERROR,
@@ -884,11 +888,14 @@ describe("the one action that fixes a failed run", () => {
   );
 });
 
-it("translates the canonical computer account refusal without suggesting model recovery", () => {
-  const translate = vi.fn((message: string) => `translated:${message}`);
-  expect(normalizeRunError(COMPUTER_ACCOUNT_REFUSED_ERROR, translate)).toEqual({
-    summary: `translated:${COMPUTER_ACCOUNT_REFUSED_ERROR}`,
-    details: COMPUTER_ACCOUNT_REFUSED_ERROR,
-  });
-  expect(translate).toHaveBeenCalledExactlyOnceWith(COMPUTER_ACCOUNT_REFUSED_ERROR);
-});
+it.each([COMPUTER_ACCOUNT_REFUSED_ERROR, COMPUTER_UNRESPONSIVE_ERROR])(
+  "translates the computer failure without suggesting model recovery: %s",
+  (details) => {
+    const translate = vi.fn((message: string) => `translated:${message}`);
+    expect(normalizeRunError(details, translate)).toEqual({
+      summary: `translated:${details}`,
+      details,
+    });
+    expect(translate).toHaveBeenCalledExactlyOnceWith(details);
+  },
+);

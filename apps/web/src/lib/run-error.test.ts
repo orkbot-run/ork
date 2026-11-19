@@ -3,7 +3,7 @@
 // Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
 
 import { i18n } from "@lingui/core";
-import { COMPUTER_ACCOUNT_REFUSED_ERROR } from "@orkbot/contracts";
+import { COMPUTER_ACCOUNT_REFUSED_ERROR, COMPUTER_UNRESPONSIVE_ERROR } from "@orkbot/contracts";
 import { MODEL_OUTPUT_CUT_ERROR, MODEL_REQUEST_LIMIT_ERROR, normalizeRunError } from "@orkbot/core";
 import { afterEach, expect, it } from "vitest";
 import { translateRunError } from "./run-error";
@@ -39,6 +39,14 @@ it("uses the active Lingui catalog for shared run errors", () => {
       i18n.locale,
     ).summary,
   ).toBe("Dein Modellanbieter drosselt Anfragen. Versuche es gleich noch einmal.");
+});
+
+it("translates an unresponsive computer without providing model settings actions", () => {
+  const details = COMPUTER_UNRESPONSIVE_ERROR;
+  const summary = "Komputer przestał odpowiadać. Spróbuj ponownie.";
+  i18n.load("pl", { [details]: summary });
+  i18n.activate("pl");
+  expect(normalizeRunError(details, translateRunError)).toEqual({ details, summary });
 });
 
 it("translates the summary of a reply cut off at the output limit", () => {

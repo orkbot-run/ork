@@ -7,6 +7,7 @@ import {
   COMPUTER_ACCOUNT_REFUSED_ERROR,
   COMPUTER_ALLOWANCE_USED_ERROR,
   COMPUTER_RATE_LIMIT_ERROR,
+  COMPUTER_UNRESPONSIVE_ERROR,
   providerQuotaResetAt,
 } from "@orkbot/contracts";
 import { stuckWorkStatusMessages } from "./stuck-work.js";
@@ -234,8 +235,8 @@ export function normalizeRunError(
   period?: "none" | "daily" | "weekly" | "monthly";
 } {
   const trimmed = details.trim();
-  if (trimmed === COMPUTER_ACCOUNT_REFUSED_ERROR) {
-    return { summary: translate(COMPUTER_ACCOUNT_REFUSED_ERROR), details };
+  if (trimmed === COMPUTER_ACCOUNT_REFUSED_ERROR || trimmed === COMPUTER_UNRESPONSIVE_ERROR) {
+    return { summary: translate(trimmed), details };
   }
   if ([MODEL_IMAGE_INPUT_ERROR, MODEL_IMAGE_INPUT_UNKNOWN].includes(trimmed)) {
     return {

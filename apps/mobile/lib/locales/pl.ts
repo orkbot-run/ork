@@ -144,6 +144,7 @@ export const PL_MESSAGES: Record<string, string> = {
   "Screen unavailable": "Ekran niedostępny",
   "The computer service cannot start computers for this account.":
     "Usługa komputerów nie może uruchomić komputerów dla tego konta.",
+  "The computer stopped responding. Try again.": "Komputer przestał odpowiadać. Spróbuj ponownie.",
   Rule: "Reguła",
   Inactive: "Nieaktywna",
   "Other tool": "Inne narzędzie",

@@ -6798,6 +6798,11 @@ msgstr "The browser keeps dropping the microphone. Start dictation again to retr
 msgid "The computer service cannot start computers for this account."
 msgstr "The computer service cannot start computers for this account."
 
+#. js-lingui-explicit-id
+#: src/lib/run-error.ts
+msgid "The computer stopped responding. Try again."
+msgstr "The computer stopped responding. Try again."
+
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "The connection timed out."
