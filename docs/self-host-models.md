@@ -71,6 +71,8 @@ ORKBOT_LOCAL_MODELS=qwen3:4b,llama3.1:8b,qwen3-vl
 ORKBOT_LOCAL_MODELS_URL=http://127.0.0.1:11434/v1
 ORKBOT_LOCAL_CONTEXT_WINDOW=32768
 ORKBOT_LOCAL_MAX_TOKENS=4096
+# Optional: trim stale context sooner when this server has no prompt cache.
+# ORKBOT_LOCAL_PROMPT_CACHE=off
 # Optional: model ids on this endpoint that accept images (screenshot computer tools).
 ORKBOT_LOCAL_VISION_MODELS=qwen3-vl
 # Optional: model ids on this endpoint that accept OpenAI-style reasoning_effort.
@@ -85,6 +87,10 @@ receive the field.
 connection sets its own max-tokens value. It never exceeds a quarter of
 `ORKBOT_LOCAL_CONTEXT_WINDOW`, so the prompt keeps the rest; a higher limit leaves less room for the
 prompt, so long chats are compacted sooner.
+
+Set `ORKBOT_LOCAL_PROMPT_CACHE=off` if the local server does not reuse cached prefixes. Ork then
+rebuilds the transcript when it can drop at least 3,000 estimated tokens of stale content, such as
+earlier browser state and screenshots. Leave the variable unset for servers that reuse prefixes.
 
 The loopback default is suitable when running Ork from a source checkout. From containers,
 prefer a stable LAN RFC1918 address (not Compose service DNS alone). On Docker Desktop,

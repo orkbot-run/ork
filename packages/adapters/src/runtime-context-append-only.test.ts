@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import type { Api, Context, Message, Model } from "@earendil-works/pi-ai";
 import type { AgentRunRequest } from "@orkbot/adapter-kit";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ContextCacheTracker,
   estimateContextTokens,
   providerContextPrefix,
 } from "./context-selection.js";
+import { LOCAL_PROVIDER_ID } from "./pi-local-provider-id.js";
 import { createRuntimeContextPolicy, rebuildPaysOff } from "./runtime-context.js";
 
 const model = {
@@ -138,10 +139,14 @@ function simulateRun(
     cacheTracker?: ContextCacheTracker;
     tick?: () => void;
     systemPrompt?: (step: number) => string;
+    callModel?: Model<Api>;
+    imageTokens?: number;
+    unsignedThinking?: boolean;
   } = {},
 ) {
   const policy = createRuntimeContextPolicy(input, undefined, {
     cacheTracker: options.cacheTracker,
+    imageTokens: options.imageTokens,
   });
   const messages = initialMessages(input);
   const sent: Context[] = [];
@@ -152,7 +157,7 @@ function simulateRun(
         tools: [],
         messages: [...messages],
       },
-      model,
+      options.callModel ?? model,
     );
     sent.push(context);
     policy.onUsage({ inputTokens: 1000, outputTokens: 10, cacheReadTokens: 900 });
@@ -172,7 +177,9 @@ function simulateRun(
         {
           type: "thinking",
           thinking: `Plan step ${index}`,
-          thinkingSignature: prefixSignature(context, context.messages.length),
+          ...(options.unsignedThinking
+            ? {}
+            : { thinkingSignature: prefixSignature(context, context.messages.length) }),
         },
         { type: "toolCall", id, name: step.tool, arguments: {} },
       ],
@@ -446,6 +453,38 @@ function driver(input: AgentRunRequest, callModel: Model<Api> = model) {
 }
 
 describe("append-only run transcript boundaries", () => {
+  it("rebuilds at 3,000 stale tokens for a server without prompt cache", () => {
+    const fresh = { tokens: 12_000, images: 2 };
+    expect(rebuildPaysOff({ tokens: 14_999, images: 3 }, fresh, 10_000, 0, true)).toBe(false);
+    expect(rebuildPaysOff({ tokens: 15_000, images: 3 }, fresh, 10_000, 0, true)).toBe(true);
+    expect(rebuildPaysOff({ tokens: 15_000, images: 3 }, fresh, 10_000, 0)).toBe(false);
+  });
+
+  it.each([
+    { provider: LOCAL_PROVIDER_ID, setting: "off", expectedRewrites: [3], screenshots: 2 },
+    { provider: LOCAL_PROVIDER_ID, setting: undefined, expectedRewrites: [], screenshots: 3 },
+    { provider: model.provider, setting: "off", expectedRewrites: [], screenshots: 3 },
+  ])(
+    "uses the smaller threshold for $provider with cache $setting",
+    ({ provider, setting, expectedRewrites, screenshots }) => {
+      vi.stubEnv("ORKBOT_LOCAL_PROMPT_CACHE", setting);
+      try {
+        const sent = simulateRun(
+          request({ contextStrategy: "retrieval", model: { provider, id: model.id } }, 0),
+          Array.from({ length: 3 }, (): Step => ({ tool: "computer_observe", screenshot: true })),
+          { callModel: { ...model, provider }, imageTokens: 3_500, unsignedThinking: true },
+        );
+        expect(rewrites(sent)).toEqual(expectedRewrites);
+        const last = sent.at(-1)!;
+        expect(imageCount(last)).toBe(screenshots);
+        expect(thinkingCount(last)).toBe(3);
+        expect(JSON.stringify(last)).toContain("Plan step 2");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it("rebuilds for stale text only from the minimum saving on", () => {
     const fresh = { tokens: 1_000, images: 0 };
     // Growth 0 isolates the minimum saving.

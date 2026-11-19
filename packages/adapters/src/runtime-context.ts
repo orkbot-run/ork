@@ -13,6 +13,7 @@ import {
   selectContext,
   shortenToolResultText,
 } from "./context-selection.js";
+import { LOCAL_PROVIDER_ID, localPromptCacheDisabled } from "./pi-local-provider-id.js";
 import {
   effectiveOutputReserve,
   operatorMaxTokens,
@@ -45,6 +46,8 @@ const messageHash = (message: Message) =>
     .digest("hex");
 /** A rebuild breaks the cached prefix, so it must drop at least this much stale content (estimated). */
 const REBUILD_MIN_SAVED_TOKENS = 16_384;
+/** A smaller batch amortizes transcript rewrites when nothing is read from a provider cache. */
+const REBUILD_MIN_SAVED_TOKENS_WITHOUT_CACHE = 3_000;
 /**
  * Images a run may carry beyond what a rebuild keeps before rebuilding pays off anyway. Cache
  * reads alone would allow more, but stale screenshots still add latency and, on some providers,
@@ -70,8 +73,10 @@ export function rebuildPaysOff(
   fresh: Size,
   rebuiltTokens: number,
   appends: number,
+  cacheDisabled = false,
 ): boolean {
   const stale = kept.tokens - fresh.tokens;
+  if (cacheDisabled) return stale >= REBUILD_MIN_SAVED_TOKENS_WITHOUT_CACHE;
   const growth = (kept.tokens - rebuiltTokens) / (appends + 1);
   return (
     (stale >= REBUILD_MIN_SAVED_TOKENS && stale * stale >= 25 * fresh.tokens * growth) ||
@@ -640,7 +645,8 @@ export function createRuntimeContextPolicy(
      * provider's cached prefix and invalidates every later signed thinking block, which
      * providers that bind reasoning to its conversation reject. The context is rebuilt only when
      * that fixes a limit the appended transcript breaks (the model's window or image limit) or
-     * when rebuildPaysOff; thinking from the first rewritten message on is then dropped.
+     * when rebuildPaysOff. Signature-bound and redacted thinking from the first rewritten
+     * message on is then dropped.
      */
     prepareContext(ctx: Context, model: Model<Api>): Context {
       let built = rebuild(ctx, model);
@@ -672,7 +678,13 @@ export function createRuntimeContextPolicy(
           append =
             overTokens(kept) ||
             overImages(kept) ||
-            !rebuildPaysOff(kept, fresh, previous.rebuiltTokens, previous.appends);
+            !rebuildPaysOff(
+              kept,
+              fresh,
+              previous.rebuiltTokens,
+              previous.appends,
+              model.provider === LOCAL_PROVIDER_ID && localPromptCacheDisabled(),
+            );
       }
       if (previous && appended && append) {
         const projection = [
