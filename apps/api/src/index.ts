@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 startup is preserved. Accounts configuration and HTTP timeouts are Ork additions.
 
-import type { Socket } from "node:net";
 import { unwrapEnvFromKeyManager } from "@orkbot/adapters";
 import { loadServerUpdatesConfig } from "@orkbot/adapters/server-updates-config";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
@@ -12,10 +11,10 @@ import { stopOnShutdownSignals } from "@orkbot/core/node/shutdown-signals";
 loadRootEnv();
 await unwrapEnvFromKeyManager();
 
-import { serve } from "@hono/node-server";
 import { SERVICE_NAMES } from "@orkbot/logging";
 import { createRootLogger } from "@orkbot/logging/axiom";
 import { loadProductEnv } from "#modules/platform/env";
+import { API_SHUTDOWN_DEADLINE_MS, createApiHttpServer } from "#modules/platform/http-drain";
 import { createApp } from "./app.js";
 
 const logger = await createRootLogger(SERVICE_NAMES.api);
@@ -46,42 +45,32 @@ try {
       }
     : undefined;
   const { app, stop, handleUpgrade } = await createApp({ ...env, logger, serverUpdateSetup });
-  const server = serve(
-    {
-      fetch: app.fetch,
-      port: env.port,
-      hostname: env.apiHost,
-      // Caddy keeps upstream connections idle for 120 seconds. Close after the proxy does.
-      serverOptions: { keepAliveTimeout: 125_000, headersTimeout: 130_000 },
-    },
-    () => {
-      logger.info("api listening", { "http.host": env.apiHost, "http.port": env.port });
-    },
-  );
-  // Desktop apps hold an outbound socket so bots can reach the user's own computer.
-  if (handleUpgrade) server.on("upgrade", handleUpgrade);
-
-  // SSE streams never end on their own, so server.close() alone would wait forever;
-  // force-close sockets still open after a short grace period.
-  const sockets = new Set<Socket>();
-  server.on("connection", (socket) => {
-    sockets.add(socket);
-    socket.once("close", () => sockets.delete(socket));
+  const { server, drain } = createApiHttpServer({
+    fetch: app.fetch,
+    hostname: env.apiHost,
+    handleUpgrade,
+  });
+  server.listen(env.port, env.apiHost, () => {
+    logger.info("api listening", { "http.host": env.apiHost, "http.port": env.port });
   });
 
   let stopping = false;
   const shutdown = async () => {
     if (stopping) return;
     stopping = true;
-    // Node closes idle keep-alive connections immediately when stopping the HTTP server.
-    const closed = new Promise<void>((resolve) => server.close(() => resolve()));
-    const grace = setTimeout(() => {
-      for (const socket of sockets) socket.destroy();
-    }, 2_000);
-    await closed;
-    clearTimeout(grace);
-    await stop();
-    await logger.flush({ timeoutMs: 2_000 });
+    setTimeout(() => {
+      logger.error("api shutdown deadline exceeded");
+      process.exit(1);
+    }, API_SHUTDOWN_DEADLINE_MS).unref();
+    try {
+      await drain();
+      await stop();
+    } catch (error) {
+      logger.error("api shutdown failed", error);
+      process.exitCode = 1;
+    } finally {
+      await logger.flush({ timeoutMs: 2_000 });
+    }
   };
   stopOnShutdownSignals(shutdown);
 } catch (error) {

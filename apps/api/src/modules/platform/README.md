@@ -1,6 +1,6 @@
 <!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
 <!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
-<!-- Inherited Apache material is preserved. Workspace response authorization changes follow LICENSE.md. -->
+<!-- Inherited Apache material is preserved. Workspace response authorization and HTTP shutdown changes follow LICENSE.md. -->
 
 # Platform
 
@@ -9,3 +9,5 @@ Environment loading, HTTP limits, health checks, monitoring, diagnostics, and sh
 `loadEnv`, `createRouter`, and `createRouterContext` are the main setup entrypoints, with middleware and helpers imported by name from their files. `app.ts` supplies the filesystem URL used by `readDeployedWebBuild`.
 
 Centrally managed sessions carry the exact workspace ID and admission revision. `authorized-response.ts` holds the authorization watch for an authenticated response until its body closes, so a pending RPC read or file download is cancelled as soon as its workspace admission is revoked. Fanout events only invalidate access. Each API and worker verifies its own fresh central projection before restoring the affected workspace's authority window.
+
+`createApiHttpServer` gives in-flight HTTP requests up to 20 seconds to finish during shutdown. Idle HTTP connections, event streams, and upgraded connections close immediately so clients can reconnect.

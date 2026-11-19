@@ -391,6 +391,7 @@ services:
       dockerfile: infra/compose/Dockerfile
     # Node runs directly, not through pnpm: pnpm does not pass SIGTERM on, so a stop would kill the
     # process before its graceful shutdown finishes in-flight requests and jobs.
+    stop_grace_period: 30s
     working_dir: /app/apps/api
     command: ["node", "--enable-source-maps", "dist/index.js"]
     environment:

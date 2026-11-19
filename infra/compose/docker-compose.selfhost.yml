@@ -69,6 +69,7 @@ services:
 
   api:
     <<: *runtime
+    stop_grace_period: 30s
     working_dir: /app/apps/api
     command: [node, /app/infra/compose/selfhost-runtime.mjs, /run/orkbot/environment.json, node, --enable-source-maps, dist/index.js]
     volumes: [api-configuration:/run/orkbot:ro, server-data:/data]
