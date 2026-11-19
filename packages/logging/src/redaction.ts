@@ -42,7 +42,9 @@ function redactValue(value: unknown, seen = new WeakSet<object>()): unknown {
   }
   if (value instanceof Error) {
     const output: Record<string, unknown> = {
-      name: value.name || "Error",
+      name: redactSensitiveText(
+        typeof value.name === "string" && value.name ? value.name : "Error",
+      ),
       message: redactSensitiveText(value.message),
     };
     if (typeof value.stack === "string" && value.stack.length > 0) {

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests are preserved. Error metadata coverage follows LICENSE.md.
+
 import { describe, expect, it, vi } from "vitest";
 import { createConsoleSink } from "./console-sink.js";
 import { createLogger } from "./logger.js";
@@ -164,6 +168,20 @@ describe("error serialization", () => {
     expect(JSON.stringify(serialized)).not.toContain("supersecret");
     expect(JSON.stringify(serialized)).not.toContain("person@example.com");
     expect(serialized.message).toContain("[Redacted]");
+  });
+
+  it("redacts recognizable credentials in error names and omits them as error codes", () => {
+    const error = Object.assign(new Error("Connection refused"), {
+      name: "sk-fixturename1234",
+      code: "sk-fixturecode5678",
+    });
+    const serialized = serializeError(error);
+    expect(serialized.name).toBe("[Redacted]");
+    expect(serialized.code).toBeUndefined();
+    const sink = createTestSink();
+    const logger = createLogger({ service: "orkbot-api", level: "warn", sinks: [sink] });
+    logger.warn("Failed", { failure: error });
+    expect(JSON.stringify(sink.events)).not.toMatch(/fixturename|fixturecode/);
   });
 
   it("redacts user profile paths in error messages and stacks", () => {

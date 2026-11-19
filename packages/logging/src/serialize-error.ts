@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 serialization is preserved. Error metadata masking follows LICENSE.md.
+
 import { redactBindings, redactSensitiveText } from "./redaction.js";
 import type { SerializedError } from "./types.js";
 
@@ -7,17 +11,21 @@ export function serializeError(error: unknown, seen = new Set<unknown>()): Seria
   if (!(error instanceof Error)) {
     return { name: "Error", message: stringifyUnknown(error) };
   }
+  const name = redactSensitiveText(
+    typeof error.name === "string" && error.name ? error.name : "Error",
+  );
   if (seen.has(error)) {
-    return { name: error.name, message: "[Circular]" };
+    return { name, message: "[Circular]" };
   }
   seen.add(error);
   const serialized: SerializedError = {
-    name: error.name || "Error",
+    name,
     message: redactSensitiveText(error.message),
   };
   // Database drivers and Node put a stable machine code (P2002, ECONNRESET) beside the message.
   const code = (error as { code?: unknown }).code;
-  if (typeof code === "string" && /^[\w.-]{1,40}$/.test(code)) serialized.code = code;
+  if (typeof code === "string" && /^[\w.-]{1,40}$/.test(code) && redactSensitiveText(code) === code)
+    serialized.code = code;
   // Prisma's meta names the database's own code, or the timeout a transaction ran past.
   const meta = (error as { meta?: unknown }).meta;
   if (meta && typeof meta === "object" && !Array.isArray(meta)) {
