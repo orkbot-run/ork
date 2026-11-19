@@ -6,6 +6,26 @@ import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contrac
 import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
 
+test("shows the Ork loading screen while the session is starting", async ({ page }, testInfo) => {
+  let release = () => {};
+  const session = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/auth/get-session**", async (route) => {
+    await session;
+    await route.fulfill({ json: null });
+  });
+  try {
+    await page.goto("/app");
+    const loading = page.locator('[data-orkbot-app-state="session-pending"]');
+    await expect(loading.getByRole("status")).toHaveText("Loading…");
+    await expect(loading.locator('img[src="/icon-192.png"]')).toBeVisible();
+    await captureScreenshot(page, testInfo, "workspace-loading");
+  } finally {
+    release();
+  }
+});
+
 test("workspace icons switch the roster and restore the previous chat without reloading", async ({
   page,
 }, testInfo) => {
@@ -51,6 +71,8 @@ test("workspace icons switch the roster and restore the previous chat without re
   expect(firstSpace).toBeTruthy();
   const secondSpace = rail.getByRole("button", { name: "Second space" });
   await expect(secondSpace).toBeVisible();
+  const railList = page.getByTestId("workspace-rail-list");
+  expect(await railList.evaluate((list) => list.scrollWidth <= list.clientWidth)).toBe(true);
   await expect(page.getByTestId("bots-sidebar").getByRole("button", { name: /Scout/ })).toHaveCount(
     0,
   );

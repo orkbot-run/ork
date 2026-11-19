@@ -146,7 +146,7 @@ test(
 
     await page.goto("/sign-up");
     await expect(page.locator('[data-orkbot-app-state="session-pending"]')).toBeVisible();
-    await expect(page.locator("#root")).toHaveText("");
+    await expect(page.locator("#root")).toHaveText("Loading…");
     await captureScreenshot(page, testInfo, "signup-session-pending");
 
     const capabilitiesRequested = page.waitForRequest("**/api/auth/capabilities");
