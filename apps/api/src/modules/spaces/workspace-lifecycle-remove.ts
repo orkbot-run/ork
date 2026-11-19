@@ -3,6 +3,7 @@
 
 import type { InstallationConfiguration } from "@orkbot/auth/installation-client";
 import type { WorkspaceLifecycleOperation } from "@orkbot/contracts";
+import { runAsSystem } from "@orkbot/db";
 import type { SpaceDeletionDeps } from "./space-deletion.js";
 import { deleteSpaceWithContent } from "./space-deletion.js";
 import {
@@ -46,11 +47,13 @@ export async function removeManagedWorkspace(
         !(await renewWorkspaceLifecycleReceipt(deps.prisma, operation.operationId, receipt.claimId))
       )
         throw new Error("Workspace deletion lease expired");
-      await deleteSpaceWithContent(deps, { spaceId: root, userId: "system" }, spaceId, workSignal, {
-        operationId: operation.operationId,
-        claimId: receipt.claimId,
-        spaceId,
-      });
+      await runAsSystem("remove data from an installation-authorized workspace", () =>
+        deleteSpaceWithContent(deps, { spaceId: root, userId: "system" }, spaceId, workSignal, {
+          operationId: operation.operationId,
+          claimId: receipt.claimId,
+          spaceId,
+        }),
+      );
     }
     workSignal.throwIfAborted();
     await sweepWorkspaceLifecycleStorage(deps, operation.operationId, workSignal);

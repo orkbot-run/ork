@@ -351,17 +351,13 @@ describePostgres.sequential("managed workspace lifecycle on PostgreSQL", () => {
       },
     });
     await expect(
-      runAsSystem("test managed deletion guard", () =>
-        removeManagedWorkspace(deps, configuration, operation, new AbortController().signal),
-      ),
+      removeManagedWorkspace(deps, configuration, operation, new AbortController().signal),
     ).rejects.toThrow("cannot yet remove configured external memory");
     expect(await prisma.bot.findUnique({ where: { id: identity.botId } })).not.toBeNull();
     await prisma.spaceMemoryConfig.delete({ where: { spaceId: root } });
     await prisma.secret.delete({ where: { id: secretId } });
     expect(
-      await runAsSystem("test managed deletion", () =>
-        removeManagedWorkspace(deps, configuration, operation, new AbortController().signal),
-      ),
+      await removeManagedWorkspace(deps, configuration, operation, new AbortController().signal),
     ).toBe(true);
     expect(await prisma.space.findUnique({ where: { id: root } })).toBeNull();
     expect(await prisma.bot.findUnique({ where: { id: identity.botId } })).toBeNull();
