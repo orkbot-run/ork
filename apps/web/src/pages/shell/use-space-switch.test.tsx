@@ -49,6 +49,7 @@ let commits: Array<() => boolean>;
 let navigationRevision: { current: number };
 let overlayRevision: { current: number };
 let navigate: ReturnType<typeof vi.fn>;
+let backgroundTarget: Parameters<typeof useOpenSpaceChat>[0]["backgroundTarget"];
 
 function Harness() {
   ({
@@ -62,6 +63,7 @@ function Harness() {
     navigationRevision,
     overlayRevision,
     closeMobileSidebar: () => {},
+    backgroundTarget,
   }));
   return null;
 }
@@ -81,6 +83,7 @@ beforeEach(() => {
   navigationRevision = { current: 0 };
   overlayRevision = { current: 0 };
   navigate = vi.fn();
+  backgroundTarget = undefined;
   state.prime.mockImplementation(
     (_space, _bot, _seed, prepared) =>
       prepared ?? new Promise<void>((resolve) => pending.push(resolve)),
@@ -96,6 +99,8 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   vi.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -246,6 +251,30 @@ it("prepares a workspace without selecting it and reuses the pending request on 
   act(() => open("new-space", "/app/new"));
   expect(state.prime).toHaveBeenCalledWith("new-space", "target", undefined, prepared);
   await ready();
+  act(() => expect(commits[0]!()).toBe(true));
+  expect(navigate).toHaveBeenCalledExactlyOnceWith("/app/new");
+});
+
+it("warms the next workspace before any input and reuses it when clicked later", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  backgroundTarget = { spaceId: "new-space", path: "/app/new" };
+  act(() => root.render(<Harness />));
+  expect(state.preload).not.toHaveBeenCalled();
+  act(() => vi.advanceTimersByTime(400));
+  expect(state.preload).toHaveBeenCalledExactlyOnceWith(
+    "new-space",
+    "target",
+    expect.any(AbortSignal),
+    "low",
+  );
+  await ready();
+  expect(state.select).not.toHaveBeenCalled();
+  expect(pendingSpaceId).toBeNull();
+  const prepared = state.preload.mock.results[0]!.value;
+  act(() => vi.advanceTimersByTime(30_000));
+  await act(async () => open("new-space", "/app/new"));
+  expect(state.prime).toHaveBeenCalledExactlyOnceWith("new-space", "target", undefined, prepared);
   act(() => expect(commits[0]!()).toBe(true));
   expect(navigate).toHaveBeenCalledExactlyOnceWith("/app/new");
 });

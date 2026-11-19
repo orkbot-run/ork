@@ -19,7 +19,8 @@ import { speaker } from "../../lib/tts";
 import { readShellOverlay, searchString, withShellOverlay } from "../shell-overlay";
 import type { useShellNavigation } from "./use-shell-navigation";
 
-const PRELOAD_MAX_AGE_MS = 15_000;
+const PRELOAD_MAX_AGE_MS = 60_000;
+const BACKGROUND_PRELOAD_DELAY_MS = 400;
 
 /**
  * Opens a chat in any of the user's spaces, including another organization's; another space loads
@@ -32,6 +33,7 @@ export function useOpenSpaceChat({
   navigationRevision,
   overlayRevision,
   closeMobileSidebar,
+  backgroundTarget,
 }: {
   bootstrapSpaceId: string | undefined;
   userId: string | undefined;
@@ -39,6 +41,7 @@ export function useOpenSpaceChat({
   navigationRevision: ReturnType<typeof useShellNavigation>["navigationRevision"];
   overlayRevision: ReturnType<typeof useShellNavigation>["overlayRevision"];
   closeMobileSidebar: () => void;
+  backgroundTarget?: { spaceId: string; path: string };
 }) {
   const spaceSwitchRequest = useRef(0);
   const preloaded = useRef<{
@@ -81,7 +84,7 @@ export function useOpenSpaceChat({
     };
   }, []);
   const preloadSpaceChat = useCallback(
-    (spaceId: string, path: string) => {
+    (spaceId: string, path: string, priority?: RequestInit["priority"]) => {
       if (
         !userId ||
         spaceId === (selectedSpaceId() ?? bootstrapSpaceId) ||
@@ -101,7 +104,7 @@ export function useOpenSpaceChat({
         return;
       current?.controller.abort();
       const controller = new AbortController();
-      const promise = preloadSpaceBootstrap(spaceId, target.botId, controller.signal);
+      const promise = preloadSpaceBootstrap(spaceId, target.botId, controller.signal, priority);
       preloaded.current = {
         userId,
         spaceId,
@@ -116,6 +119,22 @@ export function useOpenSpaceChat({
     },
     [bootstrapSpaceId, userId],
   );
+  const { spaceId: backgroundSpaceId, path: backgroundPath } = backgroundTarget ?? {};
+  useEffect(() => {
+    if (!backgroundSpaceId || !backgroundPath || !userId) return;
+    const request = spaceSwitchRequest.current;
+    const timer = window.setTimeout(() => {
+      // Let the current chat load first. A hover or switch takes priority over this guess.
+      if (
+        document.visibilityState !== "hidden" &&
+        !preloaded.current &&
+        spaceSwitchRequest.current === request
+      )
+        preloadSpaceChat(backgroundSpaceId, backgroundPath, "low");
+    }, BACKGROUND_PRELOAD_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [backgroundPath, backgroundSpaceId, preloadSpaceChat, userId]);
+
   const openSpaceChat = useCallback(
     (spaceId: string, path: string) => {
       closeMobileSidebar();

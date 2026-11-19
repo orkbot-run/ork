@@ -647,6 +647,15 @@ function SpaceShell() {
     [sidebarSpaces],
   );
   useDesktopBadge(userId ? unreadChatCount : 0);
+  const backgroundSpace =
+    initialBotsLoaded && userId && currentSpaceId
+      ? allSidebarSpaces.find(
+          (space) =>
+            space.id !== currentSpaceId &&
+            !queryClient.getQueryData(spaceSeedKey(userId, space.id)),
+        )
+      : undefined;
+  const backgroundPath = backgroundSpace && workspaceChatPath(backgroundSpace.id);
   const { openSpaceChat, preloadSpaceChat, pendingSpaceId } = useOpenSpaceChat({
     bootstrapSpaceId: currentSpaceId,
     userId,
@@ -654,6 +663,10 @@ function SpaceShell() {
     navigationRevision,
     overlayRevision,
     closeMobileSidebar: () => setMobileSidebarOpen(false),
+    backgroundTarget:
+      backgroundSpace && backgroundPath
+        ? { spaceId: backgroundSpace.id, path: backgroundPath }
+        : undefined,
   });
   useLayoutEffect(() => {
     openSpaceChatRef.current = openSpaceChat;

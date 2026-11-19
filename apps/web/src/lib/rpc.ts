@@ -38,7 +38,11 @@ export const ORGANIZATION_SPACES_STORAGE_KEY = "orkbot:org-spaces";
 
 let spaceSelectionGeneration = 0;
 
-type RpcClientContext = { spaceId?: string | null; isCurrent?: () => boolean };
+type RpcClientContext = {
+  spaceId?: string | null;
+  isCurrent?: () => boolean;
+  priority?: RequestInit["priority"];
+};
 
 export function selectedSpaceId(): string | null {
   if (typeof window === "undefined") return null;
@@ -158,6 +162,7 @@ const link = createRpcLink<RpcClientContext>({
         credentials: "include",
         // Keep cancellation attached directly to fetch rather than only a cloned Request.
         signal: options.signal,
+        ...(options.context.priority ? { priority: options.context.priority } : {}),
       });
     } catch (error) {
       assertCurrent();

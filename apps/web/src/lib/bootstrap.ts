@@ -112,8 +112,13 @@ export function primeSpaceBootstrap(
 }
 
 /** Fetches scoped data without changing selection, capabilities, or the primed shell. */
-export function preloadSpaceBootstrap(spaceId: string, botId?: string, signal?: AbortSignal) {
-  return requestBootstrap(botId, spaceId, signal).then((bootstrap) => {
+export function preloadSpaceBootstrap(
+  spaceId: string,
+  botId?: string,
+  signal?: AbortSignal,
+  priority?: RequestInit["priority"],
+) {
+  return requestBootstrap(botId, spaceId, signal, priority).then((bootstrap) => {
     if (bootstrap.me.spaceId !== spaceId) throw new Error("Workspace selection changed");
     return bootstrap;
   });
@@ -124,11 +129,16 @@ export function discardPrimedBootstrap(promise: Promise<AppBootstrap>): void {
   if (primedBootstrap?.promise === promise) primedBootstrap = null;
 }
 
-function requestBootstrap(botId?: string, spaceId?: string, signal?: AbortSignal) {
+function requestBootstrap(
+  botId?: string,
+  spaceId?: string,
+  signal?: AbortSignal,
+  priority?: RequestInit["priority"],
+) {
   markOnce("rk:renderer:bootstrap-request-start");
   const input = botId ? { botId } : {};
   const request = spaceId
-    ? rpc.bootstrap(input, { context: { spaceId }, ...(signal ? { signal } : {}) })
+    ? rpc.bootstrap(input, { context: { spaceId, priority }, ...(signal ? { signal } : {}) })
     : rpc.bootstrap(input);
   return request.then((bootstrap) => {
     markOnce("rk:renderer:bootstrap-response");
