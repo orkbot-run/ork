@@ -1,4 +1,6 @@
 import { createServer } from "node:http";
+import { connect } from "node:net";
+import type { Duplex } from "node:stream";
 import {
   createModels,
   fauxAssistantMessage,
@@ -7,7 +9,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { ModelConnectInputSchema, OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
-import { fetch as undiciFetch } from "undici";
+import { Client, fetch as undiciFetch } from "undici";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildModelConnectPlaintext } from "./model-connect.js";
 import {
@@ -430,6 +432,95 @@ describe("openai-compatible provider", () => {
     } finally {
       if (previous === undefined) delete process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC;
       else process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC = previous;
+    }
+  });
+
+  it("streams through a proxy to the checked IP, with transport deadlines disabled on the origin", async () => {
+    const originHosts: Array<string | undefined> = [];
+    const origin = createServer((request, response) => {
+      originHosts.push(request.headers.host);
+      response.writeHead(200, { "content-type": "text/event-stream" }).end("data: [DONE]\n\n");
+    });
+    const authorities: Array<string | undefined> = [];
+    const upgraded = new Set<Duplex>();
+    const proxy = createServer();
+    const listen = async (server: typeof origin) => {
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("missing fixture address");
+      return address.port;
+    };
+    const close = (server: typeof origin) =>
+      new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        server.closeAllConnections();
+      });
+    const port = await listen(origin);
+    const proxyPort = await listen(proxy);
+    const clientDispatch = vi.spyOn(Client.prototype, "dispatch");
+    proxy.on("connect", (req, client, head) => {
+      upgraded.add(client);
+      authorities.push(req.url);
+      // Loopback fixtures only. Never connect to the authority supplied by the client.
+      const upstream = connect(port, "127.0.0.1", () => {
+        client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+        if (head.length) upstream.write(head);
+        client.pipe(upstream).pipe(client);
+      });
+      upgraded.add(upstream);
+      client.on("error", () => upstream.destroy());
+      upstream.on("error", () => client.destroy());
+    });
+    try {
+      for (const key of ["http_proxy", "https_proxy", "HTTPS_PROXY", "no_proxy", "NO_PROXY"]) {
+        vi.stubEnv(key, undefined);
+      }
+      vi.stubEnv("HTTP_PROXY", `http://127.0.0.1:${proxyPort}`);
+      vi.stubEnv("ORKBOT_OPENAI_COMPAT_PRIVATE_HOSTS", "local-model.fixture.test");
+      const resolve = vi.fn(async () => [{ address: "127.0.0.1", family: 4 }]);
+      const fetchModel = createOpenAiCompatibleFetch(undefined, resolve, {
+        allowPrivate: true,
+        allowPublic: true,
+        modelStream: true,
+      });
+      const response = await fetchModel(
+        `http://local-model.fixture.test:${port}/v1/chat/completions`,
+        { signal: AbortSignal.timeout(3_000) },
+      );
+      await expect(response.text()).resolves.toBe("data: [DONE]\n\n");
+      expect(authorities).toEqual([`127.0.0.1:${port}`]);
+      expect(originHosts).toEqual([`local-model.fixture.test:${port}`]);
+      const requestIndex = clientDispatch.mock.calls.findIndex(
+        ([options]) => options.path === "/v1/chat/completions",
+      );
+      const client = clientDispatch.mock.instances[requestIndex] as Client;
+      const timeouts = Object.fromEntries(
+        Object.getOwnPropertySymbols(client)
+          .filter(
+            (symbol) =>
+              symbol.description === "headers timeout" || symbol.description === "body timeout",
+          )
+          .map((symbol) => [symbol.description, Reflect.get(client, symbol)]),
+      );
+      expect(timeouts).toEqual({ "headers timeout": 0, "body timeout": 0 });
+
+      await expect(
+        fetchModel("https://public-model.fixture.test/v1/chat/completions", {
+          signal: AbortSignal.timeout(3_000),
+        }),
+      ).rejects.toMatchObject({
+        cause: { message: "Public model server hostname resolved to a private address" },
+      });
+      expect(authorities).toHaveLength(1);
+      expect(resolve.mock.calls).toEqual([
+        ["local-model.fixture.test"],
+        ["public-model.fixture.test"],
+      ]);
+    } finally {
+      clientDispatch.mockRestore();
+      vi.unstubAllEnvs();
+      for (const socket of upgraded) socket.destroy();
+      await Promise.all([close(proxy), close(origin)]);
     }
   });
 

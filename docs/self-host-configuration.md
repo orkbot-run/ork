@@ -68,9 +68,11 @@ screen lasts before control expires.
 `MODEL_STREAM_MAX_RETRIES` (0 to 5, default `1`) retries a model stream that fails partway; more
 retries let long turns survive brief provider failures.
 
-Three model timeouts take milliseconds from `1000` to `300000`; other values keep the default.
-Raise them when several bots share one model server that queues requests. Five minutes is the
-ceiling because Node's HTTP client stops waiting at that point on its own.
+Model timeouts take whole milliseconds starting at `1000`. The stream and idle settings support
+up to `3600000` (one hour), and the connection setting supports up to `300000` (five minutes).
+Values outside these ranges keep the defaults. Raise the stream settings when several bots share
+a model server that queues requests. Local and custom OpenAI-compatible models use Ork's stream
+deadlines. Built-in providers and intermediary proxies may close a request earlier.
 
 - `MODEL_STREAM_TIMEOUT_MS` (default `120000`) is the time budget for retrying the same model. It
   is also how long a request waits for the response to start when it uses the OpenAI Chat
@@ -78,9 +80,9 @@ ceiling because Node's HTTP client stops waiting at that point on its own.
   such as Google, Vertex AI, Bedrock and some routed models, use their client's own wait.
 - `MODEL_STREAM_IDLE_TIMEOUT_MS` (default `180000`) is how long a started response may go silent,
   for every provider.
-- `MODEL_CONNECT_TIMEOUT_MS` (default `30000`) bounds connecting to an OpenAI-compatible model or
-  speech connection added in the app. `ORKBOT_LOCAL_MODELS` servers and built-in providers keep
-  Node's own connect wait; the other two settings apply to them as described above.
+- `MODEL_CONNECT_TIMEOUT_MS` (default `30000`) bounds connecting to a local model, a custom
+  OpenAI-compatible model, or a speech connection added in the app. Built-in model providers use
+  their client's connection timeout.
 
 ## Feature switches
 
@@ -172,8 +174,9 @@ HTTPS_PROXY=http://proxy.example.com:3128
 NO_PROXY=localhost,127.0.0.1,postgres,supervisor,api,worker,web
 ```
 
-HTTP MCP connections and HTTP/GraphQL tool sources tunnel to a checked IP. `NO_PROXY`
-selects direct connections. Both paths apply destination checks, and a proxy failure never
-retries directly.
+HTTP MCP connections, HTTP/GraphQL tool sources, and custom OpenAI-compatible model streams tunnel
+to a checked IP. `NO_PROXY` selects direct connections. Both paths apply destination checks, and a
+proxy failure never retries directly. Models configured with `ORKBOT_LOCAL_MODELS` use the
+environment proxy when Node proxy support is enabled by `NODE_USE_ENV_PROXY=1` or `--use-env-proxy`.
 
 For mirrors of the installer and images, see [restricted networks](./self-host-restricted-network.md).

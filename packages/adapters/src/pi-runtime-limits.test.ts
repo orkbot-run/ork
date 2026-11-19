@@ -41,24 +41,40 @@ describe("modelStreamMaxRetries", () => {
 });
 
 describe.each([
-  ["MODEL_STREAM_TIMEOUT_MS", modelStreamTimeoutMs, MODEL_STREAM_TIMEOUT_MS],
-  ["MODEL_CONNECT_TIMEOUT_MS", modelConnectTimeoutMs, MODEL_CONNECT_TIMEOUT_MS],
-  ["MODEL_STREAM_IDLE_TIMEOUT_MS", modelStreamIdleTimeoutMs, MODEL_STREAM_IDLE_TIMEOUT_MS],
-] as const)("%s", (name, read, fallback) => {
+  ["MODEL_STREAM_TIMEOUT_MS", modelStreamTimeoutMs, MODEL_STREAM_TIMEOUT_MS, 3_600_000],
+  ["MODEL_CONNECT_TIMEOUT_MS", modelConnectTimeoutMs, MODEL_CONNECT_TIMEOUT_MS, 300_000],
+  [
+    "MODEL_STREAM_IDLE_TIMEOUT_MS",
+    modelStreamIdleTimeoutMs,
+    MODEL_STREAM_IDLE_TIMEOUT_MS,
+    3_600_000,
+  ],
+] as const)("%s", (name, read, fallback, maximum) => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("reads whole milliseconds from 1 second to 5 minutes and keeps the default otherwise", () => {
+  it("reads whole milliseconds within range and keeps the default otherwise", () => {
     vi.stubEnv(name, undefined);
     expect(read()).toBe(fallback);
     for (const [value, expected] of [
       ["1000", 1_000],
       [" 240000 ", 240_000],
       ["300000", 300_000],
+      [String(maximum), maximum],
     ] as const) {
       vi.stubEnv(name, value);
       expect(read()).toBe(expected);
     }
-    for (const value of ["", " ", "0", "999", "300001", "-1000", "1500.5", "Infinity", "10m"]) {
+    for (const value of [
+      "",
+      " ",
+      "0",
+      "999",
+      String(maximum + 1),
+      "-1000",
+      "1500.5",
+      "Infinity",
+      "10m",
+    ]) {
       vi.stubEnv(name, value);
       expect(read()).toBe(fallback);
     }

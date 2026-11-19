@@ -142,13 +142,27 @@ export function modelStreamIdleWatchdog(
   };
 }
 
-/**
- * Fails a non-2xx body that stays open. The shared idle watchdog stays
- * unarmed: aborting it would skip pi's retry backoff, and a thrown read error
- * is retried like any other transport failure.
- */
-function boundRetryableErrorBody(response: Response, idleTimeoutMs: number): Response {
-  if (response.ok || response.body == null) return response;
+/** Keep network details useful without persisting arbitrary cause text from the transport. */
+function describeTerminatedResponse(error: unknown): unknown {
+  if (!(error instanceof TypeError) || error.message !== "terminated") return error;
+  const cause: unknown = error.cause;
+  if (!(cause instanceof Error) || !("code" in cause)) return error;
+  if (cause.code === "UND_ERR_SOCKET" && cause.message === "other side closed") {
+    return new TypeError("terminated (other side closed)", { cause });
+  }
+  if (cause.code === "ECONNRESET") {
+    return new TypeError("terminated (connection reset)", { cause });
+  }
+  return error;
+}
+
+/** Bound silent non-2xx bodies without aborting the watchdog and skipping retry backoff. */
+function modelResponseBody(
+  response: Response,
+  idleTimeoutMs: number,
+  reportDisconnect: boolean,
+): Response {
+  if (response.body == null || (response.ok && !reportDisconnect)) return response;
   const reader = response.body.getReader();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const clear = () => {
@@ -161,11 +175,15 @@ function boundRetryableErrorBody(response: Response, idleTimeoutMs: number): Res
         (chunk) => ({ kind: "chunk" as const, chunk }),
         (error: unknown) => ({ kind: "error" as const, error }),
       );
-      const timeout = new Promise<{ kind: "timeout" }>((resolve) => {
-        timer = setTimeout(() => resolve({ kind: "timeout" }), idleTimeoutMs);
-        timer.unref?.();
-      });
-      const outcome = await Promise.race([read, timeout]);
+      const outcome = response.ok
+        ? await read
+        : await Promise.race([
+            read,
+            new Promise<{ kind: "timeout" }>((resolve) => {
+              timer = setTimeout(() => resolve({ kind: "timeout" }), idleTimeoutMs);
+              timer.unref?.();
+            }),
+          ]);
       clear();
       if (outcome.kind === "timeout") {
         const error = new Error(MODEL_STREAM_IDLE_TIMEOUT_MESSAGE);
@@ -174,7 +192,9 @@ function boundRetryableErrorBody(response: Response, idleTimeoutMs: number): Res
         return;
       }
       if (outcome.kind === "error") {
-        controller.error(outcome.error);
+        controller.error(
+          reportDisconnect ? describeTerminatedResponse(outcome.error) : outcome.error,
+        );
         return;
       }
       if (outcome.chunk.done) controller.close();
@@ -186,8 +206,10 @@ function boundRetryableErrorBody(response: Response, idleTimeoutMs: number): Res
     },
   });
   const headers = new Headers(response.headers);
-  headers.delete("content-encoding");
-  headers.delete("content-length");
+  if (!response.ok) {
+    headers.delete("content-encoding");
+    headers.delete("content-length");
+  }
   return new Response(body, {
     status: response.status,
     statusText: response.statusText,
@@ -200,14 +222,14 @@ function modelRequestFetch(
   idleTimeoutMs: number,
 ): NonNullable<ModelsSimpleStreamOptions["fetch"]> {
   return async (input, init) => {
-    // Compatible providers attach a package undici Agent after this wrapper is
+    // Local and compatible providers attach a package undici dispatcher after this wrapper is
     // installed. Pair that dispatcher without replacing other providers' fetch.
-    const transport =
-      init && "dispatcher" in init
-        ? fetchPairedWithDispatcher(fetchImpl)
-        : (fetchImpl ?? globalThis.fetch);
+    const usesDispatcher = init !== undefined && "dispatcher" in init;
+    const transport = usesDispatcher
+      ? fetchPairedWithDispatcher(fetchImpl)
+      : (fetchImpl ?? globalThis.fetch);
     const response = await transport(input, init);
-    return boundRetryableErrorBody(response, idleTimeoutMs);
+    return modelResponseBody(response, idleTimeoutMs, usesDispatcher);
   };
 }
 
