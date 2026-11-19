@@ -461,6 +461,9 @@ function SpaceShell() {
       activeBotId,
       activeGroupId,
       refreshRoster: refreshBots,
+      rosterFetchStartedAt: roster.rosterFetchStartedAt,
+      rosterRefreshInFlight: roster.botsRefreshInFlight,
+      callsEnabled: roster.callsEnabledRef,
       isSnoozed: (botId, targetGroupId) =>
         threadSnoozeState(
           targetGroupId

@@ -23,6 +23,7 @@ import {
   callRequestClientNonce,
 } from "@orkbot/core";
 import { urlSite } from "@orkbot/core/egress";
+import type { RosterSignal } from "@orkbot/db";
 import {
   auditLogOrganization,
   commitBotUpdate,
@@ -71,6 +72,7 @@ import {
 import { createAccessGrant, listAccessGrants, revokeAccessGrant } from "../access-grants.js";
 import { requireAdmin } from "../admins.js";
 import { aiConsentStatus, allowAiConsent } from "../ai-consent.js";
+import { mergeNotificationFrames } from "../notification-frames.js";
 
 export function accountRoutes(ctx: RouterContext) {
   const { deps, os, authed } = ctx;
@@ -358,15 +360,23 @@ export function accountRoutes(ctx: RouterContext) {
       }),
     },
     notifications: {
-      subscribe: authed.notifications.subscribe.handler(({ context }) =>
+      subscribe: authed.notifications.subscribe.handler(({ context, input }) =>
         sessionStream(context, (signal) => {
           if (!deps.events.followChatAlerts) throw new ORPCError("NOT_FOUND");
           const { spaceId, userId } = context.actor;
+          const alerts = deps.events.followChatAlerts(userId, spaceId, signal);
+          const roster = input?.roster && deps.rosterChanges?.follow({ spaceId, userId }, signal);
           return {
-            source: deps.events.followChatAlerts(userId, spaceId, signal),
+            source: roster
+              ? mergeNotificationFrames<ChatAlert | RosterSignal>([alerts, roster], signal)
+              : alerts,
             heartbeat: () => ({ type: "heartbeat" as const }),
-            project: (alert: ChatAlert) =>
-              alert.spaceId === spaceId ? { type: "alert" as const, alert } : null,
+            project: (frame: ChatAlert | RosterSignal) =>
+              "type" in frame
+                ? frame
+                : frame.spaceId === spaceId
+                  ? { type: "alert" as const, alert: frame }
+                  : null,
           };
         }),
       ),

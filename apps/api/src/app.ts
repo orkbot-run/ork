@@ -135,6 +135,7 @@ import {
   createBoardEvents,
   createDb,
   createPool,
+  createRosterChanges,
   createSecurityEventPruner,
   createThreadEvents,
   describeRowSecurity,
@@ -987,6 +988,9 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     events,
     ticketChanges,
     boardEvents,
+    rosterChanges: realtime.describe().capabilities.distributed
+      ? createRosterChanges(realtime)
+      : undefined,
     auth,
     jobs,
     sandbox,

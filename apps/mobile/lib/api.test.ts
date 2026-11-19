@@ -57,6 +57,7 @@ import {
   signUp,
   spaceSelectionSeq,
   subscribeIncomingCallEvents,
+  subscribeRosterEvents,
   subscribeServerReachable,
   subscribeSessionRejected,
   subscribeThread,
@@ -3459,6 +3460,24 @@ describe("mobile thread subscription", () => {
     vi.restoreAllMocks();
     vi.mocked(SecureStore.getItemAsync).mockReset();
     vi.mocked(SecureStore.getItemAsync).mockResolvedValue("");
+  });
+
+  it("opts into roster frames using the existing bounded authenticated transport", async () => {
+    const frames = [
+      { type: "heartbeat" },
+      { type: "roster", ready: true },
+      { type: "alert", title: "Original alert" },
+      { type: "roster" },
+    ]
+      .map((json) => `data: ${JSON.stringify({ json })}\n\n`)
+      .join("");
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(frames, { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    const onEvent = vi.fn();
+    await subscribeRosterEvents(onEvent, new AbortController().signal);
+    expect(onEvent.mock.calls).toEqual([[{ type: "roster", ready: true }], [{ type: "roster" }]]);
+    expect(fetch.mock.calls[0]?.[0]).toContain("notifications/subscribe");
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({ json: { roster: true } });
   });
 
   it("shares the bounded SSE transport for one account call stream", async () => {

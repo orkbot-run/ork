@@ -4,7 +4,7 @@
 
 // @vitest-environment jsdom
 import type { Bot, ChatAlert, ProductEvent } from "@orkbot/contracts";
-import { act } from "react";
+import { act, useRef } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,7 +35,7 @@ vi.mock("../../lib/notification-icon", () => ({
   prepareNotificationIcons: () => undefined,
 }));
 
-type Frame = { type: "alert" | "heartbeat"; alert?: ChatAlert };
+type Frame = { type: "alert" | "heartbeat" | "roster"; alert?: ChatAlert; ready?: true };
 
 class FakeNotification {
   static permission: NotificationPermission = "granted";
@@ -56,6 +56,10 @@ class FakeNotification {
 
 let streams: Array<{ push: (frame: Frame) => void; fail: (error: unknown) => void }>;
 let signals: AbortSignal[];
+let subscribeInputs: unknown[];
+let refreshRoster: ReturnType<typeof vi.fn<() => Promise<void>>>;
+let fetchStartedAt: { current: number };
+let callsEnabled: { current: boolean };
 let focused: boolean;
 let visible: boolean;
 let openChat: ReturnType<typeof vi.fn<(alert: ChatAlert) => void>>;
@@ -94,7 +98,8 @@ function stream(): AsyncIterable<Frame> {
 
 const rpc = {
   notifications: {
-    subscribe: (_input: undefined, options: { signal: AbortSignal }) => {
+    subscribe: (input: unknown, options: { signal: AbortSignal }) => {
+      subscribeInputs.push(input);
       signals.push(options.signal);
       return Promise.resolve(stream());
     },
@@ -107,13 +112,20 @@ let currentRpc = rpc;
 let snoozed: Set<string>;
 
 function Harness({ botId, groupId }: { botId?: string; groupId?: string }) {
+  const activeBotId = useRef(botId);
+  activeBotId.current = botId;
+  const activeGroupId = useRef(groupId);
+  activeGroupId.current = groupId;
   callbacks = useBrowserNotifications(
     fixtureBots,
     { current: fixtureBots },
     {
       rpc: currentRpc,
-      activeBotId: { current: botId },
-      activeGroupId: { current: groupId },
+      activeBotId,
+      activeGroupId,
+      refreshRoster,
+      rosterFetchStartedAt: fetchStartedAt,
+      callsEnabled,
       isSnoozed: (bot, group) => snoozed.has(group ?? bot),
       openChat,
     },
@@ -164,6 +176,10 @@ beforeEach(() => {
   FakeNotification.shown = [];
   streams = [];
   signals = [];
+  subscribeInputs = [];
+  refreshRoster = vi.fn(async () => {});
+  fetchStartedAt = { current: Date.now() };
+  callsEnabled = { current: false };
   focused = true;
   visible = true;
   openChat = vi.fn<(alert: ChatAlert) => void>();
@@ -487,4 +503,119 @@ it("does not navigate if focusing the window retires the captured session", asyn
   notification!.onclick!();
   expect(openChat).not.toHaveBeenCalled();
   expect(notification!.closed).toBe(true);
+});
+
+describe("roster invalidations", () => {
+  beforeEach(() => vi.useFakeTimers());
+
+  async function ready() {
+    streams.at(-1)!.push({ type: "roster", ready: true });
+    await flush();
+  }
+
+  it("opts into roster updates on the existing stream and skips a prompt initial read", async () => {
+    await open({ botId: "bot-a" });
+    await ready();
+    expect(subscribeInputs).toEqual([{ roster: true }]);
+    expect(refreshRoster).not.toHaveBeenCalled();
+    await open({ botId: "bot-b" });
+    expect(streams).toHaveLength(1);
+    streams[0]!.push({ type: "roster" });
+    await flush();
+    expect(refreshRoster).toHaveBeenCalledTimes(1);
+    expect(FakeNotification.shown).toHaveLength(0);
+  });
+
+  it("refreshes on delayed readiness unless another fetch already closed the gap", async () => {
+    await open({});
+    await act(() => vi.advanceTimersByTimeAsync(2_000));
+    await ready();
+    expect(refreshRoster).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares a recent fetch with delayed initial readiness", async () => {
+    await open({});
+    await act(() => vi.advanceTimersByTimeAsync(2_000));
+    fetchStartedAt.current = Date.now();
+    await ready();
+    expect(refreshRoster).not.toHaveBeenCalled();
+  });
+
+  it("uses a 60 second fallback when ready and a 10 second fallback after disconnection", async () => {
+    await open({});
+    await ready();
+    await act(() => vi.advanceTimersByTimeAsync(59_999));
+    expect(refreshRoster).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(refreshRoster).toHaveBeenCalledTimes(1);
+    streams[0]!.fail(new Error("network"));
+    await flush();
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(refreshRoster).toHaveBeenCalledTimes(2);
+    expect(streams).toHaveLength(2);
+    await ready();
+    expect(refreshRoster).toHaveBeenCalledTimes(3);
+  });
+
+  it("falls back without readiness and refreshes on foreground recovery", async () => {
+    await open({});
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(refreshRoster).toHaveBeenCalledTimes(1);
+    visible = false;
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(refreshRoster).toHaveBeenCalledTimes(1);
+    visible = true;
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("focus"));
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    expect(refreshRoster).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps recovery polling during repeated failures before readiness", async () => {
+    await open({});
+    for (let attempt = 0; attempt < 9; attempt++) {
+      streams.at(-1)!.fail(new Error("network"));
+      await flush();
+      await act(() => vi.advanceTimersByTimeAsync(1_000));
+    }
+    expect(refreshRoster).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+    expect(refreshRoster).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains hidden-window recovery when phone calls are enabled", async () => {
+    visible = false;
+    callsEnabled.current = true;
+    await open({});
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(refreshRoster).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains a follow-up invalidation during an in-flight refresh", async () => {
+    let finish!: () => void;
+    refreshRoster.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await open({});
+    streams[0]!.push({ type: "roster" });
+    await flush();
+    streams[0]!.push({ type: "roster" });
+    await flush();
+    expect(refreshRoster).toHaveBeenCalledTimes(1);
+    finish();
+    await flush();
+    expect(refreshRoster).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects stale frames and fallback timers after the selected space changes", async () => {
+    await open({});
+    context.spaceId = "space-2";
+    streams[0]!.push({ type: "roster" });
+    await flush();
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+    expect(refreshRoster).not.toHaveBeenCalled();
+  });
 });

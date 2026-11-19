@@ -1587,6 +1587,24 @@ export async function subscribeThread(
   );
 }
 
+/** Inbox-only invalidations; call delivery keeps its separate account-wide stream. */
+export async function subscribeRosterEvents(
+  onEvent: (event: { type: "roster"; ready?: true }) => void,
+  signal: AbortSignal,
+) {
+  const context = await captureApiRequestContext();
+  return subscribeRpcEvents(
+    "notifications/subscribe",
+    { roster: true },
+    (event) => {
+      if (event.type !== "roster") return;
+      onEvent(event as { type: "roster"; ready?: true });
+    },
+    signal,
+    context,
+  );
+}
+
 export async function subscribeIncomingCallEvents(
   onCalls: (calls: IncomingBotCall[]) => void,
   signal: AbortSignal,

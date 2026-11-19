@@ -28,6 +28,9 @@ type ChatAlertOptions = {
   openChat: (alert: ChatAlert) => void;
   isSnoozed?: (botId: string, groupId?: string) => boolean;
   refreshRoster?: () => Promise<void>;
+  rosterFetchStartedAt?: RefObject<number>;
+  rosterRefreshInFlight?: RefObject<number>;
+  callsEnabled?: RefObject<boolean>;
 };
 
 /**
@@ -37,7 +40,17 @@ type ChatAlertOptions = {
 export function useBrowserNotifications(
   bots: Bot[],
   botsRef: RefObject<Bot[]>,
-  { rpc, activeBotId, activeGroupId, openChat, isSnoozed, refreshRoster }: ChatAlertOptions,
+  {
+    rpc,
+    activeBotId,
+    activeGroupId,
+    openChat,
+    isSnoozed,
+    refreshRoster,
+    rosterFetchStartedAt,
+    rosterRefreshInFlight,
+    callsEnabled,
+  }: ChatAlertOptions,
 ) {
   useEffect(() => prepareNotificationIcons(bots), [bots]);
   const openChatRef = useRef(openChat);
@@ -140,6 +153,34 @@ export function useBrowserNotifications(
     const rosterRefresh = createRefreshCoalescer(async () => {
       if (current()) await refreshRosterRef.current?.();
     });
+    let rosterReady = false;
+    let connected = false;
+    const subscribedAt = Date.now();
+    let poll: ReturnType<typeof setTimeout>;
+    let focusTimer: ReturnType<typeof setTimeout> | undefined;
+    const foreground = () => document.visibilityState === "visible" || callsEnabled?.current;
+    const refreshVisibleRoster = () => {
+      if (!current() || !foreground()) return;
+      void rosterRefresh.invalidate().catch(() => undefined);
+    };
+    const schedulePoll = () => {
+      clearTimeout(poll);
+      poll = setTimeout(
+        () => {
+          if (!rosterRefreshInFlight?.current) refreshVisibleRoster();
+          if (current()) schedulePoll();
+        },
+        rosterReady ? 60_000 : 10_000,
+      );
+    };
+    const onForeground = () => {
+      if (!foreground()) return;
+      clearTimeout(focusTimer);
+      focusTimer = setTimeout(refreshVisibleRoster, 50);
+    };
+    schedulePoll();
+    window.addEventListener("focus", onForeground);
+    document.addEventListener("visibilitychange", onForeground);
     const show = (alert: ChatAlert) => {
       const isOpen = alert.groupId
         ? alert.groupId === activeGroupId.current
@@ -168,18 +209,41 @@ export function useBrowserNotifications(
         controller = new AbortController();
         let failure: unknown;
         try {
-          const stream = await rpc.notifications.subscribe(undefined, {
-            signal: controller.signal,
-            context: { isCurrent: current },
-          });
+          const stream = await rpc.notifications.subscribe(
+            { roster: true },
+            {
+              signal: controller.signal,
+              context: { isCurrent: current },
+            },
+          );
           for await (const frame of stream) {
             if (!current()) return;
-            if (frame.alert) show(frame.alert);
+            if (frame.type === "roster") {
+              if (frame.ready) {
+                rosterReady = true;
+                schedulePoll();
+                // A prompt first handshake shares the initial fetch. Later handshakes
+                // close the subscription gap, including reconnects after a short drop.
+                if (
+                  connected ||
+                  Date.now() - (rosterFetchStartedAt?.current ?? subscribedAt) > 1_000
+                ) {
+                  void rosterRefresh.invalidate().catch(() => undefined);
+                }
+                connected = true;
+              } else {
+                void rosterRefresh.invalidate().catch(() => undefined);
+              }
+            } else if (frame.alert) show(frame.alert);
           }
         } catch (cause) {
           failure = cause;
         } finally {
           controller.abort();
+          if (rosterReady) {
+            rosterReady = false;
+            if (current()) schedulePoll();
+          }
         }
         if (!current() || (failure !== undefined && !isRetryableError(failure))) return;
         await new Promise<void>((resolve) => {
@@ -195,10 +259,23 @@ export function useBrowserNotifications(
     return () => {
       active = false;
       rosterRefresh.dispose();
+      clearTimeout(poll);
+      clearTimeout(focusTimer);
+      window.removeEventListener("focus", onForeground);
+      document.removeEventListener("visibilitychange", onForeground);
       controller?.abort();
       cancelRetry?.();
     };
-  }, [source, currentLifetime, showNotification, activeBotId, activeGroupId]);
+  }, [
+    source,
+    currentLifetime,
+    showNotification,
+    activeBotId,
+    activeGroupId,
+    rosterFetchStartedAt,
+    rosterRefreshInFlight,
+    callsEnabled,
+  ]);
   const deliverBrowserNotification = useCallback(
     (pending: PendingBrowserNotification): boolean => {
       const owner = currentLifetime();

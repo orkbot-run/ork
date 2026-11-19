@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 material is preserved. Empty-space onboarding changes follow LICENSE.md.
-// Ork keeps a periodic fallback for sidebar changes that have no live notification.
+// Sidebar invalidations and recovery polling share the shell notification stream.
 
 import { useLingui } from "@lingui/react/macro";
 import type {
@@ -14,7 +14,7 @@ import type {
   Space,
   ThreadSnapshot,
 } from "@orkbot/contracts";
-import { isRetryableError, reorderBotTo } from "@orkbot/core";
+import { reorderBotTo } from "@orkbot/core";
 import { replaceEqualDeep } from "@tanstack/react-query";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -73,6 +73,7 @@ export function useSpaceRoster({
   const botsRefreshApplied = useRef(0);
   const archivedBotsRefreshEpoch = useRef(0);
   const botsRefreshInFlight = useRef(0);
+  const rosterFetchStartedAt = useRef(Date.now());
   const routeBotId = useRef<string | undefined>(botId);
   routeBotId.current = botId;
   const routeGroupId = useRef<string | undefined>(groupId);
@@ -80,6 +81,7 @@ export function useSpaceRoster({
 
   const refreshBots = useCallback(
     async (includeArchived = false, replaceBotOrder = false) => {
+      rosterFetchStartedAt.current = Date.now();
       markOnce("rk:renderer:bots-request-start");
       const request = ++botsRefreshEpoch.current;
       const botOrderEpoch = botOrderEpochRef.current;
@@ -101,7 +103,7 @@ export function useSpaceRoster({
         // includeArchived request still owns archivedBotsRefreshEpoch — apply
         // whichever slices are still current.
         if (!botsFresh && !archivedFresh) return;
-        // The roster is polled; keeping unchanged values lets an unchanged poll skip rendering.
+        // Keeping unchanged values lets a redundant invalidation skip rendering.
         if (archivedFresh && archived)
           setArchivedBots((previous) => replaceEqualDeep(previous, archived));
         if (archivedFresh && archivedGroupList)
@@ -211,6 +213,7 @@ export function useSpaceRoster({
     callsEnabledRef,
     botsRefreshApplied,
     botsRefreshInFlight,
+    rosterFetchStartedAt,
     routeBotId,
     routeGroupId,
     refreshBots,
@@ -222,7 +225,7 @@ export function useSpaceRoster({
 export type SpaceRoster = ReturnType<typeof useSpaceRoster>;
 
 /**
- * Loads the space's bootstrap, keeps the roster polled, and saves what the shell showed so a
+ * Loads the space's bootstrap and saves what the shell showed so a
  * revisit paints at once.
  */
 export function useSpaceBootstrap({
@@ -275,9 +278,8 @@ export function useSpaceBootstrap({
     setInitialLoadFailed,
     bootstrapMe,
     setBootstrapMe,
-    callsEnabledRef,
     botsRefreshApplied,
-    botsRefreshInFlight,
+    rosterFetchStartedAt,
     routeBotId,
     routeGroupId,
     refreshBots,
@@ -330,6 +332,7 @@ export function useSpaceBootstrap({
   useEffect(() => {
     let cancelled = false;
     const appliedAtStart = botsRefreshApplied.current;
+    rosterFetchStartedAt.current = Date.now();
     void takeInitialBootstrap(botId ?? startChat?.botId)
       .then(async (bootstrap) => {
         // Kept for the space it belongs to, so switching back to it can paint at once.
@@ -440,32 +443,8 @@ export function useSpaceBootstrap({
           if (!cancelled) setInitialLoadFailed(true);
         });
       });
-    let refreshTimer: number | undefined;
-    const refreshVisibleBots = () => {
-      if (document.visibilityState !== "visible" && !callsEnabledRef.current) return;
-      window.clearTimeout(refreshTimer);
-      refreshTimer = window.setTimeout(
-        () =>
-          void refreshBots().catch((error) => {
-            if (!isRetryableError(error)) window.clearInterval(poll);
-          }),
-        50,
-      );
-    };
-    window.addEventListener("focus", refreshVisibleBots);
-    document.addEventListener("visibilitychange", refreshVisibleBots);
-    // Thread and alert streams trigger live refreshes. The slower fallback
-    // catches external changes that never produced an event in this window.
-    const poll = window.setInterval(() => {
-      if (botsRefreshInFlight.current > 0) return;
-      refreshVisibleBots();
-    }, 15_000);
     return () => {
       cancelled = true;
-      window.clearTimeout(refreshTimer);
-      window.clearInterval(poll);
-      window.removeEventListener("focus", refreshVisibleBots);
-      document.removeEventListener("visibilitychange", refreshVisibleBots);
     };
   }, []);
 }

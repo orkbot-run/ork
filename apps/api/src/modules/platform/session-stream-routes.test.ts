@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors
 
-import type { Actor } from "@orkbot/contracts";
+import type { Actor, ChatAlert } from "@orkbot/contracts";
+import type { RosterChanges } from "@orkbot/db";
 import { createRouterClient } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -20,7 +21,7 @@ const flush = async () => {
   for (let i = 0; i < 30; i++) await Promise.resolve();
 };
 
-function fixture(kind: Kind) {
+function fixture(kind: Kind, rosterChanges?: RosterChanges) {
   const controller = new AbortController();
   const stillAuthorized = vi.fn(async () => true);
   let sourceSignal: AbortSignal | undefined;
@@ -45,6 +46,7 @@ function fixture(kind: Kind) {
     env: { ticketBoardEnabled: true, phoneCallsEnabled: true },
     events: { follow, followChatAlerts: follow, followIncomingCalls: follow },
     boardEvents: { follow },
+    rosterChanges,
   } as unknown as RouterDeps);
   const client = createRouterClient(router, {
     context: { actor, signal: controller.signal, stillAuthorized },
@@ -55,7 +57,7 @@ function fixture(kind: Kind) {
     if (kind === "alerts") return client.notifications.subscribe();
     return client.notifications.subscribeCalls();
   }
-  return { controller, stillAuthorized, source, router, open, signal: () => sourceSignal };
+  return { controller, stillAuthorized, source, router, client, open, signal: () => sourceSignal };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -210,6 +212,45 @@ it("preserves a board change signal without adding heartbeat fields", async () =
   const iterator = await h.open();
   expect((await iterator.next()).value).toEqual(changed);
   await iterator.return?.();
+});
+
+it("interleaves opted-in roster invalidations with scoped notification alerts", async () => {
+  const follow = vi.fn(async function* () {
+    yield { type: "roster" as const, ready: true as const };
+    yield { type: "roster" as const };
+  });
+  const h = fixture("alerts", { follow });
+  const alert: ChatAlert = {
+    kind: "completion",
+    title: "Completed",
+    body: "Fixture",
+    threadId: "thread-1",
+    botId: "bot-1",
+    spaceId: actor.spaceId,
+  };
+  h.source.next
+    .mockResolvedValueOnce({ done: false, value: { ...alert, spaceId: "another-space" } })
+    .mockResolvedValueOnce({ done: false, value: alert });
+  const stream = await h.client.notifications.subscribe({ roster: true });
+  const frames = [
+    (await stream.next()).value,
+    (await stream.next()).value,
+    (await stream.next()).value,
+  ];
+  expect(frames).toEqual(
+    expect.arrayContaining([
+      { type: "roster", ready: true },
+      { type: "roster" },
+      { type: "alert", alert },
+    ]),
+  );
+  expect(follow).toHaveBeenCalledExactlyOnceWith(
+    { userId: actor.userId, spaceId: actor.spaceId },
+    expect.any(AbortSignal),
+  );
+  await stream.return?.();
+  expect(h.source.return).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
 });
 
 it.each(kinds)(

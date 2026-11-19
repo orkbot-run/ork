@@ -38,7 +38,7 @@ import type {
 } from "@orkbot/adapters";
 import type { Auth, WorkspaceAuthority } from "@orkbot/auth";
 import type { NavLink } from "@orkbot/contracts";
-import type { BoardEvents, PrismaClient, ThreadEvents } from "@orkbot/db";
+import type { BoardEvents, PrismaClient, RosterChanges, ThreadEvents } from "@orkbot/db";
 import { accountRoutes } from "#modules/accounts/routes/account";
 import { organizationsRoutes } from "#modules/accounts/routes/organizations";
 import type { BillingService } from "#modules/billing/billing";
@@ -84,6 +84,7 @@ export interface RouterDeps {
   prisma: PrismaClient;
   events: ThreadEvents;
   boardEvents: BoardEvents;
+  rosterChanges?: RosterChanges;
   ticketChanges: TicketChangeNotifier;
   auth: Auth;
   jobs: JobPublisher;

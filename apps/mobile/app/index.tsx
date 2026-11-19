@@ -93,7 +93,7 @@ import {
 import type { OrganizeTarget } from "../lib/organize-target";
 import { findOrganizeTarget } from "../lib/organize-target";
 import { offerPasskeyOnce } from "../lib/passkey";
-import { ACTIVITY_POLL_INTERVAL_MS, INBOX_POLL_INTERVAL_MS } from "../lib/poll-cadence";
+import { ACTIVITY_POLL_INTERVAL_MS } from "../lib/poll-cadence";
 import { registerPushToken } from "../lib/push";
 import { forgetReferrals, rememberReferral } from "../lib/referral";
 import { hasSignedInBefore, rememberSignedIn } from "../lib/returning-user";
@@ -110,6 +110,7 @@ import { useCollapsedSections } from "../lib/use-collapsed-sections";
 import { useHomeHeader } from "../lib/use-home-header";
 import { chatRpc, useInboxChatActions } from "../lib/use-inbox-chat-actions";
 import { useInboxDay } from "../lib/use-inbox-day";
+import { useInboxRoster } from "../lib/use-inbox-roster";
 import { usePublishSearchInbox } from "../lib/use-publish-search-inbox";
 import { useSnoozeClock } from "../lib/use-snooze-clock";
 import type { LoadFailureKind } from "../lib/user-error";
@@ -415,7 +416,14 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
 
   // The embedded pane is visible beside the chat, so it keeps polling even when
   // the chat route owns focus.
-  useForegroundPoll(loadBots, INBOX_POLL_INTERVAL_MS, hasSession && (embedded || isFocused));
+  useInboxRoster(loadBots, hasSession && (embedded || isFocused));
+
+  useEffect(
+    () => () => {
+      inboxRequestId.current += 1;
+    },
+    [],
+  );
 
   const archivedCount = useArchivedCount(me?.spaceId, hasSession);
   const {

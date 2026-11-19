@@ -1543,11 +1543,12 @@ export const appContract = {
   },
   notifications: {
     /** Run alerts for the signed-in user's chats in this space, live while connected. */
-    subscribe: oc.output(
+    subscribe: oc.input(z.object({ roster: z.literal(true) }).optional()).output(
       eventIterator(
         z.object({
-          type: z.enum(["alert", "heartbeat"]),
+          type: z.enum(["alert", "heartbeat", "roster"]),
           alert: ChatAlertSchema.optional(),
+          ready: z.literal(true).optional(),
         }),
       ),
     ),
