@@ -4,6 +4,7 @@
 // Ork deferred messaging SDK loading is PolyForm-covered.
 // Ork adds optional durable messaging progress admission.
 // Ork adds RPC phase timing.
+// Ork forwards renewed session cookies on application responses.
 
 import { hostname } from "node:os";
 import { join } from "node:path";
@@ -177,6 +178,7 @@ import { mountAuthCallback } from "#modules/accounts/auth-callback";
 import { mountDesktopInstallation } from "#modules/accounts/desktop-installation";
 import { managedAccountKeyForRequest } from "#modules/accounts/managed-account";
 import { nativeProtocolGuard } from "#modules/accounts/native-protocol-guard";
+import { sessionRenewal } from "#modules/accounts/session-renewal";
 import { createBillingService } from "#modules/billing/billing";
 import { mountBillingRoutes } from "#modules/billing/billing-webhook";
 import { marketingEmailRoutes, sendWelcomeEmail } from "#modules/billing/marketing-email";
@@ -1085,6 +1087,8 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       c.header("cache-control", "no-store");
     });
   }
+  const sessions = sessionRenewal(auth);
+  app.use("*", sessions.middleware);
   app.use("*", async (c, next) => {
     if (
       !env.accountsEnabled ||
@@ -1095,9 +1099,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       return next();
     if (env.desktopAccountKey && !(await installation?.registered())) return next();
     if (!c.req.header("cookie") && !c.req.header("authorization")) return next();
-    const session = await runAsSystem("workspace session", () =>
-      auth.api.getSession({ headers: c.req.raw.headers }),
-    );
+    const session = await runAsSystem("workspace session", () => sessions.read(c.req.raw));
     if (session?.user && !(await workspaceSessionAllowed(session)))
       return c.json({ error: "Workspace access unavailable" }, 403);
     return next();
@@ -1145,7 +1147,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     monitoringRoutes(
       env.browserMonitoring,
       fetch,
-      async (request) => (await auth.api.getSession({ headers: request.headers }))?.user.id,
+      async (request) => (await sessions.read(request))?.user.id,
     ),
   );
   app.route("/", cspReportRoutes(requestClientIp));
@@ -1206,9 +1208,9 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     hostAccessAllowed,
     prisma,
   });
-  const requestSession = async (request: Request) => {
+  const requestSession = async (request: Request, readSession = sessions.read) => {
     // The bearer plugin turns a signed `Authorization: Bearer` into the session cookie.
-    const session = await auth.api.getSession({ headers: request.headers });
+    const session = await readSession(request);
     if (!session?.user) return null;
     const centralized = !!installation && (await installation.registered());
     const central = centralized
@@ -1321,7 +1323,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
             // Same user in the same space, so leaving the space also ends a stream.
             // A database failure rejects this check; only a missing membership is unauthorized.
             stillAuthorized: async () => {
-              const current = await sessionActor(c.req.raw);
+              const current = (await requestSession(c.req.raw, sessions.recheck))?.actor;
               return Boolean(
                 actor && current?.userId === actor.userId && current.spaceId === actor.spaceId,
               );
