@@ -175,6 +175,7 @@ import { expireNonOidcSessions } from "#modules/accounts/accounts-only-sessions"
 import { mountAuthCallback } from "#modules/accounts/auth-callback";
 import { mountDesktopInstallation } from "#modules/accounts/desktop-installation";
 import { managedAccountKeyForRequest } from "#modules/accounts/managed-account";
+import { nativeProtocolGuard } from "#modules/accounts/native-protocol-guard";
 import { createBillingService } from "#modules/billing/billing";
 import { mountBillingRoutes } from "#modules/billing/billing-webhook";
 import { marketingEmailRoutes, sendWelcomeEmail } from "#modules/billing/marketing-email";
@@ -1097,15 +1098,10 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       return c.json({ error: "Workspace access unavailable" }, 403);
     return next();
   });
-  app.use("/api/auth/native/*", async (c, next) => {
-    if (
-      !c.req.path.startsWith("/api/auth/native/workspace/") &&
-      installation &&
-      (await installation.registered())
-    )
-      return c.json({ error: "update_required", identityProtocol: 2 }, 426);
-    return next();
-  });
+  app.use(
+    "/api/auth/native/*",
+    nativeProtocolGuard(async () => Boolean(await installation?.registered())),
+  );
   app.get("/api/auth/capabilities", (c) => {
     return c.json({
       protocol: SERVER_PROTOCOL_RANGE,
