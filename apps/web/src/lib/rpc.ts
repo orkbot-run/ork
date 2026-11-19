@@ -33,6 +33,7 @@ import { identityLabels } from "./identity-display";
 import { reportClientError } from "./monitoring";
 
 const SPACE_STORAGE_KEY = "orkbot:space-id";
+export const SPACE_UNAVAILABLE_NOTICE_KEY = "orkbot:space-unavailable-notice";
 export const ORGANIZATION_SPACES_STORAGE_KEY = "orkbot:org-spaces";
 
 let spaceSelectionGeneration = 0;
@@ -83,6 +84,17 @@ export function clearSpaceSelection(): void {
     window.localStorage.removeItem(ORGANIZATION_SPACES_STORAGE_KEY);
   } catch {
     // Ignore storage failures on sign-out / reset paths.
+  }
+}
+
+/** Retire in-flight work without discarding remembered choices for other organizations. */
+export function forgetSelectedSpace(): void {
+  spaceSelectionGeneration += 1;
+  cancelAiConsentPrompts();
+  try {
+    window.localStorage.removeItem(SPACE_STORAGE_KEY);
+  } catch {
+    // Without storage the next request will recheck the selection.
   }
 }
 
@@ -204,10 +216,13 @@ export function leaveUnavailableSpace(spaceId: string, isCurrent?: () => boolean
         selectedSpaceId() !== spaceId
       )
         return;
-      try {
-        window.localStorage.removeItem(SPACE_STORAGE_KEY);
-      } catch {
-        // Without storage the reload keeps asking without a Space.
+      forgetSelectedSpace();
+      if (desktopBridge()?.server?.change) {
+        try {
+          window.sessionStorage.setItem(SPACE_UNAVAILABLE_NOTICE_KEY, "1");
+        } catch {
+          // The app can still leave the inaccessible space without a saved notice.
+        }
       }
       window.location.reload();
     } catch {

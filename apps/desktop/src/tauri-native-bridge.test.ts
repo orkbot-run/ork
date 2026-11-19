@@ -421,6 +421,7 @@ describe("Tauri native bridge", () => {
     const bridge = desktop(window);
     await bridge.accounts?.signIn();
     await bridge.accounts?.session();
+    await bridge.accounts?.workspaceAccess?.();
     await bridge.accounts?.logout();
     await bridge.accounts?.retryRevocations?.();
     await bridge.pairing?.sync();
@@ -449,6 +450,7 @@ describe("Tauri native bridge", () => {
       { type: "hello", epoch: helloEpoch },
       { type: "accounts.signIn" },
       { type: "accounts.session" },
+      { type: "accounts.workspaceAccess" },
       { type: "accounts.logout" },
       { type: "accounts.retryRevocations" },
       { type: "pairing.sync" },

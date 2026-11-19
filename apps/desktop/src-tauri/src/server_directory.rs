@@ -147,6 +147,10 @@ struct CatalogWorkspace {
 }
 
 impl WorkspaceCatalog {
+    pub fn permits_workspace(&self, target: &WorkspaceTarget) -> bool {
+        self.server_for_target(target).is_ok()
+    }
+
     pub fn is_personal(&self, target: &WorkspaceTarget) -> Result<bool, String> {
         self.server_for_target(target)?;
         Ok(self.organizations.iter().any(|organization| {
@@ -1823,6 +1827,30 @@ mod tests {
                 "workspaces": [{"id": DEVICE, "name": "Studio", "state": "ready", "canOpen": true, "role": "member"}]
             }]
         }]})
+    }
+
+    #[test]
+    fn workspace_access_requires_the_current_ready_membership_and_binding() {
+        let mut value = workspace_catalog();
+        let catalog: WorkspaceCatalog = serde_json::from_value(value.clone()).unwrap();
+        let target = catalog
+            .clone()
+            .workspaces()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .target
+            .unwrap();
+        assert!(catalog.permits_workspace(&target));
+        value["organizations"][0]["servers"][0]["workspaces"][0]["state"] = "disabled".into();
+        let archived: WorkspaceCatalog = serde_json::from_value(value.clone()).unwrap();
+        assert!(!archived.permits_workspace(&target));
+        value["organizations"][0]["servers"][0]["workspaces"] = serde_json::json!([]);
+        let removed: WorkspaceCatalog = serde_json::from_value(value).unwrap();
+        assert!(!removed.permits_workspace(&target));
+        let mut changed = target;
+        changed.binding_version += 1;
+        assert!(!catalog.permits_workspace(&changed));
     }
 
     #[test]

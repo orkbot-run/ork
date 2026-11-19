@@ -45,12 +45,17 @@ import { continueWithAccountsServer } from "../lib/accounts-login";
 import { AccountsUnavailable } from "../lib/accounts-network";
 import { FORM_COLUMN_WIDTH } from "../lib/adaptive-layout";
 import {
+  captureApiRequestContext,
   clearProductAccountSession,
   currentApiBase,
+  forgetUnavailableSpace,
   loadApiBase,
   probeApiBase,
   rpc,
   saveApiBase,
+  selectedSpaceId,
+  spaceSelectionSeq,
+  subscribeUnavailableSpace,
 } from "../lib/api";
 import { loadAppearancePreference } from "../lib/appearance";
 import {
@@ -61,6 +66,7 @@ import {
 import { bootstrapI18n, useI18n } from "../lib/i18n";
 import {
   installationRevocationScope,
+  invalidateInstallationTransport,
   selectInstallationTransport,
 } from "../lib/installation-transport";
 import { useMobileTokens } from "../lib/native";
@@ -320,6 +326,20 @@ export function AccountsGate({
     );
   }
 
+  function leaveUnavailableWorkspace() {
+    const selected = selectedSpaceId();
+    if (selected) void forgetUnavailableSpace(selected, spaceSelectionSeq());
+    pickerOwner.current = null;
+    setForegroundOwner(null);
+    invalidateInstallationTransport();
+    setAdding(false);
+    setPhase("servers");
+    Alert.alert(
+      translate.current("Workspace unavailable"),
+      translate.current("This workspace was closed or your access was removed."),
+    );
+  }
+
   useEffect(() => {
     // Passive unmount cleanup retires the old screens before a new transport can be selected.
     const complete = retiredPicker.current;
@@ -461,9 +481,10 @@ export function AccountsGate({
             ([key, value]) => admitted.target[key as keyof WorkspaceTarget] !== value,
           )
         ) {
-          setForegroundOwner(null);
+          setDirectory(catalog);
+          setServers(entries);
           setReadyAt({ version, attempt });
-          setPhase("servers");
+          leaveUnavailableWorkspace();
           return;
         }
       }
@@ -683,6 +704,22 @@ export function AccountsGate({
       setForegroundOwner(null);
   }, [attempt, phase, readyAt, version]);
 
+  useEffect(
+    () =>
+      subscribeUnavailableSpace(() => {
+        const scope = installationRevocationScope(currentApiBase());
+        if (
+          !productGate ||
+          !scope ||
+          scope.account !== owner.current ||
+          (phase !== "ready" && !ownsPicker(pickerOwner.current))
+        )
+          return;
+        leaveUnavailableWorkspace();
+      }),
+    [phase, productGate],
+  );
+
   useEffect(() => {
     if (
       (phase !== "servers" && !(productGate && phase === "ready")) ||
@@ -710,14 +747,59 @@ export function AccountsGate({
       if (!current()) return;
       if (!operationPending.current && !pairingRef.current) {
         try {
+          const scope = installationRevocationScope(activeServer);
+          const selected = selectedSpaceId();
+          const selectionSequence = spaceSelectionSeq();
+          const operation = operationVersion.current;
           const { entries, catalog } = await accountDirectory(account);
           if (!current()) return;
+          if (operation !== operationVersion.current || operationPending.current) {
+            timer = setTimeout(() => void poll(), DIRECTORY_REFRESH_MS);
+            return;
+          }
           setDirectory(catalog);
           const added = entries.some(
             (entry) => !knownServers.current.has(entry.id) && entry.url !== activeServer,
           );
           knownServers.current = new Set(entries.map((entry) => entry.id));
           setServers(entries);
+          if (
+            scope?.account === account &&
+            JSON.stringify(installationRevocationScope(activeServer)) === JSON.stringify(scope) &&
+            (phase === "ready" || ownsPicker(pickerOwner.current))
+          ) {
+            const admitted = catalogWorkspace(catalog, scope.target);
+            if (
+              !admitted ||
+              Object.entries(scope.target).some(
+                ([key, value]) => admitted.target[key as keyof WorkspaceTarget] !== value,
+              )
+            ) {
+              leaveUnavailableWorkspace();
+              return;
+            }
+            if (selected) {
+              try {
+                const context = await captureApiRequestContext(null);
+                const { organizations } = await rpc("organizations/list", undefined, {
+                  requestContext: context,
+                });
+                if (
+                  current() &&
+                  selectedSpaceId() === selected &&
+                  spaceSelectionSeq() === selectionSequence &&
+                  JSON.stringify(installationRevocationScope(activeServer)) ===
+                    JSON.stringify(scope) &&
+                  !organizations.some((organization) => organization.spaceIds.includes(selected))
+                ) {
+                  leaveUnavailableWorkspace();
+                  return;
+                }
+              } catch {
+                // A failed server check cannot establish that access was removed.
+              }
+            }
+          }
           if (added && phase === "ready") {
             if (!discoveryAlert.current) {
               discoveryAlert.current = true;

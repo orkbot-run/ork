@@ -57,7 +57,10 @@ const state = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
   appListeners: new Set<(state: string) => void>(),
   sessionListeners: new Set<() => void>(),
+  unavailableSpaceListeners: new Set<() => void>(),
   transportScope: null as { account: string; target: WorkspaceTarget } | null,
+  selectedSpace: null as string | null,
+  selectedSequence: 0,
   closePickerScreen: null as (() => void) | null,
 }));
 vi.mock("expo-secure-store", () => ({
@@ -292,6 +295,17 @@ vi.mock("./sso", () => ({ continueWithSso: vi.fn() }));
 vi.mock("./accounts-login", () => ({ continueWithAccountsServer: vi.fn() }));
 vi.mock("./server-pairing", () => ({ beginServerPairing: vi.fn() }));
 vi.mock("./api", () => ({
+  captureApiRequestContext: vi.fn(async () => ({ apiBase: remote.url, headers: {} })),
+  selectedSpaceId: () => state.selectedSpace,
+  spaceSelectionSeq: () => state.selectedSequence,
+  forgetUnavailableSpace: vi.fn(async (selected: string, sequence: number) => {
+    if (state.selectedSpace === selected && state.selectedSequence === sequence)
+      state.selectedSpace = null;
+  }),
+  subscribeUnavailableSpace: (listener: () => void) => {
+    state.unavailableSpaceListeners.add(listener);
+    return () => state.unavailableSpaceListeners.delete(listener);
+  },
   currentApiBase: vi.fn(),
   rpc: vi.fn(),
   clearProductAccountSession: vi.fn(),
@@ -345,7 +359,10 @@ beforeEach(() => {
   state.listeners.clear();
   state.appListeners.clear();
   state.sessionListeners.clear();
+  state.unavailableSpaceListeners.clear();
   state.transportScope = null;
+  state.selectedSpace = null;
+  state.selectedSequence = 0;
   state.closePickerScreen = null;
   vi.mocked(accountsIdentity).mockResolvedValue(null);
   vi.mocked(personalLoginSelection).mockReset().mockResolvedValue(null);
@@ -1695,6 +1712,106 @@ function managedDirectory(defaultOrganizationId: string | null = personalId) {
   return workspace;
 }
 
+it.each(["archived", "deleted", "access removed"])(
+  "leaves an active workspace when it is %s during directory refresh",
+  async (change) => {
+    vi.useFakeTimers();
+    const workspace = managedDirectory(companyId);
+    const owner = JSON.stringify([identity.issuer, identity.subject]);
+    state.storage.set("orkbot.accounts.product-owner", owner);
+    await saveSelectedWorkspace(owner, remote.url, workspace);
+    await render();
+    expect(host.textContent).toContain("Product screen");
+    const server = state.catalog!.organizations.find((row) => row.id === companyId)!.servers[0]!;
+    if (change === "deleted") server.workspaces = [];
+    else if (change === "archived") server.workspaces[0]!.state = "disabled";
+    else server.workspaces[0]!.canOpen = false;
+    vi.mocked(accountServers).mockResolvedValue([]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    expect(host.textContent).not.toContain("Product screen");
+    expect(state.transportScope).toBeNull();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      "Workspace unavailable",
+      "This workspace was closed or your access was removed.",
+    );
+  },
+);
+
+it("keeps the active workspace when a directory refresh fails", async () => {
+  vi.useFakeTimers();
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  vi.mocked(accountServers).mockRejectedValueOnce(new Error("offline"));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_000);
+  });
+  expect(host.textContent).toContain("Product screen");
+  expect(Alert.alert).not.toHaveBeenCalled();
+});
+
+it("leaves a different selected workspace when its membership is removed", async () => {
+  vi.useFakeTimers();
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  state.selectedSpace = "local-space";
+  vi.mocked(rpc).mockResolvedValue({ organizations: [{ spaceIds: [] }] } as never);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_000);
+  });
+  expect(host.textContent).not.toContain("Product screen");
+  expect(Alert.alert).toHaveBeenCalledWith(
+    "Workspace unavailable",
+    "This workspace was closed or your access was removed.",
+  );
+});
+
+it("notifies and leaves immediately after a revoked selected space is detected by a request", async () => {
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  await act(async () => {
+    for (const listener of state.unavailableSpaceListeners) listener();
+  });
+  expect(host.textContent).not.toContain("Product screen");
+  expect(Alert.alert).toHaveBeenCalledWith(
+    "Workspace unavailable",
+    "This workspace was closed or your access was removed.",
+  );
+});
+
+it("ignores a late access check after the user switches workspaces", async () => {
+  vi.useFakeTimers();
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  state.selectedSpace = "local-space";
+  let resolve!: (value: never) => void;
+  vi.mocked(rpc).mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  await act(async () => vi.advanceTimersByTimeAsync(15_000));
+  state.selectedSpace = "another-space";
+  state.selectedSequence++;
+  await act(async () => resolve({ organizations: [{ spaceIds: [] }] } as never));
+  expect(host.textContent).toContain("Product screen");
+  expect(Alert.alert).not.toHaveBeenCalled();
+});
+
 it.each(["new-group", "account"])(
   "retains a warm %s navigation and its draft when Android resumes the active workspace",
   async (destination) => {
@@ -1932,6 +2049,9 @@ it("saves the default organization centrally only after an explicit preference a
 });
 vi.mock("./installation-transport", () => ({
   installationRevocationScope: () => state.transportScope ?? undefined,
+  invalidateInstallationTransport: vi.fn(() => {
+    state.transportScope = null;
+  }),
   selectInstallationTransport: vi.fn(
     async (account: string, _origin: string, target?: WorkspaceTarget) => {
       state.transportScope = target ? { account, target } : null;

@@ -32,6 +32,7 @@ import {
   currentApiBase,
   deleteAccount,
   fetchAccountSecurity,
+  forgetUnavailableSpace,
   IDLE_TIMEOUT_MS,
   isServerReachable,
   loadApiBase,
@@ -61,6 +62,7 @@ import {
   subscribeServerReachable,
   subscribeSessionRejected,
   subscribeThread,
+  subscribeUnavailableSpace,
   updateAccountName,
 } from "./api.js";
 import { artifactCacheSession } from "./artifact-cache-session";
@@ -2655,6 +2657,74 @@ describe("mobile API authentication", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0]![1].headers["x-orkbot-space-id"]).toBe("space-support");
     expect(fetchMock.mock.calls[1]![1].headers["x-orkbot-space-id"]).toBeUndefined();
+  });
+
+  it("notifies when a space is rejected but the same session works without it", async () => {
+    const storage = new Map<string, string>([["orkbot.space_id", "space-removed"]]);
+    vi.mocked(SecureStore.getItemAsync).mockImplementation(async (key) => storage.get(key) ?? null);
+    vi.mocked(SecureStore.deleteItemAsync).mockImplementation(async (key) => {
+      storage.delete(key);
+    });
+    vi.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => {
+      storage.set(key, value);
+    });
+    await loadApiBase();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"))
+        .mockResolvedValueOnce(jsonResponse({ json: { spaces: [] } })),
+    );
+    const listener = vi.fn();
+    const stop = subscribeUnavailableSpace(listener);
+    try {
+      await expect(rpc("spaces/list")).resolves.toEqual({ spaces: [] });
+      expect(selectedSpaceId()).toBeNull();
+      expect(listener).toHaveBeenCalledOnce();
+    } finally {
+      stop();
+    }
+  });
+
+  it("does not clear a newer workspace selection when leaving an unavailable space", async () => {
+    const storage = new Map<string, string>([["orkbot.space_id", "space-old"]]);
+    vi.mocked(SecureStore.getItemAsync).mockImplementation(async (key) => storage.get(key) ?? null);
+    vi.mocked(SecureStore.deleteItemAsync).mockImplementation(async (key) => {
+      storage.delete(key);
+    });
+    vi.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => {
+      storage.set(key, value);
+    });
+    await loadApiBase();
+    const previousSequence = spaceSelectionSeq();
+    await selectSpace("space-new");
+    await forgetUnavailableSpace("space-old", previousSequence);
+    expect(selectedSpaceId()).toBe("space-new");
+    expect(storage.get("orkbot.space_id")).toBe("space-new");
+  });
+
+  it("preserves a workspace selected while unavailable-space cleanup is in flight", async () => {
+    const storage = new Map<string, string>([["orkbot.space_id", "space-old"]]);
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(SecureStore.getItemAsync).mockImplementation(async (key) => storage.get(key) ?? null);
+    vi.mocked(SecureStore.deleteItemAsync).mockImplementation(async (key) => {
+      if (key === "orkbot.space_id") await blocked;
+      storage.delete(key);
+    });
+    vi.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => {
+      storage.set(key, value);
+    });
+    await loadApiBase();
+    const cleanup = forgetUnavailableSpace("space-old", spaceSelectionSeq());
+    await selectSpace("space-new");
+    release();
+    await cleanup;
+    expect(selectedSpaceId()).toBe("space-new");
+    expect(storage.get("orkbot.space_id")).toBe("space-new");
   });
 
   it("keeps a Space selected during unauthorized recovery when the retry succeeds", async () => {

@@ -74,6 +74,7 @@ if (
       ...(config.transport ? { signInToServer: () => call<void>("accounts.signInToServer") } : {}),
       session: () => call("accounts.session"),
       workspaceTarget: () => call("accounts.workspaceTarget"),
+      workspaceAccess: () => call("accounts.workspaceAccess"),
       logout: () => call("accounts.logout"),
       retryRevocations: () => call("accounts.retryRevocations"),
       ...(config.transport
