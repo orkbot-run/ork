@@ -820,6 +820,12 @@ async fn native_command(
             "maximized": window.is_maximized().unwrap_or(false),
             "fullScreen": window.is_fullscreen().unwrap_or(false),
         })),
+        Command::WindowStartDragging => {
+            window
+                .start_dragging()
+                .map_err(|_| "Could not drag the window.")?;
+            Ok(unit)
+        }
         Command::WindowClose => {
             window.close().map_err(|_| "Could not close the window.")?;
             Ok(unit)

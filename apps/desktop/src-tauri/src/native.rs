@@ -75,6 +75,8 @@ pub enum Command {
     ComputerRevokeAccess,
     #[serde(rename = "window.state")]
     WindowState,
+    #[serde(rename = "window.startDragging")]
+    WindowStartDragging,
     #[serde(rename = "window.close")]
     WindowClose,
     #[serde(rename = "window.minimize")]
@@ -938,16 +940,44 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const [bootstrap, stale, current] = JSON.parse(readFileSync(new URL('./payload.json', import.meta.url), 'utf8'));
+const listeners = new Map();
+const commands = [];
 const window = {
   location: { origin: 'https://orkbot.example.com', protocol: 'https:', pathname: '/api/native-event-fixture' },
+  addEventListener: (name, listener) => listeners.set(name, listener),
   __TAURI_INTERNALS__: {
-    invoke: () => Promise.resolve(),
+    invoke: (_, input) => {
+      commands.push(input.command.type);
+      return Promise.resolve();
+    },
     metadata: { currentWindow: { label: 'server-1' }, currentWebview: { label: 'server-1' } }
   }
 };
 window.top = window;
-const context = vm.createContext({window, crypto: {getRandomValues: value => value.fill(12)}, performance: {timeOrigin: 1000}});
+class Element {
+  constructor(markers) { this.markers = markers; }
+  closest(selectors) {
+    return selectors.split(', ').some(selector => this.markers.includes(selector)) ? this : null;
+  }
+}
+const context = vm.createContext({window, Element, crypto: {getRandomValues: value => value.fill(12)}, performance: {timeOrigin: 1000}});
 vm.runInContext(bootstrap, context);
+if (window.orkbotDesktop.platform === 'darwin') {
+  const press = listeners.get('mousedown');
+  const event = { isTrusted: true, buttons: 1, target: new Element(['.app-drag']) };
+  press({...event, isTrusted: false});
+  press({...event, buttons: 2});
+  press({...event, ctrlKey: true});
+  press({...event, defaultPrevented: true});
+  press({...event, target: new Element([])});
+  press({...event, target: new Element(['.app-drag', 'button'])});
+  press({...event, target: new Element(['.app-drag', '.app-no-drag'])});
+  press(event);
+  await new Promise(setImmediate);
+  assert.deepEqual(commands, ['hello', 'window.startDragging']);
+} else {
+  assert.equal(listeners.has('mousedown'), false);
+}
 vm.runInContext(`
   globalThis.received = [];
   globalThis.iteratorLeaks = [];

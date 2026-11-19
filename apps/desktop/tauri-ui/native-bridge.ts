@@ -161,6 +161,25 @@ if (
     configurable: false,
     writable: false,
   });
+  if (config.platform === "darwin") {
+    // The title bar overlays WebKit on macOS. The shared renderer's drag regions
+    // describe where it is safe to hand a real press to the native window.
+    window.addEventListener("mousedown", (event) => {
+      const target = event.target;
+      if (
+        !event.isTrusted ||
+        event.defaultPrevented ||
+        event.buttons !== 1 ||
+        event.ctrlKey ||
+        !(target instanceof Element) ||
+        !target.closest(".app-drag") ||
+        target.closest(".app-no-drag, button, a, input, textarea, select, [contenteditable]")
+      ) {
+        return;
+      }
+      void call<void>("window.startDragging").catch(() => undefined);
+    });
+  }
   if (config.transport) {
     const pending = new Set<string>();
     let retired = false;
