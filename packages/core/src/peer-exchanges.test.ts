@@ -2,7 +2,7 @@ import type { ThreadMessage } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { BOT_MESSAGE_MAX_LENGTH, clampBotMessage } from "./bot-messages.js";
 import { foldPeerReplies } from "./message-visibility.js";
-import { peerExchangeLines, splitPeerLabel } from "./peer-exchanges.js";
+import { peerExchangeLines, peerReceiptList, splitPeerLabel } from "./peer-exchanges.js";
 import { peerMessagesFrom } from "./peer-messages.js";
 
 function message(id: string, blocks: ThreadMessage["blocks"], runId?: string): ThreadMessage {
@@ -36,6 +36,8 @@ const received = (
   );
 const reply = (id: string, runId: string, text = "Answer") =>
   message(id, [{ kind: "text", text }], runId);
+const sent = (id: string, peer: string, name = peer) =>
+  message(id, [{ kind: "bot_message_sent", toBotId: peer, toBotName: name, text: "Task" }]);
 
 describe("peer exchanges", () => {
   it.each([undefined, "request", "question"] as const)(
@@ -155,6 +157,36 @@ describe("peer exchanges", () => {
     ).toBe(4);
   });
 
+  it("groups consecutive outgoing receipts and preserves every receipt's jump target", () => {
+    const messages = [
+      received("m1", undefined, "a"),
+      sent("m2", "a", "Scout"),
+      sent("m3", "b", "Writer"),
+      sent("m4", "a", "Researcher"),
+      message("m5", [{ kind: "text", text: "Two tasks sent" }]),
+      sent("m6", "b", "Writer"),
+    ];
+    const { lines, lineOf } = peerExchangeLines(
+      foldPeerReplies(messages, { includePeerReceipts: true }),
+    );
+    expect([...lines.keys()]).toEqual(["m1", "m2", "m6"]);
+    expect(lines.get("m2")).toMatchObject({
+      count: 3,
+      direction: "sent",
+      recipients: [
+        { peerBotId: "a", peerBotName: "Researcher" },
+        { peerBotId: "b", peerBotName: "Writer" },
+      ],
+    });
+    expect([...lineOf]).toEqual([
+      ["m1", "m1"],
+      ["m2", "m2"],
+      ["m3", "m2"],
+      ["m4", "m2"],
+      ["m6", "m6"],
+    ]);
+  });
+
   it("retains attachments and repeated text from different runs chronologically", () => {
     const first = received("m1");
     const second = received("m4");
@@ -191,6 +223,20 @@ describe("peer exchanges", () => {
 });
 
 describe("translated peer label", () => {
+  it("formats a Polish recipient list and distinguishes agents sharing a name", () => {
+    const recipients = [
+      { peerBotId: "a", peerBotName: "Scout" },
+      { peerBotId: "b", peerBotName: "Writer" },
+      { peerBotId: "c", peerBotName: "Scout" },
+    ];
+    const parts = peerReceiptList(recipients, "pl", (names) => `Wysłano wiadomość do ${names}`);
+    expect(parts.flatMap((part) => ("recipient" in part ? [part.recipient] : []))).toEqual(
+      recipients,
+    );
+    expect(
+      parts.map((part) => ("recipient" in part ? part.recipient.peerBotName : part.text)).join(""),
+    ).toBe("Wysłano wiadomość do Scout, Writer i Scout");
+  });
   it("places the avatar before the last name occurrence", () => {
     expect(splitPeerLabel("Peer: messages with Peer today", "Peer")).toEqual({
       before: "Peer: messages with ",

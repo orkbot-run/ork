@@ -331,6 +331,19 @@ const MessageBubbleContent = memo(function MessageBubbleContent({
         count={peerExchange?.count ?? 1}
         direction={sent ? "sent" : "received"}
         actionProps={actionProps}
+        recipients={peerExchange?.recipients?.map((recipient) => {
+          const recipientBot = bots.find((bot) => bot.id === recipient.peerBotId);
+          const recipientMember = members?.find((member) => member.botId === recipient.peerBotId);
+          return {
+            ...recipient,
+            color: recipientBot?.color ?? recipientMember?.color ?? tokens.mutedForeground,
+            avatarSet: recipientBot?.avatarSet ?? recipientMember?.avatarSet,
+            onPress:
+              !groupId && botId && recipient.peerBotId !== botId
+                ? () => onOpenPeerChat(recipient)
+                : undefined,
+          };
+        })}
         onPress={
           !groupId && botId && peerBotId !== botId
             ? () => onOpenPeerChat({ peerBotId, peerBotName: peer ?? t("Bot") })

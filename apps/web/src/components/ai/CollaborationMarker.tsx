@@ -1,5 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 markers are preserved. Grouped outgoing receipts are an Ork addition.
+
 import type { BotAvatarSet } from "@orkbot/contracts";
-import { splitPeerLabel } from "@orkbot/core";
+import type { PeerRecipient } from "@orkbot/core";
+import { peerReceiptList, splitPeerLabel } from "@orkbot/core";
 import type { GroupAvatarMember } from "@orkbot/ui-web";
 import { BotAvatar, GroupAvatar } from "@orkbot/ui-web";
 
@@ -37,6 +42,53 @@ export function CollaborationMarker({
         ) : null}
         {parts.after ? <span className="whitespace-pre-wrap">{parts.after}</span> : null}
       </button>
+    </div>
+  );
+}
+
+export function CollaborationRecipients({
+  recipients,
+  locale,
+  label,
+  peerBot,
+  onOpen,
+}: {
+  recipients: PeerRecipient[];
+  locale: string;
+  label: (names: string) => string;
+  peerBot: (id: string) => { color: string; avatarSet?: BotAvatarSet } | undefined;
+  onOpen: (recipient: PeerRecipient) => void;
+}) {
+  return (
+    <div
+      data-testid="peer-receipt-group"
+      className="min-w-0 px-2.5 py-2 text-center text-[13px] text-muted-foreground"
+    >
+      {peerReceiptList(recipients, locale, label).map((part) => {
+        if ("text" in part) return part.text;
+        const { recipient } = part;
+        const bot = peerBot(recipient.peerBotId);
+        return (
+          <button
+            key={recipient.peerBotId}
+            type="button"
+            onClick={() => onOpen(recipient)}
+            className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-md align-middle font-medium hover:text-foreground/75 focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2"
+          >
+            {bot ? (
+              <BotAvatar
+                avatarSet={bot.avatarSet}
+                color={bot.color}
+                identity={recipient.peerBotId}
+                size={16}
+              />
+            ) : null}
+            <span dir="auto" className="wrap-anywhere min-w-0 text-start">
+              {recipient.peerBotName}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

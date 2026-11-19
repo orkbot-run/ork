@@ -1,12 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 peer projection is preserved. Outgoing receipt grouping is an Ork addition.
+
 import type { MessageBlock } from "@orkbot/contracts";
 import { clampBotMessage } from "./bot-messages.js";
 import type { FoldedTranscript } from "./message-visibility.js";
 
-export type PeerExchange = {
+export type PeerRecipient = {
   peerBotId: string;
   peerBotName: string;
+};
+
+export type PeerExchange = PeerRecipient & {
   count: number;
   direction: "sent" | "received";
+  recipients?: PeerRecipient[];
 };
 
 type Message = {
@@ -90,8 +98,54 @@ export function peerExchangeLines<T extends Message>(transcript: FoldedTranscrip
   const unreturned = unreturnedPeerReplies(transcript);
   let previous: PeerExchange | undefined;
   let firstId: string | undefined;
+  let outgoing: { id: string; recipients: PeerRecipient[]; count: number }[] = [];
+
+  function addReceipt(id: string, exchange: PeerExchange, standalone: boolean) {
+    if (standalone && previous?.peerBotId === exchange.peerBotId && firstId) {
+      previous.peerBotName = exchange.peerBotName;
+      previous.count += exchange.count;
+      lineOf.set(id, firstId);
+      return firstId;
+    }
+    lines.set(id, exchange);
+    lineOf.set(id, id);
+    previous = standalone ? exchange : undefined;
+    firstId = standalone ? id : undefined;
+    return id;
+  }
+
+  function flushOutgoing() {
+    const first = outgoing[0];
+    if (!first) return;
+    const recipients = new Map<string, PeerRecipient>();
+    let count = 0;
+    for (const receipt of outgoing) {
+      count += receipt.count;
+      for (const peer of receipt.recipients) recipients.set(peer.peerBotId, peer);
+    }
+    const peers = [...recipients.values()];
+    const primary = peers[0]!;
+    const exchange: PeerExchange = { ...primary, count, direction: "sent" };
+    if (peers.length > 1) exchange.recipients = peers;
+    const line = addReceipt(first.id, exchange, !exchange.recipients);
+    for (const receipt of outgoing) lineOf.set(receipt.id, line);
+    outgoing = [];
+  }
+
   for (const message of transcript.messages) {
     const receipt = peerReceipt(message.blocks);
+    if (receipt && message.blocks.every((block) => block.kind === "bot_message_sent")) {
+      outgoing.push({
+        id: message.id,
+        recipients: message.blocks.map((block) => ({
+          peerBotId: block.toBotId,
+          peerBotName: block.toBotName,
+        })),
+        count: message.blocks.length + (unreturned.get(message.id)?.length ?? 0),
+      });
+      continue;
+    }
+    flushOutgoing();
     if (!receipt) {
       previous = undefined;
       continue;
@@ -100,17 +154,38 @@ export function peerExchangeLines<T extends Message>(transcript: FoldedTranscrip
       message.blocks.filter(
         (b) => b.kind === "bot_message_sent" || b.kind === "bot_message_received",
       ).length + (unreturned.get(message.id)?.length ?? 0);
-    if (previous?.peerBotId === receipt.peerBotId && firstId) {
-      previous.peerBotName = receipt.peerBotName;
-      previous.count += count;
-    } else {
-      firstId = message.id;
-      previous = { ...receipt, count };
-      lines.set(firstId, previous);
-    }
-    lineOf.set(message.id, firstId);
+    const standalone = message.blocks.every((block) => block.kind === "bot_message_received");
+    addReceipt(message.id, { ...receipt, count }, standalone);
   }
+  flushOutgoing();
   return { lines, lineOf };
+}
+
+/** Keeps each recipient actionable while respecting the locale's list and sentence order. */
+export function peerReceiptList(
+  recipients: readonly PeerRecipient[],
+  locale: string,
+  label: (names: string) => string,
+): ({ text: string } | { recipient: PeerRecipient })[] {
+  const namesInOrder = recipients.map((recipient) => recipient.peerBotName);
+  const formatter =
+    typeof Intl.ListFormat === "function" ? new Intl.ListFormat(locale || "en") : undefined;
+  const parts =
+    formatter?.formatToParts?.(namesInOrder) ??
+    namesInOrder.flatMap((value, index) => [
+      ...(index ? [{ type: "literal", value: ", " }] : []),
+      { type: "element", value },
+    ]);
+  const names = parts.map((part) => part.value).join("");
+  const { before, after } = splitPeerLabel(label(names), names);
+  let index = 0;
+  return [
+    { text: before },
+    ...parts.map((part) =>
+      part.type === "element" ? { recipient: recipients[index++]! } : { text: part.value },
+    ),
+    { text: after },
+  ];
 }
 
 /** The final translation decides avatar placement, including locales with trailing words. */

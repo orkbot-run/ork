@@ -284,9 +284,9 @@ export const Transcript = memo(function Transcript({
     messageHasVisibleBlocks(message.blocks, showToolActivity),
   );
   const exchanges = peerExchangeLines({ ...transcript, messages: visibleReceipts });
-  const shownMessages = visibleReceipts.filter(
-    (message) => !exchanges.lineOf.has(message.id) || exchanges.lines.has(message.id),
-  );
+  const isFirstReceipt = (messageId: string) =>
+    !exchanges.lineOf.has(messageId) || exchanges.lines.has(messageId);
+  const shownMessages = visibleReceipts.filter((message) => isFirstReceipt(message.id));
   const separatorIds = timeSeparatorIds(shownMessages);
   const unreadDividerId = unreadDividerMessageId(shownMessages, unreadAfterSeq, olderCursor);
   const workingLabel = liveActivityLine(messages) ?? t`Working…`;
@@ -619,7 +619,11 @@ export const Transcript = memo(function Transcript({
             );
           }
           const message = item.message;
-          if (!messageHasVisibleBlocks(message.blocks, showToolActivity)) return null;
+          if (
+            !isFirstReceipt(message.id) ||
+            !messageHasVisibleBlocks(message.blocks, showToolActivity)
+          )
+            return null;
           const peerReceipt = isPeerReceiptBlocks(message.blocks);
           const messageReactions = reactionView.reactions.get(message.id);
           return (

@@ -19,7 +19,10 @@ import { UserRound } from "lucide-react";
 import { memo, useCallback, useMemo } from "react";
 import { ArtifactFileCard } from "../../components/ArtifactFileCard";
 import { AskCard } from "../../components/AskCard";
-import { CollaborationMarker } from "../../components/ai/CollaborationMarker";
+import {
+  CollaborationMarker,
+  CollaborationRecipients,
+} from "../../components/ai/CollaborationMarker";
 import { CloudAgentCard } from "../../components/CloudAgentCard";
 import { PageBlockCard } from "../../components/pages/PageBlockCard";
 import { SubagentCard } from "../../components/SubagentCard";
@@ -140,7 +143,7 @@ export const MessageView = memo(function MessageView({
   markedUnread?: boolean;
   onReact: (message: ThreadMessage, reaction: MessageReaction) => Promise<void>;
 }) {
-  const { t } = useLingui();
+  const { i18n, t } = useLingui();
   const isNarration =
     message.role === "bot" &&
     message.blocks.length > 0 &&
@@ -370,6 +373,18 @@ export const MessageView = memo(function MessageView({
               )
             )
               return null;
+            if (peerExchange?.recipients) {
+              return (
+                <CollaborationRecipients
+                  key={i}
+                  recipients={peerExchange.recipients}
+                  locale={i18n.locale}
+                  label={(peer) => t`Messaged ${peer}`}
+                  peerBot={peerBot}
+                  onOpen={onOpenPeerMessages}
+                />
+              );
+            }
             const peer = peerExchange?.peerBotName ?? (sent ? block.toBotName : block.fromBotName);
             const peerBotId = sent ? block.toBotId : block.fromBotId;
             const count = peerExchange?.count ?? 1;
