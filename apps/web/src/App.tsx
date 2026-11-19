@@ -24,6 +24,7 @@ import { MarkdownLinkPrompt } from "./components/markdown-link-prompt";
 import { PageLoading } from "./components/PageLoading";
 import { ProtocolRecovery } from "./components/ProtocolRecovery";
 import { SubscriptionGate } from "./components/SubscriptionGate";
+import { WorkspaceAccessGuard } from "./components/WorkspaceAccessGuard";
 import { authClient } from "./lib/auth";
 import { getTicketBoardEnabled, subscribeTicketBoardEnabled } from "./lib/bootstrap";
 import { syncCallIdentity } from "./lib/call-session";
@@ -104,7 +105,9 @@ export function App() {
             <IntegrationCallbackPage />
           ) : (
             <ProtocolRecovery>
-              <SessionApp />
+              <WorkspaceAccessGuard>
+                <SessionApp />
+              </WorkspaceAccessGuard>
             </ProtocolRecovery>
           )}
         </ErrorBoundary>

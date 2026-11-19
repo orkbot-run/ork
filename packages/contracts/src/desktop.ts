@@ -107,6 +107,8 @@ export interface OrkDesktop {
     signIn: () => Promise<OrkDesktopAccount>;
     session: () => Promise<OrkDesktopAccount | null>;
     workspaceTarget?: () => Promise<WorkspaceTarget | null>;
+    /** Checks the current managed session against a fresh Accounts directory. */
+    workspaceAccess?: () => Promise<boolean | null>;
     logout: () => Promise<void>;
     /** Retry only captured retired credentials; live credentials remain native. */
     retryRevocations?: () => Promise<void>;

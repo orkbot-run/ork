@@ -641,6 +641,36 @@ async fn native_command(
             serde_json::to_value(document_workspace(&state, &document, &authorization)?)
                 .map_err(|_| "Could not continue".into())
         }
+        Command::AccountsWorkspaceAccess => {
+            if installation_login::personal_credential(&app, &state, &document)
+                .await?
+                .is_some()
+            {
+                return Ok(unit);
+            }
+            let authorization = state
+                .accounts
+                .authorization(&server_directory::origin())
+                .await?;
+            if !current_server_account(&app, &state, &document, &authorization) {
+                return Err("Could not continue".into());
+            }
+            let Some(target) = document_workspace(&state, &document, &authorization)? else {
+                return Ok(unit);
+            };
+            let catalog = server_directory::Directory::new()?
+                .catalog_for_device(
+                    authorization.directory_bearer()?,
+                    &server_directory::device_id(&state.directory)?,
+                )
+                .await?;
+            if !current_server_account(&app, &state, &document, &authorization)
+                || document_workspace(&state, &document, &authorization)?.as_ref() != Some(&target)
+            {
+                return Err("Could not continue".into());
+            }
+            Ok(serde_json::json!(catalog.permits_workspace(&target)))
+        }
         Command::AccountsCreateServerLoginGrant { origin, challenge } => {
             if state.transport.selected(&document.label).is_some() {
                 return Err("Native installation sign-in must run in Rust.".into());

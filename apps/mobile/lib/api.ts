@@ -402,6 +402,27 @@ export async function clearSpace(): Promise<boolean> {
   return true;
 }
 
+/** Remove an unavailable selection while preserving any newer selection made during storage I/O. */
+export async function forgetUnavailableSpace(expected: string, sequence: number): Promise<void> {
+  if (selectedSpaceId() !== expected || spaceSelectionRequestGeneration !== sequence) return;
+  cachedSpaceId = "";
+  bumpSpaceSelectionGeneration();
+  await clearStaleSpaceSelection();
+}
+
+async function clearStaleSpaceSelection(): Promise<void> {
+  await clearStoredValue(SPACE_KEY);
+  await clearStoredValue(SPACE_ROLLBACK_KEY);
+  const reselected = selectedSpaceId();
+  if (!reselected) return;
+  const writeGeneration = spaceSelectionGeneration;
+  await writeStoredValue(SPACE_KEY, reselected);
+  if (spaceSelectionGeneration !== writeGeneration) {
+    const live = selectedSpaceId();
+    if (live) await writeStoredValue(SPACE_KEY, live);
+  }
+}
+
 async function clearStoredValue(key: string): Promise<boolean> {
   try {
     await SecureStore.deleteItemAsync(key);
@@ -1059,6 +1080,15 @@ export async function deleteAccount(password?: string, token?: string) {
 }
 
 const sessionRejectedListeners = new Set<() => void>();
+const unavailableSpaceListeners = new Set<() => void>();
+
+/** A space-scoped request failed, while a fresh request without that space succeeded. */
+export function subscribeUnavailableSpace(listener: () => void): () => void {
+  unavailableSpaceListeners.add(listener);
+  return () => {
+    unavailableSpaceListeners.delete(listener);
+  };
+}
 
 /** Runs after the server rejected the stored session and it was cleared. */
 export function subscribeSessionRejected(listener: () => void): () => void {
@@ -1239,24 +1269,6 @@ async function request(
       // Space — only safe reads may retry as themselves; other procs probe
       // with spaces/list, then fail the original call.
       const previousSpaceId = selectedSpaceId();
-      // Clear stale selection records, then re-persist a Space selected while
-      // cleanup was in flight: check-then-clear cannot be atomic on
-      // SecureStore, so reconcile afterwards instead of trusting the check.
-      const clearStaleSpaceSelection = async () => {
-        await clearStoredValue(SPACE_KEY);
-        await clearStoredValue(SPACE_ROLLBACK_KEY);
-        const reselected = selectedSpaceId();
-        if (!reselected) return;
-        // Own the reconcile write by generation: a newer selection that
-        // persists between snapshot and write must not be overwritten by
-        // this stale id, and a write that lands stale heals once to live.
-        const writeGeneration = spaceSelectionGeneration;
-        await writeStoredValue(SPACE_KEY, reselected);
-        if (spaceSelectionGeneration !== writeGeneration) {
-          const live = selectedSpaceId();
-          if (live) await writeStoredValue(SPACE_KEY, live);
-        }
-      };
       if (
         unauthorized &&
         previousSpaceId &&
@@ -1268,6 +1280,27 @@ async function request(
       ) {
         cachedSpaceId = "";
         bumpSpaceSelectionGeneration();
+        const recoveryGeneration = spaceSelectionGeneration;
+        const recoverySelectionSequence = spaceSelectionRequestGeneration;
+        const finishRecovery = async () => {
+          if (selectedSpaceId()) return;
+          await clearStaleSpaceSelection();
+          if (
+            !selectedSpaceId() &&
+            spaceSelectionGeneration === recoveryGeneration &&
+            spaceSelectionRequestGeneration === recoverySelectionSequence &&
+            requestSessionGeneration === currentSessionGeneration() &&
+            requestApiBase === currentApiBase()
+          ) {
+            for (const listener of [...unavailableSpaceListeners]) {
+              try {
+                listener();
+              } catch {
+                /* One listener must not stop recovery. */
+              }
+            }
+          }
+        };
         const retrySameProc = SPACE_AUTH_RECOVERY_SAFE_PROCS.has(proc);
         // Share the original deadline/cancellation with recovery calls instead
         // of starting a second full timeout behind the first request.
@@ -1282,7 +1315,7 @@ async function request(
             const result = await request(proc, body, recoveryOptions);
             // A Space selected while the retry was in flight already owns both
             // the in-memory and durable selection; leave it alone.
-            if (!selectedSpaceId()) await clearStaleSpaceSelection();
+            await finishRecovery();
             return result;
           }
           await request("spaces/list", {}, recoveryOptions);
@@ -1293,7 +1326,7 @@ async function request(
           }
           throw retryError;
         }
-        if (!selectedSpaceId()) await clearStaleSpaceSelection();
+        await finishRecovery();
         throw new Error(message);
       }
       throw failure;

@@ -1504,6 +1504,10 @@ msgstr ""
 msgid "Choose how to use Ork"
 msgstr ""
 
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Choose workspace"
+msgstr ""
+
 #: src/components/vault/VaultItemEditor.tsx
 msgid "City"
 msgstr ""
@@ -2336,6 +2340,10 @@ msgstr "Impossible de se déconnecter. Réessayez."
 #: src/pages/Onboarding.tsx
 #: src/pages/Paywall.tsx
 msgid "Could not open billing"
+msgstr ""
+
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Could not open the workspace picker. Try again."
 msgstr ""
 
 #: src/components/pages/PagesList.tsx
@@ -7014,6 +7022,10 @@ msgstr "Cette connexion par abonnement n'est pas encore disponible dans Ork. Uti
 msgid "This week"
 msgstr "Cette semaine"
 
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "This workspace was closed or your access was removed."
+msgstr ""
+
 #: src/lib/cron.ts
 msgid "Thursday"
 msgstr "jeudi"
@@ -7655,6 +7667,10 @@ msgstr ""
 #: src/pages/model-settings/workspace-ai-account-form.tsx
 msgid "Workspace monthly budget (USD)"
 msgstr "Budget mensuel de l'espace de travail (USD)"
+
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Workspace unavailable"
+msgstr ""
 
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"

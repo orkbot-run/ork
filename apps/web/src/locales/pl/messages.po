@@ -1504,6 +1504,10 @@ msgstr "Wybierz, jak osoby w organizacji będą łączyć modele."
 msgid "Choose how to use Ork"
 msgstr "Wybierz sposób korzystania z Ork"
 
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Choose workspace"
+msgstr "Wybierz przestrzeń"
+
 #: src/components/vault/VaultItemEditor.tsx
 msgid "City"
 msgstr "Miejscowość"
@@ -2337,6 +2341,10 @@ msgstr "Nie udało się wylogować. Spróbuj ponownie."
 #: src/pages/Paywall.tsx
 msgid "Could not open billing"
 msgstr "Nie udało się otworzyć rozliczeń"
+
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Could not open the workspace picker. Try again."
+msgstr "Nie udało się otworzyć wyboru przestrzeni. Spróbuj ponownie."
 
 #: src/components/pages/PagesList.tsx
 msgid "Could not pin this page. Try again."
@@ -7014,6 +7022,10 @@ msgstr "To logowanie przez subskrypcję nie jest jeszcze dostępne w Ork. Użyj 
 msgid "This week"
 msgstr "Ten tydzień"
 
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "This workspace was closed or your access was removed."
+msgstr "Ta przestrzeń została zamknięta lub odebrano Ci do niej dostęp."
+
 #: src/lib/cron.ts
 msgid "Thursday"
 msgstr "czwartek"
@@ -7655,6 +7667,10 @@ msgstr "Model workspace’u"
 #: src/pages/model-settings/workspace-ai-account-form.tsx
 msgid "Workspace monthly budget (USD)"
 msgstr "Miesięczny budżet przestrzeni roboczej (USD)"
+
+#: src/components/WorkspaceAccessGuard.tsx
+msgid "Workspace unavailable"
+msgstr "Przestrzeń robocza niedostępna"
 
 #: src/pages/shell/workspace-rail.tsx
 msgid "Workspaces"
