@@ -10,10 +10,12 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
+import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { isLocalhostOrLoopbackIp } from "@orkbot/contracts";
 import { combineSignals } from "./connector-safety.js";
 import { closeMcpResource } from "./mcp-close.js";
 import type { McpDiscoveryLimits, McpDiscoveryResult } from "./mcp-discovery.js";
+import { mcpDiscoveryLimits } from "./mcp-discovery.js";
 import type { InstalledMcpBin } from "./mcp-package-installer.js";
 import {
   isInstalledMcpBin,
@@ -350,6 +352,8 @@ export class McpSession {
   private remoteFetch?: SafeRemoteFetch;
   private connected = false;
   private connecting?: Promise<void>;
+  private catalogGeneration = 0;
+  private catalog?: { limitsKey: string; result: McpDiscoveryResult<Tool> };
 
   constructor(options: McpClientOptions = {}) {
     this.clientOptions = options;
@@ -357,10 +361,32 @@ export class McpSession {
   }
 
   private newClient(): Client {
-    return new Client(
+    const client = new Client(
       { name: this.clientOptions.name ?? "orkbot", version: this.clientOptions.version ?? "0.1.0" },
       this.clientOptions.capabilities,
     );
+    client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+      this.invalidateToolCatalog();
+    });
+    client.onclose = () => {
+      if (this.client === client) {
+        this.connected = false;
+        this.invalidateToolCatalog();
+      }
+    };
+    return client;
+  }
+
+  /** Credentials may change while the SDK keeps the same transport alive. */
+  invalidateToolCatalog(): void {
+    this.catalogGeneration += 1;
+    this.catalog = undefined;
+  }
+
+  /** Stop new operations while already running tool calls finish before close. */
+  retire(): void {
+    this.connected = false;
+    this.invalidateToolCatalog();
   }
 
   async connectRemote(
@@ -368,6 +394,7 @@ export class McpSession {
   ): Promise<{ transport: McpRemoteTransport; usedFallback: boolean }> {
     if (this.connected || this.connecting)
       throw new Error("MCP session is already connected or connecting");
+    this.invalidateToolCatalog();
     const url = validateUrl(options.url, options.urlPolicy);
     const safeFetch = secureFetch(
       url,
@@ -442,6 +469,7 @@ export class McpSession {
   async connectStdio(options: McpStdioOptions): Promise<void> {
     if (this.connected || this.connecting)
       throw new Error("MCP session is already connected or connecting");
+    this.invalidateToolCatalog();
     const transport = new StdioClientTransport(stdioParams(options));
     this.transport = transport;
     // Always drain stderr: an unread pipe fills up and blocks a chatty server. The tail
@@ -469,9 +497,29 @@ export class McpSession {
   async listTools(options?: {
     signal?: AbortSignal;
     discoveryLimits?: Partial<McpDiscoveryLimits>;
+    /** Explicit connection diagnostics must reach the server and replace stale discovery. */
+    fresh?: boolean;
   }): Promise<McpDiscoveryResult<Tool>> {
-    this.assertConnected();
-    return listMcpTools(this.client, { signal: options?.signal }, options?.discoveryLimits);
+    const limits = mcpDiscoveryLimits(options?.discoveryLimits);
+    const limitsKey = JSON.stringify(limits);
+    if (options?.fresh) this.invalidateToolCatalog();
+    for (;;) {
+      this.assertConnected();
+      options?.signal?.throwIfAborted();
+      if (this.catalog?.limitsKey === limitsKey) return structuredClone(this.catalog.result);
+      const generation = this.catalogGeneration;
+      // Each discovery owns its signal. Cancelling one run cannot cancel another
+      // caller's listing, or poison the catalog for later runs.
+      const result = await listMcpTools(this.client, { signal: options?.signal }, limits);
+      options?.signal?.throwIfAborted();
+      this.assertConnected();
+      // A notification or fresh probe may overtake an in-flight listing. Neither
+      // publish nor serve that obsolete result; repeat only the read operation.
+      if (generation !== this.catalogGeneration) continue;
+      // Truncation is a diagnostic, never an authoritative catalog.
+      if (!result.diagnostic) this.catalog = { limitsKey, result: structuredClone(result) };
+      return result;
+    }
   }
 
   async callTool(
@@ -480,15 +528,24 @@ export class McpSession {
     options?: { signal?: AbortSignal },
   ): Promise<CallToolResult> {
     this.assertConnected();
-    return (await this.client.callTool({ name, arguments: args }, undefined, {
-      signal: options?.signal,
-    })) as CallToolResult;
+    try {
+      return (await this.client.callTool({ name, arguments: args }, undefined, {
+        signal: options?.signal,
+      })) as CallToolResult;
+    } catch (error) {
+      // This includes unknown-tool protocol errors. Invalidate conservatively:
+      // error messages are server-defined, and tool calls must never be replayed
+      // just to refresh discovery.
+      this.invalidateToolCatalog();
+      throw error;
+    }
   }
 
   /** `afterClose` follows actual SDK shutdown, even if this call stops waiting. */
   async close(afterClose?: () => Promise<void>): Promise<void> {
     this.connecting = undefined;
     this.connected = false;
+    this.invalidateToolCatalog();
     const client = this.client;
     const remoteFetch = this.remoteFetch;
     this.remoteFetch = undefined;

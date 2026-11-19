@@ -63,6 +63,18 @@ const ASSIGNMENT = {
   server: SERVER,
 };
 
+/** Simulate the server announcing a catalog change before faulting discovery. */
+async function notifyToolListChanged(connector: McpConnector): Promise<void> {
+  const { sessions } = connector as unknown as { sessions: Map<string, { session: McpSession }> };
+  for (const { session } of sessions.values()) {
+    session.client.transport?.onmessage?.({
+      jsonrpc: "2.0",
+      method: "notifications/tools/list_changed",
+    });
+  }
+  await Promise.resolve();
+}
+
 const TEST_NETWORK = {
   // Read the global per call so a fetch stubbed after construction still wins.
   fetch: (input: string | URL | Request, init?: RequestInit) => globalThis.fetch(input, init),
@@ -250,6 +262,8 @@ describe("MCP connector session cache", () => {
       if (scenario === "revision") assignment.server.revision += 1;
       else if (scenario.startsWith("expired")) state.sessionNotFound = 1;
       else state.failNext = true;
+      if (scenario === "discovery failure" || scenario === "expired listing")
+        await notifyToolListChanged(connector);
       const result = scenario.includes("call") ? execute() : connector.discoverTools(context);
       await vi.advanceTimersByTimeAsync(MCP_CLOSE_TIMEOUT_MS);
       if (scenario === "call failure") expect(await result).toMatchObject([{ type: "error" }]);
@@ -776,6 +790,7 @@ describe("MCP connector session cache", () => {
     await expect(connector.discoverTools(context)).resolves.not.toEqual([]);
 
     state.failNext = true;
+    await notifyToolListChanged(connector);
     const close = vi.spyOn(McpSession.prototype, "close").mockRejectedValue(new Error("busy"));
     try {
       await expect(connector.discoverTools(context)).resolves.toEqual(unavailableOnly());
@@ -1268,6 +1283,121 @@ describe("MCP connector session cache", () => {
 
     expect(append).not.toHaveBeenCalled();
     await connector.close();
+  });
+
+  it("keeps concurrent discovery alive when another run cancels its listing", async () => {
+    const state = { failNext: false, initializations: 0 };
+    const baseFetch = mcpFetch(state);
+    let firstStarted!: () => void;
+    const firstRequest = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
+    let secondStarted!: () => void;
+    const secondRequest = new Promise<void>((resolve) => {
+      secondStarted = resolve;
+    });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let lists = 0;
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (request.method === "POST") {
+        const message = await request.clone().json();
+        if (message.method === "tools/list") {
+          lists += 1;
+          if (lists === 1) {
+            firstStarted();
+            return new Response(null, { status: 202 });
+          }
+          secondStarted();
+          await released;
+        }
+      }
+      return baseFetch(input, init);
+    });
+    const connector = new McpConnector(
+      {
+        mcpServer: NO_SHARED_SERVERS,
+        botMcpServer: { findMany: vi.fn().mockResolvedValue([ASSIGNMENT]) },
+      } as never,
+      {} as never,
+      { network: TEST_NETWORK },
+    );
+    const controller = new AbortController();
+    const context = { spaceId: "w1", userId: "u1", botId: "bot-1", signal: controller.signal };
+    try {
+      const first = connector.discoverTools(context as never);
+      await firstRequest;
+      const second = connector.discoverTools({
+        ...context,
+        signal: new AbortController().signal,
+      } as never);
+      await secondRequest;
+      controller.abort(new Error("cancelled run"));
+      await first;
+      release();
+      expect((await second).map((entry) => entry.name)).toEqual(["mcp__demo__echo"]);
+      expect(state.initializations).toBe(1);
+      expect(lists).toBe(2);
+    } finally {
+      release();
+      await connector.close();
+    }
+  });
+
+  it("reuses discovery across runs while applying current bot permissions and fresh probes", async () => {
+    const state = {
+      failNext: false,
+      initializations: 0,
+      tools: [
+        { name: "first", inputSchema: { type: "object" } },
+        { name: "second", inputSchema: { type: "object" } },
+      ],
+    };
+    const fetch = mcpFetch(state);
+    vi.stubGlobal("fetch", fetch);
+    const assignment = { ...ASSIGNMENT, allowAllTools: false, allowedTools: ["first"] };
+    const connector = new McpConnector(
+      {
+        mcpServer: NO_SHARED_SERVERS,
+        botMcpServer: { findMany: vi.fn(async () => [assignment]) },
+      } as never,
+      {} as never,
+      { network: TEST_NETWORK },
+    );
+    const context = {
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never;
+    try {
+      expect(
+        (await connector.discoverTools(context)).map((entry) => entry.route?.toolName),
+      ).toEqual(["first"]);
+      const requests = fetch.mock.calls.length;
+      assignment.allowedTools = ["second"];
+      expect(
+        (await connector.discoverTools(context)).map((entry) => entry.route?.toolName),
+      ).toEqual(["second"]);
+      expect(fetch.mock.calls).toHaveLength(requests);
+      state.tools = [{ name: "third", inputSchema: { type: "object" } }];
+      expect(await connector.probe(SERVER as never, { spaceId: "w1", userId: "u1" })).toMatchObject(
+        { status: "ok", toolCount: 1 },
+      );
+      expect(fetch.mock.calls.length).toBeGreaterThan(requests);
+      assignment.allowedTools = ["third"];
+      const afterProbe = fetch.mock.calls.length;
+      expect(
+        (await connector.discoverTools(context)).map((entry) => entry.route?.toolName),
+      ).toEqual(["third"]);
+      expect(fetch.mock.calls).toHaveLength(afterProbe);
+      expect(state.initializations).toBe(1);
+    } finally {
+      await connector.close();
+    }
   });
 
   it("returns no tools when the MCP catalog is empty", async () => {
@@ -2252,6 +2382,7 @@ describe("MCP connector session cache", () => {
         return events;
       })();
       await callArrived;
+      await notifyToolListChanged(connector);
 
       expect(await connector.discoverTools(context)).toMatchObject([
         { name: "mcp__demo__unavailable" },
@@ -2285,6 +2416,7 @@ describe("MCP connector session cache", () => {
 
     await connector.discoverTools(context);
     state.sessionNotFound = 1;
+    await notifyToolListChanged(connector);
     const tools = await connector.discoverTools(context);
     expect(tools.map((tool) => tool.name)).toEqual(["mcp__demo__echo"]);
     expect(state.initializations).toBe(2);
@@ -2324,6 +2456,7 @@ describe("MCP connector session cache", () => {
 
     await connector.discoverTools(context);
     state.sessionNotFound = 1;
+    await notifyToolListChanged(connector);
     expect((await connector.discoverTools(context)).map((tool) => tool.name)).toEqual([
       "mcp__demo__echo",
     ]);
@@ -2331,6 +2464,7 @@ describe("MCP connector session cache", () => {
 
     state.sessionNotFound = 1;
     state.sessionNotFoundResponse = { status: 400, body: "Bad Request: Invalid session parameter" };
+    await notifyToolListChanged(connector);
     // Not retried: the server's tools are replaced by the stand-in that carries the reason.
     expect((await connector.discoverTools(context)).map((tool) => tool.name)).toEqual([
       "mcp__demo__unavailable",

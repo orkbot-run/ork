@@ -564,7 +564,7 @@ export class McpConnector implements ConnectorProvider {
               },
             );
           // Cleanup must not turn one server's failure into losing every server's tools.
-          await this.evict(key).catch(() => undefined);
+          if (!context.signal.aborted) await this.evict(key).catch(() => undefined);
           this.unavailable.set(key, reason);
           // A cancelled run says nothing about the server, and an install that outlived the
           // deadline is still on its way.
@@ -773,6 +773,7 @@ export class McpConnector implements ConnectorProvider {
           return session.listTools({
             signal: context.signal,
             discoveryLimits: this.discoveryLimits,
+            fresh: true,
           });
         });
       } else {
@@ -884,6 +885,7 @@ export class McpConnector implements ConnectorProvider {
   private async evict(sessionKey: string): Promise<void> {
     const entry = this.sessions.get(sessionKey);
     if (!entry) return;
+    entry.session.retire();
     this.sessions.delete(sessionKey);
     if ((this.inFlight.get(entry.session) ?? 0) > 0) {
       this.expired.add(entry.session);
@@ -917,6 +919,7 @@ export class McpConnector implements ConnectorProvider {
         // Stop reusing the expired session immediately, but let its other requests
         // receive their own responses before closing the shared SDK client.
         if (this.sessions.get(sessionKey)?.session === session) this.sessions.delete(sessionKey);
+        session.retire();
         this.expired.add(session);
       } finally {
         if (tracked) {
@@ -1085,6 +1088,7 @@ export class McpConnector implements ConnectorProvider {
       launchSecrets.push(...oauthMaterialSecrets({ args }));
       const env = { ...(material.env ?? {}) };
       const onPersisted = (record: { id: string; ref: string; material: OAuthMaterial }) => {
+        session.invalidateToolCatalog();
         ref = record.ref;
         recordId = record.id;
         digest = credentialDigest(JSON.stringify(record.material));
