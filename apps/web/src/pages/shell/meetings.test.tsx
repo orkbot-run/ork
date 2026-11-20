@@ -67,9 +67,14 @@ const meeting = {
   updatedAt: "2026-11-20T12:10:00Z",
   error: null,
 };
-async function flush() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 15));
+const meetingDetail = {
+  ...meeting,
+  transcript: [{ speaker: "Ada", startMs: 61000, endMs: 65000, text: "Ship the small version." }],
+};
+async function waitFor(assertion: () => void) {
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    assertion();
   });
 }
 async function render(url = "") {
@@ -80,24 +85,28 @@ async function render(url = "") {
       </QueryClientProvider>,
     ),
   );
-  await flush();
+  await waitFor(() => {
+    expect(
+      container.querySelector("section") ||
+        container.textContent?.includes("Meetings are not available on this server."),
+    ).toBeTruthy();
+  });
 }
 async function click(label: string) {
-  const button = Array.from(container.querySelectorAll("button")).find((entry) =>
-    entry.textContent?.includes(label),
-  );
-  expect(button).toBeTruthy();
+  let button: HTMLButtonElement | undefined;
+  await waitFor(() => {
+    button = Array.from(container.querySelectorAll("button")).find((entry) =>
+      entry.textContent?.includes(label),
+    );
+    expect(button).toBeTruthy();
+  });
   await act(async () => button!.click());
-  await flush();
 }
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.status.mockResolvedValue({ enabled: true, dailyLimit: 10, maxMinutes: 60 });
   mocks.list.mockResolvedValue([]);
-  mocks.get.mockResolvedValue({
-    ...meeting,
-    transcript: [{ speaker: "Ada", startMs: 61000, endMs: 65000, text: "Ship the small version." }],
-  });
+  mocks.get.mockResolvedValue(meetingDetail);
   mocks.create.mockResolvedValue(meeting);
   mocks.leave.mockResolvedValue({ ok: true });
   mocks.remove.mockResolvedValue({ ok: true });
@@ -140,19 +149,33 @@ describe("Meetings", () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("shows speaker timings and requires confirmation before deleting", async () => {
-    mocks.list.mockResolvedValue([meeting]);
+    mocks.list.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return [meeting];
+    });
+    mocks.get.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return meetingDetail;
+    });
     await render();
     await click("Design review");
-    expect(container.textContent).toContain("Ada");
-    expect(container.textContent).toContain("1:01–1:05");
-    expect(container.textContent).toContain("Ship the small version.");
+    await waitFor(() => {
+      expect(container.textContent).toContain("Ada");
+      expect(container.textContent).toContain("1:01–1:05");
+      expect(container.textContent).toContain("Ship the small version.");
+    });
     await click("Delete meeting");
     expect(mocks.remove).not.toHaveBeenCalled();
     await click("Confirm deletion");
-    expect(mocks.remove).toHaveBeenCalledWith({ meetingId: "meeting-1" });
+    await waitFor(() => {
+      expect(mocks.remove).toHaveBeenCalledWith({ meetingId: "meeting-1" });
+    });
   });
   it("gates the join form and list when the server has disabled meetings", async () => {
-    mocks.status.mockResolvedValue({ enabled: false, dailyLimit: 10, maxMinutes: 60 });
+    mocks.status.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      return { enabled: false, dailyLimit: 10, maxMinutes: 60 };
+    });
     await render();
     expect(container.querySelector("form")).toBeNull();
     expect(mocks.list).not.toHaveBeenCalled();
