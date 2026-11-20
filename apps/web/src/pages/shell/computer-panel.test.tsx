@@ -120,7 +120,22 @@ it.each([null, computer("stopped"), computer("suspended")])(
 it("previews a running computer's screen", async () => {
   await render(computer("running"));
   expect(container.querySelector('[data-state="idle"]')).toBeNull();
-  expect(container.querySelector("iframe")).not.toBeNull();
+  expect(container.querySelector("iframe")?.getAttribute("sandbox")).toBe(
+    "allow-scripts allow-same-origin allow-pointer-lock",
+  );
+});
+
+it("remounts the preview under its new sandbox when the screen changes origin", async () => {
+  await render(computer("running"));
+  const remote = container.querySelector("iframe");
+  await render(computer("running"), vi.fn(), undefined, {
+    embeddedScreenUrl: "/novnc/vnc.html",
+  });
+  const local = container.querySelector("iframe");
+  expect(local).not.toBe(remote);
+  expect(local?.getAttribute("sandbox")).toBe("allow-scripts allow-pointer-lock");
+  await render(computer("running"), vi.fn(), undefined, { embeddedScreenUrl: "/app" });
+  expect(container.querySelector("iframe")).toBeNull();
 });
 
 it.each([computer("running"), computer("suspended")])(

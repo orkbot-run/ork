@@ -23,6 +23,7 @@ import {
   parseMessagingCommand,
   promptTextForAttachments,
   sanitizeMessagingLabel,
+  stripDirectionalControls,
   unavailableAttachmentLabel,
 } from "@orkbot/core";
 import type {
@@ -132,6 +133,14 @@ type IdentityRow = {
  */
 export function createMessagingInboundHandler(deps: MessagingInboundDeps) {
   return async (event: MessagingInboundMessage): Promise<void> => {
+    // Provider metadata is an identity label; content and attachment text remain literal.
+    event = {
+      ...event,
+      ...(event.fromLabel != null ? { fromLabel: stripDirectionalControls(event.fromLabel) } : {}),
+      ...(event.channelName != null
+        ? { channelName: stripDirectionalControls(event.channelName) }
+        : {}),
+    };
     if (!event.isDirect) {
       await handleChannelEvent(deps, event);
       return;
@@ -437,8 +446,10 @@ export async function wakeMessageRoutines(
     kind: event.isDirect ? "direct" : "channel",
     handle: event.handle,
     from: event.from,
-    fromLabel: event.fromLabel,
-    channelName: event.channelName,
+    fromLabel:
+      event.fromLabel == null ? event.fromLabel : stripDirectionalControls(event.fromLabel),
+    channelName:
+      event.channelName == null ? event.channelName : stripDirectionalControls(event.channelName),
     content: event.content,
     mediaUrl: event.mediaUrl,
     ...(options?.unavailable?.length ? { unavailable: options.unavailable } : {}),
@@ -1074,11 +1085,11 @@ async function handleChannelEvent(
     ...(event.transport ? { transport: event.transport } : {}),
     channelId: channel.id,
     fromAddress: event.from,
-    fromLabel,
+    fromLabel: stripDirectionalControls(fromLabel),
     text: event.content,
     hop: 0,
   };
-  const prompt = `[Group "${channel.name ?? "group"}", ${fromLabel}]: ${event.content}`;
+  const prompt = `[Group "${sanitizeMessagingLabel(channel.name ?? "group")}", ${sanitizeMessagingLabel(fromLabel)}]: ${event.content}`;
   for (const member of approved) {
     const identity = await deps.prisma.messagingIdentity.findUnique({
       where: { id: member.identityId! },

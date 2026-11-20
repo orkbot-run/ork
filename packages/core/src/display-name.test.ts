@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors (inherited material)
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache tests are preserved; directional-control regressions are Ork additions.
+
 import { describe, expect, it } from "vitest";
 import { accountDisplay, displayMessageBlock, displayName } from "./display-name.js";
 
@@ -11,6 +16,10 @@ const opaque = [
 ];
 
 describe("displayName", () => {
+  it("strips directional formatting from existing names without changing RTL or joiners", () => {
+    expect(displayName("\u202eAlice שלום 👩‍💻\u2069", "Bot")).toBe("Alice שלום 👩‍💻");
+    expect(displayName("\u202e\u2069", "Bot")).toBe("Bot");
+  });
   it.each([undefined, null, "", "  ", "__", "💬", ...opaque])(
     "hides opaque or empty names: %s",
     (name) => {
@@ -82,4 +91,20 @@ it("guards identity metadata without changing literal message text", () => {
   });
   const text = { kind: "text" as const, text: "__TestTok1__" };
   expect(displayMessageBlock(text)).toBe(text);
+});
+
+it("projects stored channel sender labels without altering message text", () => {
+  const block = {
+    kind: "channel_message" as const,
+    provider: "test",
+    channelId: "group",
+    fromAddress: "member",
+    fromLabel: "Alice\u202e שלום 👩‍💻",
+    text: "Mixed שלום\u202e text",
+  };
+  expect(displayMessageBlock(block)).toMatchObject({
+    fromLabel: "Alice שלום 👩‍💻",
+    text: block.text,
+  });
+  expect(block.fromLabel).toContain("\u202e");
 });

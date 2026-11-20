@@ -95,6 +95,7 @@ function ComputerPreview({
   onOpenComputerSettings,
   onOpen,
 }: Omit<ComputerPanelProps, "cleaningUpDisk" | "onCleanUpDisk" | "onDismissDiskWarning">) {
+  const screenSandbox = screenIframeSandbox(embeddedScreenUrl);
   // A clickable preview invites a boot that costs money, so an idle computer only wakes from its button.
   const idle =
     !computerOpen &&
@@ -166,17 +167,18 @@ function ComputerPreview({
         ) : computerCapabilitiesFor(computer, computerCapabilities).screen &&
           computer?.state === "running" &&
           embeddedScreenUrl &&
+          (embeddedScreenUrl === COMPUTER_FRAME_SOURCE || screenSandbox) &&
           !computerBooting &&
           !computerScreenError ? (
           embeddedScreenUrl === COMPUTER_FRAME_SOURCE ? (
             <NativeComputerScreen key={screenFrameKey} botId={bot.id} onFrameError={onFrameError} />
           ) : (
             <iframe
-              key={screenFrameKey}
+              key={`${screenFrameKey}:${screenSandbox}`}
               title={t`Bot screen preview`}
               ref={screenFrameRef}
               src={embeddedScreenUrl}
-              sandbox={screenIframeSandbox(embeddedScreenUrl)}
+              sandbox={screenSandbox}
               className="h-full w-full border-0 bg-black"
               allow="clipboard-read; clipboard-write"
               style={{ pointerEvents: "none" }}

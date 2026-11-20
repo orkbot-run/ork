@@ -125,13 +125,11 @@ export function createDb(
     adapter,
     transactionOptions: { maxWait: CHECKOUT_TIMEOUT_MS },
   });
-  // Row-level security wraps everything else, so its findUnique rewrite still runs
-  // through content encryption. Text is cleaned for Postgres before any of them see it.
-  const prisma = withTextSanitization(
-    withRowLevelSecurity(
-      withContentEncryption(client, contentKeys),
-      rlsBypassKey(connectionString),
-    ),
+  // Prisma runs hooks in registration order. Clean text before encryption and project
+  // names after decryption; RLS rewrites must retain both extensions on their client.
+  const prisma = withRowLevelSecurity(
+    withContentEncryption(withTextSanitization(client), contentKeys),
+    rlsBypassKey(connectionString),
   );
   return { prisma, pool, contentKeys };
 }

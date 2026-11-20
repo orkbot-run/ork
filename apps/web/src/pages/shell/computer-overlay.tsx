@@ -81,6 +81,7 @@ export function ComputerOverlay({
   onRefreshComputer,
   onClose,
 }: ComputerOverlayProps) {
+  const screenSandbox = screenIframeSandbox(embeddedScreenUrl);
   return (
     <div className="fixed inset-0 z-30 bg-background">
       <div
@@ -206,6 +207,7 @@ export function ComputerOverlay({
           ) : computerCapabilitiesFor(computer).screen &&
             computer?.state === "running" &&
             embeddedScreenUrl &&
+            (embeddedScreenUrl === COMPUTER_FRAME_SOURCE || screenSandbox) &&
             !computerBooting &&
             !computerScreenError ? (
             <>
@@ -220,11 +222,11 @@ export function ComputerOverlay({
                 />
               ) : (
                 <iframe
-                  key={screenFrameKey}
+                  key={`${screenFrameKey}:${screenSandbox}`}
                   title={t`Bot screen`}
                   ref={screenFrameRef}
                   src={embeddedScreenUrl}
-                  sandbox={screenIframeSandbox(embeddedScreenUrl)}
+                  sandbox={screenSandbox}
                   className="h-full w-full border-0 bg-black"
                   allow="clipboard-read; clipboard-write; fullscreen"
                   style={{

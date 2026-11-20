@@ -202,3 +202,86 @@ it("retries private diagnostics after a rejected read settles", async () => {
   });
   expect(internal).toHaveBeenCalledTimes(2);
 });
+
+it.each([
+  ["127.0.0.1", 200],
+  ["127.42.0.1", 200],
+  ["::1", 200],
+  ["10.2.3.4", 200],
+  ["172.17.0.1", 200],
+  ["192.168.1.2", 200],
+  ["fd00::1", 200],
+  ["::ffff:127.0.0.1", 200],
+  ["::ffff:ac11:1", 200],
+  ["203.0.113.7", 404],
+  ["2606:4700::1111", 404],
+  ["::ffff:203.0.113.7", 404],
+  ["::ffff:cb00:7107", 404],
+  ["fe80::1", 404],
+  ["0.0.0.0", 404],
+  ["::", 404],
+  ["172.32.0.1", 404],
+  ["192.0.2.1", 404],
+  ["not-an-ip", 404],
+  ["", 404],
+  ["127.0.0.1:1234", 404],
+  ["[::1]", 404],
+  [undefined, 404],
+] as const)(
+  "checks the actual socket peer %s before loading private details",
+  async (remoteAddress, status) => {
+    const details = vi.fn(() => ({ revision: "fixture-revision" }));
+    const internal = vi.fn(async () => ({ integrations: [] }));
+    const health = healthRoutes(details, undefined, internal);
+    const response = await health.request(
+      "/internal/health",
+      {},
+      {
+        incoming: { socket: { remoteAddress } },
+      },
+    );
+    expect(response.status).toBe(status);
+    expect(internal).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
+    expect(details).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
+  },
+);
+
+it.each([
+  { incoming: {} },
+  { incoming: null },
+  { server: {} },
+  { server: { incoming: { socket: { remoteAddress: "203.0.113.7" } } } },
+])("fails closed for invalid or public server socket bindings", async (env) => {
+  expect((await app.request("/internal/health", {}, env)).status).toBe(404);
+});
+
+it.each(["x-forwarded-for", "forwarded"])(
+  "refuses even empty %s from a private socket",
+  async (header) => {
+    expect(
+      (
+        await app.request(
+          "/internal/health",
+          { headers: { [header]: "" } },
+          {
+            incoming: { socket: { remoteAddress: "127.0.0.1" } },
+          },
+        )
+      ).status,
+    ).toBe(404);
+  },
+);
+
+it("accepts a private peer from wrapped Node server bindings", async () => {
+  expect(
+    (
+      await app.request(
+        "/internal/health",
+        {},
+        {
+          server: { incoming: { socket: { remoteAddress: "::ffff:192.168.1.2" } } },
+        },
+      )
+    ).status,
+  ).toBe(200);
+});

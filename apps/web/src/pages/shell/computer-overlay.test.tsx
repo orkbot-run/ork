@@ -120,6 +120,18 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+it("sandboxes full-window screens and rejects unrelated app pages", async () => {
+  await render("running", vi.fn(), { embeddedScreenUrl: "/computer-screen/screen.html" });
+  const local = container.querySelector("iframe");
+  expect(local?.getAttribute("sandbox")).toBe("allow-scripts allow-pointer-lock");
+  await render("running", vi.fn(), { embeddedScreenUrl: "https://vendor.example/screen.html" });
+  expect(container.querySelector("iframe")?.getAttribute("sandbox")).toBe(
+    "allow-scripts allow-same-origin allow-pointer-lock",
+  );
+  await render("running", vi.fn(), { embeddedScreenUrl: "/app" });
+  expect(container.querySelector("iframe")).toBeNull();
+});
+
 it("offers Start for a stopped computer instead of a bare label", async () => {
   const onStart = await render("stopped");
   expect(container.textContent).toContain("Computer is stopped");

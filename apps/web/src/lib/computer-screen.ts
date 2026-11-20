@@ -38,28 +38,27 @@ export async function loadComputerScreen(options: {
 export function embeddableScreenUrl(url: string | null): string | null {
   if (!url) return null;
   if (url === COMPUTER_FRAME_SOURCE) return url;
-  try {
-    const parsed = new URL(url, window.location.href);
-    const page = new URL(window.location.href);
-    // An embedded desktop is drawn by its Web SDK in a page this server serves. Its one-time login
-    // code rides in the fragment so it never reaches a server log.
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return `${page.origin}${COMPUTER_SCREEN_PATH}#${parsed.searchParams.toString()}`;
-    }
-    // The server that served this page proxies /novnc/. Keep the frame on this origin even when the
-    // API's WEB_ORIGIN names another host for it (localhost vs 127.0.0.1), as the CSP frames 'self'.
-    if (parsed.pathname.startsWith("/novnc/")) {
-      return `${page.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
-    }
-    const local = isLocalhostOrLoopbackIp(parsed.hostname);
-    const pagePort = page.port || (page.protocol === "https:" ? "443" : "80");
-    if (local && parsed.port && parsed.port !== pagePort) {
-      return null;
-    }
-    return parsed.toString();
-  } catch {
-    return url;
+  const location = screenLocation(url);
+  if (!location) return null;
+  const { target, page } = location;
+  if (target.username || target.password) return null;
+  // The SDK needs the one-time code in the fragment so it stays out of server logs.
+  if (
+    (target.protocol === "wuying:" || target.protocol === "embedded-screen:") &&
+    target.hostname === "desktop"
+  ) {
+    return `${page.origin}${COMPUTER_SCREEN_PATH}#${target.searchParams.toString()}`;
   }
+  if (!isHttpUrl(target)) return null;
+  // WEB_ORIGIN can name a different loopback host than the renderer.
+  if (target.pathname.startsWith("/novnc/")) {
+    return `${page.origin}${target.pathname}${target.search}${target.hash}`;
+  }
+  if (target.origin === page.origin && !isProxyScreenPath(target.pathname)) return null;
+  const pagePort = page.port || (page.protocol === "https:" ? "443" : "80");
+  if (isLocalhostOrLoopbackIp(target.hostname) && target.port && target.port !== pagePort)
+    return null;
+  return target.toString();
 }
 
 /**
@@ -82,16 +81,33 @@ export function sameEmbeddedComputerScreen(current: string | null, next: string 
   }
 }
 
-export function screenIframeSandbox(url: string | null) {
-  if (!url) return undefined;
+function isHttpUrl(url: URL): boolean {
+  return url.protocol === "http:" || url.protocol === "https:";
+}
+
+function screenLocation(url: string) {
+  const href = pageLocationHref();
+  if (!href) return null;
   try {
-    const pathname = new URL(url, window.location.href).pathname;
-    return pathname.startsWith("/novnc/") || pathname === COMPUTER_SCREEN_PATH
-      ? "allow-scripts allow-pointer-lock"
-      : undefined;
+    const page = new URL(href);
+    return isHttpUrl(page) ? { page, target: new URL(url, page) } : null;
   } catch {
-    return undefined;
+    return null;
   }
+}
+
+function isProxyScreenPath(pathname: string): boolean {
+  return pathname.startsWith("/novnc/") || pathname === COMPUTER_SCREEN_PATH;
+}
+
+/** Each iframe has a sandbox. Only a remote HTTP(S) screen may keep its own origin. */
+export function screenIframeSandbox(url: string | null): string {
+  const location = url ? screenLocation(url) : null;
+  if (!location) return "";
+  const { target, page } = location;
+  if (!isHttpUrl(target) || target.username || target.password) return "";
+  if (target.origin !== page.origin) return "allow-scripts allow-same-origin allow-pointer-lock";
+  return isProxyScreenPath(target.pathname) ? "allow-scripts allow-pointer-lock" : "";
 }
 
 /** Deduplicate only the boot request; callers can still take over and refresh. */
@@ -112,7 +128,15 @@ export async function bootComputerOnce<T>(
 
 /** Only pages the web proxy serves carry the shim that reports their state to the app. */
 export function isProxiedScreenUrl(url: string | null): url is string {
-  return screenIframeSandbox(url) !== undefined;
+  const location = url ? screenLocation(url) : null;
+  return Boolean(
+    location &&
+      isHttpUrl(location.target) &&
+      !location.target.username &&
+      !location.target.password &&
+      location.target.origin === location.page.origin &&
+      isProxyScreenPath(location.target.pathname),
+  );
 }
 
 /** How long a framed screen may stay silent before the app treats it as not loaded. */

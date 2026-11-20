@@ -1,5 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors (inherited material)
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; messaging-label filtering is an Ork addition.
+
 import type { Actor, ExternalConversation, ExternalConversationPolicy } from "@orkbot/contracts";
 import { AutomatedSenderPoliciesSchema } from "@orkbot/contracts";
+import { stripDirectionalControls } from "@orkbot/core";
 import type { PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";
 import { withNewestThreadMessages } from "./preview-messages.js";
@@ -65,7 +71,10 @@ export function createExternalConversationRepos(prisma: PrismaClient) {
         Array<{ senderId: string; senderName: string }>
       >();
       for (const row of senderRows) {
-        const sender = { senderId: row.senderId, senderName: row.senderName };
+        const sender = {
+          senderId: row.senderId,
+          senderName: stripDirectionalControls(row.senderName),
+        };
         const list = messagesByConversation.get(row.externalConversationId);
         if (list) list.push(sender);
         else messagesByConversation.set(row.externalConversationId, [sender]);

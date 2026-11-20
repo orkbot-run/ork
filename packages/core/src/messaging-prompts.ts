@@ -4,6 +4,7 @@
 // Inherited Apache-2.0 material is preserved; bounded attachment failure labels are Ork additions.
 
 import type { MessageBlock } from "@orkbot/contracts";
+import { stripDirectionalControls } from "./directional-controls.js";
 
 /** Instruction-stack note for bots whose owner has a messaging identity. */
 export function messagingDmSurfaceNote(): string {
@@ -49,7 +50,7 @@ export function isMessagingChannelRun(
  * into prompts and DMs; strip framing characters before they get near one.
  */
 export function sanitizeMessagingLabel(value: string): string {
-  return value
+  return stripDirectionalControls(value)
     .replace(/[\r\n"[\]]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
