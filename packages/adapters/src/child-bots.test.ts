@@ -609,80 +609,151 @@ describe("destroyBot", () => {
     expect(removeArtifact).not.toHaveBeenCalled();
   });
 
-  it("deletes the waiting one-time answer of a run it cancels", async () => {
-    const deleteSecrets = vi.fn().mockResolvedValue({ count: 1 });
-    const transaction = vi.fn(async (callback: (tx: unknown) => Promise<void>) =>
-      callback({
-        $queryRaw: vi.fn().mockResolvedValue([{ id: "bot-1" }]),
-        chatGroup: {
-          findMany: vi.fn().mockResolvedValue([]),
-          deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+  it.each(["completed", "failed"])(
+    "cleans only cancelled work when a run became %s before deletion",
+    async (terminalStatus) => {
+      const activeRun = { id: "run-1", taskId: "task-1", userId: "user-1", spaceId: "workspace-1" };
+      const terminalRun = { ...activeRun, id: "finished-run", taskId: "finished-task" };
+      const finishedAt = new Date("2026-08-16T12:00:00.000Z");
+      const finished = {
+        ...terminalRun,
+        status: terminalStatus,
+        completedAt: finishedAt,
+        leaseOwner: null,
+      };
+      const rows = [
+        {
+          ...activeRun,
+          status: "running",
+          completedAt: null as Date | null,
+          leaseOwner: "worker-1" as string | null,
         },
-        artifact: {
-          findMany: vi.fn().mockResolvedValue([]),
-          deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+        finished,
+      ];
+      const cancelRuns = vi.fn(
+        async (query: {
+          where: { id: { in: string[] }; status: { in: string[] } };
+          data: { status: string; completedAt: Date; leaseOwner: null };
+        }) =>
+          rows
+            .filter(
+              (run) =>
+                query.where.id.in.includes(run.id) && query.where.status.in.includes(run.status),
+            )
+            .map((run) => {
+              Object.assign(run, query.data);
+              return { id: run.id };
+            }),
+      );
+      const cancelAttempts = vi.fn().mockResolvedValue({ count: 1 });
+      const cancelTasks = vi.fn().mockResolvedValue({ count: 1 });
+      const cancel = vi.fn().mockResolvedValue(undefined);
+      const deleteSecrets = vi.fn().mockResolvedValue({ count: 1 });
+      const transaction = vi.fn(async (callback: (tx: unknown) => Promise<void>) =>
+        callback({
+          externalEffect: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+          message: { findMany: vi.fn().mockResolvedValue([]) },
+          run: {
+            updateManyAndReturn: cancelRuns,
+            findMany: vi.fn().mockResolvedValue([activeRun]),
+          },
+          attempt: { updateMany: cancelAttempts },
+          task: { updateMany: cancelTasks },
+          $queryRaw: vi.fn().mockResolvedValue([{ id: "bot-1" }]),
+          chatGroup: {
+            findMany: vi.fn().mockResolvedValue([]),
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+          },
+          artifact: {
+            findMany: vi.fn().mockResolvedValue([]),
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+          },
+          page: {
+            updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+          },
+          secret: {
+            findMany: vi.fn().mockResolvedValue([]),
+            deleteMany: deleteSecrets,
+          },
+          computerExecutionLease: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+          computer: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+          $executeRaw: vi.fn().mockResolvedValue(1),
+          botDeletion: { create: vi.fn().mockResolvedValue({}) },
+          bot: { delete: vi.fn().mockResolvedValue({}) },
+        }),
+      );
+      const prisma = {
+        computer: { findUnique: vi.fn().mockResolvedValue(null) },
+        run: {
+          findMany: vi.fn().mockResolvedValue([activeRun, terminalRun]),
         },
-        page: {
-          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-          deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
-        },
-        secret: {
-          findMany: vi.fn().mockResolvedValue([]),
-          deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
-        },
-        computerExecutionLease: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
-        computer: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-        $executeRaw: vi.fn().mockResolvedValue(1),
-        botDeletion: { create: vi.fn().mockResolvedValue({}) },
-        bot: { delete: vi.fn().mockResolvedValue({}) },
-      }),
-    );
-    const prisma = {
-      computer: { findUnique: vi.fn().mockResolvedValue(null) },
-      run: {
-        findMany: vi
-          .fn()
-          .mockResolvedValueOnce([{ id: "run-1" }])
-          .mockResolvedValueOnce([{ id: "run-1", userId: "user-1", spaceId: "workspace-1" }]),
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-      },
-      externalEffect: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
-      message: { findMany: vi.fn(async () => []) },
-      secret: { findMany: vi.fn().mockResolvedValue([]), deleteMany: deleteSecrets },
-      routine: { findMany: vi.fn().mockResolvedValue([]) },
-      $transaction: transaction,
-    } as unknown as PrismaClient;
+        externalEffect: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+        message: { findMany: vi.fn(async () => []) },
+        secret: { findMany: vi.fn().mockResolvedValue([]), deleteMany: deleteSecrets },
+        routine: { findMany: vi.fn().mockResolvedValue([]) },
+        $transaction: transaction,
+      } as unknown as PrismaClient;
 
-    await destroyBot(
-      {
-        prisma,
-        sandbox: {} as SandboxProvider,
-        home: {} as AgentHomeStore,
-        jobs: { cancel: vi.fn() } as unknown as JobPublisher,
-        artifacts: { remove: vi.fn() } as unknown as ArtifactStore,
-      },
-      {
-        id: "bot-1",
-        spaceId: "workspace-1",
-        userId: "user-1",
-        name: "Researcher",
-        archivedAt: null,
-      },
-      context,
-      { deleteMemories: false },
-    );
+      await destroyBot(
+        {
+          prisma,
+          sandbox: {} as SandboxProvider,
+          home: {} as AgentHomeStore,
+          jobs: { cancel } as unknown as JobPublisher,
+          artifacts: { remove: vi.fn() } as unknown as ArtifactStore,
+        },
+        {
+          id: "bot-1",
+          spaceId: "workspace-1",
+          userId: "user-1",
+          name: "Researcher",
+          archivedAt: null,
+        },
+        context,
+        { deleteMemories: false },
+      );
 
-    expect(deleteSecrets).toHaveBeenCalledWith({
-      where: {
-        OR: [
-          { userId: "user-1", spaceId: "workspace-1", kind: "run-secret:run-1" },
-          { userId: "user-1", spaceId: "workspace-1", kind: "run-code:run-1" },
-          { userId: "user-1", spaceId: "workspace-1", kind: "run-code-spent:run-1" },
-          { userId: "user-1", spaceId: "workspace-1", kind: { startsWith: "run-login:run-1:" } },
-        ],
-      },
-    });
-  });
+      expect(cancelRuns).toHaveBeenCalledWith({
+        where: {
+          id: { in: ["run-1", "finished-run"] },
+          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+        },
+        data: {
+          status: "cancelled",
+          completedAt: expect.any(Date),
+          leaseOwner: null,
+          leaseExpiresAt: null,
+        },
+        select: { id: true },
+      });
+      expect(cancelAttempts).toHaveBeenCalledWith({
+        where: { runId: { in: ["run-1"] }, status: "running" },
+        data: { status: "cancelled", finishedAt: expect.any(Date) },
+      });
+      expect(cancelTasks).toHaveBeenCalledWith({
+        where: { id: { in: ["task-1"] } },
+        data: { status: "cancelled" },
+      });
+      expect(finished).toEqual({
+        ...terminalRun,
+        status: terminalStatus,
+        completedAt: finishedAt,
+        leaseOwner: null,
+      });
+      expect(cancel.mock.calls).toEqual([["run:run-1"]]);
+      expect(deleteSecrets).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { userId: "user-1", spaceId: "workspace-1", kind: "run-secret:run-1" },
+            { userId: "user-1", spaceId: "workspace-1", kind: "run-code:run-1" },
+            { userId: "user-1", spaceId: "workspace-1", kind: "run-code-spent:run-1" },
+            { userId: "user-1", spaceId: "workspace-1", kind: { startsWith: "run-login:run-1:" } },
+          ],
+        },
+      });
+    },
+  );
 
   it("dissolves groups with fewer than two active members after deleting the bot", async () => {
     const deleteGroups = vi.fn().mockResolvedValue({ count: 1 });
@@ -2188,86 +2259,152 @@ describe("destroyBot", () => {
 });
 
 describe("archiveBot", () => {
-  it("stops work and routines while preserving the bot", async () => {
-    const updateBot = vi.fn().mockResolvedValue({});
-    const disableRoutines = vi.fn().mockResolvedValue({ count: 2 });
-    const groupCleanup = noGroupMemberships();
-    const deleteSecrets = vi.fn().mockResolvedValue({ count: 1 });
-    const transaction = vi.fn(async (callback: (tx: unknown) => Promise<void>) =>
-      callback({
-        externalEffect: { deleteMany: vi.fn(async () => ({ count: 0 })) },
-        message: { findMany: vi.fn(async () => []) },
-        ...groupCleanup,
-        run: {
-          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-          findMany: vi
-            .fn()
-            .mockResolvedValue([{ id: "run-1", userId: "user-1", spaceId: "workspace-1" }]),
+  it.each(["completed", "failed"])(
+    "stops active work while preserving a run that became %s before archive cancellation",
+    async (terminalStatus) => {
+      const activeRun = { id: "run-1", taskId: "task-1", userId: "user-1", spaceId: "workspace-1" };
+      const terminalRun = { ...activeRun, id: "finished-run", taskId: "finished-task" };
+      const finishedAt = new Date("2026-08-16T12:00:00.000Z");
+      const finished = {
+        ...terminalRun,
+        status: terminalStatus,
+        completedAt: finishedAt,
+        leaseOwner: null,
+      };
+      const rows = [
+        {
+          ...activeRun,
+          status: "running",
+          completedAt: null as Date | null,
+          leaseOwner: "worker-1" as string | null,
         },
-        task: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-        secret: { findMany: vi.fn().mockResolvedValue([]), deleteMany: deleteSecrets },
-        routine: { updateMany: disableRoutines },
-        computerExecutionLease: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-        computer: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-        bot: { update: updateBot },
-      }),
-    );
-    const cancel = vi.fn().mockResolvedValue(undefined);
-    const prisma = {
-      bot: {
-        findUnique: vi.fn().mockResolvedValue({
+        finished,
+      ];
+      const cancelRuns = vi.fn(
+        async (query: {
+          where: { id: { in: string[] }; status: { in: string[] } };
+          data: { status: string; completedAt: Date; leaseOwner: null };
+        }) =>
+          rows
+            .filter(
+              (run) =>
+                query.where.id.in.includes(run.id) && query.where.status.in.includes(run.status),
+            )
+            .map((run) => {
+              Object.assign(run, query.data);
+              return { id: run.id };
+            }),
+      );
+      const cancelAttempts = vi.fn().mockResolvedValue({ count: 1 });
+      const cancelTasks = vi.fn().mockResolvedValue({ count: 1 });
+      const updateBot = vi.fn().mockResolvedValue({});
+      const disableRoutines = vi.fn().mockResolvedValue({ count: 2 });
+      const groupCleanup = noGroupMemberships();
+      const deleteSecrets = vi.fn().mockResolvedValue({ count: 1 });
+      const transaction = vi.fn(async (callback: (tx: unknown) => Promise<void>) =>
+        callback({
+          externalEffect: { deleteMany: vi.fn(async () => ({ count: 0 })) },
+          message: { findMany: vi.fn(async () => []) },
+          ...groupCleanup,
+          run: {
+            updateManyAndReturn: cancelRuns,
+            findMany: vi
+              .fn()
+              .mockResolvedValue([{ id: "run-1", userId: "user-1", spaceId: "workspace-1" }]),
+          },
+          attempt: { updateMany: cancelAttempts },
+          task: { updateMany: cancelTasks },
+          secret: { findMany: vi.fn().mockResolvedValue([]), deleteMany: deleteSecrets },
+          routine: { updateMany: disableRoutines },
+          computerExecutionLease: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+          computer: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+          bot: { update: updateBot },
+        }),
+      );
+      const cancel = vi.fn().mockResolvedValue(undefined);
+      const prisma = {
+        bot: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "bot-1",
+            spaceId: "workspace-1",
+            archivedAt: null,
+          }),
+        },
+        computer: { findUnique: vi.fn().mockResolvedValue(null) },
+        run: { findMany: vi.fn().mockResolvedValue([activeRun, terminalRun]) },
+        routine: { findMany: vi.fn().mockResolvedValue([]) },
+        $transaction: transaction,
+      } as unknown as PrismaClient;
+
+      await archiveBot(
+        {
+          prisma,
+          sandbox: {} as SandboxProvider,
+          home: {} as AgentHomeStore,
+          jobs: { cancel } as unknown as JobPublisher,
+        },
+        {
           id: "bot-1",
           spaceId: "workspace-1",
+          userId: "user-1",
+          name: "Researcher",
           archivedAt: null,
-        }),
-      },
-      computer: { findUnique: vi.fn().mockResolvedValue(null) },
-      run: { findMany: vi.fn().mockResolvedValue([{ id: "run-1" }]) },
-      routine: { findMany: vi.fn().mockResolvedValue([]) },
-      $transaction: transaction,
-    } as unknown as PrismaClient;
+        },
+        context,
+      );
 
-    await archiveBot(
-      {
-        prisma,
-        sandbox: {} as SandboxProvider,
-        home: {} as AgentHomeStore,
-        jobs: { cancel } as unknown as JobPublisher,
-      },
-      {
-        id: "bot-1",
-        spaceId: "workspace-1",
-        userId: "user-1",
-        name: "Researcher",
-        archivedAt: null,
-      },
-      context,
-    );
-
-    expect(disableRoutines).toHaveBeenCalledWith({
-      where: { botId: "bot-1" },
-      data: { active: false, nextRunAt: null },
-    });
-    expect(updateBot).toHaveBeenCalledWith({
-      where: { id: "bot-1" },
-      data: { archivedAt: expect.any(Date), pinned: false },
-    });
-    expect(groupCleanup.$queryRaw).not.toHaveBeenCalled();
-    expect(groupCleanup.chatGroup.deleteMany).not.toHaveBeenCalled();
-    expect(groupCleanup.chatGroupMember.deleteMany).not.toHaveBeenCalled();
-    // The archived bot's cancelled run never reads a waiting one-time answer.
-    expect(deleteSecrets).toHaveBeenCalledWith({
-      where: {
-        OR: [
-          { userId: "user-1", spaceId: "workspace-1", kind: "run-secret:run-1" },
-          { userId: "user-1", spaceId: "workspace-1", kind: "run-code:run-1" },
-          { userId: "user-1", spaceId: "workspace-1", kind: "run-code-spent:run-1" },
-          { userId: "user-1", spaceId: "workspace-1", kind: { startsWith: "run-login:run-1:" } },
-        ],
-      },
-    });
-    expect(cancel).toHaveBeenCalledWith("run:run-1");
-  });
+      expect(disableRoutines).toHaveBeenCalledWith({
+        where: { botId: "bot-1" },
+        data: { active: false, nextRunAt: null },
+      });
+      expect(updateBot).toHaveBeenCalledWith({
+        where: { id: "bot-1" },
+        data: { archivedAt: expect.any(Date), pinned: false },
+      });
+      expect(groupCleanup.$queryRaw).not.toHaveBeenCalled();
+      expect(groupCleanup.chatGroup.deleteMany).not.toHaveBeenCalled();
+      expect(groupCleanup.chatGroupMember.deleteMany).not.toHaveBeenCalled();
+      // The archived bot's cancelled run never reads a waiting one-time answer.
+      expect(deleteSecrets).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { userId: "user-1", spaceId: "workspace-1", kind: "run-secret:run-1" },
+            { userId: "user-1", spaceId: "workspace-1", kind: "run-code:run-1" },
+            { userId: "user-1", spaceId: "workspace-1", kind: "run-code-spent:run-1" },
+            { userId: "user-1", spaceId: "workspace-1", kind: { startsWith: "run-login:run-1:" } },
+          ],
+        },
+      });
+      expect(cancelRuns).toHaveBeenCalledWith({
+        where: {
+          id: { in: ["run-1", "finished-run"] },
+          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+        },
+        data: {
+          status: "cancelled",
+          completedAt: expect.any(Date),
+          leaseOwner: null,
+          leaseExpiresAt: null,
+        },
+        select: { id: true },
+      });
+      expect(cancelAttempts).toHaveBeenCalledWith({
+        where: { runId: { in: ["run-1"] }, status: "running" },
+        data: { status: "cancelled", finishedAt: expect.any(Date) },
+      });
+      expect(cancelTasks).toHaveBeenCalledWith({
+        where: { id: { in: ["task-1"] } },
+        data: { status: "cancelled" },
+      });
+      expect(finished).toEqual({
+        ...terminalRun,
+        status: terminalStatus,
+        completedAt: finishedAt,
+        leaseOwner: null,
+      });
+      expect(cancel.mock.calls).toEqual([["run:run-1"]]);
+    },
+  );
 
   it("surfaces computer stop failures and leaves the provider state retryable", async () => {
     const archivedAt = new Date("2026-08-16T12:00:00.000Z");
