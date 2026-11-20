@@ -12,6 +12,7 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "re
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useIdentityConfirmation } from "../../components/confirm-identity";
 import { LoadFailure } from "../../components/load-failure";
+import { NativeSymbol } from "../../components/native-symbol";
 import { SettingsGroup, SettingsRow, SettingsSwitch } from "../../components/settings-group";
 import { VaultItemEditor } from "../../components/vault-item-editor";
 import { mobileTokens } from "../../lib/appearance";
@@ -21,7 +22,13 @@ import { queryClient, rpcQuery } from "../../lib/query";
 import { ACCOUNT_SETTINGS, captureSettingsContext } from "../../lib/settings-target";
 import { useSideInsets } from "../../lib/side-insets";
 import type { VaultItem, VaultSave } from "../../lib/vault";
-import { billingChoices, readableItem, vaultItemSubtitle, vaultKindLabel } from "../../lib/vault";
+import {
+  billingChoices,
+  readableItem,
+  vaultItemSubtitle,
+  vaultKindLabel,
+  vaultKindSymbol,
+} from "../../lib/vault";
 
 export default function OrganizationVaultScreen() {
   const { t } = useI18n();
@@ -43,11 +50,12 @@ export default function OrganizationVaultScreen() {
     },
     queryClient,
   );
+  const [accessItem, setAccessItem] = useState<string | null>(null);
   const workspaces = useQuery(
     {
-      ...rpcQuery("organizationVault/workspaces"),
-      queryFn: () => rpc("organizationVault/workspaces"),
-      enabled: shared,
+      ...rpcQuery("organizationVault/credentialWorkspaces", { name: accessItem ?? "" }),
+      queryFn: () => rpc("organizationVault/credentialWorkspaces", { name: accessItem! }),
+      enabled: shared && accessItem !== null,
     },
     queryClient,
   );
@@ -66,6 +74,7 @@ export default function OrganizationVaultScreen() {
       return () => {
         focused.current = false;
         setEditing(null);
+        setAccessItem(null);
       };
     }, []),
   );
@@ -130,7 +139,7 @@ export default function OrganizationVaultScreen() {
                 "Your organization's server manages these secrets. Ork Accounts does not receive them. Only organization admins can manage this vault.",
               )}
             </Text>
-            {items.isError || workspaces.isError ? (
+            {items.isError || (accessItem && workspaces.isError) ? (
               <LoadFailure
                 message={t(
                   "Could not load the organization vault. Check your access and try again.",
@@ -146,7 +155,7 @@ export default function OrganizationVaultScreen() {
                 {error}
               </Text>
             ) : null}
-            {items.isSuccess && workspaces.isSuccess ? (
+            {items.isSuccess ? (
               <MenuView
                 colorScheme={colorScheme}
                 title={t("New item")}
@@ -161,7 +170,8 @@ export default function OrganizationVaultScreen() {
                   accessibilityLabel={t("New item")}
                   style={styles.add}
                 >
-                  <Text style={styles.addText}>+ {t("New item")}</Text>
+                  <NativeSymbol ios="plus" android="add" size={18} />
+                  <Text style={styles.addText}>{t("New item")}</Text>
                 </View>
               </MenuView>
             ) : null}
@@ -171,15 +181,28 @@ export default function OrganizationVaultScreen() {
             <SettingsGroup label={t("Secrets")}>
               {items.data?.map((item) => {
                 const readable = readableItem(item);
+                const symbol = readable
+                  ? vaultKindSymbol(vaultKind(readable.auth.type))
+                  : { ios: "questionmark", android: "help" };
                 return (
                   <SettingsRow
                     key={item.name}
                     title={item.title || item.name}
                     detail={vaultItemSubtitle(item)}
+                    leading={
+                      <View style={styles.tile}>
+                        <NativeSymbol
+                          ios={symbol.ios}
+                          android={symbol.android as never}
+                          size={17}
+                        />
+                      </View>
+                    }
                     chevron="right"
                     disabled={pending}
                     onPress={() =>
                       Alert.alert(item.title || item.name, undefined, [
+                        { text: t("Workspace access"), onPress: () => setAccessItem(item.name) },
                         ...(readable
                           ? [
                               {
@@ -219,30 +242,39 @@ export default function OrganizationVaultScreen() {
                 );
               })}
             </SettingsGroup>
-            <SettingsGroup
-              label={t("Workspace access")}
-              footer={t(
-                "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.",
-              )}
-            >
-              {workspaces.data?.map((space) => (
-                <SettingsSwitch
-                  key={space.id}
-                  label={space.name}
-                  detail={space.state}
-                  value={space.granted}
-                  disabled={pending}
-                  onChange={(allowed) => {
-                    setPending(true);
-                    setError(null);
-                    void rpc("organizationVault/setWorkspaceAccess", { spaceId: space.id, allowed })
-                      .then(() => workspaces.refetch())
-                      .catch(() => setError(t("Could not change workspace access.")))
-                      .finally(() => setPending(false));
-                  }}
-                />
-              ))}
-            </SettingsGroup>
+            {accessItem ? (
+              <SettingsGroup
+                label={
+                  t("Workspace access") +
+                  ": " +
+                  (items.data?.find((item) => item.name === accessItem)?.title || accessItem)
+                }
+                footer={t("Choose which workspaces can use this secret.")}
+              >
+                <SettingsRow title={t("Back")} onPress={() => setAccessItem(null)} />
+                {workspaces.data?.map((space) => (
+                  <SettingsSwitch
+                    key={space.id}
+                    label={space.name}
+                    detail={space.state}
+                    value={space.granted}
+                    disabled={pending}
+                    onChange={(allowed) => {
+                      setPending(true);
+                      setError(null);
+                      void rpc("organizationVault/setCredentialWorkspaceAccess", {
+                        name: accessItem,
+                        spaceId: space.id,
+                        allowed,
+                      })
+                        .then(() => workspaces.refetch())
+                        .catch(() => setError(t("Could not change workspace access.")))
+                        .finally(() => setPending(false));
+                    }}
+                  />
+                ))}
+              </SettingsGroup>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -269,6 +301,9 @@ function createStyles() {
     description: { color: native.secondaryLabel, fontSize: 14, lineHeight: 20 },
     error: { color: tokens.destructive, fontSize: 14 },
     add: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
       alignSelf: "flex-start",
       paddingVertical: 10,
       paddingHorizontal: 14,
@@ -276,5 +311,13 @@ function createStyles() {
       backgroundColor: native.groupedCell,
     },
     addText: { color: native.label, fontSize: 15 },
+    tile: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: native.groupedCell,
+    },
   });
 }

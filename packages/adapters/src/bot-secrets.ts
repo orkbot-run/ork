@@ -41,6 +41,7 @@ import type { Prisma, PrismaClient } from "@orkbot/db";
 import {
   currentDbContext,
   lockSpaceSettings,
+  runAsSystem,
   runAsTenant,
   runCodeKind,
   runCodeSpentKind,
@@ -118,6 +119,25 @@ async function organizationVaultRows(
     (context.userId !== scope.userId || context.spaceId !== scope.spaceId)
   )
     throw new Error("Workspace access denied");
+  const allowedIds = async () =>
+    runAsSystem(
+      "resolve the credentials granted to the acting workspace",
+      async () =>
+        new Set(
+          (
+            await prisma.organizationVaultCredentialGrant.findMany({
+              where: {
+                spaceId: scope.spaceId,
+                organizationId: policy.organizationId,
+                bindingVersion: policy.bindingVersion,
+              },
+              select: { credentialId: true },
+            })
+          ).map((grant) => grant.credentialId),
+        ),
+    );
+  const allowed = await allowedIds();
+  if (!allowed.size) return [];
   const rows = await runAsTenant(
     {
       userId: scope.userId,
@@ -126,17 +146,22 @@ async function organizationVaultRows(
     },
     () =>
       prisma.organizationVaultCredential.findMany({
-        where: { organizationId: policy.organizationId },
+        where: { organizationId: policy.organizationId, id: { in: [...allowed] } },
         orderBy: { name: "asc" },
       }),
   );
   const current = await organizationVaultPolicy(prisma, scope);
-  return current.kind === "shared" &&
-    current.granted &&
-    current.organizationId === policy.organizationId &&
-    current.bindingVersion === policy.bindingVersion
-    ? rows
-    : [];
+  if (
+    !(
+      current.kind === "shared" &&
+      current.granted &&
+      current.organizationId === policy.organizationId &&
+      current.bindingVersion === policy.bindingVersion
+    )
+  )
+    return [];
+  const stillAllowed = await allowedIds();
+  return rows.filter((row) => stillAllowed.has(row.id));
 }
 
 /** Even system workers must resolve credentials as the acting workspace and user. */

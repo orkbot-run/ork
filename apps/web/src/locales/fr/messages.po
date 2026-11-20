@@ -644,8 +644,8 @@ msgid "Add rule"
 msgstr "Ajouter une règle"
 
 #: src/pages/OrganizationVaultSettings.tsx
-msgid "Add secret"
-msgstr ""
+#~ msgid "Add secret"
+#~ msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
@@ -729,6 +729,7 @@ msgid "Agent from another app"
 msgstr ""
 
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "All"
 msgstr ""
@@ -768,7 +769,12 @@ msgstr "Autoriser"
 
 #. placeholder {0}: space.name
 #: src/pages/OrganizationVaultSettings.tsx
-msgid "Allow {0} to use the organization vault"
+#~ msgid "Allow {0} to use the organization vault"
+#~ msgstr ""
+
+#. placeholder {0}: space.name
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Allow {0} to use this secret"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -898,7 +904,6 @@ msgstr ""
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
@@ -1343,7 +1348,6 @@ msgstr "Ne peut pas lire les images"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/shell/create-bot-dialog.tsx
@@ -1385,7 +1389,6 @@ msgid "Cancelled"
 msgstr "Annulé"
 
 #: src/components/vault/kinds.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Card"
 msgstr ""
 
@@ -1588,8 +1591,12 @@ msgid "Choose how to use Ork"
 msgstr ""
 
 #: src/pages/OrganizationVaultSettings.tsx
-msgid "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it."
+msgid "Choose which workspaces can use this secret."
 msgstr ""
+
+#: src/pages/OrganizationVaultSettings.tsx
+#~ msgid "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it."
+#~ msgstr ""
 
 #: src/components/WorkspaceAccessGuard.tsx
 msgid "Choose workspace"
@@ -1873,7 +1880,6 @@ msgid "Confirm password"
 msgstr "Confirmer le mot de passe"
 
 #: src/components/integrations/plugin-marketplace.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Confirm removal"
 msgstr ""
 
@@ -2016,7 +2022,6 @@ msgid "Connector ID"
 msgstr ""
 
 #: src/components/vault/kinds.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Contact"
 msgstr ""
 
@@ -2383,6 +2388,7 @@ msgid "Could not load computer settings"
 msgstr ""
 
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Could not load credentials."
 msgstr ""
 
@@ -2427,8 +2433,8 @@ msgid "Could not load the desktop."
 msgstr "Impossible de charger le bureau."
 
 #: src/pages/OrganizationVaultSettings.tsx
-msgid "Could not load the organization vault. Check your access and try again."
-msgstr ""
+#~ msgid "Could not load the organization vault. Check your access and try again."
+#~ msgstr ""
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -2453,6 +2459,10 @@ msgstr "Impossible de charger les paramètres vocaux"
 #: src/pages/shell/use-routine-editor.ts
 msgid "Could not load webhook key"
 msgstr "Could not load webhook key"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not load workspace access."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not load workspace model settings."
@@ -3307,7 +3317,6 @@ msgstr "Chaque nom ne peut être utilisé qu’une fois."
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Edit"
 msgstr "Modifier"
 
@@ -4364,7 +4373,6 @@ msgid "Log out"
 msgstr "Se déconnecter"
 
 #: src/components/vault/kinds.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Login"
 msgstr ""
 
@@ -4395,8 +4403,8 @@ msgid "Make available to organization"
 msgstr ""
 
 #: src/pages/OrganizationVaultSettings.tsx
-msgid "Make credentials available to approved workspaces."
-msgstr ""
+#~ msgid "Make credentials available to approved workspaces."
+#~ msgstr ""
 
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -4878,6 +4886,7 @@ msgid "Never ask"
 msgstr "Ne jamais demander"
 
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/shell/chat-context.tsx
 #: src/pages/shell/keyboard-shortcuts-dialog.tsx
 msgid "New"
@@ -5018,6 +5027,7 @@ msgid "No managed app catalog is configured on this deployment."
 msgstr "Aucun catalogue d'applications géré n'est configuré sur ce déploiement."
 
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "No matches"
 msgstr ""
 
@@ -5091,8 +5101,8 @@ msgid "No runs yet"
 msgstr "Aucune exécution pour le moment"
 
 #: src/pages/OrganizationVaultSettings.tsx
-msgid "No secrets added yet."
-msgstr ""
+#~ msgid "No secrets added yet."
+#~ msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -5181,6 +5191,10 @@ msgstr "Ne fonctionne pas"
 #: src/pages/KnowledgeSection.tsx
 msgid "Nothing remembered yet"
 msgstr "Rien n'est mémorisé pour le moment"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Nothing saved yet."
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
@@ -5955,7 +5969,6 @@ msgstr "Recharger"
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelRoleSettings.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
@@ -6508,6 +6521,7 @@ msgstr "Écran indisponible"
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/providers-section.tsx
 #: src/pages/model-settings/role-model-picker.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/bot-picker.tsx
 #: src/pages/shell/chat-model-picker.tsx
@@ -6562,6 +6576,7 @@ msgid "Search tools"
 msgstr "Rechercher des outils"
 
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Search Vault"
 msgstr ""
 
@@ -6576,8 +6591,8 @@ msgid "Searching…"
 msgstr "Recherche en cours…"
 
 #: src/pages/OrganizationVaultSettings.tsx
-msgid "Secrets"
-msgstr ""
+#~ msgid "Secrets"
+#~ msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Security"
@@ -6741,6 +6756,7 @@ msgstr "Mémoire partagée"
 
 #: src/components/vault/VaultItemDetail.tsx
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Show"
 msgstr "Afficher"
 
@@ -7342,6 +7358,7 @@ msgstr "Ces fichiers ou ces choix ne correspondent plus. Choisissez à nouveau l
 
 #: src/components/vault/VaultItemDetail.tsx
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "These saved settings can't be read. Remove it and add it again."
 msgstr ""
 
@@ -7954,7 +7971,6 @@ msgstr "Valeur"
 
 #: src/components/vault/kinds.tsx
 #: src/components/vault/VaultItemDetail.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Variable"
 msgstr ""
 

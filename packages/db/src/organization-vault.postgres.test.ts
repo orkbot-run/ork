@@ -99,6 +99,24 @@ postgres("organization vault database boundaries", () => {
     await db.organizationVaultGrant.create({
       data: { spaceId: space, organizationId: org, bindingVersion: 7 },
     });
+    await db.organizationVaultCredentialGrant.create({
+      data: {
+        credentialId: `org-${suffix}`,
+        spaceId: space,
+        organizationId: org,
+        bindingVersion: 7,
+      },
+    });
+    await db.organizationVaultCredential.create({
+      data: {
+        id: `private-${suffix}`,
+        organizationId: org,
+        name: "private",
+        origin: "https://example.test",
+        auth: {},
+        ciphertext: "encrypted",
+      },
+    });
   });
   afterAll(async () => {
     const db = asSystem(owner.prisma);
@@ -141,6 +159,12 @@ postgres("organization vault database boundaries", () => {
     expect(
       await runAsTenant(actor, () => app.prisma.organizationVaultCredential.findMany()),
     ).toHaveLength(1);
+    expect(
+      await runAsTenant(actor, () => app.prisma.organizationVaultCredential.findMany()),
+    ).toMatchObject([{ name: "company" }]);
+    await expect(
+      runAsTenant(actor, () => app.prisma.organizationVaultCredentialGrant.findMany()),
+    ).resolves.toEqual([]);
     expect(
       await runAsTenant(actor, () => app.prisma.organizationVaultGrant.findMany()),
     ).toHaveLength(0);

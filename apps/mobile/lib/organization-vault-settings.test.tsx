@@ -32,7 +32,11 @@ vi.mock("../components/load-failure", () => ({
 }));
 vi.mock("../components/settings-group", () => ({
   SettingsGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  SettingsRow: ({ title }: { title: string }) => <div>{title}</div>,
+  SettingsRow: ({ title, onPress }: { title: string; onPress?: () => void }) => (
+    <button type="button" onClick={onPress}>
+      {title}
+    </button>
+  ),
   SettingsSwitch: ({
     label,
     value,
@@ -48,6 +52,7 @@ vi.mock("../components/settings-group", () => ({
   ),
 }));
 vi.mock("../components/vault-item-editor", () => ({ VaultItemEditor: () => null }));
+vi.mock("../components/native-symbol", () => ({ NativeSymbol: () => null }));
 vi.mock("../components/confirm-identity", () => ({
   useIdentityConfirmation: () => ({
     withIdentityConfirmation: (action: () => Promise<unknown>) => action(),
@@ -87,10 +92,11 @@ beforeEach(() => {
   queryClient.clear();
   fixture.send.mockReset().mockImplementation(async (path: string) => {
     if (path === "organizationVault/context") return { kind: fixture.kind };
-    if (path === "organizationVault/list") return [];
-    if (path === "organizationVault/workspaces")
+    if (path === "organizationVault/list")
+      return [{ name: "secret-a", title: "Secret A", origin: "", auth: { type: "command" } }];
+    if (path === "organizationVault/credentialWorkspaces")
       return [{ id: "space", name: "Team", state: "ready", granted: false }];
-    if (path === "organizationVault/setWorkspaceAccess") return { ok: true };
+    if (path === "organizationVault/setCredentialWorkspaceAccess") return { ok: true };
     throw new Error("Unexpected request");
   });
   container = document.createElement("div");
@@ -114,10 +120,26 @@ const render = async () => {
 it("lets an administrator grant a workspace access", async () => {
   fixture.kind = "shared";
   await render();
+  const row = Array.from(container.querySelectorAll("button")).find(
+    (entry) => entry.textContent === "Secret A",
+  );
+  expect(row).toBeTruthy();
+  await act(async () => row!.click());
+  const { Alert } = await import("react-native");
+  const actions = vi.mocked(Alert.alert).mock.calls.at(-1)?.[2];
+  const access = actions?.find((entry) => entry.text === "Workspace access");
+  expect(access).toBeTruthy();
+  await act(async () => {
+    access!.onPress?.();
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
   const button = container.querySelector<HTMLButtonElement>('[role="switch"]');
   expect(button?.textContent).toBe("Team");
   await act(async () => button?.click());
-  expect(fixture.send).toHaveBeenCalledWith("organizationVault/setWorkspaceAccess", {
+  expect(fixture.send).toHaveBeenCalledWith("organizationVault/setCredentialWorkspaceAccess", {
+    name: "secret-a",
     spaceId: "space",
     allowed: true,
   });
