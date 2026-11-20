@@ -78,6 +78,10 @@ export default function SettingsLayout() {
       <Stack.Screen name="model-connection" options={glassHeaderOptions(t("Model"))} />
       <Stack.Screen name="billing" options={glassHeaderOptions(t("Billing"))} />
       <Stack.Screen name="models" options={glassHeaderOptions(t("Models"))} />
+      <Stack.Screen
+        name="organization-vault"
+        options={glassHeaderOptions(t("Organization vault"))}
+      />
       <Stack.Screen name="updates" options={glassHeaderOptions(t("Updates"))} />
       <Stack.Screen name="voice" options={glassHeaderOptions(t("Voice"))} />
       <Stack.Screen name="wallet" options={glassHeaderOptions(t("Wallet"))} />

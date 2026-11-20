@@ -623,8 +623,12 @@ describePostgres("row-level security (PostgreSQL)", () => {
         // the keyed system bypass, unmanaged compatibility and the exact workspace fence.
         expect(policy.permissive, policy.policyname).toBe("RESTRICTIVE");
         expect(policy.policyname.endsWith("_central_resource")).toBe(true);
+        const personalVault =
+          policy.policyname === "vault_credentials_central_resource"
+            ? ' OR (("spaceId" IS NULL) AND ( SELECT app_personal_vault_allowed() AS app_personal_vault_allowed))'
+            : "";
         expect(policy.qual, policy.policyname).toBe(
-          `(${bypass} OR (NOT ( SELECT app_central_scope_is_managed() AS app_central_scope_is_managed)) OR ("spaceId" = NULLIF(current_setting('app.space_id'::text, true), ''::text)))`,
+          `(${bypass} OR (NOT ( SELECT app_central_scope_is_managed() AS app_central_scope_is_managed)) OR ("spaceId" = NULLIF(current_setting('app.space_id'::text, true), ''::text))${personalVault})`,
         );
         expect(policy.with_check, policy.policyname).toBe(policy.qual);
       }

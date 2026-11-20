@@ -64,6 +64,26 @@ describe("procedureSecurityEvent", () => {
     expect(JSON.stringify(event)).not.toContain("ghp_secretvalue");
   });
 
+  it("audits organization vault changes without storing their secret values", () => {
+    const event = procedureSecurityEvent(
+      ["organizationVault", "put"],
+      {
+        destination: { name: "deploy-key", origin: "", auth: { type: "command" } },
+        value: "fake-private-value",
+      },
+      actor,
+    );
+    expect(event?.metadata).toMatchObject({ kind: "organization_vault", name: "deploy-key" });
+    expect(JSON.stringify(event)).not.toContain("fake-private-value");
+    expect(
+      procedureSecurityEvent(
+        ["organizationVault", "setWorkspaceAccess"],
+        { spaceId: "space-2", allowed: true },
+        actor,
+      )?.metadata,
+    ).toMatchObject({ spaceId: "space-2", allowed: true });
+  });
+
   it("lists which deployment settings changed without the allowlist itself", () => {
     const event = procedureSecurityEvent(
       ["deployment", "update"],

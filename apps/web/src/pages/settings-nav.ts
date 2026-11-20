@@ -40,7 +40,10 @@ export function useSettingsNavItems(available: {
     { id: "general", label: t`General`, icon: Settings },
     { id: "organization", label: t`Organization`, icon: Building2 },
     ...(available.organizationModels
-      ? [{ id: "organization-models" as const, label: t`Organization models`, icon: Cpu }]
+      ? [
+          { id: "organization-models" as const, label: t`Organization models`, icon: Cpu },
+          { id: "organization-vault" as const, label: t`Organization vault`, icon: KeyRound },
+        ]
       : []),
     {
       id: "models",

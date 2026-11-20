@@ -18,6 +18,8 @@ const catalogDir = path.join(mobileDir, "e2e", "ios-screenshots");
 /** Routes without standalone screenshot coverage, and why. */
 const UNCOVERED: Record<string, string> = {
   "integration-setup": "redirects to Integrations",
+  "organization-vault":
+    "requires a verified organization administrator session; screenshot fixtures use local password sessions",
   "oauth2/callback": "native Accounts consumes this callback before redirecting; no standalone UI",
   meetings:
     "requires an enabled meeting provider; the iOS screenshot backend has no meeting provider",

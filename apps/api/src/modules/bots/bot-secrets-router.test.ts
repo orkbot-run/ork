@@ -97,6 +97,10 @@ function botSecretDeps(seed: Row[] = []) {
       }),
     },
     vaultCredential: botSecret,
+    space: {
+      findUnique: vi.fn(async () => ({ centralBinding: null, admissionWorkspaceId: null })),
+    },
+    organizationVaultCredential: { findMany: vi.fn(async () => []), count: vi.fn(async () => 0) },
     // Counted before a prepared value that was never committed is deleted from the store.
     secret: { count: vi.fn(async () => 0) },
     botSecret: { count: vi.fn(async () => 0) },

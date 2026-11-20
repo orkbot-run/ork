@@ -55,6 +55,7 @@ function fixture(role = "owner") {
     },
     secret: { count: vi.fn(async () => 0) },
     botSecret: { count: vi.fn(async () => 0) },
+    organizationVaultCredential: { count: vi.fn(async () => 0) },
     integrationProviderConfig: { count: vi.fn(async () => 0) },
     $queryRaw: vi.fn(async () => [{ locked: 1 }]),
   };

@@ -3,6 +3,23 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":
+    "選擇此伺服器上可以使用這些密鑰的工作區。新工作區在獲得許可前沒有存取權限。",
+  "Could not change workspace access.": "無法變更工作區存取權限。",
+  "Could not load the organization vault. Check your access and try again.":
+    "無法載入組織保管庫。請檢查存取權限後重試。",
+  "Could not verify this organization's vault policy. Sign in again to continue.":
+    "無法驗證組織保管庫政策。請重新登入。",
+  "Could not verify this organization. Sign in again and try again.": "無法驗證組織。請重新登入。",
+  "Organization vault": "組織保管庫",
+  "Personal organizations use your personal vault. Open Your settings → Vault to manage your secrets.":
+    "個人組織使用您的個人保管庫。請開啟您的設定 → 保管庫。",
+  "Personal vaults are unavailable in shared organizations. Organization admins can manage secrets and workspace access in Organization settings → Organization vault.":
+    "共用組織不能使用個人保管庫。管理員可在組織設定 → 組織保管庫中管理密鑰和工作區存取權限。",
+  Secrets: "密鑰",
+  "Workspace access": "工作區存取權限",
+  "Your organization's server manages these secrets. Ork Accounts does not receive them. Only organization admins can manage this vault.":
+    "這些密鑰由您組織的伺服器管理，不會傳送給 Ork Accounts。只有組織管理員可以管理保管庫。",
   "Add a schedule or an HTTPS address to run this routine.":
     "新增排程或 HTTPS 網址以執行此例行工作。",
   "Ask an owner to resume your plan.": "請擁有者恢復您的方案。",

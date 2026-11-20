@@ -73,6 +73,7 @@ function setup() {
     secret: { create: vi.fn(), count: vi.fn().mockResolvedValue(1) },
     botSecret: { count: vi.fn().mockResolvedValue(0) },
     vaultCredential: { count: vi.fn().mockResolvedValue(0) },
+    organizationVaultCredential: { count: vi.fn().mockResolvedValue(0) },
     integrationProviderConfig: { count: vi.fn().mockResolvedValue(0) },
     $transaction: vi.fn(),
   };

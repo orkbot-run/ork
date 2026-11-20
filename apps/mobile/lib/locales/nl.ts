@@ -3,6 +3,24 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":
+    "Kies welke werkruimten op deze server deze geheimen mogen gebruiken. Nieuwe werkruimten hebben pas toegang na toestemming.",
+  "Could not change workspace access.": "Toegang tot de werkruimte kon niet worden gewijzigd.",
+  "Could not load the organization vault. Check your access and try again.":
+    "De organisatiekluis kon niet worden geladen. Controleer je toegang en probeer opnieuw.",
+  "Could not verify this organization's vault policy. Sign in again to continue.":
+    "Het kluisbeleid kon niet worden gecontroleerd. Meld je opnieuw aan.",
+  "Could not verify this organization. Sign in again and try again.":
+    "De organisatie kon niet worden gecontroleerd. Meld je opnieuw aan.",
+  "Organization vault": "Organisatiekluis",
+  "Personal organizations use your personal vault. Open Your settings → Vault to manage your secrets.":
+    "Persoonlijke organisaties gebruiken je persoonlijke kluis. Open Je instellingen → Kluis.",
+  "Personal vaults are unavailable in shared organizations. Organization admins can manage secrets and workspace access in Organization settings → Organization vault.":
+    "Persoonlijke kluizen zijn niet beschikbaar in gedeelde organisaties. Beheerders beheren geheimen en toegang via Organisatie-instellingen → Organisatiekluis.",
+  Secrets: "Geheimen",
+  "Workspace access": "Toegang voor werkruimten",
+  "Your organization's server manages these secrets. Ork Accounts does not receive them. Only organization admins can manage this vault.":
+    "De server van je organisatie beheert deze geheimen. Ork Accounts ontvangt ze niet. Alleen organisatiebeheerders kunnen de kluis beheren.",
   "Add a schedule or an HTTPS address to run this routine.":
     "Voeg een planning of HTTPS-adres toe om deze routine uit te voeren.",
   "Ask an owner to resume your plan.": "Vraag een eigenaar om je abonnement te hervatten.",

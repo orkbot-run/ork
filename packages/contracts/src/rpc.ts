@@ -44,6 +44,7 @@ import {
 } from "./board.js";
 import { BotAvatarSetSchema } from "./bot-avatar.js";
 import {
+  BotSecretDestinationInput,
   BotSecretMetadata,
   BotSecretPutInput,
   LOGIN_FIELD_LIMIT,
@@ -1736,6 +1737,33 @@ export const appContract = {
     reveal: oc.input(VaultRevealInput).output(VaultRevealed),
     remove: oc
       .input(settingsScopeInput.extend({ name: StoredBotSecretName }))
+      .output(z.object({ ok: z.literal(true) })),
+  },
+  organizationVault: {
+    context: oc.output(
+      z.object({ kind: z.enum(["personal", "shared", "unverified", "unmanaged"]) }),
+    ),
+    list: oc.output(z.array(BotSecretMetadata)),
+    reveal: oc.input(z.object({ name: StoredBotSecretName })).output(VaultRevealed),
+    workspaces: oc.output(
+      z.array(z.object({ id: Id, name: z.string(), state: z.string(), granted: z.boolean() })),
+    ),
+    setWorkspaceAccess: oc
+      .input(z.object({ spaceId: Id, allowed: z.boolean() }))
+      .output(z.object({ ok: z.literal(true) })),
+    put: oc
+      .input(
+        z.object({
+          destination: BotSecretDestinationInput,
+          value: z.string().min(1).max(16384).optional(),
+          title: z.string().trim().max(80).optional(),
+          note: z.string().trim().max(200).optional(),
+          createOnly: z.boolean().optional(),
+        }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
+    remove: oc
+      .input(z.object({ name: StoredBotSecretName }))
       .output(z.object({ ok: z.literal(true) })),
   },
   /** The vault this Space uses, for apps that predate it. The bot only checks access. */

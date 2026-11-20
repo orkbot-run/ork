@@ -3,6 +3,24 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const PL_MESSAGES: Record<string, string> = {
+  "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":
+    "Wybierz przestrzenie robocze na tym serwerze, które mogą używać sekretów. Nowe przestrzenie nie mają dostępu, dopóki go nie przyznasz.",
+  "Could not change workspace access.": "Nie udało się zmienić dostępu przestrzeni roboczej.",
+  "Could not load the organization vault. Check your access and try again.":
+    "Nie udało się załadować sejfu organizacji. Sprawdź dostęp i spróbuj ponownie.",
+  "Could not verify this organization's vault policy. Sign in again to continue.":
+    "Nie udało się zweryfikować zasad sejfu organizacji. Zaloguj się ponownie.",
+  "Could not verify this organization. Sign in again and try again.":
+    "Nie udało się zweryfikować organizacji. Zaloguj się ponownie.",
+  "Organization vault": "Sejf organizacji",
+  "Personal organizations use your personal vault. Open Your settings → Vault to manage your secrets.":
+    "Organizacje osobiste używają Twojego sejfu. Zarządzaj sekretami w Twoje ustawienia → Sejf.",
+  "Personal vaults are unavailable in shared organizations. Organization admins can manage secrets and workspace access in Organization settings → Organization vault.":
+    "Sejf osobisty jest niedostępny we wspólnych organizacjach. Administratorzy zarządzają sekretami i dostępem w Ustawienia organizacji → Sejf organizacji.",
+  Secrets: "Sekrety",
+  "Workspace access": "Dostęp przestrzeni roboczych",
+  "Your organization's server manages these secrets. Ork Accounts does not receive them. Only organization admins can manage this vault.":
+    "Sekretami zarządza serwer Twojej organizacji. Ork Accounts ich nie otrzymuje. Tylko administratorzy organizacji mogą zarządzać sejfem.",
   No: "Nie",
   Refresh: "Odśwież",
   Yes: "Tak",

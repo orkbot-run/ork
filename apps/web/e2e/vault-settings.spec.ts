@@ -5,6 +5,63 @@
 import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
 
+test("organization vault shows secrets and server-specific workspace access", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `org-vault-${Date.now()}@orkbot.test`, "password12", "Vault Admin");
+  await completeOnboarding(page);
+  await page.route("**/rpc/models/workspacePolicy", (route) =>
+    route.fulfill({ json: { json: { managed: true, canManage: false, policy: null } } }),
+  );
+  await page.route("**/rpc/organizationVault/context", (route) =>
+    route.fulfill({ json: { json: { kind: "shared" } } }),
+  );
+  await page.route("**/rpc/organizationVault/list", (route) =>
+    route.fulfill({
+      json: {
+        json: [
+          {
+            name: "deploy-key",
+            title: "Deployment key",
+            note: "For production",
+            origin: "",
+            auth: { type: "command" },
+            createdAt: "2026-11-01T12:00:00.000Z",
+            updatedAt: "2026-11-01T12:00:00.000Z",
+          },
+        ],
+      },
+    }),
+  );
+  let allowed = false;
+  await page.route("**/rpc/organizationVault/workspaces", (route) =>
+    route.fulfill({
+      json: {
+        json: [
+          { id: "workspace-1", name: "Production", state: "ready", granted: allowed },
+          { id: "workspace-2", name: "Research", state: "ready", granted: false },
+        ],
+      },
+    }),
+  );
+  await page.route("**/rpc/organizationVault/setWorkspaceAccess", (route) => {
+    allowed = true;
+    return route.fulfill({ json: { json: { ok: true } } });
+  });
+  const settings = await openUserSettings(page);
+  await settings.getByRole("button", { name: "Organization settings", exact: true }).click();
+  await settings.getByTestId("settings-nav-organization-vault").click();
+  const vault = settings.getByTestId("organization-vault");
+  await expect(vault.getByText("Deployment key")).toBeVisible();
+  await expect(vault.getByText("Production")).toBeVisible();
+  await captureScreenshot(page, testInfo, "organization-vault");
+  await vault.getByRole("switch").first().click();
+  await expect(vault.getByRole("switch").first()).toBeChecked();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(vault.getByText("Deployment key")).toBeVisible();
+  await captureScreenshot(page, testInfo, "organization-vault-mobile");
+});
+
 test("saves a contact, a card billed to it, and a login from Settings, showing no protected value", async ({
   page,
 }, testInfo) => {

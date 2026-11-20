@@ -24,6 +24,7 @@ const settingsScreens = new Set([
   "memory-note",
   "models",
   "organization",
+  "organization-vault",
   "plugin",
   "signup-survey",
   "skill",

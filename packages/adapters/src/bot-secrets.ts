@@ -39,7 +39,9 @@ import {
 } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "@orkbot/db";
 import {
+  currentDbContext,
   lockSpaceSettings,
+  runAsTenant,
   runCodeKind,
   runCodeSpentKind,
   runLoginKind,
@@ -49,6 +51,7 @@ import {
 import { getLogger } from "@orkbot/logging";
 import { z } from "zod";
 import { combineSignals, redactConnectorPayload } from "./connector-safety.js";
+import { organizationVaultPolicy } from "./organization-vault-policy.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { createPrivateNetworkFetch, createSafeRemoteFetch } from "./remote-mcp.js";
 import { generateSecretValue } from "./secret-generator.js";
@@ -84,15 +87,111 @@ async function assertVaultInUse(client: VaultClient, scope: BotSecretScope) {
   }
 }
 
+async function assertPersonalVaultWritable(prisma: PrismaClient, scope: BotSecretScope) {
+  // Protected database operations cannot succeed without a context.
+  if (!currentDbContext()) return;
+  const policy = await organizationVaultPolicy(prisma, scope);
+  if (policy.kind === "shared" || policy.kind === "unverified")
+    throw new Error("Only organization administrators can manage the organization vault");
+}
+
 /** The vault rows a call reads and writes: the account's (no Space) or the Space's own. */
 async function vaultFields(client: VaultClient, scope: BotSecretScope) {
   const target = await settingsTarget(client, scope, "credentials", scope.vault);
   return { userId: scope.userId, spaceId: target === "space" ? scope.spaceId : null };
 }
 
+/** Organization entries are visible only under the workspace's database grant. */
+async function organizationVaultRows(
+  prisma: PrismaClient,
+  scope: BotSecretScope,
+  policy: Awaited<ReturnType<typeof organizationVaultPolicy>>,
+) {
+  const context = currentDbContext();
+  // Explicit account/space settings are private vault views, not the organization's vault.
+  if (scope.vault) return [];
+  // Unscoped calls cannot access protected rows; preserve that boundary for callers without one.
+  if (!context) return [];
+  if (policy.kind !== "shared" || !policy.granted) return [];
+  if (
+    context?.kind === "tenant" &&
+    (context.userId !== scope.userId || context.spaceId !== scope.spaceId)
+  )
+    throw new Error("Workspace access denied");
+  const rows = await runAsTenant(
+    {
+      userId: scope.userId,
+      spaceId: scope.spaceId,
+      personalDeviceId: context?.kind === "tenant" ? context.personalDeviceId : undefined,
+    },
+    () =>
+      prisma.organizationVaultCredential.findMany({
+        where: { organizationId: policy.organizationId },
+        orderBy: { name: "asc" },
+      }),
+  );
+  const current = await organizationVaultPolicy(prisma, scope);
+  return current.kind === "shared" &&
+    current.granted &&
+    current.organizationId === policy.organizationId &&
+    current.bindingVersion === policy.bindingVersion
+    ? rows
+    : [];
+}
+
+/** Even system workers must resolve credentials as the acting workspace and user. */
+async function readVault<T>(
+  prisma: PrismaClient,
+  scope: BotSecretScope,
+  personal: () => Promise<T[]>,
+  select: (row: Awaited<ReturnType<typeof organizationVaultRows>>[number]) => T | undefined,
+): Promise<T[]> {
+  const context = currentDbContext();
+  if (!context) return personal();
+  if (
+    context.kind === "tenant" &&
+    (context.userId !== scope.userId || context.spaceId !== scope.spaceId)
+  )
+    throw new Error("Workspace access denied");
+  const policy = await organizationVaultPolicy(prisma, scope);
+  return runAsTenant(
+    {
+      userId: scope.userId,
+      spaceId: scope.spaceId,
+      personalDeviceId: context.kind === "tenant" ? context.personalDeviceId : undefined,
+    },
+    async () => {
+      const [own, organization] = await Promise.all([
+        policy.kind === "personal" || policy.kind === "unmanaged"
+          ? personal()
+          : Promise.resolve([]),
+        organizationVaultRows(prisma, scope, policy),
+      ]);
+      return [
+        ...own,
+        ...organization.flatMap((row) => {
+          const value = select(row);
+          return value === undefined ? [] : [value];
+        }),
+      ];
+    },
+  );
+}
+
 const metadata = { name: true, origin: true, auth: true } as const;
 // What people see of an item besides its destination.
 const labels = { title: true, note: true } as const;
+type ReadableCredential = {
+  id: string;
+  name: string;
+  origin: string;
+  auth: Prisma.JsonValue;
+  ciphertext: string;
+  title: string;
+  note: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 const SECRET_ALREADY_SAVED = "A credential with this name is already saved";
 
@@ -206,11 +305,17 @@ export async function loadBotCommandEnvironment(
   scope: BotSecretScope,
   unsetVariables?: Set<string>,
 ): Promise<Record<string, string>> {
-  const rows = await prisma.vaultCredential.findMany({
-    where: await vaultFields(prisma, scope),
-    select: { id: true, name: true, auth: true, ciphertext: true },
-    orderBy: { name: "asc" },
-  });
+  const rows = await readVault(
+    prisma,
+    scope,
+    async () =>
+      prisma.vaultCredential.findMany({
+        where: await vaultFields(prisma, scope),
+        select: { id: true, name: true, auth: true, ciphertext: true },
+        orderBy: { name: "asc" },
+      }),
+    ({ id, name, auth, ciphertext }) => ({ id, name, auth, ciphertext }),
+  );
   const environment: Record<string, string> = {};
   for (const row of rows) {
     if (!isCommandCredential(row.auth)) continue;
@@ -507,10 +612,21 @@ export function canReplaceLoginSite(
 
 /** The credential saved under `name`. Its row id is for a card that replaces it, never for the bot. */
 export async function findBotSecret(prisma: PrismaClient, scope: BotSecretScope, name: string) {
-  const row = await prisma.vaultCredential.findFirst({
-    where: { ...(await vaultFields(prisma, scope)), name },
-    select: { ...metadata, id: true },
-  });
+  const [row] = await readVault(
+    prisma,
+    scope,
+    async () => {
+      const row = await prisma.vaultCredential.findFirst({
+        where: { ...(await vaultFields(prisma, scope)), name },
+        select: { ...metadata, id: true },
+      });
+      return row ? [row] : [];
+    },
+    (row) =>
+      row.name === name
+        ? { id: row.id, name: row.name, origin: row.origin, auth: row.auth }
+        : undefined,
+  );
   return row ? { id: row.id, destination: normalizeSecretDestination(row) } : null;
 }
 
@@ -520,10 +636,17 @@ export async function findBotSecret(prisma: PrismaClient, scope: BotSecretScope,
  */
 export async function findSiteLogin(prisma: PrismaClient, scope: BotSecretScope, origin: string) {
   if (!origin.startsWith("https://")) return null;
-  const rows = await prisma.vaultCredential.findMany({
-    where: { ...(await vaultFields(prisma, scope)), origin },
-    select: metadata,
-  });
+  const rows = await readVault(
+    prisma,
+    scope,
+    async () =>
+      prisma.vaultCredential.findMany({
+        where: { ...(await vaultFields(prisma, scope)), origin },
+        select: metadata,
+      }),
+    (row) =>
+      row.origin === origin ? { name: row.name, origin: row.origin, auth: row.auth } : undefined,
+  );
   // A row saved before today's name or site rules can't be filled, so it doesn't count.
   const logins = rows.flatMap((row) => {
     try {
@@ -571,22 +694,9 @@ export async function prepareBotSecret(input: {
   note?: string;
 }) {
   const { prisma, secretStore, scope } = input;
-  let { plaintext } = input;
-  if (!plaintext || plaintext.length > 16_384) throw new Error("Invalid credential length");
+  await assertPersonalVaultWritable(prisma, scope);
   const destination = normalizeSecretDestination(input.destination);
-  if (
-    destination.auth.type === "login" ||
-    destination.auth.type === "card" ||
-    destination.auth.type === "contact"
-  ) {
-    plaintext = canonicalSecretValue(destination, plaintext);
-  } else if (destination.auth.type === "command") {
-    // NUL cannot be an environment value. An unpaired surrogate cannot be percent-encoded
-    // later, and that throw would abort every subsequent shell command for this bot.
-    if (plaintext.includes("\0") || percentEncoded(plaintext) === undefined) {
-      throw new Error(UNUSABLE_CREDENTIAL);
-    }
-  } else credentialHeader(destination, plaintext);
+  const plaintext = validateBotSecretValue(destination, input.plaintext);
   await assertVaultInUse(prisma, scope);
   const vault = await vaultFields(prisma, scope);
   const existing = await prisma.vaultCredential.findFirst({
@@ -653,6 +763,28 @@ export async function prepareBotSecret(input: {
         });
     },
   };
+}
+
+/** Validate and encode a value identically for personal and organization vaults. */
+export function validateBotSecretValue(
+  destination: BotSecretDestination,
+  plaintext: string,
+): string {
+  if (!plaintext || plaintext.length > 16_384) throw new Error("Invalid credential length");
+  if (
+    destination.auth.type === "login" ||
+    destination.auth.type === "card" ||
+    destination.auth.type === "contact"
+  ) {
+    plaintext = canonicalSecretValue(destination, plaintext);
+  } else if (destination.auth.type === "command") {
+    // NUL cannot be an environment value. An unpaired surrogate cannot be percent-encoded
+    // later, and that throw would abort every subsequent shell command for this bot.
+    if (plaintext.includes("\0") || percentEncoded(plaintext) === undefined) {
+      throw new Error(UNUSABLE_CREDENTIAL);
+    }
+  } else credentialHeader(destination, plaintext);
+  return plaintext;
 }
 
 export async function storeBotSecret(input: Parameters<typeof prepareBotSecret>[0]) {
@@ -782,11 +914,25 @@ export async function listBotSecrets(
   secretStore: Pick<SecretStore, "load">,
   scope: BotSecretScope,
 ) {
-  const rows = await prisma.vaultCredential.findMany({
-    where: await vaultFields(prisma, scope),
-    select: { ...metadata, ...labels, id: true, ciphertext: true },
-    orderBy: { name: "asc" },
-  });
+  const rows = await readVault(
+    prisma,
+    scope,
+    async () =>
+      prisma.vaultCredential.findMany({
+        where: await vaultFields(prisma, scope),
+        select: { ...metadata, ...labels, id: true, ciphertext: true },
+        orderBy: { name: "asc" },
+      }),
+    ({ id, name, origin, auth, title, note, ciphertext }) => ({
+      id,
+      name,
+      origin,
+      auth,
+      title,
+      note,
+      ciphertext,
+    }),
+  );
   return Promise.all(
     rows.map(async ({ id, ciphertext, title, note, ...row }) => {
       const preview = await itemPreview(secretStore, { id, ciphertext, auth: row.auth });
@@ -809,18 +955,32 @@ export async function listBotSecrets(
 const ownerMetadata = { ...metadata, ...labels, createdAt: true, updatedAt: true } as const;
 
 export async function listBotSecretMetadata(prisma: PrismaClient, scope: BotSecretScope) {
-  return prisma.vaultCredential.findMany({
-    where: await vaultFields(prisma, scope),
-    select: ownerMetadata,
-    orderBy: { name: "asc" },
-  });
+  return readVault(
+    prisma,
+    scope,
+    async () =>
+      prisma.vaultCredential.findMany({
+        where: await vaultFields(prisma, scope),
+        select: ownerMetadata,
+        orderBy: { name: "asc" },
+      }),
+    ({ name, origin, auth, title, note, createdAt, updatedAt }) => ({
+      name,
+      origin,
+      auth,
+      title,
+      note,
+      createdAt,
+      updatedAt,
+    }),
+  );
 }
 
 /**
  * What a list shows of an item's saved value: a login's first visible field, a card's summary, or
  * a contact. Nothing for other kinds, whose value is the secret itself, or a value that can't be read.
  */
-async function itemPreview(
+export async function itemPreview(
   secretStore: Pick<SecretStore, "load">,
   row: { id: string; ciphertext: string; auth: unknown },
 ): Promise<VaultPreview | undefined> {
@@ -877,11 +1037,30 @@ export async function listVaultItems(
   scope: BotSecretScope,
   name?: string,
 ) {
-  const rows = await prisma.vaultCredential.findMany({
-    where: { ...(await vaultFields(prisma, scope)), ...(name !== undefined ? { name } : {}) },
-    select: { ...ownerMetadata, id: true, ciphertext: true },
-    orderBy: { name: "asc" },
-  });
+  const rows = await readVault(
+    prisma,
+    scope,
+    async () =>
+      prisma.vaultCredential.findMany({
+        where: { ...(await vaultFields(prisma, scope)), ...(name !== undefined ? { name } : {}) },
+        select: { ...ownerMetadata, id: true, ciphertext: true },
+        orderBy: { name: "asc" },
+      }),
+    (row) =>
+      name === undefined || row.name === name
+        ? {
+            id: row.id,
+            name: row.name,
+            origin: row.origin,
+            auth: row.auth,
+            title: row.title,
+            note: row.note,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            ciphertext: row.ciphertext,
+          }
+        : undefined,
+  );
   return Promise.all(
     rows.map(async ({ id, ciphertext, ...row }) => {
       const preview = await itemPreview(secretStore, { id, ciphertext, auth: row.auth });
@@ -929,6 +1108,7 @@ export async function relabelVaultItem(
   name: string,
   labels: { title?: string; note?: string },
 ) {
+  await assertPersonalVaultWritable(prisma, scope);
   await assertVaultInUse(prisma, scope);
   // Only these columns: the rest of a request never reaches the row.
   const data = {
@@ -947,6 +1127,32 @@ export async function getBotSecretMetadata(
   scope: BotSecretScope,
   name: string,
 ) {
+  if (typeof Reflect.get(client, "$transaction") === "function") {
+    const [row] = await readVault(
+      client as PrismaClient,
+      scope,
+      async () => {
+        const item = await client.vaultCredential.findFirst({
+          where: { ...(await vaultFields(client, scope)), name },
+          select: ownerMetadata,
+        });
+        return item ? [item] : [];
+      },
+      (item) =>
+        item.name === name
+          ? {
+              name: item.name,
+              origin: item.origin,
+              auth: item.auth,
+              title: item.title,
+              note: item.note,
+              createdAt: item.createdAt,
+              updatedAt: item.updatedAt,
+            }
+          : undefined,
+    );
+    return row ?? null;
+  }
   return client.vaultCredential.findFirst({
     where: { ...(await vaultFields(client, scope)), name },
     select: ownerMetadata,
@@ -963,6 +1169,7 @@ export async function revealBotSecret(input: {
   scope: BotSecretScope;
   name: string;
 }): Promise<LoginSecretValue | { card: CardSecretValue } | { value: string } | null> {
+  await assertPersonalVaultWritable(input.prisma, input.scope);
   const row = await input.prisma.vaultCredential.findFirst({
     where: { ...(await vaultFields(input.prisma, input.scope)), name: input.name },
   });
@@ -975,6 +1182,7 @@ export async function revealBotSecret(input: {
 }
 
 export async function forgetBotSecret(prisma: PrismaClient, scope: BotSecretScope, name: string) {
+  await assertPersonalVaultWritable(prisma, scope);
   await prisma.$transaction(async (tx) => {
     await lockVault(tx, scope);
     await tx.vaultCredential.deleteMany({ where: { ...(await vaultFields(tx, scope)), name } });
@@ -993,9 +1201,17 @@ export async function requestWithBotSecret(input: {
   registerRedactions?: (values: string[]) => void;
 }): Promise<unknown> {
   const request = SecretHttpRequest.parse(input.request);
-  const row = await input.prisma.vaultCredential.findFirst({
-    where: { ...(await vaultFields(input.prisma, input.scope)), name: request.name },
-  });
+  const [row] = await readVault<ReadableCredential>(
+    input.prisma,
+    input.scope,
+    async () => {
+      const found = await input.prisma.vaultCredential.findFirst({
+        where: { ...(await vaultFields(input.prisma, input.scope)), name: request.name },
+      });
+      return found ? [found] : [];
+    },
+    (candidate) => (candidate.name === request.name ? candidate : undefined),
+  );
   if (!row) return { error: "Credential is unavailable. Use request_secret to save it first." };
   const destination = normalizeSecretDestination(row);
   if (destination.auth.type === "login") {
@@ -1111,16 +1327,22 @@ export async function loadLoginPasswordRedactions(
   scope: BotSecretScope,
 ): Promise<string[]> {
   // Every saved login and card, however many other credentials the bot has; only they are read.
-  const rows = await prisma.vaultCredential.findMany({
-    where: {
-      ...(await vaultFields(prisma, scope)),
-      OR: [
-        { auth: { path: ["type"], equals: "login" } },
-        { auth: { path: ["type"], equals: "card" } },
-      ],
-    },
-    select: { id: true, auth: true, ciphertext: true },
-  });
+  const rows = await readVault(
+    prisma,
+    scope,
+    async () =>
+      prisma.vaultCredential.findMany({
+        where: {
+          ...(await vaultFields(prisma, scope)),
+          OR: [
+            { auth: { path: ["type"], equals: "login" } },
+            { auth: { path: ["type"], equals: "card" } },
+          ],
+        },
+        select: { id: true, auth: true, ciphertext: true },
+      }),
+    ({ id, auth, ciphertext }) => ({ id, auth, ciphertext }),
+  );
   const forms = new Set<string>();
   for (const row of rows) {
     const type = BotSecretAuth.safeParse(row.auth).data?.type;
@@ -1301,11 +1523,19 @@ export async function resolveLoginFill(input: {
     input.runId,
     input.name,
   );
-  const row = runLogin
-    ? undefined
-    : await input.prisma.vaultCredential.findFirst({
-        where: { ...(await vaultFields(input.prisma, input.scope)), name: input.name },
-      });
+  const [row] = runLogin
+    ? []
+    : await readVault<ReadableCredential>(
+        input.prisma,
+        input.scope,
+        async () => {
+          const found = await input.prisma.vaultCredential.findFirst({
+            where: { ...(await vaultFields(input.prisma, input.scope)), name: input.name },
+          });
+          return found ? [found] : [];
+        },
+        (candidate) => (candidate.name === input.name ? candidate : undefined),
+      );
   const stored = runLogin
     ? { name: input.name, origin: runLogin.origin, auth: { type: "login" } }
     : row;
@@ -1451,10 +1681,16 @@ export async function resolveVaultCardFill(input: {
 }): Promise<{ text: string; origin: string; redactions: string[] } | { error: string }> {
   const target = OneTimeCodeTarget.safeParse({ origin: input.site });
   if (!target.success) return { error: "site must be the checkout page's HTTPS origin." };
-  const vault = await vaultFields(input.prisma, input.scope);
-  const row = await input.prisma.vaultCredential.findFirst({
-    where: { ...vault, name: input.name },
-  });
+  const rows = await readVault<ReadableCredential>(
+    input.prisma,
+    input.scope,
+    async () =>
+      input.prisma.vaultCredential.findMany({
+        where: await vaultFields(input.prisma, input.scope),
+      }),
+    (row) => row,
+  );
+  const row = rows.find((candidate) => candidate.name === input.name);
   if (!row || BotSecretAuth.safeParse(row.auth).data?.type !== "card") {
     return { error: "No card is saved under this name. Check list_secrets." };
   }
@@ -1476,9 +1712,7 @@ export async function resolveVaultCardFill(input: {
       ? { text: card.cvc, origin, redactions }
       : { error: "This card has no security code saved." };
   }
-  const billing = card.billing
-    ? await input.prisma.vaultCredential.findFirst({ where: { ...vault, name: card.billing } })
-    : null;
+  const billing = card.billing ? rows.find((candidate) => candidate.name === card.billing) : null;
   const postalCode =
     billing && BotSecretAuth.safeParse(billing.auth).data?.type === "contact"
       ? decodeContactSecret(await input.secretStore.load(billing.ciphertext, billing.id)).postalCode

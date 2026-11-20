@@ -626,6 +626,10 @@ msgstr ""
 msgid "Add open work"
 msgstr "未完了の作業を追加"
 
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Add organization secret"
+msgstr ""
+
 #: src/components/PasskeyOffer.tsx
 #: src/components/PasskeySettings.tsx
 msgid "Add passkey"
@@ -637,6 +641,10 @@ msgstr "プロバイダーを追加"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add rule"
+msgstr ""
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Add secret"
 msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
@@ -757,6 +765,11 @@ msgstr "全期間"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "許可"
+
+#. placeholder {0}: space.name
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Allow {0} to use the organization vault"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Allow cross-space bot communication"
@@ -885,6 +898,7 @@ msgstr "自分のキーで、あらゆるモデルを"
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
@@ -1329,6 +1343,7 @@ msgstr "画像を読み取れません"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/shell/create-bot-dialog.tsx
@@ -1370,6 +1385,7 @@ msgid "Cancelled"
 msgstr "キャンセル済み"
 
 #: src/components/vault/kinds.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Card"
 msgstr ""
 
@@ -1570,6 +1586,10 @@ msgstr ""
 #: src/components/SubscriptionGate.tsx
 msgid "Choose how to use Ork"
 msgstr "Orkの使い方を選択"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it."
+msgstr ""
 
 #: src/components/WorkspaceAccessGuard.tsx
 msgid "Choose workspace"
@@ -1853,6 +1873,7 @@ msgid "Confirm password"
 msgstr "パスワードの確認"
 
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Confirm removal"
 msgstr ""
 
@@ -1995,6 +2016,7 @@ msgid "Connector ID"
 msgstr ""
 
 #: src/components/vault/kinds.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Contact"
 msgstr ""
 
@@ -2126,6 +2148,10 @@ msgstr ""
 #: src/components/pages/PageViewHost.tsx
 msgid "Could not change who can view this page. Try again."
 msgstr "このページを閲覧できる人を変更できませんでした。もう一度お試しください。"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not change workspace access."
+msgstr ""
 
 #: src/components/ProtocolRecovery.tsx
 msgid "Could not check server compatibility."
@@ -2400,6 +2426,10 @@ msgstr "スキルを読み込めませんでした"
 msgid "Could not load the desktop."
 msgstr "デスクトップを読み込めませんでした。"
 
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not load the organization vault. Check your access and try again."
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
 msgstr "このアーティファクトを読み込めませんでした。"
@@ -2439,6 +2469,10 @@ msgstr "ログアウトできませんでした。もう一度お試しくださ
 #: src/pages/Paywall.tsx
 msgid "Could not open billing"
 msgstr "請求ページを開けませんでした"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not open the secret."
+msgstr ""
 
 #: src/components/WorkspaceAccessGuard.tsx
 msgid "Could not open the workspace picker. Try again."
@@ -2508,6 +2542,10 @@ msgstr ""
 #: src/components/VaultSettings.tsx
 msgid "Could not remove the credential"
 msgstr "認証情報を削除できませんでした"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not remove the secret."
+msgstr ""
 
 #: src/pages/model-settings/providers-section.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -2605,6 +2643,10 @@ msgstr "そのボイスを保存できませんでした"
 msgid "Could not save the credential"
 msgstr "認証情報を保存できませんでした"
 
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not save the secret. Please try again."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Could not save this choice"
 msgstr "この選択を保存できませんでした"
@@ -2700,6 +2742,18 @@ msgstr "リアクションを更新できませんでした"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Could not update the default memory scope"
 msgstr "デフォルトのメモリ範囲を更新できませんでした"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not verify this organization. Sign in again and try again."
+msgstr ""
+
+#: src/components/VaultSettings.tsx
+msgid "Could not verify this organization's vault policy. Sign in again to continue."
+msgstr ""
+
+#: src/components/VaultSettings.tsx
+msgid "Could not verify this organization's vault policy. Update the server or try again."
+msgstr ""
 
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
@@ -3253,6 +3307,7 @@ msgstr "各名前は一度だけ使用できます。"
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Edit"
 msgstr "編集"
 
@@ -3271,6 +3326,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
 msgstr "名前を編集"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Edit organization secret"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 msgid "Edit Profile"
@@ -4260,6 +4319,11 @@ msgstr "プレビューを読み込み中…"
 msgid "Loading usage"
 msgstr ""
 
+#: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Loading vault settings…"
+msgstr ""
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Loading voice providers…"
 msgstr "音声プロバイダーを読み込み中…"
@@ -4300,6 +4364,7 @@ msgid "Log out"
 msgstr "ログアウト"
 
 #: src/components/vault/kinds.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Login"
 msgstr ""
 
@@ -4327,6 +4392,10 @@ msgstr "メインモデル"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Make available to organization"
+msgstr ""
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Make credentials available to approved workspaces."
 msgstr ""
 
 #: src/pages/BillingSettingsPanel.tsx
@@ -5021,6 +5090,10 @@ msgstr "このフィルターに一致する実行はありません。"
 msgid "No runs yet"
 msgstr "実行はまだありません"
 
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "No secrets added yet."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
 msgstr "スキルはまだありません"
@@ -5300,6 +5373,10 @@ msgstr ""
 msgid "Organization settings"
 msgstr "組織の設定"
 
+#: src/pages/settings-nav.ts
+msgid "Organization vault"
+msgstr ""
+
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
 msgstr "元のメッセージを表示できません"
@@ -5496,6 +5573,14 @@ msgstr "個人のモデル"
 #: src/pages/Onboarding.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Personal models may process workspace data outside company servers."
+msgstr ""
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Personal organizations use your personal vault. Open Your settings → Vault to manage your secrets."
+msgstr ""
+
+#: src/components/VaultSettings.tsx
+msgid "Personal vaults are unavailable in shared organizations. Organization admins can manage secrets and workspace access in Organization settings → Organization vault."
 msgstr ""
 
 #: src/components/vault/VaultItemDetail.tsx
@@ -5870,6 +5955,7 @@ msgstr "再読み込み"
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelRoleSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
@@ -6488,6 +6574,10 @@ msgstr "検索: {0}"
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "検索中…"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Secrets"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Security"
@@ -7864,6 +7954,7 @@ msgstr "値"
 
 #: src/components/vault/kinds.tsx
 #: src/components/vault/VaultItemDetail.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Variable"
 msgstr ""
 
@@ -8102,6 +8193,10 @@ msgstr "ChatGPT または Claude のプランで使えます。"
 msgid "Workspace"
 msgstr "ワークスペース"
 
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Workspace access"
+msgstr ""
+
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Workspace model"
 msgstr ""
@@ -8232,6 +8327,10 @@ msgstr ""
 #: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Your organization role could not be verified. Check that Accounts and this server are up to date."
+msgstr ""
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Your organization's server manages these secrets. Ork Accounts does not receive them. Only organization admins can manage this vault."
 msgstr ""
 
 #: src/components/ModelCredits.tsx

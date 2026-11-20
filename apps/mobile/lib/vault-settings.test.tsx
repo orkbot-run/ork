@@ -296,6 +296,7 @@ beforeEach(() => {
   state.confirmIdentity.mockReset().mockResolvedValue(true);
   state.credentials = [credential({}), variable];
   state.rpc.mockReset().mockImplementation(async (proc: string, input: Record<string, unknown>) => {
+    if (proc === "organizationVault/context") return { kind: "personal" };
     if (proc === "vault/list") return state.credentials;
     if (proc === "vault/put") {
       const destination = input.destination as Credential;
@@ -330,6 +331,18 @@ afterEach(() => {
   act(() => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+});
+
+it("does not load a personal vault inside a shared organization", async () => {
+  state.rpc.mockImplementation(async (proc: string) => {
+    if (proc === "organizationVault/context") return { kind: "shared" };
+    throw new Error(`Unexpected RPC: ${proc}`);
+  });
+  await render();
+  expect(container.textContent).toContain(
+    "Personal vaults are unavailable in shared organizations",
+  );
+  expect(state.rpc).not.toHaveBeenCalledWith("vault/list", expect.anything());
 });
 
 it("lists the account vault with each item's title and subtitle", async () => {

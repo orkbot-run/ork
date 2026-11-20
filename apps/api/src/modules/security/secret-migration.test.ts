@@ -17,6 +17,7 @@ function fixture() {
     })),
     botSecret: [{ id: "bot-row", ciphertext: "fake-bot-ref" }],
     vaultCredential: [{ id: "vault-row", ciphertext: "fake-vault-ref" }],
+    organizationVaultCredential: [{ id: "org-vault-row", ciphertext: "fake-org-vault-ref" }],
     integrationProviderConfig: [{ id: "composio", ciphertext: "fake-config-ref" }],
   };
   const client = Object.fromEntries(
@@ -62,7 +63,7 @@ describe("migration persistence", () => {
     const f = fixture();
     const rows = [];
     for await (const row of f.repository.rows()) rows.push(row);
-    expect(rows).toHaveLength(104);
+    expect(rows).toHaveLength(105);
     expect(rows[0]).toMatchObject({ ephemeral: true, id: "row-000", label: "secret" });
     // A run's login and codes are short-lived too, and stay in local encryption.
     expect(rows.slice(0, 4).map((row) => row.ephemeral)).toEqual([true, true, true, true]);
@@ -74,6 +75,7 @@ describe("migration persistence", () => {
     });
     expect(rows.find((row) => row.id === "bot-row")?.recordId).toBe("bot-row");
     expect(rows.find((row) => row.id === "vault-row")?.recordId).toBe("vault-row");
+    expect(rows.find((row) => row.id === "org-vault-row")?.recordId).toBe("org-vault-row");
   });
   it("compares the original ref so a concurrent update or delete wins", async () => {
     const f = fixture();
@@ -84,6 +86,7 @@ describe("migration persistence", () => {
     expect(await f.repository.replace(row, "fake-deleted")).toBe(false);
     expect(await f.repository.referenced("fake-bot-ref")).toBe(true);
     expect(await f.repository.referenced("fake-config-ref")).toBe(true);
+    expect(await f.repository.referenced("fake-org-vault-ref")).toBe(true);
     expect(await f.repository.referenced("fake-missing")).toBe(false);
   });
 });

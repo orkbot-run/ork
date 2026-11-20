@@ -3,6 +3,24 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ES_MESSAGES: Record<string, string> = {
+  "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":
+    "Elige los espacios de este servidor que pueden usar estos secretos. Los nuevos no tienen acceso hasta que lo permitas.",
+  "Could not change workspace access.": "No se pudo cambiar el acceso del espacio.",
+  "Could not load the organization vault. Check your access and try again.":
+    "No se pudo cargar la bóveda de la organización. Comprueba tu acceso e inténtalo de nuevo.",
+  "Could not verify this organization's vault policy. Sign in again to continue.":
+    "No se pudo verificar la política de la bóveda. Inicia sesión de nuevo.",
+  "Could not verify this organization. Sign in again and try again.":
+    "No se pudo verificar la organización. Inicia sesión de nuevo.",
+  "Organization vault": "Bóveda de la organización",
+  "Personal organizations use your personal vault. Open Your settings → Vault to manage your secrets.":
+    "Las organizaciones personales usan tu bóveda personal. Abre Tu configuración → Bóveda.",
+  "Personal vaults are unavailable in shared organizations. Organization admins can manage secrets and workspace access in Organization settings → Organization vault.":
+    "Las bóvedas personales no están disponibles en organizaciones compartidas. Los administradores gestionan los secretos y el acceso en Configuración de la organización → Bóveda.",
+  Secrets: "Secretos",
+  "Workspace access": "Acceso de espacios",
+  "Your organization's server manages these secrets. Ork Accounts does not receive them. Only organization admins can manage this vault.":
+    "El servidor de tu organización gestiona estos secretos. Ork Accounts no los recibe. Solo los administradores de la organización pueden gestionar la bóveda.",
   "Add a schedule or an HTTPS address to run this routine.":
     "Añade una programación o una dirección HTTPS para ejecutar esta rutina.",
   "Ask an owner to resume your plan.": "Pide a un propietario que reactive tu plan.",

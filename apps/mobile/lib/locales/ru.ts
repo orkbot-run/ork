@@ -3,6 +3,24 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const RU_MESSAGES: Record<string, string> = {
+  "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":
+    "Выберите рабочие пространства на этом сервере, которым доступны секреты. Новые пространства не получат доступ без разрешения.",
+  "Could not change workspace access.": "Не удалось изменить доступ рабочего пространства.",
+  "Could not load the organization vault. Check your access and try again.":
+    "Не удалось загрузить хранилище организации. Проверьте доступ и повторите попытку.",
+  "Could not verify this organization's vault policy. Sign in again to continue.":
+    "Не удалось проверить политику хранилища. Войдите снова.",
+  "Could not verify this organization. Sign in again and try again.":
+    "Не удалось проверить организацию. Войдите снова.",
+  "Organization vault": "Хранилище организации",
+  "Personal organizations use your personal vault. Open Your settings → Vault to manage your secrets.":
+    "Личные организации используют личное хранилище. Откройте Ваши настройки → Хранилище.",
+  "Personal vaults are unavailable in shared organizations. Organization admins can manage secrets and workspace access in Organization settings → Organization vault.":
+    "Личные хранилища недоступны в общих организациях. Администраторы управляют секретами и доступом в разделе Настройки организации → Хранилище организации.",
+  Secrets: "Секреты",
+  "Workspace access": "Доступ рабочих пространств",
+  "Your organization's server manages these secrets. Ork Accounts does not receive them. Only organization admins can manage this vault.":
+    "Этими секретами управляет сервер вашей организации. Ork Accounts их не получает. Управлять хранилищем могут только администраторы организации.",
   "Add a schedule or an HTTPS address to run this routine.":
     "Добавьте расписание или HTTPS-адрес для запуска этой задачи.",
   "Ask an owner to resume your plan.": "Попросите владельца возобновить ваш тарифный план.",

@@ -302,6 +302,8 @@ model Organization {
   referrals    Referral[]          @relation("ReferrerOrganization")
   modelPolicy  WorkspaceModelPolicy?
   serverAIConnections ServerAIConnection[]
+  organizationVaultCredentials OrganizationVaultCredential[]
+  organizationVaultGrants OrganizationVaultGrant[]
 
   @@unique([slug])
   @@map("organization")
@@ -526,6 +528,7 @@ model Space {
   chatGroups                  ChatGroup[]
   botSecrets                  BotSecret[]
   vaultCredentials            VaultCredential[]
+  organizationVaultGrant      OrganizationVaultGrant?
   externalConversations       ExternalConversation[]
   agentSecrets                AgentSecret[]
   board                       Board?
@@ -2166,6 +2169,38 @@ model VaultCredential {
   @@map("vault_credentials")
 }
 
+/// Organization-owned secrets survive the removal of the administrator who created them.
+model OrganizationVaultCredential {
+  id             String @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  title          String @default("")
+  note           String @default("")
+  origin         String
+  auth           Json
+  ciphertext     String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, name])
+  @@map("organization_vault_credentials")
+}
+
+/// A grant is specific to one workspace and one installation binding version.
+model OrganizationVaultGrant {
+  spaceId        String @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  space          Space @relation(fields: [spaceId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  bindingVersion Int
+  createdAt      DateTime @default(now())
+
+  @@unique([spaceId, organizationId])
+  @@index([organizationId])
+  @@map("organization_vault_grants")
+}
+
 model ExternalConversation {
   id                       String            @id @default(cuid())
   provider                 String
@@ -2655,6 +2690,8 @@ model CentralWorkspaceBinding {
   id String @id
   serverId String
   centralOrganizationId String
+  /// Organization type from a verified Accounts login grant; null until verified.
+  organizationType String?
   localOrganizationId String
   spaceId String @unique
   space Space @relation(fields: [spaceId, localOrganizationId], references: [id, organizationId], onDelete: Restrict)
