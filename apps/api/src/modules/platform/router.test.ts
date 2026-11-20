@@ -4303,7 +4303,11 @@ describe("computer terminal and file transfer", () => {
     controlBotId: "bot-1",
   };
 
-  function setup(computer: Record<string, unknown> = {}, maxUploadSizeBytes?: number) {
+  function setup(
+    computer: Record<string, unknown> = {},
+    maxUploadSizeBytes?: number,
+    home?: LocalAgentHomeStore,
+  ) {
     const sandbox = {
       describe: vi.fn<SandboxProvider["describe"]>(() =>
         new adapters.FakeSandboxProvider().describe(),
@@ -4347,6 +4351,7 @@ describe("computer terminal and file transfer", () => {
     const deps = {
       prisma,
       sandbox,
+      home,
       jobs: { enqueue: vi.fn().mockResolvedValue(undefined) },
       env: {
         maxUploadSizeBytes,
@@ -4598,6 +4603,76 @@ describe("computer terminal and file transfer", () => {
     await expect(text.call("readFile", { path: "notes.txt" })).resolves.toEqual({
       status: 200,
       body: { json: { path: "notes.txt", content: "hello" } },
+    });
+  });
+
+  it("returns 404 when a listed file disappears from the stopped computer's saved home", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "orkbot-stopped-computer-file-"));
+    const home = new LocalAgentHomeStore(directory);
+    const savedFolder = path.join(home.pathFor("home-1"), "bots", "bot-1");
+    const savedFile = path.join(savedFolder, "notes.txt");
+    try {
+      await mkdir(savedFolder, { recursive: true });
+      await writeFile(savedFile, "saved text");
+      const { call, sandbox } = setup({ state: "stopped" }, undefined, home);
+      await expect(call("files", { path: "" })).resolves.toMatchObject({
+        status: 200,
+        body: { json: [{ path: "notes.txt", kind: "file" }] },
+      });
+      await expect(call("readFile", { path: "notes.txt" })).resolves.toEqual({
+        status: 200,
+        body: { json: { path: "notes.txt", content: "saved text" } },
+      });
+      await rm(savedFile);
+      await expect(call("readFile", { path: "notes.txt" })).resolves.toMatchObject({
+        status: 404,
+        body: { json: { code: "NOT_FOUND", message: "File no longer exists." } },
+      });
+      expect(sandbox.readFile).not.toHaveBeenCalled();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["provider code", Object.assign(new Error("Path was removed"), { code: "file_not_found" })],
+    [
+      "SDK type",
+      Object.assign(new Error("File was removed"), { name: "SandboxFileNotFoundError" }),
+    ],
+    ["remote stat", new Error("stat: cannot stat 'notes.txt': No such file or directory\n")],
+    [
+      "Docker supervisor",
+      new Error(
+        `sandbox file read failed: 404 ${JSON.stringify({
+          error: [
+            "Traceback (most recent call last):",
+            '  File "<string>", line 3, in <module>',
+            "FileNotFoundError: [Errno 2] No such file or directory: 'notes.txt'",
+          ].join("\n"),
+        })}`,
+      ),
+    ],
+  ])("reports the live %s missing file in previews and downloads", async (_kind, missing) => {
+    const { call, sandbox } = setup();
+    sandbox.readFile.mockRejectedValue(missing);
+    for (const procedure of ["readFile", "downloadFile"]) {
+      await expect(call(procedure, { path: "notes.txt" })).resolves.toMatchObject({
+        status: 404,
+        body: { json: { code: "NOT_FOUND", message: "File no longer exists." } },
+      });
+    }
+  });
+
+  it("leaves unrelated computer read failures visible as server errors", async () => {
+    const { call, sandbox } = setup();
+    sandbox.readFile.mockRejectedValue(
+      new Error('sandbox file read failed: 404 {"error":"computer not found"}'),
+    );
+    await expect(call("readFile", { path: "notes.txt" })).resolves.toMatchObject({ status: 500 });
+    sandbox.readFile.mockRejectedValue(new Error("cat: notes.txt: Permission denied"));
+    await expect(call("downloadFile", { path: "notes.txt" })).resolves.toMatchObject({
+      status: 500,
     });
   });
 

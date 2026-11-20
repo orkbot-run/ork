@@ -23,6 +23,7 @@ import {
   ensureComputerWorkspaceLayout,
   expireComputerControl,
   hasActiveComputerControl,
+  isComputerFileMissing,
   isComputerScreenUnavailable,
   isSandboxGoneError,
   provisionComputer,
@@ -792,6 +793,9 @@ export function computerRoutes(ctx: RouterContext) {
               maxBytes: MAX_COMPUTER_TEXT_FILE_BYTES,
             })
             .catch((error: unknown) => {
+              if (isComputerFileMissing(error)) {
+                throw new ORPCError("NOT_FOUND", { message: "File no longer exists." });
+              }
               if (error instanceof Error && /exceeds|too large/i.test(error.message)) {
                 throw new ORPCError("BAD_REQUEST", { message: "file is too large to preview" });
               }
@@ -808,6 +812,9 @@ export function computerRoutes(ctx: RouterContext) {
               maxBytes: MAX_COMPUTER_TEXT_FILE_BYTES,
             });
           } catch (error) {
+            if (isComputerFileMissing(error)) {
+              throw new ORPCError("NOT_FOUND", { message: "File no longer exists." });
+            }
             if (error instanceof Error && error.message.startsWith("agent home file exceeds ")) {
               throw new ORPCError("BAD_REQUEST", { message: "file is too large to preview" });
             }
@@ -838,6 +845,9 @@ export function computerRoutes(ctx: RouterContext) {
             { maxBytes: attachmentMaxBytes(deps.env) },
           )
           .catch((error: unknown) => {
+            if (isComputerFileMissing(error)) {
+              throw new ORPCError("NOT_FOUND", { message: "File no longer exists." });
+            }
             if (error instanceof Error && /exceeds|too large/i.test(error.message)) {
               throw new ORPCError("BAD_REQUEST", {
                 message: `File exceeds the ${attachmentSizeLabel(attachmentMaxBytes(deps.env))} download limit.`,
