@@ -7935,3 +7935,15 @@ msgstr "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00"
 #: src/components/McpFormCard.tsx
 msgid "Yes"
 msgstr "Yes"
+
+msgid "Reveal key"
+msgstr "Reveal key"
+
+msgid "Saved. Reveal key to view."
+msgstr "Saved. Reveal key to view."
+
+msgid "Could not load webhook key"
+msgstr "Could not load webhook key"
+
+msgid "No webhook key configured"
+msgstr "No webhook key configured"

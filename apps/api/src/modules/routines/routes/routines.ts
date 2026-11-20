@@ -11,7 +11,7 @@ import {
   stableStringify,
   validateRoutineWatch,
 } from "@orkbot/adapters";
-import { canonicalPiProviderId } from "@orkbot/contracts";
+import { canonicalPiProviderId, routineTriggerIssue } from "@orkbot/contracts";
 import {
   expandSkillReferencesInPrompt,
   hasMixedOneShotSchedule,
@@ -164,16 +164,14 @@ export function routinesRoutes(ctx: RouterContext) {
         const watchChanged =
           input.watch !== undefined &&
           stableStringify(input.watch) !== stableStringify(parseRoutineWatch(existing.watch));
-        if (crons.length === 0 && !webhookEnabled && !githubEnabled && !messageProvider && !watch) {
-          throw new ORPCError("BAD_REQUEST", {
-            message: "Add a schedule, webhook, GitHub, message, or change trigger",
-          });
-        }
-        if (watch && crons.length > 0) {
-          throw new ORPCError("BAD_REQUEST", {
-            message: "A change trigger checks on its own interval; remove the schedule",
-          });
-        }
+        const triggerIssue = routineTriggerIssue({
+          crons,
+          webhookEnabled,
+          githubEnabled,
+          messageProvider,
+          watch,
+        });
+        if (triggerIssue) throw new ORPCError("BAD_REQUEST", { message: triggerIssue.message });
         if (hasMixedOneShotSchedule(crons)) {
           throw new ORPCError("BAD_REQUEST", {
             message: "A one-time schedule can't be combined with other schedules.",

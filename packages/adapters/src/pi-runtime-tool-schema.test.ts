@@ -523,6 +523,30 @@ describe("bot management tool parameters", () => {
     });
   });
 
+  it.each(["schedule_create", "create_child_routine"])(
+    "%s accepts event-only and repeating event triggers",
+    (name) => {
+      const tool = builtinAgentTools.find((entry) => entry.name === name)!;
+      const args = {
+        name: "Events",
+        prompt: "Handle changes",
+        on: { webhook: true, github: true, chat: "telegram" },
+      };
+      expect(parseConnectorToolArgs(tool.inputSchema, args)).toEqual(args);
+      expect(parseConnectorToolArgs(tool.inputSchema, { ...args, cron: "0 9 * * *" })).toEqual({
+        ...args,
+        cron: "0 9 * * *",
+      });
+      expect(() =>
+        parseConnectorToolArgs(tool.inputSchema, { ...args, on: { webhook: "true" } }),
+      ).toThrow();
+      expect(() =>
+        parseConnectorToolArgs(tool.inputSchema, { ...args, on: { secret: "hidden" } }),
+      ).toThrow();
+      expect(wireFor(name).properties).toHaveProperty("on");
+    },
+  );
+
   it("create_child_routine carries the target and the timing fields", () => {
     const props = Object.keys(wireFor("create_child_routine").properties as object);
     expect(props).toEqual(

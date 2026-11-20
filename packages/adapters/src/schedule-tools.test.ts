@@ -17,6 +17,7 @@ import {
   isOneShotRoutineCron,
   listSchedulesFromTool,
   MAX_ACTIVE_ROUTINES_PER_BOT,
+  resolveScheduleCreation,
   resolveScheduleTiming,
   SCHEDULE_TOOL_NAMES,
   scheduleCreateError,
@@ -40,6 +41,78 @@ function accountZonePrisma(prisma: Record<string, unknown>, timezone: string | n
   };
   return client;
 }
+
+describe("event schedules", () => {
+  it("accepts event-only routines without scheduling a wakeup", () => {
+    expect(
+      resolveScheduleCreation({ on: { webhook: true, github: true, chat: "telegram" } }, "UTC"),
+    ).toEqual({
+      ok: true,
+      crons: [],
+      nextRunAt: null,
+      oneShot: false,
+      triggers: { webhookEnabled: true, githubEnabled: true, messageProvider: "telegram" },
+    });
+    expect(resolveScheduleCreation({ on: { webhook: false, chat: null } }, "UTC")).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it("refuses to disable a routine trigger owned by another space member", async () => {
+    const findFirst = vi.fn(async () => null);
+    const updateMany = vi.fn();
+    const deps = {
+      prisma: { routine: { findFirst, updateMany } },
+    } as unknown as Parameters<typeof updateScheduleFromTool>[0];
+    await expect(
+      updateScheduleFromTool(deps, {
+        spaceId: "ws-1",
+        botId: "bot-1",
+        userId: "peer",
+        threadId: "thread-1",
+        routineId: "owner-routine",
+        schedule: { on: { github: false } },
+      }),
+    ).resolves.toEqual({ error: "Schedule not found or owned by another member." });
+    expect(findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: "owner-routine", userId: "peer" }),
+    });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("lists event flags and routing without returning the bot key", async () => {
+    const deps = {
+      prisma: {
+        routine: {
+          findMany: async () => [
+            {
+              id: "routine-1",
+              crons: [],
+              active: true,
+              nextRunAt: null,
+              webhookEnabled: true,
+              githubEnabled: true,
+              messageProvider: "telegram",
+              webhookSecretId: "secret-1",
+            },
+          ],
+        },
+      },
+    } as unknown as Parameters<typeof listSchedulesFromTool>[0];
+    const result = await listSchedulesFromTool(deps, {
+      spaceId: "ws-1",
+      botId: "bot-1",
+      userId: "user-1",
+    });
+    expect(result.routines[0]).toMatchObject({
+      on: { webhook: true, github: true, chat: "telegram" },
+      nextRunAt: null,
+      setup: expect.stringContaining("settings"),
+      messageRouting: expect.stringContaining("usual replies"),
+    });
+    expect(JSON.stringify(result)).not.toContain("secret-1");
+  });
+});
 
 describe("resolveScheduleTiming", () => {
   beforeEach(() => vi.useFakeTimers({ now: new Date("2026-10-20T00:11:59.999Z") }));

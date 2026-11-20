@@ -358,6 +358,7 @@ function fixture({
       }),
     },
     bot: {
+      findFirst: vi.fn(async () => ({ id: run.botId, userId: botUserId })),
       findUniqueOrThrow: vi.fn(async () => ({
         ...instructionState,
         id: run.botId,
@@ -3352,6 +3353,43 @@ describe("Auto Review of new sites", () => {
       );
       expect(isApprovalPausedResult(f.results[1])).toBe(true);
     });
+
+    it.each(["schedule_create", "schedule_update"])(
+      "requires owner approval for %s event changes after outside content",
+      async (name) => {
+        reviewMock.mockResolvedValue({ decision: "pass", reason: "Fits", model: "mock" });
+        const f = fixture({
+          builtin: true,
+          autoReview: true,
+          sourceRole: "user",
+          rules: [{ effect: "always_allow", matchKind: "tool", matchValue: name }],
+        });
+        f.setCalls([
+          search,
+          {
+            name,
+            args:
+              name === "schedule_create"
+                ? { name: "Events", prompt: "Handle events", on: { github: true } }
+                : { routineId: "routine-1", on: { webhook: true } },
+            executionId: "call-2",
+          },
+        ]);
+        await f.run();
+        expect(reviewMock).not.toHaveBeenCalled();
+        expect(f.pauseRunForInput).toHaveBeenCalledWith(
+          expect.objectContaining({
+            blocks: [
+              expect.objectContaining({
+                approvalReason: "outside_content_schedule",
+                allowRule: false,
+              }),
+            ],
+          }),
+        );
+        expect(isApprovalPausedResult(f.results[1])).toBe(true);
+      },
+    );
 
     it("asks a person even when Auto Review or a tool rule would pass it", async () => {
       reviewMock.mockResolvedValue({ decision: "pass", reason: "Fits", model: "mock" });

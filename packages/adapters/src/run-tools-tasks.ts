@@ -244,6 +244,7 @@ export const taskTools: ToolHandlers = {
           delayMinutes: args.delayMinutes,
           delaySeconds: args.delaySeconds,
           startAt: args.startAt,
+          on: args.on,
         }),
       }),
     );

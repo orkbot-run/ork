@@ -646,6 +646,24 @@ export function botsRoutes(ctx: RouterContext) {
         await removeBot(context.actor, input.botId, { deleteMemories: input.deleteMemories });
         return { ok: true as const };
       }),
+      getWebhookConfig: authed.bots.getWebhookConfig.handler(async ({ context, input }) => {
+        const bot = await repos.getBot(context.actor, input.botId);
+        if (!bot.webhookSecretId) return null;
+        const secret = await deps.prisma.secret.findFirst({
+          where: {
+            id: bot.webhookSecretId,
+            userId: context.actor.userId,
+            spaceId: context.actor.spaceId,
+            kind: "webhook",
+          },
+        });
+        if (!secret) return null;
+        return {
+          secret: await deps.secrets.load(secret.ciphertext, secret.id),
+          path: `/api/v1/bots/${bot.id}/webhook`,
+          webhookConfigured: true as const,
+        };
+      }),
       rotateWebhookSecret: authed.bots.rotateWebhookSecret.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         const plaintext = randomBytes(32).toString("base64url");
@@ -656,8 +674,24 @@ export function botsRoutes(ctx: RouterContext) {
           userId: context.actor.userId,
           signal: context.signal ?? new AbortController().signal,
         });
-        await deps.prisma.$transaction(async (tx) => {
-          const previousSecretId = bot.webhookSecretId;
+        const current = await deps.prisma.$transaction(async (tx) => {
+          const [locked] = await tx.$queryRaw<Array<{ webhookSecretId: string | null }>>`
+            SELECT "webhookSecretId" FROM bots WHERE id = ${bot.id} AND "spaceId" = ${context.actor.spaceId}
+            AND "userId" = ${context.actor.userId} AND "archivedAt" IS NULL FOR UPDATE`;
+          if (!locked) throw new ORPCError("NOT_FOUND");
+          const previousSecretId = locked.webhookSecretId;
+          if (input.onlyIfMissing && previousSecretId) {
+            const existing = await tx.secret.findFirst({
+              where: {
+                id: previousSecretId,
+                spaceId: context.actor.spaceId,
+                userId: context.actor.userId,
+                kind: "webhook",
+              },
+              select: { id: true, ciphertext: true },
+            });
+            if (existing) return existing;
+          }
           await tx.secret.create({
             data: {
               id: stored.id,
@@ -683,7 +717,7 @@ export function botsRoutes(ctx: RouterContext) {
           }
         });
         return {
-          secret: plaintext,
+          secret: current ? await deps.secrets.load(current.ciphertext, current.id) : plaintext,
           path: `/api/v1/bots/${bot.id}/webhook`,
           webhookConfigured: true as const,
         };

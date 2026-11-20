@@ -20,6 +20,7 @@ import {
 } from "./mcp.js";
 import { ModelHeadersSchema } from "./model-headers.js";
 import { NavLinkSchema } from "./nav-links.js";
+import { RoutineMessageProviderSchema, routineTriggerIssue } from "./routine-triggers.js";
 import { RoutineWatchSchema, RoutineWatchStateSchema } from "./routine-watch.js";
 import { RunRoutineNameSchema, RunTriggerSchema } from "./runs.js";
 import { SettingsScopeSchema } from "./settings-scope.js";
@@ -563,12 +564,7 @@ export const RoutineSchema = z.object({
   notify: z.boolean(),
   webhookEnabled: z.boolean(),
   githubEnabled: z.boolean(),
-  messageProvider: z
-    .string()
-    .min(1)
-    .max(50)
-    .regex(/^[a-z0-9._-]+$/i)
-    .nullable(),
+  messageProvider: RoutineMessageProviderSchema.nullable(),
   /** Null runs this routine on its bot's model. */
   modelProvider: z.string().nullable(),
   modelId: z.string().nullable(),
@@ -597,13 +593,7 @@ export const CreateRoutineInput = z
     active: z.boolean().default(false),
     webhookEnabled: z.boolean().default(false),
     githubEnabled: z.boolean().default(false),
-    messageProvider: z
-      .string()
-      .min(1)
-      .max(50)
-      .regex(/^[a-z0-9._-]+$/i)
-      .nullable()
-      .default(null),
+    messageProvider: RoutineMessageProviderSchema.nullable().default(null),
     modelProvider: z.string().trim().min(1).max(80).nullable().default(null),
     modelId: z.string().trim().min(1).max(200).nullable().default(null),
     thinkingLevel: ThinkingLevelSchema.nullable().default(null),
@@ -611,26 +601,8 @@ export const CreateRoutineInput = z
   })
   .superRefine((value, ctx) => {
     routineModelIssues(value, ctx);
-    if (
-      value.crons.length === 0 &&
-      !value.webhookEnabled &&
-      !value.githubEnabled &&
-      !value.messageProvider &&
-      !value.watch
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Add a schedule, webhook, GitHub, message, or change trigger",
-        path: ["crons"],
-      });
-    }
-    if (value.watch && value.crons.length > 0) {
-      ctx.addIssue({
-        code: "custom",
-        message: "A change trigger checks on its own interval; remove the schedule",
-        path: ["watch"],
-      });
-    }
+    const issue = routineTriggerIssue(value);
+    if (issue) ctx.addIssue({ code: "custom", message: issue.message, path: [issue.path] });
   });
 export type CreateRoutineInput = z.infer<typeof CreateRoutineInput>;
 

@@ -719,6 +719,44 @@ describe("prepareFleetRequest create_child_routine", () => {
     });
   });
 
+  it("approves event-only triggers and describes chat routing without exposing secrets", async () => {
+    const { deps } = fakeFleet(fleet);
+    const prepared = await prepareFleetRequest(deps, run, "create_child_routine", {
+      bot_id: "bot-writer",
+      name: "Events",
+      prompt: "Handle incoming events",
+      on: { webhook: true, github: true, chat: "telegram" },
+    });
+    expect(prepared).toMatchObject({
+      ok: true,
+      canonical: { schedule: { on: { webhook: true, github: true, chat: "telegram" } } },
+      summary: {
+        lines: [
+          "Trigger: webhook; configure URL and secret in routine settings",
+          "Trigger: GitHub; configure webhook and secret in routine settings",
+          "Trigger: telegram messages; takes over normal replies in this app",
+          "Prompt: Handle incoming events",
+        ],
+      },
+    });
+    expect(JSON.stringify(prepared)).not.toContain("webhookKey");
+  });
+
+  it("preserves event triggers alongside the approved repeating cron", async () => {
+    const { deps } = fakeFleet(fleet);
+    const prepared = await prepareFleetRequest(deps, run, "create_child_routine", {
+      bot_id: "bot-writer",
+      name: "Events",
+      prompt: "Check events",
+      cron: "0 9 * * *",
+      on: { github: true },
+    });
+    expect(prepared).toMatchObject({
+      ok: true,
+      canonical: { schedule: { cron: "0 9 * * *", on: { github: true } } },
+    });
+  });
+
   it("schedules in the user's timezone when the bot names none", async () => {
     const { deps } = fakeFleet({ ...fleet, timezone: "Europe/Paris" });
     const prepared = await prepareFleetRequest(deps, run, "create_child_routine", {
@@ -2087,7 +2125,14 @@ describe("createChildRoutine", () => {
     );
     prisma.routine.create.mockImplementation(
       async ({ data }: { data: Record<string, unknown> }) => {
-        const row = { id: `routine-${created.length + 1}`, active: true, ...data };
+        const row = {
+          id: `routine-${created.length + 1}`,
+          active: true,
+          webhookEnabled: false,
+          githubEnabled: false,
+          messageProvider: null,
+          ...data,
+        };
         created.push(row);
         return row;
       },
@@ -2123,7 +2168,14 @@ describe("createChildRoutine", () => {
     );
     prisma.routine.create.mockImplementation(
       async ({ data }: { data: Record<string, unknown> }) => {
-        const row = { id: `routine-${created.length + 1}`, active: true, ...data };
+        const row = {
+          id: `routine-${created.length + 1}`,
+          active: true,
+          webhookEnabled: false,
+          githubEnabled: false,
+          messageProvider: null,
+          ...data,
+        };
         created.push(row);
         return row;
       },
@@ -2147,6 +2199,43 @@ describe("createChildRoutine", () => {
       botName: "Writer",
     });
     expect(prisma.routine.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("matches all event flags and the empty cron on approved event-only retries", async () => {
+    const { prisma } = fakeFleet({
+      ...fleet,
+      routines: [
+        {
+          id: "event-1",
+          name: "Daily",
+          crons: [],
+          nextRunAt: null,
+          webhookEnabled: true,
+          githubEnabled: false,
+          messageProvider: "telegram",
+        },
+      ],
+    });
+    const result = await createChildRoutine(writeDeps(prisma), run, {
+      ...canonical,
+      schedule: { on: { webhook: true, chat: "telegram" } },
+    });
+    expect(prisma.routine.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          crons: { equals: [] },
+          webhookEnabled: true,
+          githubEnabled: false,
+          messageProvider: "telegram",
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      routineId: "event-1",
+      on: { webhook: true, chat: "telegram" },
+    });
+    expect(prisma.routine.create).not.toHaveBeenCalled();
   });
 
   it("creates the routine in the child's thread and rolls it back if enqueueing fails", async () => {

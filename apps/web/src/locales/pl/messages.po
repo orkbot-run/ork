@@ -7997,3 +7997,15 @@ msgstr "Podaj datę i czas ze strefą czasową, np. 2026-11-20T14:30:00+01:00"
 #: src/components/McpFormCard.tsx
 msgid "Yes"
 msgstr "Tak"
+
+msgid "Reveal key"
+msgstr "Pokaż klucz"
+
+msgid "Saved. Reveal key to view."
+msgstr "Zapisano. Kliknij Pokaż klucz."
+
+msgid "Could not load webhook key"
+msgstr "Nie udało się odczytać klucza webhooka"
+
+msgid "No webhook key configured"
+msgstr "Brak skonfigurowanego klucza webhooka"

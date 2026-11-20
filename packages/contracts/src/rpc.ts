@@ -186,6 +186,7 @@ import {
 } from "./pages.js";
 import { PaymentWalletStatusSchema } from "./payments.js";
 import { MessageReactionSchema } from "./reactions.js";
+import { RoutineMessageProviderSchema, routineTriggerIssue } from "./routine-triggers.js";
 import { RoutineWatchSchema } from "./routine-watch.js";
 import {
   ROUTINE_HISTORY_PAGE_SIZE,
@@ -706,7 +707,14 @@ export const appContract = {
     remove: oc
       .input(z.object({ botId: Id, deleteMemories: z.boolean().default(false) }))
       .output(z.object({ ok: z.literal(true) })),
-    rotateWebhookSecret: oc.input(botId).output(
+    getWebhookConfig: oc
+      .input(botId)
+      .output(
+        z
+          .object({ secret: z.string(), path: z.string(), webhookConfigured: z.literal(true) })
+          .nullable(),
+      ),
+    rotateWebhookSecret: oc.input(botId.extend({ onlyIfMissing: z.boolean().optional() })).output(
       z.object({
         secret: z.string(),
         path: z.string(),
@@ -1013,13 +1021,7 @@ export const appContract = {
             notify: z.boolean().optional(),
             webhookEnabled: z.boolean().optional(),
             githubEnabled: z.boolean().optional(),
-            messageProvider: z
-              .string()
-              .min(1)
-              .max(50)
-              .regex(/^[a-z0-9._-]+$/i)
-              .nullable()
-              .optional(),
+            messageProvider: RoutineMessageProviderSchema.nullable().optional(),
             /** Null clears the routine's own model and runs it on the bot's. */
             modelProvider: z.string().trim().min(1).max(80).nullable().optional(),
             modelId: z.string().trim().min(1).max(200).nullable().optional(),
@@ -1030,19 +1032,17 @@ export const appContract = {
             watch: RoutineWatchSchema.nullable().optional(),
           })
           .superRefine((value, ctx) => {
+            // Partial updates need existing values; the route validates their merged state.
             if (
-              value.crons &&
-              value.crons.length === 0 &&
-              value.webhookEnabled === false &&
-              value.githubEnabled === false &&
-              value.messageProvider === null &&
-              value.watch === null
+              value.crons !== undefined &&
+              value.webhookEnabled !== undefined &&
+              value.githubEnabled !== undefined &&
+              value.messageProvider !== undefined &&
+              value.watch !== undefined
             ) {
-              ctx.addIssue({
-                code: "custom",
-                message: "Add a schedule, webhook, GitHub, message, or change trigger",
-                path: ["crons"],
-              });
+              const issue = routineTriggerIssue({ ...value, crons: value.crons });
+              if (issue)
+                ctx.addIssue({ code: "custom", message: issue.message, path: [issue.path] });
             }
           }),
       )

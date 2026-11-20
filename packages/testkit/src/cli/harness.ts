@@ -224,6 +224,37 @@ async function main() {
       override run(
         ...[request, context]: Parameters<InstanceType<typeof ScriptedAgentRuntime>["run"]>
       ) {
+        const routineFixture = /\bRoutine event fixture (hooks|chat|edit)(?: ([a-z0-9]+))?/i.exec(
+          request.prompt,
+        );
+        if (routineFixture) {
+          const mode = routineFixture[1];
+          const call =
+            mode === "edit"
+              ? {
+                  name: "schedule_update",
+                  args: { routineId: routineFixture[2], on: { github: false } },
+                }
+              : {
+                  name: "schedule_create",
+                  args: {
+                    name: mode === "hooks" ? "Project events" : "Telegram events",
+                    prompt: "Summarize the incoming project event.",
+                    timezone: "UTC",
+                    on: mode === "hooks" ? { webhook: true, github: true } : { chat: "telegram" },
+                  },
+                };
+          return super.run(
+            {
+              ...request,
+              script: [
+                { toolCalls: [call] },
+                { assistant: "Routine tool finished.", complete: true },
+              ],
+            },
+            context,
+          );
+        }
         if (/\bMCP form fixture \d+\b/.test(request.prompt)) {
           return super.run(
             {

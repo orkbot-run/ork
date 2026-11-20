@@ -424,6 +424,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["bots/reorder"],
       ["bots/restoreInstructions"],
       ["bots/setComputer"],
+      ["bots/getWebhookConfig", { botId: "missing-bot" }],
       ["bots/rotateWebhookSecret"],
       ["groups/create", { name: "Nope", botIds: ["missing-a", "missing-b"] }],
       ["groups/list"],

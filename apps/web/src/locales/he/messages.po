@@ -7887,3 +7887,15 @@ msgstr ""
 #: src/components/McpFormCard.tsx
 msgid "Yes"
 msgstr ""
+
+msgid "Reveal key"
+msgstr "Reveal key"
+
+msgid "Saved. Reveal key to view."
+msgstr "Saved. Reveal key to view."
+
+msgid "Could not load webhook key"
+msgstr "Could not load webhook key"
+
+msgid "No webhook key configured"
+msgstr "No webhook key configured"

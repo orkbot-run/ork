@@ -371,12 +371,13 @@ export function RoutineEditor({
   onTestRun,
   onDelete,
   onEnsureWebhook,
+  onRevealWebhook,
 }: {
   draft: RoutineDraftState;
   onChange: (next: RoutineDraftState) => void;
   editing: Routine | null;
   timezone: string;
-  webhook: { path: string; secret: string | null; configured: boolean };
+  webhook: { path: string; secret: string | null; configured: boolean; busy?: boolean };
   githubPath: string;
   messageProviders: string[];
   saving: boolean;
@@ -388,6 +389,7 @@ export function RoutineEditor({
   onTestRun: () => void;
   onDelete: () => void;
   onEnsureWebhook: () => Promise<void>;
+  onRevealWebhook?: () => Promise<void>;
 }) {
   const { t } = useLingui();
   const fieldId = useId();
@@ -660,6 +662,8 @@ export function RoutineEditor({
               configured={webhook.configured}
               onRemove={() => onChange({ ...draft, webhookEnabled: false })}
               onRotate={() => void onEnsureWebhook()}
+              onReveal={() => void onRevealWebhook?.()}
+              busy={webhook.busy}
             />
           ) : null}
 
@@ -672,6 +676,8 @@ export function RoutineEditor({
               configured={webhook.configured}
               onRemove={() => onChange({ ...draft, githubEnabled: false })}
               onRotate={() => void onEnsureWebhook()}
+              onReveal={() => void onRevealWebhook?.()}
+              busy={webhook.busy}
             />
           ) : null}
 
@@ -1002,6 +1008,8 @@ function InboundTriggerCard({
   configured,
   onRemove,
   onRotate,
+  onReveal,
+  busy,
 }: {
   kind: "webhook" | "github";
   saved: boolean;
@@ -1010,6 +1018,8 @@ function InboundTriggerCard({
   configured: boolean;
   onRemove: () => void;
   onRotate: () => void;
+  onReveal: () => void;
+  busy?: boolean;
 }) {
   const { t } = useLingui();
   const pending = !saved;
@@ -1019,7 +1029,7 @@ function InboundTriggerCard({
   const postValue = kind === "github" || !pending ? path : placeholder;
   const keyValue = pending
     ? placeholder
-    : (secret ?? (configured ? t`Saved. Rotate to reveal.` : placeholder));
+    : (secret ?? (configured ? t`Saved. Reveal key to view.` : placeholder));
   const headerValue =
     kind === "github"
       ? "X-Hub-Signature-256: sha256=…"
@@ -1071,6 +1081,22 @@ function InboundTriggerCard({
         </div>
         {saved && configured && !secret ? (
           <Button
+            type="button"
+            variant="link"
+            size="xs"
+            onClick={onReveal}
+            disabled={busy}
+            aria-busy={busy}
+            className="px-0 text-muted-foreground"
+          >
+            <Trans>Reveal key</Trans>
+          </Button>
+        ) : null}
+        {saved && configured ? (
+          <Button
+            type="button"
+            disabled={busy}
+            aria-busy={busy}
             variant="link"
             size="xs"
             onClick={onRotate}

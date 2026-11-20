@@ -282,6 +282,17 @@ export async function gateToolCall(
       (name === "schedule_update" && Boolean(args.prompt))) &&
     (await isRunTainted(ctx)) &&
     (await ctx.trust.routineNamesNewSite(String(args.prompt ?? "")));
+  // External content must not install unattended event handlers without owner approval.
+  const scheduleEvents =
+    name === "create_child_routine"
+      ? (args.schedule as Record<string, unknown> | undefined)?.on
+      : args.on;
+  const scheduleChangesEvents =
+    (name === "schedule_create" || name === "schedule_update" || name === "create_child_routine") &&
+    scheduleEvents !== undefined &&
+    scheduleEvents !== null &&
+    (await isRunTainted(ctx));
+  const outsideContentSchedule = scheduleNamesNewSite || scheduleChangesEvents;
   const { purchase, cardUse } = request;
   // Typing a saved card is approved like a purchase: every time, by a person.
   const paying = Boolean(purchase) || Boolean(cardUse);
@@ -302,12 +313,12 @@ export async function gateToolCall(
     request.mandatoryApproval ||
     paying ||
     Boolean(watchApprovalReason) ||
-    scheduleNamesNewSite ||
+    outsideContentSchedule ||
     requiresUnattendedApproval ||
     toolRequiresExplicitApproval(name);
   const mandatoryReason: ApprovalReason | undefined =
     watchApprovalReason ??
-    (scheduleNamesNewSite
+    (outsideContentSchedule
       ? "outside_content_schedule"
       : requiresUnattendedApproval
         ? "webhook_trigger"

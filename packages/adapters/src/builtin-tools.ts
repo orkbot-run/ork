@@ -120,7 +120,25 @@ export const DELEGATION_TOOL_NAMES = new Set<string>([
   ...FLEET_TOOL_NAMES,
 ]);
 
+const scheduleEventSpec = {
+  type: "object",
+  description:
+    "Event triggers, alone or alongside a repeating schedule. Webhook/GitHub secrets are available only in routine settings. chat selects a messaging provider and takes over normal replies in that app; null disables it.",
+  properties: {
+    webhook: { type: "boolean" },
+    github: { type: "boolean" },
+    chat: {
+      anyOf: [
+        { type: "string", minLength: 1, maxLength: 50, pattern: "^[a-zA-Z0-9._-]+$" },
+        { type: "null" },
+      ],
+    },
+  },
+  additionalProperties: false,
+};
+
 const scheduleCreateProperties = {
+  on: scheduleEventSpec,
   name: { type: "string", description: "Short label shown in Routines." },
   prompt: {
     type: "string",
@@ -219,12 +237,12 @@ function scheduleCreateBranch(
   return {
     type: "object",
     properties,
-    required: ["name", "prompt", ...active],
+    required: ["name", "prompt", ...(active.length ? active : ["on"])],
     additionalProperties: false,
   };
 }
 
-/** Exactly one timing method. Null or blank leftovers stay valid so callers can ignore them. */
+/** One timing method or event-only triggers. Null or blank leftovers stay valid so callers can ignore them. */
 const scheduleCreateInputSchema = {
   oneOf: [
     scheduleCreateBranch(["cron"]),
@@ -233,6 +251,7 @@ const scheduleCreateInputSchema = {
     scheduleCreateBranch(["delayMinutes"]),
     scheduleCreateBranch(["delaySeconds"]),
     scheduleCreateBranch(["watch"]),
+    scheduleCreateBranch([]),
   ],
 };
 
@@ -241,7 +260,7 @@ const childRoutineTargetProperties = {
   bot_name: { type: "string", description: "Exact name of a bot in this space." },
 };
 
-/** Same exactly-one-timing-method rule as schedule_create, plus the target bot. */
+/** Same timing/event rules as schedule_create, plus the target bot. */
 const createChildRoutineInputSchema = {
   oneOf: [
     scheduleCreateBranch(["cron"], childRoutineTargetProperties),
@@ -249,6 +268,7 @@ const createChildRoutineInputSchema = {
     scheduleCreateBranch(["runAt"], childRoutineTargetProperties),
     scheduleCreateBranch(["delayMinutes"], childRoutineTargetProperties),
     scheduleCreateBranch(["delaySeconds"], childRoutineTargetProperties),
+    scheduleCreateBranch([], childRoutineTargetProperties),
   ],
 };
 
@@ -1334,7 +1354,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "schedule_create",
     description:
-      'Create a reminder or recurring job for this bot. Use for "remind me in 10 minutes" or "every morning send a joke". Repeats: cron or every/unit (min 1 minute), optionally from startAt. One-shot: runAt, delayMinutes, or delaySeconds. A repeating job carries out the user\'s lasting request each time, not a copy of what was decided today.',
+      'Create a reminder, recurring job or event-triggered routine for this bot. Use on.webhook, on.github or on.chat without timing for events only; event triggers may accompany repeating timing. Use for "remind me in 10 minutes" or "every morning send a joke". Repeats: cron or every/unit (min 1 minute), optionally from startAt. One-shot: runAt, delayMinutes, or delaySeconds. A repeating job carries out the user\'s lasting request each time, not a copy of what was decided today.',
     inputSchema: scheduleCreateInputSchema,
   },
   {
@@ -1345,7 +1365,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "schedule_update",
     description:
-      "Edit one of this bot's schedules by routineId instead of cancelling and recreating it. In groups, edit only this chat's schedules. Send only what changes. Timing fields replace the current timing; startAt alone moves the next run of the current repeat. active false pauses it. It cannot change a watch's interval or timezone; the user can change the interval in the routine's settings on the web.",
+      "Edit one of this bot's schedules by routineId instead of cancelling and recreating it. In groups, edit only this chat's schedules. Send only what changes. on edits event triggers (false or chat null disables them); only the routine owner can edit. chat takes over normal replies in that app. Timing fields replace the current timing; startAt alone moves the next run of the current repeat. active false pauses it. It cannot change a watch's interval or timezone; the user can change the interval in the routine's settings on the web.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1740,7 +1760,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "create_child_routine",
     description:
-      "Schedule a routine that wakes a bot in this space in its own thread. Identify it by bot_id or bot_name (exact). Repeats: cron or every/unit (min 1 minute). One-shot: runAt, delayMinutes, or delaySeconds.",
+      "Schedule a routine that wakes a bot in this space in its own thread. on.webhook, on.github and on.chat support event-only routines or events alongside a repeating schedule. chat takes over normal replies in that app; webhook/GitHub secrets stay in routine settings. Identify it by bot_id or bot_name (exact). Repeats: cron or every/unit (min 1 minute). One-shot: runAt, delayMinutes, or delaySeconds.",
     inputSchema: createChildRoutineInputSchema,
   },
   {

@@ -46,6 +46,7 @@ export * from "./pages.js";
 export * from "./payments.js";
 export * from "./personal-device.js";
 export * from "./reactions.js";
+export * from "./routine-triggers.js";
 export * from "./routine-watch.js";
 export * from "./rpc.js";
 export * from "./runs.js";
