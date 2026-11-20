@@ -1596,7 +1596,7 @@ describe("MCP OAuth", () => {
   });
 
   it("persists SDK credentials and invalidates only the requested scope", async () => {
-    const persisted: unknown[] = [];
+    const persisted: OAuthMaterial[] = [];
     const provider = new StoredMcpOAuthProvider(
       "server-1",
       {
@@ -1617,6 +1617,8 @@ describe("MCP OAuth", () => {
       refresh_token: "rotated",
       token_type: "bearer",
     });
+    const grantId = persisted[0]?.oauth?.grantId;
+    expect(grantId).toMatch(/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/);
     await provider.invalidateCredentials("tokens");
 
     expect(await provider.tokens()).toBeUndefined();
@@ -1625,6 +1627,9 @@ describe("MCP OAuth", () => {
       authorizationServerUrl: "https://auth.example.test",
     });
     expect(persisted).toHaveLength(2);
+    expect(persisted[1]?.oauth?.clearedGrant).toBe(grantId);
+    expect(persisted[1]?.oauth?.grantId).toBeUndefined();
+    expect(persisted[1]?.oauth?.tokens).toBeUndefined();
     await expect(
       provider.redirectToAuthorization(new URL("https://auth.example.test/authorize")),
     ).rejects.toThrow(McpReauthorizationRequiredError);

@@ -70,6 +70,14 @@ describe("isStopCommand", () => {
       expect(parseMessagingCommand(text), text).toBeNull();
     }
   });
+  it("handles long punctuation runs without changing exact command boundaries", () => {
+    const punctuation = "!".repeat(100_000);
+    expect(isStopCommand(`${punctuation}STOP${punctuation}`)).toBe(true);
+    expect(isStopCommand(`normal text${punctuation}still text`)).toBe(false);
+    expect(isStopCommand(`${punctuation}still text`)).toBe(false);
+    expect(isStopCommand(punctuation)).toBe(false);
+    expect(isStopCommand("! !stop! !")).toBe(false);
+  });
 });
 
 describe("parseMessagingCommand", () => {

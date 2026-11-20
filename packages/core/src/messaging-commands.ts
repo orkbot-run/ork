@@ -30,17 +30,17 @@ const STOP_COMMANDS = new Set([
   "zatrzymaj się",
   "przerwij",
 ]);
+const EDGE_PUNCTUATION = new Set(".!?…¡¿。！？,;:،؛");
 
 /** Recognizes an entire Stop command, independently of the user's app locale. */
 export function isStopCommand(text: string): boolean {
-  const normalized = text
-    .normalize("NFKC")
-    .trim()
-    .toLowerCase()
-    // Only sentence punctuation at the edges; /stop remains a normal message.
-    .replace(/^[.!?…¡¿。！？,;:،؛]+|[.!?…¡¿。！？,;:،؛]+$/gu, "")
-    .trim()
-    .replace(/\s+/g, " ");
+  const value = text.normalize("NFKC").trim().toLowerCase();
+  // Only sentence punctuation at the edges; /stop remains a normal message.
+  let start = 0;
+  let end = value.length;
+  while (start < end && EDGE_PUNCTUATION.has(value[start]!)) start += 1;
+  while (end > start && EDGE_PUNCTUATION.has(value[end - 1]!)) end -= 1;
+  const normalized = value.slice(start, end).trim().replace(/\s+/g, " ");
   return STOP_COMMANDS.has(normalized);
 }
 

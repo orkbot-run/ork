@@ -62,7 +62,14 @@ export function outgoingDraftBindingForTool(name: string): OutgoingDraftBinding 
 const record = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === "object" && !Array.isArray(v);
 // Masked values cannot safely be round-tripped into the actual tool arguments.
-const masked = (s: string) => /\[(?:redacted|secret|hidden)[^\]]*\]/i.test(s);
+function masked(value: string): boolean {
+  // Any marker before the last closing bracket has a closing bracket after it.
+  // Check fixed prefixes once, without rescanning an unterminated suffix per marker.
+  const end = value.lastIndexOf("]");
+  if (end < 0) return false;
+  const prefix = value.slice(0, end).toLowerCase();
+  return prefix.includes("[redacted") || prefix.includes("[secret") || prefix.includes("[hidden");
+}
 const populated = (v: unknown) =>
   v !== undefined && v !== null && v !== "" && !(Array.isArray(v) && !v.length);
 

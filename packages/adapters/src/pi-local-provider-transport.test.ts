@@ -58,7 +58,7 @@ async function fixture() {
   vi.stubEnv("ORKBOT_LOCAL_MODELS_URL", `${origin}/v1`);
   const provider = localProvider()!;
   const model = provider.getModels()[0]!;
-  return { provider, model, requests: () => requests };
+  return { provider, model, origin, requests: () => requests };
 }
 
 function trackDispatchers() {
@@ -153,15 +153,21 @@ describe("local model streaming transport", () => {
   it.each(["env", "NODE_OPTIONS", "execArgv"])(
     "honours Node proxy opt-in via %s on the wire",
     async (mode) => {
-      const { provider, model, requests } = await fixture();
+      const { provider, model, origin, requests } = await fixture();
+      const upstreamPort = new URL(origin).port;
       let proxyRequests = 0;
+      let proxyTarget: string | undefined;
       const proxy = createServer((request, response) => {
         proxyRequests++;
+        proxyTarget = request.url;
+        // This fixture forwards only to its own loopback server, regardless of the request target.
         const upstream = httpRequest(
-          request.url!,
           {
-            method: request.method,
-            headers: request.headers,
+            hostname: "127.0.0.1",
+            port: upstreamPort,
+            path: "/v1/chat/completions",
+            method: "POST",
+            headers: { "content-type": "application/json" },
           },
           (upstreamResponse) => {
             response.writeHead(upstreamResponse.statusCode!, upstreamResponse.headers);
@@ -184,6 +190,7 @@ describe("local model streaming transport", () => {
       expect(result.stopReason).toBe("stop");
       expect(requests()).toBe(1);
       expect(proxyRequests).toBe(1);
+      expect(proxyTarget).toBe(`${origin}/v1/chat/completions`);
       expect([...dispatchers].some((dispatcher) => dispatcher instanceof EnvHttpProxyAgent)).toBe(
         true,
       );

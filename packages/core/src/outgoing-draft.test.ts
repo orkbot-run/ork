@@ -54,6 +54,29 @@ describe("outgoing drafts bound to known send requests", () => {
       outgoingDraftForEffect("GMAIL_SEND_EMAIL", { ...email, body: "x".repeat(100_001) }),
     ).toBeUndefined();
   });
+  it.each([
+    ["[SECRET: token]", true],
+    ["unrelated ] then [HiDdEn value]", true],
+    ["[secret [hidden]", true],
+    ["[secret\nvalue]", true],
+    ["[secrets]", true],
+    ["[secret", false],
+    ["] [hidden", false],
+    ["[unmasked]", false],
+    [`[secret${"[hidden".repeat(10_000)}`, false],
+    [`[secret${"[hidden".repeat(10_000)}]`, true],
+  ] as const)("preserves masked marker detection (case %#)", (body, isMasked) => {
+    const request = { ...email, body };
+    const draft = outgoingDraftForEffect("gmail_send_email", request);
+    const patched = patchOutgoingDraftEffect("gmail_send_email", email, { ...edited, body });
+    if (isMasked) {
+      expect(draft).toBeUndefined();
+      expect(patched).toBeUndefined();
+    } else {
+      expect(draft?.body).toBe(body);
+      expect(patched).toMatchObject({ body });
+    }
+  });
   it("patches trusted direct and catalog envelopes without changing routing or account", () => {
     const direct = ["__orkbotCatalogTool", "direct", { route, args: email }];
     const catalog = [
