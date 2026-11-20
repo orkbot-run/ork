@@ -57,9 +57,18 @@ export class WorkspaceAuthority {
     const { response, nonce, startedAt } = await this.installation
       .signedRequest(
         "/servers/synchronize",
-        { personalDeviceProtocol: 1, organizationRoleProtocol: 1 },
+        { personalDeviceProtocol: 1, organizationRoleProtocol: 1, organizationTypeProtocol: 1 },
         configuration,
       )
+      .catch((error) => {
+        if (error instanceof InstallationRequestError && error.status === 400)
+          return this.installation.signedRequest(
+            "/servers/synchronize",
+            { personalDeviceProtocol: 1, organizationRoleProtocol: 1 },
+            configuration,
+          );
+        throw error;
+      })
       .catch((error) => {
         if (error instanceof InstallationRequestError && error.status === 400)
           return this.installation.signedRequest(
@@ -86,6 +95,7 @@ export class WorkspaceAuthority {
     const projection = workspaceProjectionSchema.parse({
       serverId: claims.serverId,
       organizationId: claims.organizationId,
+      organizationType: claims.organizationType,
       bindingVersion: claims.bindingVersion,
       keyFingerprint: claims.keyFingerprint,
       verifiedAt: claims.verifiedAt,
@@ -128,7 +138,10 @@ export class WorkspaceAuthority {
             const workspace = projection.workspaces.find((value) => value.id === binding.id);
             if (
               workspace &&
-              (workspace.permissionVersion < binding.permissionVersion ||
+              ((projection.organizationType &&
+                binding.organizationType &&
+                projection.organizationType !== binding.organizationType) ||
+                workspace.permissionVersion < binding.permissionVersion ||
                 workspace.operationId !== binding.operationId ||
                 (workspace.localOrganizationId &&
                   workspace.localOrganizationId !== binding.localOrganizationId) ||
@@ -174,6 +187,9 @@ export class WorkspaceAuthority {
               where: { id: binding.id },
               data: {
                 state: ready ? "ready" : workspace.state === "ready" ? "failed" : workspace.state,
+                ...(projection.organizationType
+                  ? { organizationType: projection.organizationType }
+                  : {}),
                 bindingVersion: projection.bindingVersion,
                 permissionVersion: workspace.permissionVersion,
                 members: workspace.members,
@@ -298,6 +314,7 @@ export class WorkspaceAuthority {
             const latestProjection = workspaceProjectionSchema.parse({
               serverId: latest.serverId,
               organizationId: latest.organizationId,
+              organizationType: latest.organizationType,
               bindingVersion: latest.bindingVersion,
               keyFingerprint: latest.keyFingerprint,
               verifiedAt: latest.verifiedAt,
