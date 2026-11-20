@@ -5,6 +5,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger } from "@orkbot/ui-web";
 import { useState } from "react";
 import { createSpaceRpc } from "../../lib/rpc";
+import { VirtualSidebarList } from "./virtual-sidebar-list";
 
 export type SnoozedChat = {
   kind: "bot" | "group";
@@ -42,6 +43,7 @@ export function SnoozedChats({
   }
   return (
     <Collapsible
+      data-sidebar-group="snoozed"
       open={open}
       onOpenChange={setOpen}
       className="mt-2 border-t border-border pt-2"
@@ -54,32 +56,38 @@ export function SnoozedChats({
         <span>{chats.length}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col">
-        {chats.map((chat) => (
-          <div
-            key={`${chat.kind}:${chat.id}`}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-2"
-          >
-            <span className="min-w-0 flex-1 truncate text-sm" dir="auto">
-              {chat.name}
-            </span>
-            <time className="text-xs text-muted-foreground" dateTime={chat.until}>
-              {new Date(chat.until).toLocaleString(undefined, {
-                weekday: "short",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </time>
-            <Button
-              variant="ghost"
-              size="xs"
-              disabled={busy !== null}
-              aria-label={t`Wake ${chat.name}`}
-              onClick={() => void wake(chat)}
+        <VirtualSidebarList
+          items={chats}
+          getItemKey={(chat) => `${chat.kind}:${chat.id}`}
+          estimateSize={44}
+        >
+          {(chat) => (
+            <div
+              key={`${chat.kind}:${chat.id}`}
+              className="flex items-center gap-2 rounded-lg px-2.5 py-2"
             >
-              <Trans>Wake</Trans>
-            </Button>
-          </div>
-        ))}
+              <span className="min-w-0 flex-1 truncate text-sm" dir="auto">
+                {chat.name}
+              </span>
+              <time className="text-xs text-muted-foreground" dateTime={chat.until}>
+                {new Date(chat.until).toLocaleString(undefined, {
+                  weekday: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </time>
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={busy !== null}
+                aria-label={t`Wake ${chat.name}`}
+                onClick={() => void wake(chat)}
+              >
+                <Trans>Wake</Trans>
+              </Button>
+            </div>
+          )}
+        </VirtualSidebarList>
         {failed ? (
           <p role="alert" className="px-2.5 text-sm text-destructive">
             <Trans>Something went wrong. Try again.</Trans>

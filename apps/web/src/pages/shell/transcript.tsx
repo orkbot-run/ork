@@ -12,7 +12,7 @@ import type {
   Run,
   ThreadMessage,
 } from "@orkbot/contracts";
-import type { ChildBotBlock, FoldedTranscript } from "@orkbot/core";
+import type { ChildBotBlock, FoldedTranscript, ThreadItem } from "@orkbot/core";
 import {
   expandPeerReplies,
   groupVoiceChats,
@@ -30,16 +30,7 @@ import type { GroupAvatarMember } from "@orkbot/ui-web";
 import { Button, cn, Skeleton, Spinner } from "@orkbot/ui-web";
 import { ArrowDown } from "lucide-react";
 import type { CSSProperties, RefObject } from "react";
-import {
-  Fragment,
-  memo,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActiveBotGlyph } from "../../components/ai/CollaborationMarker";
 import { VoiceChatCard } from "../../components/call/VoiceChatCard";
 import type { ArtifactTarget } from "../../lib/artifact-open";
@@ -54,6 +45,7 @@ import type { createSpaceRpc } from "../../lib/rpc";
 import { messageHasVisibleBlocks } from "../../lib/tool-activity-view";
 import { CHAT_USER_TEXT_SURFACE, TRANSCRIPT_CONTENT_PADDING } from "../../lib/transcript-layout";
 import {
+  firstVisibleTranscriptRow,
   longReplyScrollTop,
   transcriptIsNearEnd,
   transcriptMovedDown,
@@ -63,6 +55,12 @@ import type { ImportSetupTarget } from "./import-setup-card";
 import { MessageView } from "./message-view";
 import { QuoteSelectionButton } from "./quote-selection-button";
 import type { OutgoingMessage, TranscriptSendReceipt } from "./use-composer-actions";
+import type { ChatWindowScroll } from "./virtual-chat-rows";
+import { VirtualChatRows } from "./virtual-chat-rows";
+
+function transcriptRowKey(item: ThreadItem<ThreadMessage>) {
+  return item.kind === "voiceChat" ? item.key : item.message.id;
+}
 
 /** Bubbles stop at a readable line length instead of stretching with wide windows. */
 export function bubbleFrameWidth(role: ThreadMessage["role"]) {
@@ -105,6 +103,7 @@ export const Transcript = memo(function Transcript({
   artifactTarget,
   transcript,
   loadingChat,
+  findOpen = false,
   outgoingMessages = [],
   showToolActivity,
   olderCursor,
@@ -150,6 +149,7 @@ export const Transcript = memo(function Transcript({
   transcript: FoldedTranscript<ThreadMessage>;
   /** A target without a local or freshly loaded snapshot. */
   loadingChat?: string;
+  findOpen?: boolean;
   outgoingMessages?: OutgoingMessage[];
   showToolActivity: boolean;
   olderCursor: number | null;
@@ -204,6 +204,7 @@ export const Transcript = memo(function Transcript({
   const lastScrollTop = useRef<number | null>(null);
   const autoScrollTimer = useRef<number | undefined>(undefined);
   const jumpButtonRef = useRef<HTMLButtonElement>(null);
+  const windowScroll = useRef<ChatWindowScroll>(null);
   const replyFollow = useRef<{
     existingLiveRows: Set<string>;
     continuationIds: Set<string>;
@@ -308,14 +309,31 @@ export const Transcript = memo(function Transcript({
     [onJumpToMessage],
   );
   const reactionView = useMemo(() => projectMessageReactions(pageView.visibleMessages), [pageView]);
-  const visibleReceipts = reactionView.visibleMessages.filter((message) =>
-    messageHasVisibleBlocks(message.blocks, showToolActivity),
-  );
-  const exchanges = peerExchangeLines({ ...transcript, messages: visibleReceipts });
-  const isFirstReceipt = (messageId: string) =>
-    !exchanges.lineOf.has(messageId) || exchanges.lines.has(messageId);
-  const shownMessages = visibleReceipts.filter((message) => isFirstReceipt(message.id));
-  const separatorIds = timeSeparatorIds(shownMessages);
+  const { exchanges, rows, rowOf, shownMessages, separatorIds } = useMemo(() => {
+    const visibleReceipts = reactionView.visibleMessages.filter((message) =>
+      messageHasVisibleBlocks(message.blocks, showToolActivity),
+    );
+    const exchanges = peerExchangeLines({ ...transcript, messages: visibleReceipts });
+    const shownMessages = visibleReceipts.filter(
+      ({ id }) => !exchanges.lineOf.has(id) || exchanges.lines.has(id),
+    );
+    // Group calls before filtering their individual lines so a hidden activity row
+    // cannot split a call card in the middle.
+    const visibleIds = new Set(shownMessages.map(({ id }) => id));
+    const rows = groupVoiceChats(reactionView.visibleMessages).filter(
+      (item) => item.kind === "voiceChat" || visibleIds.has(item.message.id),
+    );
+    const rowOf = new Map<string, string>();
+    for (const item of rows) {
+      const key = transcriptRowKey(item);
+      if (item.kind === "voiceChat") {
+        for (const message of item.messages) rowOf.set(message.id, key);
+      } else {
+        rowOf.set(item.message.id, key);
+      }
+    }
+    return { exchanges, rows, rowOf, shownMessages, separatorIds: timeSeparatorIds(shownMessages) };
+  }, [reactionView.visibleMessages, showToolActivity, transcript]);
   const unreadDividerId = unreadDividerMessageId(shownMessages, unreadAfterSeq, olderCursor);
   const workingLabel = liveActivityLine(messages) ?? t`Thinking…`;
   const [quoteDraft, setQuoteDraft] = useState<{
@@ -326,6 +344,46 @@ export const Transcript = memo(function Transcript({
     rangeText: string;
   } | null>(null);
   const selectingWithMouse = useRef(false);
+  const [prependAnchor, setPrependAnchor] = useState<{
+    id: string;
+    top: number;
+    cursor: number | null;
+  } | null>(null);
+  const jumpMessageId =
+    scrollRequest && (exchanges.lineOf.get(scrollRequest.messageId) ?? scrollRequest.messageId);
+  const jumpRowKey = jumpMessageId ? rowOf.get(jumpMessageId) : undefined;
+  const selectionRowKey = quoteDraft ? rowOf.get(quoteDraft.message.id) : undefined;
+  const prependRowKey = prependAnchor ? rowOf.get(prependAnchor.id) : undefined;
+  const keepKeys = useMemo(
+    () => [jumpRowKey, selectionRowKey, prependRowKey],
+    [jumpRowKey, selectionRowKey, prependRowKey],
+  );
+
+  useLayoutEffect(() => {
+    if (!prependAnchor || prependAnchor.cursor === olderCursor) return;
+    // Restore after the new page commits, when the header and measured rows
+    // have their new geometry. Measuring newly visible rows can change it again.
+    let frame: number;
+    let framesLeft = 6;
+    let stableFrames = 0;
+    const restore = () => {
+      const element = scrollRef.current;
+      const row = element?.querySelector(`[data-message-id="${CSS.escape(prependAnchor.id)}"]`);
+      if (element && row) {
+        const delta = row.getBoundingClientRect().top - prependAnchor.top;
+        if (Math.abs(delta) > 1) {
+          element.scrollTop += delta;
+          stableFrames = 0;
+        } else {
+          stableFrames += 1;
+        }
+      }
+      if (--framesLeft > 0 && stableFrames < 2) frame = window.requestAnimationFrame(restore);
+      else setPrependAnchor(null);
+    };
+    frame = window.requestAnimationFrame(restore);
+    return () => window.cancelAnimationFrame(frame);
+  }, [olderCursor, prependAnchor, scrollRef]);
 
   // A streaming edit can replace the selected nodes without firing selectionchange: replacing
   // both endpoints collapses the range, replacing one moves it; the pill must not keep its
@@ -433,36 +491,33 @@ export const Transcript = memo(function Transcript({
       window.removeEventListener("blur", onWindowBlur);
     };
   }, [evaluateSelection, followIfNearEnd]);
-  const snapToEnd = useCallback(() => {
-    const element = scrollRef.current;
-    if (!element) return;
-    following.current = true;
-    autoScrolling.current = false;
-    setAtEnd(true);
-    element.scrollTo({ top: element.scrollHeight, behavior: "auto" });
-  }, [scrollRef]);
+  const scrollToEnd = useCallback(
+    (behavior: "auto" | "smooth") => {
+      const element = scrollRef.current;
+      if (!element) return;
+      following.current = true;
+      // A virtual scroll command is reconciled as the last rows are measured.
+      // Its intermediate scroll events are not a reader moving away from the end.
+      autoScrolling.current = Boolean(windowScroll.current) || behavior === "smooth";
+      setAtEnd(true);
+      if (windowScroll.current) windowScroll.current.toEnd(behavior);
+      else element.scrollTo({ top: element.scrollHeight, behavior });
+      window.clearTimeout(autoScrollTimer.current);
+      if (autoScrolling.current) {
+        autoScrollTimer.current = window.setTimeout(() => {
+          autoScrolling.current = false;
+        }, 2_000);
+      }
+    },
+    [scrollRef],
+  );
+  const snapToEnd = useCallback(() => scrollToEnd("auto"), [scrollToEnd]);
 
   const jumpToLatest = useCallback(() => {
-    const element = scrollRef.current;
-    if (!element) return;
     replyFollow.current = null;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    following.current = true;
-    autoScrolling.current = !reducedMotion;
-    setAtEnd(true);
-    element.scrollTo({
-      top: element.scrollHeight,
-      behavior: reducedMotion ? "auto" : "smooth",
-    });
-    window.clearTimeout(autoScrollTimer.current);
-    // Fallback only: onScroll clears autoScrolling once near-end is reached.
-    autoScrollTimer.current = window.setTimeout(
-      () => {
-        autoScrolling.current = false;
-      },
-      reducedMotion ? 0 : 2_000,
-    );
-  }, [scrollRef]);
+    scrollToEnd(reducedMotion ? "auto" : "smooth");
+  }, [scrollToEnd]);
 
   const scrolledJump = useRef<number | null>(null);
   const jumpScrollTimer = useRef<number | undefined>(undefined);
@@ -478,17 +533,16 @@ export const Transcript = memo(function Transcript({
   // (or user input interrupting it, which also fires scrollend) ends the
   // suppression, with the timeout as fallback when no scroll happens.
   useLayoutEffect(() => {
-    if (!scrollRequest || scrolledJump.current === scrollRequest.nonce) return;
+    if (!scrollRequest || !jumpMessageId || scrolledJump.current === scrollRequest.nonce) return;
     const element = scrollRef.current;
-    const row = element?.querySelector(
-      `[data-message-id="${CSS.escape(exchanges.lineOf.get(scrollRequest.messageId) ?? scrollRequest.messageId)}"]`,
-    );
+    const row = element?.querySelector(`[data-message-id="${CSS.escape(jumpMessageId)}"]`);
     if (!element || !row) return;
     scrolledJump.current = scrollRequest.nonce;
     replyFollow.current = null;
     following.current = false;
     autoScrolling.current = false;
     jumpScrolling.current = true;
+    windowScroll.current?.cancel();
     element.addEventListener("scrollend", endJumpScroll, { once: true });
     window.clearTimeout(jumpScrollTimer.current);
     jumpScrollTimer.current = window.setTimeout(endJumpScroll, 2_000);
@@ -506,7 +560,7 @@ export const Transcript = memo(function Transcript({
       { duration: 1200 },
     );
     onScrollRequestHandled();
-  }, [messages, scrollRequest, scrollRef, endJumpScroll, onScrollRequestHandled, exchanges.lineOf]);
+  }, [messages, scrollRequest, scrollRef, endJumpScroll, onScrollRequestHandled, jumpMessageId]);
 
   const followedRequest = useRef(followRequest);
   useLayoutEffect(() => {
@@ -592,9 +646,15 @@ export const Transcript = memo(function Transcript({
     following.current = false;
     replyFollow.current = null;
     autoScrolling.current = false;
+    windowScroll.current?.cancel();
+    const row = firstVisibleTranscriptRow(scrollRef.current);
+    const id = row?.dataset.messageId;
+    if (row && id)
+      setPrependAnchor({ id, top: row.getBoundingClientRect().top, cursor: olderCursor });
     const pending = onLoadOlder();
     if (!pending) return;
     return Promise.resolve(pending).catch((error) => {
+      setPrependAnchor(null);
       const element = scrollRef.current;
       if (wasFollowing && element && transcriptIsNearEnd(element)) {
         following.current = true;
@@ -602,7 +662,7 @@ export const Transcript = memo(function Transcript({
       }
       throw error;
     });
-  }, [onLoadOlder, scrollRef]);
+  }, [olderCursor, onLoadOlder, scrollRef]);
 
   useEffect(
     () => () => {
@@ -624,11 +684,15 @@ export const Transcript = memo(function Transcript({
         data-testid="transcript"
         aria-busy={showSkeleton || undefined}
         onPointerDown={(event) => {
+          if (prependAnchor) setPrependAnchor(null);
+          windowScroll.current?.cancel();
           lastScrollTop.current = event.currentTarget.scrollTop;
           autoScrolling.current = false;
           following.current = false;
         }}
         onTouchStart={(event) => {
+          if (prependAnchor) setPrependAnchor(null);
+          windowScroll.current?.cancel();
           lastScrollTop.current = event.currentTarget.scrollTop;
           autoScrolling.current = false;
           following.current = false;
@@ -648,8 +712,10 @@ export const Transcript = memo(function Transcript({
             jumpToLatest();
         }}
         onWheel={(event) => {
+          if (prependAnchor) setPrependAnchor(null);
           if (event.deltaY && replyFollow.current?.held) replyFollow.current = null;
           if (event.deltaY < 0) {
+            windowScroll.current?.cancel();
             lastScrollTop.current = event.currentTarget.scrollTop;
             autoScrolling.current = false;
             following.current = false;
@@ -674,7 +740,7 @@ export const Transcript = memo(function Transcript({
           if (jumpScrolling.current) return;
           if (nearEnd) {
             if (scrolledDown) following.current = true;
-            if (autoScrolling.current) {
+            if (autoScrolling.current && !windowScroll.current) {
               autoScrolling.current = false;
               window.clearTimeout(autoScrollTimer.current);
             }
@@ -682,7 +748,7 @@ export const Transcript = memo(function Transcript({
             following.current = false;
           }
         }}
-        className={`rk-scroll @container/transcript isolate flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto scroll-pt-16 scroll-pb-7 pt-20 pb-12 md:pt-[84px] md:pb-13 ${TRANSCRIPT_CONTENT_PADDING}`}
+        className={`rk-scroll @container/transcript isolate flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto scroll-pt-16 scroll-pb-7 pt-20 pb-12 [overflow-anchor:none] md:pt-[84px] md:pb-13 ${TRANSCRIPT_CONTENT_PADDING}`}
         style={
           userBubble
             ? ({
@@ -706,138 +772,143 @@ export const Transcript = memo(function Transcript({
             {t`Load earlier messages`}
           </Button>
         ) : null}
-        {groupVoiceChats(reactionView.visibleMessages).map((item) => {
-          if (item.kind === "voiceChat") {
+        <VirtualChatRows
+          rows={rows}
+          getKey={transcriptRowKey}
+          layoutKey={`${showSkeleton}:${olderCursor != null}`}
+          renderAll={findOpen}
+          startAtEnd={!jumpRowKey}
+          keepKeys={keepKeys}
+          scrollControllerRef={windowScroll}
+        >
+          {(item) => {
+            if (item.kind === "voiceChat") {
+              return (
+                <div>
+                  {item.messages[0] && separatorIds.has(item.messages[0].id) ? (
+                    <TimeSeparator
+                      createdAt={item.messages[0].createdAt}
+                      locale={i18n.locale || "en"}
+                    />
+                  ) : null}
+                  {voiceChatHoldsMessage(item, unreadDividerId) ? (
+                    <UnreadDivider
+                      afterSeparator={Boolean(
+                        item.messages[0] && separatorIds.has(item.messages[0].id),
+                      )}
+                    />
+                  ) : null}
+                  <VoiceChatCard
+                    group={item}
+                    revealMessageId={scrollRequest?.messageId}
+                    onCallBack={onCallBack}
+                  />
+                </div>
+              );
+            }
+            const message = item.message;
+            const peerReceipt = isPeerReceiptBlocks(message.blocks);
+            const messageReactions = reactionView.reactions.get(message.id);
             return (
-              <div key={item.key}>
-                {item.messages[0] && separatorIds.has(item.messages[0].id) ? (
-                  <TimeSeparator
-                    createdAt={item.messages[0].createdAt}
-                    locale={i18n.locale || "en"}
-                  />
+              <>
+                {separatorIds.has(message.id) ? (
+                  <TimeSeparator createdAt={message.createdAt} locale={i18n.locale || "en"} />
                 ) : null}
-                {voiceChatHoldsMessage(item, unreadDividerId) ? (
-                  <UnreadDivider
-                    afterSeparator={Boolean(
-                      item.messages[0] && separatorIds.has(item.messages[0].id),
-                    )}
-                  />
+                {message.id === unreadDividerId ? (
+                  <UnreadDivider afterSeparator={separatorIds.has(message.id)} />
                 ) : null}
-                <VoiceChatCard
-                  group={item}
-                  revealMessageId={scrollRequest?.messageId}
-                  onCallBack={onCallBack}
-                />
-              </div>
-            );
-          }
-          const message = item.message;
-          if (
-            !isFirstReceipt(message.id) ||
-            !messageHasVisibleBlocks(message.blocks, showToolActivity)
-          )
-            return null;
-          const peerReceipt = isPeerReceiptBlocks(message.blocks);
-          const messageReactions = reactionView.reactions.get(message.id);
-          return (
-            <Fragment key={message.id}>
-              {separatorIds.has(message.id) ? (
-                <TimeSeparator createdAt={message.createdAt} locale={i18n.locale || "en"} />
-              ) : null}
-              {message.id === unreadDividerId ? (
-                <UnreadDivider afterSeparator={separatorIds.has(message.id)} />
-              ) : null}
-              <div
-                data-message-id={message.id}
-                className={peerReceipt ? "relative py-0.5" : "group/message relative hover:z-[1]"}
-              >
                 <div
-                  className={
-                    peerReceipt
-                      ? undefined
-                      : `relative flex ${message.role === "user" ? "justify-end" : "justify-start"}`
-                  }
+                  data-message-id={message.id}
+                  className={peerReceipt ? "relative py-0.5" : "group/message relative hover:z-[1]"}
                 >
                   <div
-                    data-testid={peerReceipt ? undefined : "message-bubble-frame"}
                     className={
                       peerReceipt
                         ? undefined
-                        : message.blocks.some(
-                              (block) => block.kind === "ask" || block.kind === "mcp_approval",
-                            )
-                          ? "relative w-full min-w-0 max-w-xl"
-                          : `relative ${message.blocks.some((block) => block.kind === "app_connect" || block.kind === "page") || pageView.pages.has(message.id) ? "w-full" : "w-fit"} min-w-0 ${bubbleFrameWidth(message.role)}`
+                        : `relative flex ${message.role === "user" ? "justify-end" : "justify-start"}`
                     }
                   >
-                    <MessageView
-                      artifactTarget={artifactTarget}
-                      message={message}
-                      markedUnread={message.id === markedUnreadMessageId}
-                      mentions={mentionView.mentions.get(message.id)}
-                      pages={pageView.pages.get(message.id)}
-                      isPageSuperseded={pageView.isSuperseded}
-                      canAnswer={answerableAskIds.has(message.id)}
-                      canDismiss={dismissableAskIds.has(message.id)}
-                      onOpenBot={onOpenBot}
-                      onOpenPeerMessages={onOpenPeerMessages}
-                      peerExchange={exchanges.lines.get(message.id)}
-                      onAnswer={onAnswer}
-                      speakerName={
+                    <div
+                      data-testid={peerReceipt ? undefined : "message-bubble-frame"}
+                      className={
                         peerReceipt
                           ? undefined
-                          : message.role === "bot"
-                            ? memberName?.(message.botId)
+                          : message.blocks.some(
+                                (block) => block.kind === "ask" || block.kind === "mcp_approval",
+                              )
+                            ? "relative w-full min-w-0 max-w-xl"
+                            : `relative ${message.blocks.some((block) => block.kind === "app_connect" || block.kind === "page") || pageView.pages.has(message.id) ? "w-full" : "w-fit"} min-w-0 ${bubbleFrameWidth(message.role)}`
+                      }
+                    >
+                      <MessageView
+                        artifactTarget={artifactTarget}
+                        message={message}
+                        markedUnread={message.id === markedUnreadMessageId}
+                        mentions={mentionView.mentions.get(message.id)}
+                        pages={pageView.pages.get(message.id)}
+                        isPageSuperseded={pageView.isSuperseded}
+                        canAnswer={answerableAskIds.has(message.id)}
+                        canDismiss={dismissableAskIds.has(message.id)}
+                        onOpenBot={onOpenBot}
+                        onOpenPeerMessages={onOpenPeerMessages}
+                        peerExchange={exchanges.lines.get(message.id)}
+                        onAnswer={onAnswer}
+                        speakerName={
+                          peerReceipt
+                            ? undefined
+                            : message.role === "bot"
+                              ? memberName?.(message.botId)
+                              : undefined
+                        }
+                        memberName={memberName}
+                        peerBot={peerBot}
+                        replyParent={
+                          message.replyToMessageId
+                            ? messageById.get(message.replyToMessageId)
                             : undefined
-                      }
-                      memberName={memberName}
-                      peerBot={peerBot}
-                      replyParent={
-                        message.replyToMessageId
-                          ? messageById.get(message.replyToMessageId)
-                          : undefined
-                      }
-                      onJumpToMessage={jumpToMessage}
-                      onRefresh={onRefresh}
-                      onBotChanged={onBotChanged}
-                      onAddRoutine={onAddRoutine}
-                      voiceReady={voiceReady}
-                      speechBlocked={speechBlocked}
-                      speaking={speakingMessageId === message.id}
-                      onSpeak={onSpeak}
-                      onOpenComputer={onOpenComputer}
-                      onOpenImportSetup={onOpenImportSetup}
-                      rpc={rpc}
-                      showToolActivity={showToolActivity}
-                      onReply={onReply}
-                      onMarkUnread={onMarkUnread}
-                      onReact={onReact}
-                    />
+                        }
+                        onJumpToMessage={jumpToMessage}
+                        onRefresh={onRefresh}
+                        onBotChanged={onBotChanged}
+                        onAddRoutine={onAddRoutine}
+                        voiceReady={voiceReady}
+                        speechBlocked={speechBlocked}
+                        speaking={speakingMessageId === message.id}
+                        onSpeak={onSpeak}
+                        onOpenComputer={onOpenComputer}
+                        onOpenImportSetup={onOpenImportSetup}
+                        rpc={rpc}
+                        showToolActivity={showToolActivity}
+                        onReply={onReply}
+                        onMarkUnread={onMarkUnread}
+                        onReact={onReact}
+                      />
+                    </div>
                   </div>
+                  {!peerReceipt && messageReactions ? (
+                    <div
+                      data-testid="message-reactions"
+                      className={cn(
+                        "mt-1 flex flex-wrap gap-1",
+                        message.role === "user" && "justify-end",
+                      )}
+                    >
+                      {[...messageReactions].map(([emoji, count]) => (
+                        <span
+                          key={emoji}
+                          className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs"
+                        >
+                          {emoji}
+                          {count > 1 ? ` ${count}` : ""}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-                {!peerReceipt && messageReactions ? (
-                  <div
-                    data-testid="message-reactions"
-                    className={cn(
-                      "mt-1 flex flex-wrap gap-1",
-                      message.role === "user" && "justify-end",
-                    )}
-                  >
-                    {[...messageReactions].map(([emoji, count]) => (
-                      <span
-                        key={emoji}
-                        className="rounded-full border border-border bg-muted px-2 py-0.5 text-xs"
-                      >
-                        {emoji}
-                        {count > 1 ? ` ${count}` : ""}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </Fragment>
-          );
-        })}
+              </>
+            );
+          }}
+        </VirtualChatRows>
         {outgoingMessages.map((message) => (
           <div
             key={message.clientNonce}

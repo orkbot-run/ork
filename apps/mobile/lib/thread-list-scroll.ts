@@ -6,7 +6,6 @@ import type {
   LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
-  ScrollView,
   View,
 } from "react-native";
 import { Platform } from "react-native";
@@ -57,7 +56,7 @@ export function useThreadListScroll({
     pinnedScrollMetrics,
   } = history;
   const list = useRef<FlatList<ThreadItem<MobileMessage>>>(null);
-  const pinnedList = useRef<ScrollView>(null);
+  const pinnedList = useRef<FlatList<MobileMessage>>(null);
   const helperViewport = useRef<View>(null);
   const helperScrollOffset = useRef(0);
   const helperResize = useRef<(() => void) | null>(null);
@@ -130,7 +129,7 @@ export function useThreadListScroll({
   }
 
   function scrollPinnedTo(offset: number) {
-    pinnedList.current?.scrollTo({ y: offset, animated: false });
+    pinnedList.current?.scrollToOffset({ offset, animated: false });
     pinnedScrollMetrics.current.offset = offset;
   }
 
@@ -179,8 +178,8 @@ export function useThreadListScroll({
                   })
                 : before;
               if (showPinnedPage) {
-                pinnedList.current?.scrollTo({
-                  y: helperHeaderOffset(pinnedScrollMetrics.current.offset, after, target),
+                pinnedList.current?.scrollToOffset({
+                  offset: helperHeaderOffset(pinnedScrollMetrics.current.offset, after, target),
                   animated: false,
                 });
               } else {
@@ -293,6 +292,8 @@ export function useThreadListScroll({
   return {
     list,
     pinnedList,
+    isPinnedJumpPending: () =>
+      jumpAnchor.current.holds() && jumpAnchor.current.align(anchor) == null,
     helperViewport,
     behavior,
     pinnedScrollBack,

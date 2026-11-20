@@ -5,9 +5,9 @@
 import type { ThreadItem } from "@orkbot/core";
 import { threadWindowMessages } from "@orkbot/core";
 import type { ReactElement, ReactNode } from "react";
-import { useMemo } from "react";
-import type { ListRenderItem } from "react-native";
-import { ActivityIndicator, FlatList, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useMemo, useRef } from "react";
+import type { CellRendererProps, ListRenderItem } from "react-native";
+import { ActivityIndicator, FlatList, Platform, StyleSheet, View } from "react-native";
 import type { MobileMessage } from "../../lib/api";
 import { mobileTokens } from "../../lib/appearance";
 import type { ThreadColumnPadding } from "../../lib/thread-edges";
@@ -77,6 +77,46 @@ export function ThreadMessageList({
   const tokens = mobileTokens();
   const { showPinnedPage, pinnedTarget, pinnedNewerCursor, behavior, state } = scroll;
   const { jumpTarget } = scroll;
+  const pinnedMessages = useMemo(
+    () => threadWindowMessages(visibleMessages, pinnedNewerCursor),
+    [visibleMessages, pinnedNewerCursor],
+  );
+  // FlatList wraps each row in a cell. Measure the cell, whose y is relative to
+  // the content, rather than the message's local y (always zero in its cell).
+  const scrollRef = useRef(scroll);
+  scrollRef.current = scroll;
+  const PinnedCell = useMemo(
+    () =>
+      function PinnedCell({ item, index, onLayout, ...props }: CellRendererProps<MobileMessage>) {
+        return (
+          <View
+            {...props}
+            onLayout={(event) => {
+              onLayout?.(event);
+              scrollRef.current.layoutJumpRow(item.id, event.nativeEvent.layout.y, index);
+            }}
+          />
+        );
+      },
+    [],
+  );
+  const retryJump = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const targetId = jumpTarget ?? pinnedTarget?.messageId;
+  const jumpToPinnedTarget = useRef(() => {});
+  jumpToPinnedTarget.current = () => {
+    if (!showPinnedPage || !scroll.isPinnedJumpPending()) return;
+    const index = pinnedMessages.findIndex((message) => message.id === targetId);
+    if (index < 0) return;
+    scroll.pinnedList.current?.scrollToIndex({
+      index,
+      viewOffset: headerClearance.padding,
+      animated: false,
+    });
+  };
+  useEffect(() => {
+    jumpToPinnedTarget.current();
+    return () => clearTimeout(retryJump.current);
+  }, [showPinnedPage, targetId]);
   const listContentStyle = useMemo(
     () => ({
       paddingBottom: headerClearance.padding,
@@ -98,9 +138,23 @@ export function ThreadMessageList({
     >
       {showPinnedPage ? (
         <ThreadScrollSurface key={`pinned:${jumpTarget ?? pinnedTarget?.messageId ?? threadKey}`}>
-          <ScrollView
+          <FlatList
             key={jumpTarget ?? pinnedTarget?.messageId ?? threadKey}
             ref={scroll.pinnedList}
+            data={pinnedMessages}
+            keyExtractor={(message) => message.id}
+            extraData={renderMessageRow}
+            CellRendererComponent={PinnedCell}
+            renderItem={({ item, index }) => renderMessageRow(item, { index })}
+            onScrollToIndexFailed={({ index, averageItemLength }) => {
+              if (!scroll.isPinnedJumpPending()) return;
+              scroll.pinnedList.current?.scrollToOffset({
+                offset: Math.max(0, averageItemLength * index - headerClearance.padding),
+                animated: false,
+              });
+              clearTimeout(retryJump.current);
+              retryJump.current = setTimeout(() => jumpToPinnedTarget.current(), 100);
+            }}
             style={styles.list}
             // A pinned page always shows the floating jump button (44pt, 12pt from the
             // bottom), so its last message must be able to scroll clear of it.
@@ -113,19 +167,22 @@ export function ThreadMessageList({
             maintainVisibleContentPosition={messageListPosition}
             scrollEventThrottle={16}
             {...pinnedListHandlers}
-          >
-            {loadEarlierControl}
-            {threadWindowMessages(visibleMessages, pinnedNewerCursor).map((message, index) =>
-              renderMessageRow(message, { enableJump: true, index }),
-            )}
-            {pinnedNewerCursor === null ? failedSendBubbles : null}
-            {errorNotice}
-            {pinnedNewerCursor === null ? (
-              workingFooter
-            ) : loadingNewer ? (
-              <ActivityIndicator color={tokens.mutedForeground} style={{ marginVertical: 12 }} />
-            ) : null}
-          </ScrollView>
+            ListHeaderComponent={loadEarlierControl}
+            ListFooterComponent={
+              <View>
+                {pinnedNewerCursor === null ? failedSendBubbles : null}
+                {errorNotice}
+                {pinnedNewerCursor === null ? (
+                  workingFooter
+                ) : loadingNewer ? (
+                  <ActivityIndicator
+                    color={tokens.mutedForeground}
+                    style={{ marginVertical: 12 }}
+                  />
+                ) : null}
+              </View>
+            }
+          />
         </ThreadScrollSurface>
       ) : (
         <ThreadScrollSurface key={`live:${threadKey}`}>
