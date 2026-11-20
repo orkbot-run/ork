@@ -45,6 +45,21 @@ export const AUDITED_PROCEDURES: Record<string, AuditedProcedure> = {
   "integrationSetup.save": { type: "credential.changed", kind: "integration_provider" },
   "agentSecrets.put": { type: "credential.changed", kind: "agent_secret" },
   "agentSecrets.remove": { type: "credential.deleted", kind: "agent_secret", fields: ["id"] },
+  "organizationVault.put": {
+    type: "credential.changed",
+    kind: "organization_vault",
+    fields: ["destination.name"],
+  },
+  "organizationVault.remove": {
+    type: "credential.deleted",
+    kind: "organization_vault",
+    fields: ["name"],
+  },
+  "organizationVault.setWorkspaceAccess": {
+    type: "approval.policy.changed",
+    kind: "organization_vault",
+    fields: ["spaceId", "allowed"],
+  },
   "botSecrets.put": {
     type: "credential.changed",
     kind: "bot_secret",

@@ -626,6 +626,10 @@ msgstr ""
 msgid "Add open work"
 msgstr "Open taak toevoegen"
 
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Add organization secret"
+msgstr ""
+
 #: src/components/PasskeyOffer.tsx
 #: src/components/PasskeySettings.tsx
 msgid "Add passkey"
@@ -637,6 +641,10 @@ msgstr "Aanbieder toevoegen"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add rule"
+msgstr ""
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Add secret"
 msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
@@ -778,6 +786,10 @@ msgstr ""
 msgid "Allow personal models"
 msgstr ""
 
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Allow workspace access"
+msgstr ""
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
 msgstr "Schrijven toestaan"
@@ -885,6 +897,7 @@ msgstr "Elk model, met je eigen sleutel"
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
@@ -1329,6 +1342,7 @@ msgstr "Kan afbeeldingen niet lezen"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/shell/create-bot-dialog.tsx
@@ -1370,6 +1384,7 @@ msgid "Cancelled"
 msgstr "Geannuleerd"
 
 #: src/components/vault/kinds.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Card"
 msgstr ""
 
@@ -1569,6 +1584,10 @@ msgstr ""
 #: src/components/ModelCredits.tsx
 #: src/components/SubscriptionGate.tsx
 msgid "Choose how to use Ork"
+msgstr ""
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it."
 msgstr ""
 
 #: src/components/WorkspaceAccessGuard.tsx
@@ -1853,6 +1872,7 @@ msgid "Confirm password"
 msgstr "Wachtwoord bevestigen"
 
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Confirm removal"
 msgstr ""
 
@@ -1995,6 +2015,7 @@ msgid "Connector ID"
 msgstr ""
 
 #: src/components/vault/kinds.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Contact"
 msgstr ""
 
@@ -2126,6 +2147,10 @@ msgstr ""
 #: src/components/pages/PageViewHost.tsx
 msgid "Could not change who can view this page. Try again."
 msgstr "Kon niet wijzigen wie deze pagina kan bekijken. Probeer het opnieuw."
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not change workspace access."
+msgstr ""
 
 #: src/components/ProtocolRecovery.tsx
 msgid "Could not check server compatibility."
@@ -2399,6 +2424,10 @@ msgstr "Skill laden mislukt"
 msgid "Could not load the desktop."
 msgstr "Het bureaublad kon niet worden geladen."
 
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not load the organization vault. Check your access and try again."
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
 msgstr "Dit artefact laden mislukt."
@@ -2438,6 +2467,10 @@ msgstr "Uitloggen mislukt. Probeer het opnieuw."
 #: src/pages/Paywall.tsx
 msgid "Could not open billing"
 msgstr "Facturatie openen mislukt"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not open the secret."
+msgstr ""
 
 #: src/components/WorkspaceAccessGuard.tsx
 msgid "Could not open the workspace picker. Try again."
@@ -2507,6 +2540,10 @@ msgstr ""
 #: src/components/VaultSettings.tsx
 msgid "Could not remove the credential"
 msgstr "De gegevens verwijderen mislukt"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not remove the secret."
+msgstr ""
 
 #: src/pages/model-settings/providers-section.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -2604,6 +2641,10 @@ msgstr "Die stem opslaan mislukt"
 msgid "Could not save the credential"
 msgstr "De gegevens opslaan mislukt"
 
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not save the secret. Please try again."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Could not save this choice"
 msgstr "Deze keuze opslaan mislukt"
@@ -2699,6 +2740,18 @@ msgstr "Reactie bijwerken mislukt"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Could not update the default memory scope"
 msgstr "Het standaardgeheugenbereik bijwerken mislukt"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not verify this organization. Sign in again and try again."
+msgstr ""
+
+#: src/components/VaultSettings.tsx
+msgid "Could not verify this organization's vault policy. Sign in again to continue."
+msgstr ""
+
+#: src/components/VaultSettings.tsx
+msgid "Could not verify this organization's vault policy. Update the server or try again."
+msgstr ""
 
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
@@ -3252,6 +3305,7 @@ msgstr "Elke naam kan maar één keer worden gebruikt."
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Edit"
 msgstr "Bewerken"
 
@@ -3270,6 +3324,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
 msgstr "Naam bewerken"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Edit organization secret"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 msgid "Edit Profile"
@@ -4259,6 +4317,11 @@ msgstr "Voorbeeld laden…"
 msgid "Loading usage"
 msgstr ""
 
+#: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Loading vault settings…"
+msgstr ""
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Loading voice providers…"
 msgstr "Spraakanbieders laden…"
@@ -4299,6 +4362,7 @@ msgid "Log out"
 msgstr "Uitloggen"
 
 #: src/components/vault/kinds.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Login"
 msgstr ""
 
@@ -4326,6 +4390,10 @@ msgstr "Hoofdmodel"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Make available to organization"
+msgstr ""
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Make credentials available to approved workspaces."
 msgstr ""
 
 #: src/pages/BillingSettingsPanel.tsx
@@ -5020,6 +5088,10 @@ msgstr "Geen runs komen overeen met deze filters."
 msgid "No runs yet"
 msgstr "Nog geen runs"
 
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "No secrets added yet."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
 msgstr "Nog geen skills"
@@ -5299,6 +5371,10 @@ msgstr ""
 msgid "Organization settings"
 msgstr "Organisatie-instellingen"
 
+#: src/pages/settings-nav.ts
+msgid "Organization vault"
+msgstr ""
+
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
 msgstr "Oorspronkelijk bericht niet beschikbaar"
@@ -5495,6 +5571,14 @@ msgstr "Persoonlijke modellen"
 #: src/pages/Onboarding.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Personal models may process workspace data outside company servers."
+msgstr ""
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Personal organizations use your personal vault. Open Your settings → Vault to manage your secrets."
+msgstr ""
+
+#: src/components/VaultSettings.tsx
+msgid "Personal vaults are unavailable in shared organizations. Organization admins can manage secrets and workspace access in Organization settings → Organization vault."
 msgstr ""
 
 #: src/components/vault/VaultItemDetail.tsx
@@ -5869,6 +5953,7 @@ msgstr "Herladen"
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelRoleSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
@@ -6487,6 +6572,10 @@ msgstr "Zoeken: {0}"
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "Bezig met zoeken…"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Secrets"
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Security"
@@ -7863,6 +7952,7 @@ msgstr "Waarde"
 
 #: src/components/vault/kinds.tsx
 #: src/components/vault/VaultItemDetail.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Variable"
 msgstr ""
 
@@ -8101,6 +8191,10 @@ msgstr "Werkt met je ChatGPT- of Claude-abonnement."
 msgid "Workspace"
 msgstr "Werkruimte"
 
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Workspace access"
+msgstr ""
+
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Workspace model"
 msgstr ""
@@ -8231,6 +8325,10 @@ msgstr ""
 #: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Your organization role could not be verified. Check that Accounts and this server are up to date."
+msgstr ""
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Your organization's server manages these secrets. Ork Accounts does not receive them. Only organization admins can manage this vault."
 msgstr ""
 
 #: src/components/ModelCredits.tsx

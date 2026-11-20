@@ -2007,6 +2007,13 @@ describe.skipIf(!enabled)(
         deviceSignature,
       });
       expect(response.status).toBe(200);
+      expect(
+        (
+          await system(() =>
+            prisma!.centralWorkspaceBinding.findUniqueOrThrow({ where: { id: workspaceId } }),
+          )
+        ).organizationType,
+      ).toBe("personal");
       const result = (await response.json()) as { token: string; personalDevice: { id: string } };
       expect(result.personalDevice.id).toBe(device.id);
       const session = await system(() =>
@@ -2427,9 +2434,18 @@ describe.skipIf(!enabled)(
               })
             ).status,
           ).toBe(403);
-        const grant = await server.loginGrant(challenge);
+        const grant = await server.loginGrant(challenge, undefined, {
+          organization_type: "shared",
+        });
         const complete = await call("complete", { challenge, grant });
         expect(complete.status).toBe(200);
+        expect(
+          (
+            await system(() =>
+              prisma!.centralWorkspaceBinding.findUniqueOrThrow({ where: { id: workspaceId } }),
+            )
+          ).organizationType,
+        ).toBe("shared");
         const result = (await complete.json()) as { token: string };
         expect(result).toMatchObject({
           workspaceId,

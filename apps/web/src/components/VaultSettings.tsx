@@ -42,9 +42,20 @@ export function VaultSettings({
   const { t } = useLingui();
   const rpc = useSpaceRpc();
   const queries = useSpaceQueries();
+  const vaultContext = useQuery({
+    ...queries.organizationVault.context.queryOptions(),
+    retry: false,
+  });
   const queryClient = useQueryClient();
   const list = queries.vault.list.queryOptions({ input: { scope } });
-  const listQuery = useQuery({ ...list, refetchOnMount: "always" });
+  const listQuery = useQuery({
+    ...list,
+    refetchOnMount: "always",
+    enabled:
+      vaultContext.isSuccess &&
+      vaultContext.data.kind !== "shared" &&
+      vaultContext.data.kind !== "unverified",
+  });
   const items = listQuery.data;
   const { one, many } = useVaultKindLabels();
   const subtitle = useVaultSubtitle();
@@ -178,6 +189,36 @@ export function VaultSettings({
         )),
   );
   const openedItem = items?.find((item) => item.name === opened);
+
+  if (vaultContext.isPending)
+    return (
+      <p className="text-sm text-muted-foreground">
+        <Trans>Loading vault settings…</Trans>
+      </p>
+    );
+  if (vaultContext.data?.kind === "shared")
+    return (
+      <p className="text-sm text-muted-foreground">
+        <Trans>
+          Personal vaults are unavailable in shared organizations. Organization admins can manage
+          secrets and workspace access in Organization settings → Organization vault.
+        </Trans>
+      </p>
+    );
+  if (vaultContext.data?.kind === "unverified")
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        <Trans>Could not verify this organization's vault policy. Sign in again to continue.</Trans>
+      </p>
+    );
+  if (vaultContext.isError)
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        <Trans>
+          Could not verify this organization's vault policy. Update the server or try again.
+        </Trans>
+      </p>
+    );
 
   // An item or form takes the list's place in this panel instead of opening a dialog over Settings.
   if (editing)

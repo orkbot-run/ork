@@ -45,9 +45,15 @@ vi.mock("./ConfirmIdentityDialog", async () => {
 });
 
 vi.mock("../lib/rpc", () => ({
-  rpc: { vault },
-  rpcForSpace: () => ({ vault }),
-  createSpaceRpc: () => ({ vault }),
+  rpc: { vault, organizationVault: { context: async () => ({ kind: "personal" }) } },
+  rpcForSpace: () => ({
+    vault,
+    organizationVault: { context: async () => ({ kind: "personal" }) },
+  }),
+  createSpaceRpc: () => ({
+    vault,
+    organizationVault: { context: async () => ({ kind: "personal" }) },
+  }),
   selectedSpaceId: () => null,
 }));
 vi.mock("@lingui/react/macro", () => {
@@ -122,6 +128,7 @@ async function render(scope: SettingsScope = "account") {
     );
   });
   await flush();
+  await flush(); // Vault items load after the organization policy resolves.
 }
 
 function find<T extends HTMLElement = HTMLElement>(testId: string): T | null {

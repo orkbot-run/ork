@@ -3,6 +3,24 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":
+    "このサーバーでシークレットを使用できるワークスペースを選択します。新しいワークスペースには許可するまでアクセス権がありません。",
+  "Could not change workspace access.": "ワークスペースのアクセス権を変更できませんでした。",
+  "Could not load the organization vault. Check your access and try again.":
+    "組織の保管庫を読み込めませんでした。アクセス権を確認して再試行してください。",
+  "Could not verify this organization's vault policy. Sign in again to continue.":
+    "組織の保管庫ポリシーを確認できませんでした。再度サインインしてください。",
+  "Could not verify this organization. Sign in again and try again.":
+    "組織を確認できませんでした。再度サインインしてください。",
+  "Organization vault": "組織の保管庫",
+  "Personal organizations use your personal vault. Open Your settings → Vault to manage your secrets.":
+    "個人組織では個人の保管庫を使用します。個人設定 → 保管庫を開いてください。",
+  "Personal vaults are unavailable in shared organizations. Organization admins can manage secrets and workspace access in Organization settings → Organization vault.":
+    "共有組織では個人の保管庫は利用できません。管理者は組織設定 → 組織の保管庫でシークレットとアクセス権を管理します。",
+  Secrets: "シークレット",
+  "Workspace access": "ワークスペースのアクセス権",
+  "Your organization's server manages these secrets. Ork Accounts does not receive them. Only organization admins can manage this vault.":
+    "これらのシークレットは組織のサーバーが管理し、Ork Accounts には送信されません。管理できるのは組織の管理者のみです。",
   "Add a schedule or an HTTPS address to run this routine.":
     "このルーティンを実行するには、スケジュールまたはHTTPSアドレスを追加してください。",
   "Ask an owner to resume your plan.": "オーナーにプランの再開を依頼してください。",

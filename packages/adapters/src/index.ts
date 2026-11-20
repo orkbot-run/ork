@@ -154,6 +154,8 @@ export * from "./openai-compatible-url.js";
 export * from "./openai-compatible-voice.js";
 export * from "./openai-voice.js";
 export * from "./openrouter-usage.js";
+export { OrganizationVault } from "./organization-vault.js";
+export { organizationVaultPolicy } from "./organization-vault-policy.js";
 export * from "./page-browser-session.js";
 export * from "./page-share-secrets.js";
 export * from "./parallel-web.js";

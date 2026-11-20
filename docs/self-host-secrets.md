@@ -76,6 +76,25 @@ With `MASTER_KEY_PROVIDER=aws-kms`, these and the other API and worker
 secrets can be kept in `.env` wrapped by the key manager instead of in
 plaintext ([wrapped settings](content-encryption.md#wrapped-settings)).
 
+## Organization vault
+
+Organization administrators can manage the vault under **Organization settings → Organization
+vault** in the app. Credentials use the installation's configured secret store; Ork Accounts
+does not receive their values. Back up the store and its encryption key according to the operator's
+configuration. With the default encrypted store, losing `ENCRYPTION_KEY` makes stored credentials
+unreadable.
+
+The vault and its grants belong to this installation. An organization with multiple servers
+configures secrets and workspace access separately on each server. New workspaces have no vault
+access until an administrator grants it. Revocation and archiving prevent future reads; a command
+already running may retain values it received earlier. Archiving preserves grants for restoration,
+and deleting a workspace removes its grant without deleting organization secrets. Removing the
+administrator who created a secret does not remove the secret.
+
+Personal organizations continue to use the personal vault. Existing signed-in users may need to
+sign in again after upgrading so the installation can verify the organization's type. An unknown
+type cannot use the personal vault until it is verified.
+
 ## Optional keys (leave blank if unused)
 
 From `.env.images.example` (images installer). Leave blank if unused:

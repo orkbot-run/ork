@@ -34,6 +34,7 @@ export interface NativeLoginIdentity {
     id: string;
     spaceId: string;
     organizationId: string;
+    organizationType?: "personal" | "shared";
     revision: string;
     role: "admin" | "member";
   };

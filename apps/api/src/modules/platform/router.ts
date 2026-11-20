@@ -58,6 +58,7 @@ import { messagingRoutes } from "#modules/messaging/routes/messaging";
 import { modelsRoutes } from "#modules/models/routes/models";
 import { serverAIRoutes } from "#modules/models/routes/server-ai";
 import { routinesRoutes } from "#modules/routines/routes/routines";
+import { organizationVaultRoutes } from "#modules/security/organization-vault-routes";
 import { serverUpdateRoutes } from "#modules/server-updates/routes";
 import type { ServerUpdatesService } from "#modules/server-updates/service";
 import { availabilityRoutes } from "#modules/spaces/routes/availability";
@@ -174,6 +175,7 @@ export function createRouter(deps: RouterDeps) {
     ...organizationsRoutes(ctx),
     ...modelsRoutes(ctx),
     ...serverAIRoutes(ctx),
+    ...organizationVaultRoutes(ctx),
     ...botsRoutes(ctx),
     ...threadsRoutes(ctx),
     ...computerRoutes(ctx),

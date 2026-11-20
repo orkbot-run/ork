@@ -5,7 +5,13 @@
 import type { SecretMigrationRepository, SecretMigrationRow } from "@orkbot/adapters";
 import type { PrismaClient } from "@orkbot/db";
 
-const tables = ["secret", "botSecret", "vaultCredential", "integrationProviderConfig"] as const;
+const tables = [
+  "secret",
+  "botSecret",
+  "vaultCredential",
+  "organizationVaultCredential",
+  "integrationProviderConfig",
+] as const;
 
 export function createSecretMigrationRepository(prisma: PrismaClient): SecretMigrationRepository {
   return {
@@ -49,6 +55,7 @@ export function createSecretMigrationRepository(prisma: PrismaClient): SecretMig
         (await prisma.secret.count({ where: { ciphertext: ref } })) ||
           (await prisma.botSecret.count({ where: { ciphertext: ref } })) ||
           (await prisma.vaultCredential.count({ where: { ciphertext: ref } })) ||
+          (await prisma.organizationVaultCredential.count({ where: { ciphertext: ref } })) ||
           (await prisma.integrationProviderConfig.count({ where: { ciphertext: ref } })),
       );
     },

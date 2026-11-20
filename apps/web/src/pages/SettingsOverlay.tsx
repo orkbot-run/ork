@@ -35,6 +35,7 @@ import {
   OrganizationSettingsActions,
   OrganizationSettingsPanel,
 } from "./OrganizationSettingsPanel";
+import { OrganizationVaultSettings } from "./OrganizationVaultSettings";
 import { PaymentWalletSettingsPanel } from "./PaymentWalletSettingsPanel";
 import { ServerAISettings } from "./ServerAISettings";
 import { SpaceSettingsPanel } from "./SpaceSettingsPanel";
@@ -208,12 +209,17 @@ export function SettingsOverlay({
     modelPolicy.data?.managed === true &&
     (section === "organization" ||
       section === "organization-models" ||
+      section === "organization-vault" ||
       section === "organization-activity");
   const navItems = modelPolicy.data?.managed
     ? allNavItems.filter((item) =>
         organizationScope
-          ? item.id === "organization" || item.id === "organization-models"
-          : item.id !== "organization" && item.id !== "organization-models",
+          ? item.id === "organization" ||
+            item.id === "organization-models" ||
+            item.id === "organization-vault"
+          : item.id !== "organization" &&
+            item.id !== "organization-models" &&
+            item.id !== "organization-vault",
       )
     : allNavItems;
 
@@ -542,6 +548,9 @@ export function SettingsOverlay({
                   ) : null}
                   {section === "organization-models" && modelPolicy.data?.managed ? (
                     <ServerAISettings embedded onClose={requestClose} />
+                  ) : null}
+                  {section === "organization-vault" && modelPolicy.data?.managed ? (
+                    <OrganizationVaultSettings />
                   ) : null}
                   {section === "organization-activity" && !auditForbidden ? (
                     <AuditLog

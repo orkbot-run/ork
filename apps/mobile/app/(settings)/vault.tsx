@@ -62,6 +62,7 @@ export default function Vault() {
   const sideInsets = useSideInsets();
   const styles = useThemedStyles(createStyles);
   const [items, setItems] = useState<BotSecretMetadata[] | null>(null);
+  const [vaultPolicy, setVaultPolicy] = useState<"shared" | "unverified" | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -89,9 +90,19 @@ export default function Vault() {
     useCallback(() => {
       let current = true;
       const changesAtRead = changes.current;
-      void rpc("vault/list", { scope })
+      setItems(null);
+      setVaultPolicy(null);
+      void rpc("organizationVault/context")
+        .then((policy) => {
+          if (!current) return null;
+          if (policy?.kind === "shared" || policy?.kind === "unverified") {
+            setVaultPolicy(policy.kind);
+            return null;
+          }
+          return rpc("vault/list", { scope });
+        })
         .then((next) => {
-          if (!current || changes.current !== changesAtRead) return;
+          if (!current || !next || changes.current !== changesAtRead) return;
           setItems(next);
           setError(null);
           setLoadError(null);
@@ -112,6 +123,12 @@ export default function Vault() {
 
   useLayoutEffect(() => {
     if (!iosAtLeast(26)) return;
+    if (vaultPolicy) {
+      navigation.setOptions({
+        unstable_headerRightItems: () => [],
+      } satisfies NativeStackNavigationOptions);
+      return;
+    }
     navigation.setOptions({
       unstable_headerRightItems: () => [
         {
@@ -130,7 +147,7 @@ export default function Vault() {
         },
       ],
     } satisfies NativeStackNavigationOptions);
-  }, [navigation, startAdding, t]);
+  }, [navigation, startAdding, t, vaultPolicy]);
 
   async function save(change: VaultSave) {
     changes.current += 1;
@@ -267,6 +284,15 @@ export default function Vault() {
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
       >
+        {vaultPolicy ? (
+          <Text style={styles.empty}>
+            {vaultPolicy === "shared"
+              ? t(
+                  "Personal vaults are unavailable in shared organizations. Organization admins can manage secrets and workspace access in Organization settings → Organization vault.",
+                )
+              : t("Could not verify this organization's vault policy. Sign in again to continue.")}
+          </Text>
+        ) : null}
         {failure && !items ? (
           <LoadFailure
             message={failure}

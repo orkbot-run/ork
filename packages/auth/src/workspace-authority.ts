@@ -580,6 +580,9 @@ export class WorkspaceAuthority {
         id: workspace.id,
         spaceId: binding.spaceId,
         organizationId: binding.localOrganizationId,
+        ...(claims.organization_type === "personal" || claims.organization_type === "shared"
+          ? { organizationType: claims.organization_type }
+          : {}),
         revision: member.accessVersion,
         role: member.role,
       },
@@ -617,6 +620,9 @@ export class WorkspaceAuthority {
         );
         if (
           binding.state !== "ready" ||
+          (workspace.organizationType &&
+            binding.organizationType &&
+            workspace.organizationType !== binding.organizationType) ||
           binding.spaceId !== workspace.spaceId ||
           binding.localOrganizationId !== workspace.organizationId ||
           binding.validUntil.getTime() <= Date.now() ||
@@ -628,6 +634,11 @@ export class WorkspaceAuthority {
           )
         )
           throw refused();
+        if (workspace.organizationType && binding.organizationType !== workspace.organizationType)
+          await tx.centralWorkspaceBinding.update({
+            where: { id: binding.id },
+            data: { organizationType: workspace.organizationType },
+          });
         await tx.member.upsert({
           where: { organizationId_userId: { organizationId: workspace.organizationId, userId } },
           create: {
@@ -751,6 +762,7 @@ export class WorkspaceAuthority {
               id: binding.id,
               spaceId: binding.spaceId,
               organizationId: binding.localOrganizationId,
+              organizationType: "personal",
               revision: device.membershipVersion,
               role: access.role as "admin" | "member",
             },

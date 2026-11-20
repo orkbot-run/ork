@@ -3,6 +3,24 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":
+    "Wähle die Arbeitsbereiche auf diesem Server, die diese Geheimnisse verwenden dürfen. Neue Arbeitsbereiche haben erst nach Freigabe Zugriff.",
+  "Could not change workspace access.": "Der Arbeitsbereichszugriff konnte nicht geändert werden.",
+  "Could not load the organization vault. Check your access and try again.":
+    "Der Organisationstresor konnte nicht geladen werden. Prüfe deinen Zugriff und versuche es erneut.",
+  "Could not verify this organization's vault policy. Sign in again to continue.":
+    "Die Tresorrichtlinie konnte nicht überprüft werden. Melde dich erneut an.",
+  "Could not verify this organization. Sign in again and try again.":
+    "Die Organisation konnte nicht überprüft werden. Melde dich erneut an.",
+  "Organization vault": "Organisationstresor",
+  "Personal organizations use your personal vault. Open Your settings → Vault to manage your secrets.":
+    "Persönliche Organisationen verwenden deinen persönlichen Tresor. Öffne Deine Einstellungen → Tresor.",
+  "Personal vaults are unavailable in shared organizations. Organization admins can manage secrets and workspace access in Organization settings → Organization vault.":
+    "Persönliche Tresore sind in gemeinsamen Organisationen nicht verfügbar. Administratoren verwalten Geheimnisse und Zugriff unter Organisationseinstellungen → Organisationstresor.",
+  Secrets: "Geheimnisse",
+  "Workspace access": "Arbeitsbereichszugriff",
+  "Your organization's server manages these secrets. Ork Accounts does not receive them. Only organization admins can manage this vault.":
+    "Der Server deiner Organisation verwaltet diese Geheimnisse. Ork Accounts erhält sie nicht. Nur Organisationsadministratoren können den Tresor verwalten.",
   "Add a schedule or an HTTPS address to run this routine.":
     "Füge einen Zeitplan oder eine HTTPS-Adresse hinzu, um diese Routine auszuführen.",
   "Ask an owner to resume your plan.": "Bitte einen Inhaber, deinen Tarif wieder zu aktivieren.",

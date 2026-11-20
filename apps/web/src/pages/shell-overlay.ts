@@ -6,6 +6,7 @@ const SETTINGS_SECTIONS = [
   "general",
   "organization",
   "organization-models",
+  "organization-vault",
   "organization-activity",
   "space",
   "models",

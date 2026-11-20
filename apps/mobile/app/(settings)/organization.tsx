@@ -87,6 +87,11 @@ export default function OrganizationSettings() {
               chevron="right"
               onPress={() => openFromSettingsSheet(router, "/models?organization=1")}
             />
+            <SettingsRow
+              title={t("Organization vault")}
+              chevron="right"
+              onPress={() => openFromSettingsSheet(router, "/organization-vault")}
+            />
           </SettingsGroup>
         </ScrollView>
       </SafeAreaView>
