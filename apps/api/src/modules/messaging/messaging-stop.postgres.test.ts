@@ -9,6 +9,7 @@ import {
   asSystem,
   createDb,
   createThreadEvents,
+  createThreadMessage,
   provisionMessagingIdentity,
   runAsSystem,
 } from "@orkbot/db";
@@ -28,6 +29,8 @@ describe.skipIf(!enabled)("a linked owner's stop command (PostgreSQL)", () => {
   let identity: Awaited<ReturnType<typeof provisionMessagingIdentity>>;
   let handle: (event: MessagingInboundMessage) => Promise<void>;
   let transaction: ReturnType<typeof vi.fn>;
+  let channels: string[];
+  let extraOwners: (typeof identity)[];
   const sandbox = {
     execute: vi.fn(async function* () {
       yield { type: "exit", code: 0 };
@@ -45,6 +48,8 @@ describe.skipIf(!enabled)("a linked owner's stop command (PostgreSQL)", () => {
     };
   });
   beforeEach(async () => {
+    channels = [];
+    extraOwners = [];
     identity = await runAsSystem("test fixture", () =>
       provisionMessagingIdentity(
         prisma,
@@ -67,6 +72,19 @@ describe.skipIf(!enabled)("a linked owner's stop command (PostgreSQL)", () => {
     handle = (event) => runAsSystem("test inbound", () => inbound(event));
   });
   afterEach(async () => {
+    const channelRows = await system.messagingChannel.findMany({
+      where: { id: { in: channels } },
+      select: { threadId: true },
+    });
+    await system.messagingOutbound.deleteMany({
+      where: { threadId: { in: channelRows.map((row) => row.threadId) } },
+    });
+    await system.messagingChannel.deleteMany({ where: { id: { in: channels } } });
+    for (const extra of extraOwners) {
+      await system.messagingIdentity.deleteMany({ where: { userId: extra.userId } });
+      await system.organization.deleteMany({ where: { id: extra.spaceId } });
+      await system.user.deleteMany({ where: { id: extra.userId } });
+    }
     await system.messagingIdentity.deleteMany({ where: { userId: identity.userId } });
     await system.organization.deleteMany({ where: { id: identity.spaceId } });
     await system.user.deleteMany({ where: { id: identity.userId } });
@@ -91,16 +109,37 @@ describe.skipIf(!enabled)("a linked owner's stop command (PostgreSQL)", () => {
       mediaUrl: null,
       ...extra,
     });
-  const work = async () => {
+  const work = async (channelId?: string, secondChannelId?: string, person = identity) => {
     const owner = {
-      spaceId: identity.spaceId,
-      botId: identity.botId,
-      threadId: identity.threadId,
-      userId: identity.userId,
+      spaceId: person.spaceId,
+      botId: person.botId,
+      threadId: person.threadId,
+      userId: person.userId,
     };
     const task = await system.task.create({ data: { ...owner, prompt: "work", status: "queued" } });
+    const source = channelId
+      ? await createThreadMessage(system, {
+          threadId: person.threadId,
+          role: "user",
+          blocks: [channelId, ...(secondChannelId ? [secondChannelId] : [])].map((id) => ({
+            kind: "channel_message",
+            channelId: id,
+            provider: "test",
+            text: "work",
+            fromAddress: person.address,
+            fromLabel: "Owner",
+            hop: 0,
+          })),
+        })
+      : null;
     return system.run.create({
-      data: { ...owner, taskId: task.id, status: "running", trigger: "user" },
+      data: {
+        ...owner,
+        taskId: task.id,
+        status: "running",
+        trigger: "user",
+        sourceMessageId: source?.id,
+      },
     });
   };
   const status = async (id: string) =>
@@ -122,6 +161,136 @@ describe.skipIf(!enabled)("a linked owner's stop command (PostgreSQL)", () => {
     ).filter((message) => JSON.stringify(message.blocks).includes(STOPPED_BY_MESSAGE_NOTE)).length;
   const userMessages = () =>
     system.message.count({ where: { threadId: identity.threadId, role: "user" } });
+
+  const channel = async (status = "approved") => {
+    const linked = await system.messagingIdentity.findFirstOrThrow({
+      where: { botId: identity.botId },
+    });
+    const channel = await system.messagingChannel.create({
+      data: {
+        provider: "test",
+        threadId: `group-${randomUUID()}`,
+        members: { create: { address: identity.address, identityId: linked.id, status } },
+      },
+    });
+    channels.push(channel.id);
+    return channel;
+  };
+  const groupText = (
+    group: { threadId: string },
+    content: string,
+    id: string,
+    extra: Partial<MessagingInboundMessage> = {},
+  ) =>
+    text(content, id, {
+      isDirect: false,
+      threadId: group.threadId,
+      participants: [],
+      ...extra,
+    });
+
+  it("stops only this approved channel's work and keeps a concurrent replay stable", async () => {
+    const group = await channel();
+    const other = await channel();
+    const current = await work(group.id);
+    const dm = await work();
+    const unrelated = await work(other.id, group.id);
+    await Promise.all([
+      groupText(group, "zatrzymaj", "channel-stop"),
+      groupText(group, "zatrzymaj", "channel-stop"),
+    ]);
+    expect(await status(current.id)).toBe("cancelled");
+    expect(await status(dm.id)).toBe("running");
+    expect(await status(unrelated.id)).toBe("running");
+    expect(await userMessages()).toBe(2);
+    const newer = await work(group.id);
+    await groupText(group, "zatrzymaj", "channel-stop");
+    expect(await status(newer.id)).toBe("running");
+    expect(await replies()).toEqual([]);
+    expect(await notes()).toBe(1);
+    expect(
+      await system.messagingOutbound.findMany({ where: { threadId: group.threadId } }),
+    ).toEqual([
+      expect.objectContaining({ kind: "command_receipt", status: "recorded", body: "stopped" }),
+    ]);
+  });
+
+  it("stops approved member bots across owners while leaving unapproved bots alone", async () => {
+    const group = await channel();
+    const peers = await Promise.all(
+      ["approved", "invited"].map(async (status) => {
+        const peer = await runAsSystem("channel stop peer fixture", () =>
+          provisionMessagingIdentity(
+            prisma,
+            { provider: "test", address: `peer-${randomUUID()}` },
+            { signupsEnabled: undefined, signupAllowlist: undefined },
+          ),
+        );
+        extraOwners.push(peer);
+        const linked = await system.messagingIdentity.findFirstOrThrow({
+          where: { botId: peer.botId },
+        });
+        await system.messagingChannelMember.create({
+          data: {
+            channelId: group.id,
+            address: peer.address,
+            identityId: linked.id,
+            status,
+          },
+        });
+        return work(group.id, undefined, peer);
+      }),
+    );
+    const own = await work(group.id);
+    await groupText(group, "stop", "channel-multiple-owners");
+    expect(await status(own.id)).toBe("cancelled");
+    expect(await status(peers[0]!.id)).toBe("cancelled");
+    expect(await status(peers[1]!.id)).toBe("running");
+  });
+
+  it("fans an idle stop out normally and never cancels later work on retry", async () => {
+    const group = await channel();
+    await groupText(group, "stop", "channel-idle");
+    expect(await userMessages()).toBe(1);
+    const newer = await work(group.id);
+    await groupText(group, "stop", "channel-idle");
+    expect(await status(newer.id)).toBe("running");
+    expect(await userMessages()).toBe(2); // source fixture plus the original stop
+    expect(await replies()).toEqual([]);
+  });
+
+  it.each([
+    { name: "bot sender", extra: { senderIsBot: true } },
+    { name: "media", extra: { mediaUrl: "https://example.test/image.jpg" } },
+    {
+      name: "attachment",
+      extra: {
+        attachments: [
+          { name: "image.jpg", mimeType: "image/jpeg", fetch: async () => new Uint8Array() },
+        ],
+      },
+    },
+    { name: "different provider", extra: { provider: "other" } },
+  ])("keeps active work for $name", async ({ extra }) => {
+    const group = await channel();
+    const current = await work(group.id);
+    await groupText(group, "stop", "channel-no-stop", extra);
+    expect(await status(current.id)).toBe("running");
+  });
+
+  it("requires an approved linked sender", async () => {
+    const group = await channel("invited");
+    const current = await work(group.id);
+    await groupText(group, "stop", "channel-unapproved");
+    expect(await status(current.id)).toBe("running");
+    await system.messagingChannelMember.updateMany({
+      where: { channelId: group.id },
+      data: { status: "approved" },
+    });
+    await system.messagingIdentity.deleteMany({ where: { botId: identity.botId } });
+    await groupText(group, "stop", "channel-unlinked");
+    expect(await status(current.id)).toBe("running");
+  });
 
   it("stops running work, answers once and notes it in the app", async () => {
     const running = await work();

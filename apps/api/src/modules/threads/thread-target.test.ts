@@ -3994,6 +3994,19 @@ describe("sendThreadMessage", () => {
 });
 
 describe("stopThreadRuns", () => {
+  const groupRun = (suffix: string) => ({
+    id: `run-${suffix}`,
+    taskId: `task-${suffix}`,
+    botId: `bot-${suffix}`,
+    threadId: "thread-1",
+    userId: "user-1",
+    spaceId: "workspace-1",
+  });
+  const statusWrites = () => ({
+    attempt: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    task: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+  });
+
   it("snapshots every lease when group members share a team computer", async () => {
     const releaseScreen = vi.fn().mockResolvedValue(undefined);
     const execute = vi.fn(async function* () {
@@ -4001,6 +4014,7 @@ describe("stopThreadRuns", () => {
     });
     let nextEventSeq = 0;
     const transaction = {
+      ...statusWrites(),
       externalEffect: { deleteMany: vi.fn(async () => ({ count: 0 })) },
       $queryRaw: vi.fn(),
       thread: {
@@ -4008,7 +4022,7 @@ describe("stopThreadRuns", () => {
       },
       message: { findMany: vi.fn(async () => []) },
       run: {
-        findMany: vi.fn().mockResolvedValue([]),
+        findMany: vi.fn().mockResolvedValue([groupRun("a"), groupRun("b")]),
         updateManyAndReturn: vi.fn().mockResolvedValue([
           { id: "run-a", botId: "bot-a" },
           { id: "run-b", botId: "bot-b" },
@@ -4144,6 +4158,7 @@ describe("stopThreadRuns", () => {
       yield { type: "exit", code: 0 };
     });
     const transaction = {
+      ...statusWrites(),
       externalEffect: { deleteMany: vi.fn(async () => ({ count: 0 })) },
       $queryRaw: vi.fn(),
       thread: {
@@ -4151,7 +4166,7 @@ describe("stopThreadRuns", () => {
       },
       message: { findMany: vi.fn(async () => []) },
       run: {
-        findMany: vi.fn().mockResolvedValue([]),
+        findMany: vi.fn().mockResolvedValue([groupRun("a")]),
         updateManyAndReturn: vi.fn().mockResolvedValue([{ id: "run-a", botId: "bot-a" }]),
         findUnique: vi.fn().mockResolvedValue({ status: "cancelled" }),
       },
@@ -4255,6 +4270,7 @@ describe("stopThreadRuns", () => {
     const writes: string[] = [];
     const created: Array<Record<string, unknown>> = [];
     const transaction = {
+      ...statusWrites(),
       externalEffect: { deleteMany: vi.fn(async () => ({ count: 0 })) },
       $queryRaw: vi.fn(),
       thread: {
@@ -4262,10 +4278,7 @@ describe("stopThreadRuns", () => {
       },
       message: { findMany: vi.fn(async () => []) },
       run: {
-        findMany: vi.fn().mockResolvedValue([
-          { id: "run-a", userId: "user-1", spaceId: "workspace-1" },
-          { id: "run-b", userId: "user-1", spaceId: "workspace-1" },
-        ]),
+        findMany: vi.fn().mockResolvedValue([groupRun("a"), groupRun("b")]),
         updateManyAndReturn: vi.fn().mockResolvedValue([
           { id: "run-a", botId: "bot-a", userId: "user-1", spaceId: "workspace-1" },
           { id: "run-b", botId: "bot-b", userId: "user-1", spaceId: "workspace-1" },

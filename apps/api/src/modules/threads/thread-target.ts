@@ -5,7 +5,7 @@
 // Ork adds per-message reconciliation identifiers for pending sends.
 
 import type { JobPublisher, ProductAnalytics, SandboxProvider } from "@orkbot/adapter-kit";
-import { runContinueJob } from "@orkbot/adapter-kit";
+import { runContinueJob, runJobKey } from "@orkbot/adapter-kit";
 import { cancelComputerRunWork, screenLeaseIdForRun, toComputerRef } from "@orkbot/adapters";
 import type {
   Actor,
@@ -26,11 +26,11 @@ import {
   BACKGROUND_RUN_TRIGGERS,
   callIdFromClientNonce,
   isConversationalRun,
+  isStopCommand,
   MODEL_REQUIRED_SEND_ERROR,
   mentionedGroupBotIds,
   messageBypassesTakeoverWait,
   messageReaction,
-  parseMessagingCommand,
   projectMessages,
   projectRunRoutineName,
   QUEUE_HOLDING_RUN_STATUSES,
@@ -43,6 +43,7 @@ import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   answerWaitingRunWithTextInTransaction,
   appendEventInTransaction,
+  cancelRunsInTransaction,
   clearEndedRunState,
   createGroupRepos,
   createRepos,
@@ -54,6 +55,7 @@ import {
   lockSpaceForWork,
   primaryActiveRun,
   retireWaitingQuestionInTransaction,
+  returnBackgroundHelperOutcome,
   THREAD_LOCK_TRANSACTION_OPTIONS,
   touchGroupUpdatedAt,
   transientRunEventsWhere,
@@ -846,6 +848,7 @@ export async function sendThreadMessage(
   // paint; without it the bubble shows loose until a refetch reads the nonce.
   const callId = callIdFromClientNonce(input.clientNonce);
   const messageClientNonce = ThreadMessageClientNonce.safeParse(input.clientNonce).data;
+  const stopMessage = isStopMessage(input);
   const requestedReplyQuote = input.replyQuote?.trim() || undefined;
   if (requestedReplyQuote && !input.replyToMessageId) {
     throw new ORPCError("BAD_REQUEST", { message: "replyQuote requires replyToMessageId." });
@@ -862,7 +865,7 @@ export async function sendThreadMessage(
         target.kind === "group" ? await lockAndLoadGroupMembers(tx, actor, target) : [];
       // Stabilize the work target before consent reads, as well as before message counters.
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
-      await deps.consentPreflight?.(tx);
+      if (target.kind === "bot" || !stopMessage) await deps.consentPreflight?.(tx);
       let routineRuns: Array<{ id: string; status: string }> = [];
       let replyToMessageId: string | undefined;
       let replyQuote: string | undefined;
@@ -967,7 +970,7 @@ export async function sendThreadMessage(
           clientNonce: input.clientNonce,
         });
         // A bare "stop" from the owner while work is active is the Stop button, not a reply.
-        const stopping = activeRuns.length > 0 && !routineRuns.length && isStopMessage(input);
+        const stopping = activeRuns.length > 0 && !routineRuns.length && stopMessage;
         if (input.noModel && !stopping) {
           throw new ORPCError("BAD_REQUEST", { message: MODEL_REQUIRED_SEND_ERROR });
         }
@@ -1125,6 +1128,30 @@ export async function sendThreadMessage(
       }
 
       const memberBotIds = members.map((member) => member.botId);
+      if (stopMessage && !input.mentions?.length && !startRoutines) {
+        const stop = await cancelThreadRuns(
+          actor,
+          { ...target, memberBotIds },
+          {
+            botId: memberBotIds[0]!,
+            receipt: { clientNonce: input.clientNonce, messageClientNonce },
+          },
+        )(tx);
+        if (stop.message) {
+          await touchGroupUpdatedAt(tx, target.groupId);
+          return {
+            message: stop.message,
+            runs: stop.runs,
+            routineRuns,
+            eventSeq: stop.eventSeq!,
+            stop,
+          };
+        }
+      }
+      if (input.noModel) {
+        throw new ORPCError("BAD_REQUEST", { message: MODEL_REQUIRED_SEND_ERROR });
+      }
+      if (stopMessage) await deps.consentPreflight?.(tx);
       const mentionTargets = splitMentionTargets(input.mentions);
       let { botIds: targetBotIds, namesNobody } = groupSendTargets(members, input, repliedBotId);
       const { blocks: attachmentBlocks, artifacts } = await resolveGroupSendAttachments(
@@ -1583,7 +1610,7 @@ async function startReactionTurn(
 
 /** A bare "stop" or "stop now" with nothing attached: the owner's Stop, sent as text. */
 export function isStopMessage(input: { text?: string; artifactIds?: string[] }) {
-  return !input.artifactIds?.length && parseMessagingCommand(input.text ?? "") === "stop";
+  return !input.artifactIds?.length && isStopCommand(input.text ?? "");
 }
 
 export const STOPPED_BY_MESSAGE_NOTE = "Stopped. Anything already done stays done.";
@@ -1593,6 +1620,7 @@ export async function stopThreadRuns(
     prisma: PrismaClient;
     sandbox: SandboxProvider;
     events: ThreadEvents;
+    jobs?: JobPublisher;
   },
   actor: Actor,
   target: ThreadTarget,
@@ -1614,26 +1642,80 @@ export function cancelThreadRuns(
   target:
     | { kind: "bot"; botId: string; threadId: string }
     | { kind: "group"; memberBotIds: string[]; threadId: string },
-  note?: { botId: string },
+  note?: {
+    botId: string;
+    receipt?: { clientNonce?: string; messageClientNonce?: string };
+  },
+  onlyRunIds?: readonly string[],
 ) {
   return async (tx: Prisma.TransactionClient) => {
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
-    const cancelled = await tx.run.updateManyAndReturn({
-      where: {
-        threadId: target.threadId,
-        status: { in: [...ACTIVE_RUN_STATUSES] },
-      },
-      data: { status: "cancelled", completedAt: new Date() },
-      select: { id: true, botId: true, userId: true, spaceId: true },
-    });
+    const group = target.kind === "group";
+    const now = new Date();
+    const active = { status: { in: [...ACTIVE_RUN_STATUSES] } };
+    const select = {
+      id: true,
+      botId: true,
+      userId: true,
+      spaceId: true,
+      taskId: true,
+      threadId: true,
+    };
+    const cancelled =
+      group || onlyRunIds
+        ? await cancelRunsInTransaction(
+            tx,
+            await tx.run.findMany({
+              where: {
+                ...active,
+                spaceId: actor.spaceId,
+                ...(group
+                  ? {
+                      OR: [
+                        { threadId: target.threadId, botId: { in: target.memberBotIds } },
+                        { trigger: "tickets", thread: { parentThreadId: target.threadId } },
+                      ],
+                    }
+                  : { threadId: target.threadId, botId: target.botId }),
+                ...(onlyRunIds ? { id: { in: [...onlyRunIds] } } : {}),
+              },
+              orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+              select,
+            }),
+            now,
+          )
+        : await tx.run.updateManyAndReturn({
+            where: { threadId: target.threadId, ...active },
+            data: { status: "cancelled", completedAt: now },
+            select,
+          });
     const ids = cancelled.map((run) => run.id);
-    await clearEndedRunState(tx, ids);
-    await tx.steeringMessage.deleteMany({
-      where: {
-        botId: { in: target.kind === "bot" ? [target.botId] : target.memberBotIds },
-        message: { threadId: target.threadId },
-      },
-    });
+    const foreground = cancelled.filter((run) => run.threadId === target.threadId);
+    const helperRunIds = group
+      ? cancelled.filter((run) => run.threadId !== target.threadId).map((run) => run.id)
+      : [];
+    if (!group && !onlyRunIds) {
+      await clearEndedRunState(tx, ids);
+      await tx.steeringMessage.deleteMany({
+        where: { botId: { in: [target.botId] }, message: { threadId: target.threadId } },
+      });
+    } else if (ids.length) {
+      await tx.steeringMessage.deleteMany({
+        where: {
+          OR: [
+            { runId: { in: ids } },
+            ...(group
+              ? [
+                  {
+                    botId: { in: [...new Set(cancelled.map((run) => run.botId))] },
+                    message: { threadId: target.threadId },
+                  },
+                ]
+              : []),
+          ],
+        },
+      });
+    }
     // Snapshot teardown coordinates before commit. Once cancellation becomes
     // visible, a worker can release its lease / execution columns immediately; a
     // later lookup would then miss the sandbox work this request must stop.
@@ -1669,7 +1751,7 @@ export function cancelThreadRuns(
     // the fresh seq keeps max(seq) above every deleted progress row so a client
     // whose cursor pointed at one never discards later refreshes as stale.
     let eventSeq: number | null = null;
-    for (const run of cancelled) {
+    for (const run of group ? foreground : cancelled) {
       const event = await appendEventInTransaction(tx, {
         spaceId: actor.spaceId,
         threadId: target.threadId,
@@ -1680,20 +1762,38 @@ export function cancelThreadRuns(
       });
       eventSeq = event.seq;
     }
+    let message: Awaited<ReturnType<typeof createThreadMessageInTransaction>> | undefined;
+    const runs = [...foreground, ...cancelled.filter((run) => run.threadId !== target.threadId)];
     if (ids.length && note) {
       const blocks: MessageBlock[] = [{ kind: "meta", text: STOPPED_BY_MESSAGE_NOTE }];
-      const message = await createThreadMessageInTransaction(tx, {
+      message = await createThreadMessageInTransaction(tx, {
         threadId: target.threadId,
         role: "system",
         blocks,
         botId: note.botId,
+        ...(note.receipt
+          ? {
+              runId: runs[0]?.id,
+              clientNonce: note.receipt.clientNonce,
+              allowCancelledRun: true,
+            }
+          : {}),
       });
       const event = await appendEventInTransaction(tx, {
         spaceId: actor.spaceId,
         threadId: target.threadId,
         botId: note.botId,
         type: "thread.message.created",
-        payload: { messageId: message.id, role: "system", blocks },
+        payload: note.receipt
+          ? {
+              messageId: message.id,
+              seq: message.seq,
+              role: "system",
+              blocks,
+              clientNonce: note.receipt.messageClientNonce,
+              runIds: runs.map((run) => run.id),
+            }
+          : { messageId: message.id, role: "system", blocks },
       });
       eventSeq = event.seq;
     }
@@ -1705,16 +1805,27 @@ export function cancelThreadRuns(
         },
       });
     }
-    return { runIds: ids, computers, leases, eventSeq };
+    return { runIds: ids, helperRunIds, computers, leases, eventSeq, runs, message };
   };
 }
 
 /** Stop's after-commit half: wakes subscribers and tears down the cancelled runs' computer work. */
 export async function finishThreadStop(
-  deps: { prisma: PrismaClient; sandbox: SandboxProvider; events: Pick<ThreadEvents, "notify"> },
+  deps: {
+    prisma: PrismaClient;
+    sandbox: SandboxProvider;
+    events: Pick<ThreadEvents, "notify">;
+    jobs?: Pick<JobPublisher, "enqueue"> & Partial<Pick<JobPublisher, "cancel">>;
+  },
   actor: Pick<Actor, "spaceId" | "userId">,
   target: { threadId: string },
-  { runIds, computers, leases, eventSeq }: Awaited<ReturnType<ReturnType<typeof cancelThreadRuns>>>,
+  {
+    runIds,
+    helperRunIds,
+    computers,
+    leases,
+    eventSeq,
+  }: Awaited<ReturnType<ReturnType<typeof cancelThreadRuns>>>,
 ) {
   if (eventSeq !== null) {
     // The events are durable; subscribers refetch from their persisted cursor.
@@ -1722,6 +1833,26 @@ export async function finishThreadStop(
       getLogger().error("thread stop realtime notification", error);
     });
   }
+  await Promise.all([
+    ...runIds.map(async (runId) => {
+      try {
+        await deps.jobs?.cancel?.(runJobKey(runId));
+      } catch (error) {
+        getLogger().error("thread stop job cancellation", error);
+      }
+    }),
+    ...helperRunIds.map(async (runId) => {
+      try {
+        const outcome = await returnBackgroundHelperOutcome(deps.prisma, {
+          spaceId: actor.spaceId,
+          runId,
+        });
+        if (outcome) await deps.events.notify(outcome.threadId, outcome.eventSeq);
+      } catch (error) {
+        getLogger().error("thread stop helper outcome", error);
+      }
+    }),
+  ]);
   // Keep the DB lease until after teardown so a replacement run cannot claim the
   // screen while we still need the cancelled run's screenLeaseId to release it.
   const computerById = new Map(computers.map((computer) => [computer.id, computer]));

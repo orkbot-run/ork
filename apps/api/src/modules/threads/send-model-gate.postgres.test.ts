@@ -18,6 +18,7 @@ import {
   runAsSystem,
   runAsTenant,
 } from "@orkbot/db";
+import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RouterDeps } from "#modules/platform/router";
@@ -81,7 +82,10 @@ describe.skipIf(!enabled)("send model gate with a bot's own model (PostgreSQL)",
       sandbox: {},
       env: { agentRuntime: "pi", deploymentModelConfigured: false },
     } as unknown as RouterDeps;
-    const handler = new RPCHandler(createRouter(deps));
+    const rpcError = vi.fn();
+    const handler = new RPCHandler(createRouter(deps), {
+      clientInterceptors: [onError(rpcError)],
+    });
     call = async (path, input) => {
       const { response } = await runAsTenant(actor, () =>
         handler.handle(
@@ -93,6 +97,7 @@ describe.skipIf(!enabled)("send model gate with a bot's own model (PostgreSQL)",
           { prefix: "/rpc", context: { actor } },
         ),
       );
+      if (response?.status === 500 && rpcError.mock.lastCall) throw rpcError.mock.lastCall[0];
       return response!;
     };
   });
@@ -121,6 +126,33 @@ describe.skipIf(!enabled)("send model gate with a bot's own model (PostgreSQL)",
   };
   const userMessages = (threadId: string) =>
     system.message.count({ where: { threadId, role: "user" } });
+  const groupWithSecondMember = async () => {
+    const fields = { spaceId: actor.spaceId, userId: actor.userId };
+    const second = await system.bot.create({
+      data: { ...fields, name: "Second member", color: "primary" },
+    });
+    const group = await system.chatGroup.create({
+      data: {
+        ...fields,
+        name: "Group with two members",
+        members: { create: [{ botId }, { botId: second.id }] },
+        thread: { create: fields },
+      },
+      include: { thread: true },
+    });
+    return { groupId: group.id, threadId: group.thread!.id, secondBotId: second.id };
+  };
+  const startWork = async (threadId: string, member: string, trigger = "user") => {
+    const fields = { spaceId: actor.spaceId, userId: actor.userId, threadId, botId: member };
+    const task = await system.task.create({
+      data: { ...fields, prompt: "Work", status: "running" },
+    });
+    return system.run.create({
+      data: { ...fields, status: "running", taskId: task.id, trigger },
+    });
+  };
+  const runStatus = async (id: string) =>
+    (await system.run.findUniqueOrThrow({ where: { id } })).status;
   /** Reacts 👍 to a fresh reply from `author` and returns the runs the reaction started. */
   const react = async (target: Record<string, string>, threadId: string, author: string) => {
     await system.run.updateMany({ where: { threadId }, data: { status: "completed" } });
@@ -205,7 +237,7 @@ describe.skipIf(!enabled)("send model gate with a bot's own model (PostgreSQL)",
     expect((await send({ groupId: group.id, text: "@Alpha hello" })).status).toBe(200);
     await expectRefused(await send({ groupId: group.id, text: "@Beta hello" }));
     await expectRefused(await send({ groupId: group.id, text: "@everyone hello" }));
-    // A group "stop" is no stop, so a bot without a model still refuses it.
+    // An explicitly addressed message is not a bare Stop command.
     await expectRefused(
       await send({ groupId: group.id, text: "stop", mentions: [{ kind: "bot", id: beta.id }] }),
     );
@@ -235,5 +267,113 @@ describe.skipIf(!enabled)("send model gate with a bot's own model (PostgreSQL)",
     // A reaction wakes the bot that wrote the message.
     expect(await react({ groupId: group.id }, group.thread!.id, beta.id)).toEqual([]);
     expect(await react({ groupId: group.id }, group.thread!.id, botId)).toHaveLength(1);
+  });
+
+  it("stops all group work and its helper without a model, returning the same result on retry", async () => {
+    const { groupId, threadId, secondBotId } = await groupWithSecondMember();
+    await expectRefused(await send({ groupId, text: "stop" }));
+    const runA = await startWork(threadId, botId);
+    const runB = await startWork(threadId, secondBotId);
+    const direct = await system.thread.findUniqueOrThrow({ where: { botId } });
+    const outside = await startWork(direct.id, botId);
+    const helperThread = await system.thread.create({
+      data: {
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        parentThreadId: threadId,
+        parentRunId: runA.id,
+        helperCallId: "helper-call",
+      },
+    });
+    const helper = await startWork(helperThread.id, botId, "tickets");
+    const helperCard = await createThreadMessage(system, {
+      threadId,
+      role: "system",
+      botId,
+      clientNonce: `background-helper:${helper.id}`,
+      blocks: [
+        {
+          kind: "subagent",
+          agentId: helper.id,
+          name: "Helper",
+          task: "Work",
+          status: "running",
+        },
+      ],
+    });
+    const pending = await createThreadMessage(system, {
+      threadId,
+      role: "user",
+      blocks: [{ kind: "text", text: "Keep looking" }],
+    });
+    await system.steeringMessage.createMany({
+      data: [
+        { messageId: pending.id, botId, userId: actor.userId, runId: runA.id },
+        { messageId: pending.id, botId: secondBotId, userId: actor.userId },
+      ],
+    });
+
+    const input = { groupId, text: "¡DETENER!", clientNonce: randomUUID() };
+    const first = await send(input);
+    expect(first.status).toBe(200);
+    const result = await first.json();
+    expect(result).toMatchObject({
+      json: { runIds: expect.arrayContaining([runA.id, runB.id, helper.id]) },
+    });
+    const stopped = [runA, runB, helper];
+    expect(await Promise.all(stopped.map(({ id }) => runStatus(id)))).toEqual([
+      "cancelled",
+      "cancelled",
+      "cancelled",
+    ]);
+    expect(await runStatus(outside.id)).toBe("running");
+    expect(
+      await system.task.count({
+        where: { id: { in: stopped.map(({ taskId }) => taskId) }, status: "cancelled" },
+      }),
+    ).toBe(3);
+    expect(await system.steeringMessage.count({ where: { messageId: pending.id } })).toBe(0);
+    expect(await system.message.findUniqueOrThrow({ where: { id: helperCard.id } })).toMatchObject({
+      blocks: [{ kind: "subagent", agentId: helper.id, stopped: true, status: "failed" }],
+    });
+    expect(await userMessages(threadId)).toBe(1);
+
+    const newer = await startWork(threadId, botId);
+    const retry = await send(input);
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual(result);
+    expect(await runStatus(newer.id)).toBe("running");
+    expect(
+      await system.message.count({
+        where: { threadId, clientNonce: input.clientNonce, role: "system" },
+      }),
+    ).toBe(1);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("sends idle stop and stop with an attachment as ordinary group messages", async () => {
+    const { groupId, threadId, secondBotId } = await groupWithSecondMember();
+    await Promise.all([useModel(botId, "openrouter"), useModel(secondBotId, "openrouter")]);
+    expect((await send({ groupId, text: "stop" })).status).toBe(200);
+    expect(await userMessages(threadId)).toBe(1);
+    expect(await system.run.count({ where: { threadId, status: "queued" } })).toBe(2);
+    await system.run.updateMany({ where: { threadId }, data: { status: "completed" } });
+    const first = await startWork(threadId, botId);
+    const artifact = await system.artifact.create({
+      data: {
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        groupId,
+        name: "readme.txt",
+        mimeType: "text/plain",
+        size: 1,
+        hash: "fixture",
+        storageKey: "fixture",
+      },
+    });
+    const fileSend = await send({ groupId, text: "stop", artifactIds: [artifact.id] });
+    expect(fileSend.status).toBe(200);
+    expect(await runStatus(first.id)).toBe("running");
+    expect(await userMessages(threadId)).toBe(2);
   });
 });

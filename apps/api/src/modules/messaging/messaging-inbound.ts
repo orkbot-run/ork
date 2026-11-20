@@ -15,7 +15,9 @@ import type { MessageBlock } from "@orkbot/contracts";
 import { ATTACHMENT_MAX_COUNT, isAttachmentAudioMimeType } from "@orkbot/contracts";
 import type { MessagingCommand } from "@orkbot/core";
 import {
+  ACTIVE_RUN_STATUSES,
   displayName,
+  isStopCommand,
   messageBlockForArtifact,
   normalizeVoiceTranscript,
   parseMessagingCommand,
@@ -592,6 +594,116 @@ async function stopOwnerWork(
   if (stop?.runIds.length) await finishThreadStop(deps, identity, target, stop);
 }
 
+/**
+ * Personal-channel stop has the channel's approval boundary and stops only runs
+ * whose durable source belongs to that channel. A terminal receipt records even
+ * an idle decision, without sending anything to the provider on the user's behalf.
+ */
+async function stopChannelWork(
+  deps: MessagingInboundDeps,
+  channelId: string,
+  event: MessagingInboundMessage,
+): Promise<boolean> {
+  if (event.senderIsBot) return false;
+  const key = `command:channel-stop:${event.provider}:${channelId}:${event.handle}`;
+  const decision = await deps.prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM messaging_channels WHERE id = ${channelId} FOR UPDATE`;
+    const channel = await tx.messagingChannel.findUnique({ where: { id: channelId } });
+    if (!channel || channel.provider !== event.provider || channel.threadId !== event.threadId)
+      return { handled: false, stopped: [] };
+    // Approval can be revoked without taking the channel lock. Hold the member
+    // and identity rows until cancellation commits, and verify their live binding.
+    await tx.$queryRaw`SELECT id FROM messaging_channel_members WHERE "channelId" = ${channelId} ORDER BY id FOR UPDATE`;
+    const members = await tx.messagingChannelMember.findMany({
+      where: { channelId, status: "approved", identityId: { not: null } },
+    });
+    const identities: IdentityRow[] = [];
+    for (const member of [...members].sort((a, b) => a.identityId!.localeCompare(b.identityId!))) {
+      await tx.$queryRaw`SELECT id FROM messaging_identities WHERE id = ${member.identityId} FOR UPDATE`;
+      const identity = await tx.messagingIdentity.findUnique({ where: { id: member.identityId! } });
+      if (!identity || identity.provider !== event.provider || identity.address !== member.address)
+        continue;
+      if (event.installationSpaceId && identity.spaceId !== event.installationSpaceId) continue;
+      const bot = await tx.bot.findFirst({
+        where: { id: identity.botId, userId: identity.userId, spaceId: identity.spaceId },
+        select: { id: true },
+      });
+      if (bot) identities.push(identity);
+    }
+    if (!identities.some((identity) => identity.address === event.from))
+      return { handled: false, stopped: [] };
+    const receipt = await tx.messagingOutbound.findUnique({ where: { idempotencyKey: key } });
+    if (receipt) return { handled: receipt.body === "stopped", stopped: [] };
+    const stopped: Array<{
+      identity: IdentityRow;
+      target: { kind: "bot"; botId: string; threadId: string };
+      stop: Awaited<ReturnType<ReturnType<typeof cancelThreadRuns>>>;
+    }> = [];
+    const threads = await tx.thread.findMany({
+      where: { botId: { in: identities.map((identity) => identity.botId) }, groupId: null },
+      orderBy: { id: "asc" },
+      select: { id: true, botId: true },
+    });
+    for (const thread of threads) {
+      const identity = identities.find((row) => row.botId === thread.botId)!;
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${thread.id} FOR UPDATE`;
+      const runs = await tx.run.findMany({
+        where: {
+          threadId: thread.id,
+          botId: identity.botId,
+          spaceId: identity.spaceId,
+          userId: identity.userId,
+          status: { in: [...ACTIVE_RUN_STATUSES] },
+          sourceMessage: {
+            threadId: thread.id,
+            role: "user",
+          },
+        },
+        select: { id: true, sourceMessage: { select: { threadId: true, blocks: true } } },
+      });
+      // Blocks are encrypted at rest: inspect the decoded first channel source,
+      // rather than using a JSON predicate that cannot see encrypted content.
+      const ids = runs
+        .filter((run) => {
+          if (run.sourceMessage?.threadId !== thread.id || !Array.isArray(run.sourceMessage.blocks))
+            return false;
+          const source = run.sourceMessage.blocks.find(
+            (block) =>
+              block &&
+              typeof block === "object" &&
+              !Array.isArray(block) &&
+              block.kind === "channel_message",
+          );
+          return (
+            source &&
+            typeof source === "object" &&
+            !Array.isArray(source) &&
+            source.channelId === channelId &&
+            source.provider === event.provider
+          );
+        })
+        .map((run) => run.id);
+      if (!ids.length) continue;
+      const target = { kind: "bot", botId: identity.botId, threadId: thread.id } as const;
+      const stop = await cancelThreadRuns(identity, target, { botId: identity.botId }, ids)(tx);
+      if (stop.runIds.length) stopped.push({ identity, target, stop });
+    }
+    await tx.messagingOutbound.create({
+      data: {
+        idempotencyKey: key,
+        kind: "command_receipt",
+        threadId: event.threadId,
+        status: "recorded",
+        body: stopped.length ? "stopped" : "idle",
+      },
+    });
+    return { handled: stopped.length > 0, stopped };
+  }, THREAD_LOCK_TRANSACTION_OPTIONS);
+  for (const { identity, target, stop } of decision.stopped)
+    await finishThreadStop(deps, identity, target, stop);
+  return decision.handled;
+}
+
 /** How long a channel invite or connection request can be answered by text. */
 export const TEXT_ANSWER_WINDOW_MS = 24 * 60 * 60 * 1000;
 
@@ -929,6 +1041,14 @@ async function handleChannelEvent(
 
   // A service message (a pin, a join) carries nothing for a bot to read.
   if (!event.content.trim() && !event.mediaUrl && !event.attachments?.length) return;
+
+  if (
+    isStopCommand(event.content) &&
+    !event.mediaUrl &&
+    !event.attachments?.length &&
+    (await stopChannelWork(deps, channel.id, event))
+  )
+    return;
 
   // Only approved owners' bots participate.
   const senderMember = await deps.prisma.messagingChannelMember.findUnique({
