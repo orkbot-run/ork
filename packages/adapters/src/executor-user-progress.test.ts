@@ -92,6 +92,7 @@ async function runTurn(
     durableMemory?: string;
     scratchpadTitle?: string;
     scripted?: boolean;
+    sourceClientNonce?: string;
   } = {},
 ) {
   vi.mocked(loadBotMessageContext).mockResolvedValue({
@@ -270,7 +271,14 @@ async function runTurn(
       findUnique: vi.fn(async () =>
         run.trigger === "messaging"
           ? { blocks: [{ kind: "channel_message", channelId: "channel-1" }] }
-          : null,
+          : options.sourceClientNonce
+            ? {
+                clientNonce: options.sourceClientNonce,
+                role: "user",
+                blocks: [],
+                threadId: run.threadId,
+              }
+            : null,
       ),
       findFirst: vi.fn(async ({ where }: { where?: { runId?: string; role?: string } } = {}) =>
         options.priorBotMessage && where?.runId === run.id && where.role === "bot"
@@ -1054,6 +1062,63 @@ describe("notes that can't be posted as messages", () => {
       { text: "", activity: true },
       { text: "They match.", streaming: true },
     ]);
+  });
+
+  it("publishes a matching call's public text while the model is still running", async () => {
+    let insideModel = false;
+    const spokenWhileRunning: unknown[] = [];
+    const { finalizeRun } = await runTurn("", false, undefined, [], "fyi", {
+      sourceClientNonce: "call:fixture-call:voice-turn",
+      runtime: async function* () {
+        insideModel = true;
+        yield { type: "text", text: "First sentence. More" };
+        insideModel = false;
+        yield { type: "text", text: " follows." };
+        yield { type: "done", text: "First sentence. More follows." };
+      },
+      appendGate: async (event) => {
+        if (insideModel && event.type === "thread.progress" && event.payload?.publicText)
+          spokenWhileRunning.push(event.payload);
+      },
+    });
+    expect(spokenWhileRunning).toEqual([
+      expect.objectContaining({
+        publicText: "First sentence. More",
+        publicTextCallId: "fixture-call",
+      }),
+    ]);
+    expect(finalizeRun).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a final after a quick tool separate when it never had a live progress event", async () => {
+    const { append, finalizeRun } = await runTurn("", false, undefined, [], "fyi", {
+      sourceClientNonce: "call:fixture-call:voice-turn",
+      runtimeEvents: [
+        { type: "text", text: "I will check the totals." },
+        { type: "tool", name: "read_file", args: {}, executionId: "call-1" },
+        { type: "text", text: "The totals match." },
+        { type: "done", text: "The totals match." },
+      ],
+    });
+    expect(progress(append)).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({ publicText: "I will check the totals." }),
+      }),
+    );
+    const tailWasStreamed = progress(append).some((event) =>
+      String(event.payload?.publicText ?? "").includes("The totals match."),
+    );
+    expect(finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "text",
+            text: "The totals match.",
+            ...(!tailWasStreamed ? { callSpeechContinues: true } : {}),
+          }),
+        ]),
+      }),
+    );
   });
 
   it("keeps tool status lines from replacing the note until the bot writes again", async () => {

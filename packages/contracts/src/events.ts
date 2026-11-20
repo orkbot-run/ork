@@ -124,6 +124,8 @@ export const MessageBlock = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("text"),
     text: z.string(),
+    /** The final text arrived after a streamed section and had no live update of its own. */
+    callSpeechContinues: z.literal(true).optional(),
     /** Original text on a server-routed direct message, before media or service notes were added. */
     ownerText: z.string().max(2_000).optional(),
   }),
@@ -243,6 +245,12 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     kind: z.literal("progress"),
     streaming: z.literal(true).optional(),
     text: z.string(),
+    /** Cumulative redacted chat text already shown for this run; absent on private/old streams. */
+    publicText: z.string().optional(),
+    /** The persisted source call nonce's call id, never inferred from the active client. */
+    publicTextCallId: z.string().optional(),
+    /** Offset where the current visible reply resumes after earlier narration. */
+    publicTextSegmentStart: z.number().int().nonnegative().optional(),
     /** Provider-generated tool status rather than assistant-authored narration. */
     activity: z.literal(true).optional(),
     pendingToolNames: z.array(z.string()).optional(),

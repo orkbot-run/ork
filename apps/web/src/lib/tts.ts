@@ -6,6 +6,7 @@ import { t } from "@lingui/core/macro";
 import type { SettingsScope } from "@orkbot/contracts";
 import type { SpeakerClaim } from "@orkbot/core";
 import {
+  CallSpeechQueue,
   createSpeakerOwnership,
   readVoiceAudio,
   readVoiceError,
@@ -106,6 +107,58 @@ export class Speaker {
       URL.revokeObjectURL(this.objectUrl);
       this.objectUrl = null;
     }
+  }
+
+  /** A voice turn can keep receiving text while its first audio clip is playing. */
+  startStream(opts: SpeakOptions) {
+    if (!this.canSpeak(opts.owner)) throw new Error(t`Could not speak that.`);
+    this.stop();
+    this.activeOwner = opts.owner;
+    const token = this.token;
+    const controller = new AbortController();
+    this.request = controller;
+    const live = () => this.token === token && !controller.signal.aborted;
+    const spaceId = opts.spaceId ?? selectedSpaceId();
+    const stream = new CallSpeechQueue({
+      render: async (text, signal) => {
+        const utterances = await this.prepare(text, opts, signal, spaceId);
+        return Promise.all(
+          utterances.map((utterance) => this.render(utterance, opts, signal, spaceId)),
+        );
+      },
+      play: async (clips, text, signal) => {
+        for (const clip of clips) {
+          if (!live() || signal.aborted) return;
+          this.set({
+            status: "speaking",
+            botId: opts.botId,
+            messageId: opts.messageId,
+            caption: text,
+          });
+          const stop = () => this.settlePlayback?.(false);
+          signal.addEventListener("abort", stop, { once: true });
+          try {
+            const played = await this.play(clip, () => live() && !signal.aborted);
+            if (!played && live() && !signal.aborted) throw new Error(t`Could not speak that.`);
+          } finally {
+            signal.removeEventListener("abort", stop);
+          }
+        }
+      },
+    });
+    controller.signal.addEventListener("abort", () => stream.cancel(), { once: true });
+    void stream.settled.then(
+      () => {
+        if (live()) this.stop(opts.owner);
+      },
+      (error: unknown) => {
+        if (!live()) return;
+        this.stop(opts.owner);
+        this.set({ ...IDLE, error: errorText(error) });
+      },
+    );
+    this.set({ status: "preparing", botId: opts.botId, messageId: opts.messageId });
+    return stream;
   }
 
   /** Resolves with this request's failure text; stopping or superseding it resolves with none. */

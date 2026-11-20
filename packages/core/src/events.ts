@@ -354,6 +354,19 @@ export function reduceLiveMessageBlocks(
       kind: "progress",
       text: tailText,
       ...(streaming && !activity ? { streaming: true as const } : {}),
+      ...(update.type === "progress" &&
+      streaming &&
+      !activity &&
+      typeof update.payload?.publicText === "string" &&
+      typeof update.payload.publicTextCallId === "string"
+        ? {
+            publicText: update.payload.publicText,
+            publicTextCallId: update.payload.publicTextCallId,
+            ...(typeof update.payload.publicTextSegmentStart === "number"
+              ? { publicTextSegmentStart: update.payload.publicTextSegmentStart }
+              : {}),
+          }
+        : {}),
       ...(activity ? { activity: true as const } : {}),
       ...(pendingToolNames.length > 0 ? { pendingToolNames } : {}),
     },

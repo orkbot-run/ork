@@ -6,6 +6,7 @@ import type { MessageBlock } from "@orkbot/contracts";
 import {
   appendTextSegment,
   appendToolCallSegment,
+  callIdFromClientNonce,
   createStreamingRedactor,
   endsSentence,
   isBackgroundRunTrigger,
@@ -178,6 +179,41 @@ export function mayBeSilentEnding(ctx: Pick<RunContext, "groupReplyOptional">, t
 export async function appendProgress(ctx: RunContext, payload: Record<string, unknown>) {
   const { deps, run, runId, bot, thread } = ctx;
   const { reply } = ctx.state;
+  // Mark only assistant text that this run actually exposes in the owner's chat.
+  // Status lines and explicit/final-only narration must never enter the spoken stream.
+  let publicText: string | undefined;
+  const publicTextCallId = callIdFromClientNonce(ctx.source.callClientNonce);
+  if (
+    publicTextCallId &&
+    payload.streaming === true &&
+    payload.activity !== true &&
+    !reply.publicTextLimitReached &&
+    !ctx.scripted &&
+    ctx.source.ownerStartedRun &&
+    !ctx.source.messagingChannelRun &&
+    !ctx.source.callEndRun &&
+    runPromotesMidTurnNarration(run.trigger, run.replyMode)
+  ) {
+    const text = typeof payload.delta === "string" ? payload.delta : payload.text;
+    if (typeof text === "string" && text) {
+      const previous = reply.publicText ?? "";
+      const separator = previous && typeof payload.delta !== "string" ? "\n\n" : "";
+      const next = previous + separator + text;
+      // Bound repeated event payloads on very long runs. Clients finish any unspoken
+      // suffix from the durable final response when this optional marker stops growing.
+      if (next.length <= PUBLIC_PROGRESS_TEXT_MAX_LENGTH) {
+        publicText = next;
+        if (typeof payload.delta !== "string")
+          reply.publicTextSegmentStart = previous.length + separator.length;
+        payload = {
+          ...payload,
+          publicText,
+          publicTextCallId,
+          publicTextSegmentStart: reply.publicTextSegmentStart ?? 0,
+        };
+      } else reply.publicTextLimitReached = true;
+    }
+  }
   const step =
     payload.activity === true && typeof payload.text === "string" ? payload.text.trim() : "";
   const rosterProgress = step ? `step:${step}` : payload.streaming === true ? "writing" : undefined;
@@ -191,8 +227,11 @@ export async function appendProgress(ctx: RunContext, payload: Record<string, un
     payload,
     ...(invalidateRoster ? { invalidateRoster: true } : {}),
   });
+  if (publicText !== undefined) reply.publicText = publicText;
   reply.rosterProgress = rosterProgress;
 }
+
+export const PUBLIC_PROGRESS_TEXT_MAX_LENGTH = 128 * 1024;
 
 export async function flushProgress(ctx: RunContext) {
   const { run } = ctx;

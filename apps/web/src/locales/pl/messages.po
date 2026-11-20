@@ -2538,6 +2538,10 @@ msgstr "Nie udało się pokazać danych uwierzytelniających"
 msgid "Could not sign in"
 msgstr "Nie udało się zalogować"
 
+#: src/lib/tts.ts
+msgid "Could not speak that."
+msgstr "Nie udało się odtworzyć odpowiedzi głosowej."
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "Nie udało się rozpocząć OAuth"

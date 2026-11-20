@@ -7,7 +7,9 @@ import type { BotAvatarSet, ProductEvent, ThreadMessage, ThreadSnapshot } from "
 import type { CallExchange, SpeakerClaim } from "@orkbot/core";
 import {
   CALL_FAREWELL_TIMEOUT_MS,
+  CallSpeechTurn,
   callClientNonce,
+  callSpeechCompletion,
   createCallSendTracker,
   createInterimBargeIn,
   errorStatus,
@@ -119,12 +121,17 @@ let awaitingReply = false;
 /** The run whose approval card the caller was sent to answer on screen. */
 let approvalRunId: string | null = null;
 let awaitedRunId: string | null = null;
+let turnGeneration = 0;
 const finishedRunIds = new Set<string>();
+const stoppedSpeechRuns = new Set<string>();
+const finishedSpeechStreams = new Set<string>();
+let streamedReply: { runId: string; turn: CallSpeechTurn; finishing?: true } | undefined;
 /** Counting down an interim phrase heard over the reply, before it counts as cutting in. */
 const interim = createInterimBargeIn(() => {
   if (state?.phase !== "speaking") return;
   // Never resume the cut-off message, and keep the idle it emits from reopening the mic.
   bargedIn = true;
+  stopStreamedReply(true);
   speaker.stop(speechOwner);
   set({ phase: "listening", caption: "" });
 });
@@ -199,10 +206,16 @@ export function startCall(call: {
       if (openingPending && speech.status === "idle") openingPending = false;
       if (speech.status === "speaking") {
         bargedIn = false;
+        if (streamedReply && speech.caption) spokenMemory.remember(speech.caption);
         set({ phase: "speaking", caption: speech.caption ?? "" });
         // The mic stays open through playback so the caller can talk over the reply.
         void openMic();
-      } else if (speech.status === "idle" && state.phase !== "listening" && !bargedIn) {
+      } else if (
+        speech.status === "idle" &&
+        state.phase !== "listening" &&
+        !bargedIn &&
+        !streamedReply
+      ) {
         set({ caption: "" });
         guardThenListen();
       }
@@ -303,6 +316,9 @@ function dropCall(): void {
   approvalRunId = null;
   awaitedRunId = null;
   finishedRunIds.clear();
+  stopStreamedReply();
+  stoppedSpeechRuns.clear();
+  finishedSpeechStreams.clear();
   unsubSpeech?.();
   unsubDictation?.();
   unsubSpeech = null;
@@ -498,6 +514,7 @@ function watchThread(botId: string) {
       if (isThreadSnapshotEvent(event)) commit(reduceThreadSnapshot(thread, event));
     },
     onEvent: (event) => {
+      if (event.type === "thread.progress") acceptStreamedSpeech(event.runId, event.payload);
       // The bot hung up: speak the farewell it wrote and stop there — the rest of its
       // work lands in the thread as chat, which the caller is no longer listening to.
       if (event.type !== "thread.call.ended" || event.payload.callId !== callId) return;
@@ -514,6 +531,7 @@ function watchThread(botId: string) {
 /** The bot's own goodbye: the last thing this call says before the speaker goes idle. */
 function speakFarewell(payload: Record<string, unknown>) {
   if (!state) return;
+  stopStreamedReply();
   const farewell = typeof payload.farewell === "string" ? payload.farewell.trim() : "";
   const messageId = typeof payload.messageId === "string" ? payload.messageId : undefined;
   if (messageId) spokenMessageIds.add(messageId);
@@ -564,6 +582,7 @@ function guardThenListen() {
 
 async function listen() {
   if (!state) return;
+  if (streamedReply) return;
   // The caller said goodbye: every path back to listening hangs up instead.
   if (hangUpAfterReply) {
     endCall();
@@ -616,6 +635,7 @@ async function handleTranscript(text: string) {
     }
     // The caller talked over the reply: cut the audio, and never resume that message.
     bargedIn = true;
+    stopStreamedReply(true);
     speaker.stop(speechOwner);
     set({ phase: "thinking", caption: "" });
   }
@@ -654,6 +674,9 @@ async function handleTranscript(text: string) {
     return;
   }
   approvalRunId = null;
+  const generation = ++turnGeneration;
+  const stillCurrent = () =>
+    state?.botId === botId && callId === turnCallId && turnGeneration === generation;
   awaitedRunId = askMessage?.runId ?? null;
   awaitingReply = true;
   set({ heard: text, phase: "thinking", exchanges: [...exchanges, { role: "user", text }] });
@@ -680,10 +703,10 @@ async function handleTranscript(text: string) {
         : rpc.threads.send({ botId, clientNonce, text });
     releasePendingSend = callSends.track(turnCallId, sendRequest);
     const receipt = await sendRequest;
-    if (!state || state.botId !== botId || callId !== turnCallId) return;
+    if (!stillCurrent()) return;
     if ("runId" in receipt) awaitedRunId = receipt.runId;
   } catch (error) {
-    if (!state || state.botId !== botId || callId !== turnCallId) return;
+    if (!stillCurrent() || streamedReply) return;
     awaitingReply = false;
     set({ caption: errorText(error, t`Could not send that`) });
     void listen();
@@ -691,11 +714,11 @@ async function handleTranscript(text: string) {
   } finally {
     releasePendingSend();
   }
-  if (!state || state.botId !== botId || callId !== turnCallId) return;
+  if (!stillCurrent()) return;
   try {
     await callFeed?.load();
   } catch (error) {
-    if (!state || state.botId !== botId || callId !== turnCallId) return;
+    if (!stillCurrent() || streamedReply) return;
     awaitingReply = false;
     set({ caption: errorText(error, t`Could not send that`) });
     void listen();
@@ -711,6 +734,76 @@ async function handleTranscript(text: string) {
 function watchInterim(text: string) {
   if (state?.phase !== "speaking") return;
   interim.hear(text);
+}
+
+function stopStreamedReply(interrupted = false) {
+  const reply = streamedReply;
+  streamedReply = undefined;
+  if (!reply) return;
+  if (interrupted) stoppedSpeechRuns.add(reply.runId);
+  reply.turn.cancel();
+}
+
+function acceptStreamedSpeech(
+  runId: string | null | undefined,
+  speech: {
+    publicText?: unknown;
+    publicTextCallId?: unknown;
+    publicTextSegmentStart?: unknown;
+  },
+) {
+  const text = speech.publicText;
+  if (
+    !state ||
+    !awaitingReply ||
+    openingPending ||
+    botEndedCall ||
+    state.phase === "ringing" ||
+    !runId ||
+    stoppedSpeechRuns.has(runId) ||
+    finishedSpeechStreams.has(runId) ||
+    speech.publicTextCallId !== callId ||
+    typeof text !== "string"
+  )
+    return;
+  const expected = approvalRunId ?? awaitedRunId ?? streamedReply?.runId;
+  if (expected && expected !== runId) return;
+  if (!streamedReply) {
+    const { botId } = state;
+    streamedReply = {
+      runId,
+      turn: new CallSpeechTurn(() => speaker.startStream({ botId, owner: speechOwner })),
+    };
+  }
+  streamedReply.turn.update(
+    text,
+    typeof speech.publicTextSegmentStart === "number" ? speech.publicTextSegmentStart : undefined,
+  );
+}
+
+function finishStreamedReply(text?: string, append?: boolean) {
+  const reply = streamedReply;
+  if (!reply || reply.finishing) return;
+  reply.finishing = true;
+  finishedSpeechStreams.add(reply.runId);
+  void reply.turn
+    .finish(text, append)
+    .catch(() => undefined)
+    .then(() => {
+      if (streamedReply !== reply) return;
+      streamedReply = undefined;
+      if (!bargedIn) guardThenListen();
+    });
+}
+
+function callReplyText(
+  text: string,
+  ask: Extract<ThreadMessage["blocks"][number], { kind: "ask" }> | undefined,
+) {
+  if (!ask) return text;
+  if (isSecretAskBlock(ask)) return `${text}. ${t`Hang up first, then enter the code on screen.`}`;
+  if (isApprovalAskBlock(ask)) return `${text}. ${t`Approve or deny it on screen.`}`;
+  return `${text}. ${t`Say yes or no, or answer in a sentence.`}`;
 }
 
 /**
@@ -731,22 +824,36 @@ function reactToThread() {
   if (state.phase === "listening" && !awaitingReply) return;
   const { botId } = state;
   const messages = thread?.messages ?? [];
+  const liveReply = messages.findLast((message) => {
+    const block = message.blocks.at(-1);
+    return (
+      block?.kind === "progress" && block.publicTextCallId === callId && !replyFinished(message)
+    );
+  });
+  const progress = liveReply?.blocks.at(-1);
+  if (progress?.kind === "progress" && progress.streaming) {
+    acceptStreamedSpeech(liveReply?.runId, progress);
+  }
   // Only what the bot wrote after the caller's latest turn answers it. A run that stopped on a
   // card keeps its live progress message after the card; that is not a reply.
   const turnIndex = messages.findLastIndex((message) => message.role === "user");
-  const replyRunId = approvalRunId ?? awaitedRunId;
+  const replyRunId = streamedReply?.runId ?? approvalRunId ?? awaitedRunId;
   const lastBot = messages
     .slice(turnIndex + 1)
     .findLast(
       (message) =>
         message.role === "bot" &&
+        !(message.runId && stoppedSpeechRuns.has(message.runId)) &&
         !(message.id.startsWith("progress:") && replyFinished(message)) &&
         (!replyRunId || message.runId === replyRunId),
     );
   if (lastBot && !spokenMessageIds.has(lastBot.id) && replyFinished(lastBot)) {
-    const text = speechFromBlocks(lastBot.blocks);
+    const completion =
+      streamedReply && streamedReply.runId === lastBot.runId
+        ? callSpeechCompletion(lastBot.blocks)
+        : undefined;
+    const text = completion?.text ?? speechFromBlocks(lastBot.blocks);
     const ask = lastBot.blocks.find((block) => block.kind === "ask" && block.status !== "answered");
-    const secretAsk = ask && isSecretAskBlock(ask);
     const approvalAsk = ask && isApprovalAskBlock(ask);
     if (text) {
       // Never spoken again, interrupted or not.
@@ -756,23 +863,26 @@ function reactToThread() {
       approvalRunId = approvalAsk ? (lastBot.runId ?? null) : null;
       awaitingReply = approvalRunId !== null;
       set({ exchanges: [...state.exchanges, { role: "bot", text }], heard: "" });
+      if (completion) {
+        finishStreamedReply(
+          callReplyText(text, ask?.kind === "ask" ? ask : undefined),
+          completion.append,
+        );
+        return;
+      }
       spokenMemory.remember(text);
-      void speaker.speak(
-        secretAsk
-          ? `${text}. ${t`Hang up first, then enter the code on screen.`}`
-          : approvalAsk
-            ? `${text}. ${t`Approve or deny it on screen.`}`
-            : ask
-              ? `${text}. ${t`Say yes or no, or answer in a sentence.`}`
-              : text,
-        { botId, messageId: lastBot.id, owner: speechOwner },
-      );
+      void speaker.speak(callReplyText(text, ask?.kind === "ask" ? ask : undefined), {
+        botId,
+        messageId: lastBot.id,
+        owner: speechOwner,
+      });
       return;
     }
     if (!runActive(thread)) {
       spokenMessageIds.add(lastBot.id);
       awaitingReply = false;
-      void listen();
+      if (completion) finishStreamedReply();
+      else void listen();
     }
   }
   if (awaitingReply && replyRunId && finishedRunIds.has(replyRunId)) {
@@ -780,6 +890,10 @@ function reactToThread() {
     approvalRunId = null;
     awaitedRunId = null;
     set({ caption: errorText(thread?.run?.id === replyRunId ? thread.run.error : undefined) });
+    if (streamedReply?.runId === replyRunId) {
+      finishStreamedReply();
+      return;
+    }
     void listen();
   }
 }

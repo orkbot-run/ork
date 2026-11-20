@@ -871,6 +871,9 @@ export async function completeRun(ctx: RunContext) {
   // Preserve the last held-back preview as a normal final reply when the
   // model supplies none, unless it chose silence or already delivered that text.
   // Persisting peer results here also lets outcome delivery retry after completion.
+  const unstreamedCallContinuation = Boolean(
+    reply.publicText && !reply.hasStreamedText && reply.assembled.trim(),
+  );
   recordExplicitNoResponse(reply, reply.lastDiscardedMidTurnNarration);
   // When nothing follows the last step, the notes since the last interim message are the reply.
   if (
@@ -958,6 +961,11 @@ export async function completeRun(ctx: RunContext) {
         redactBlocks(completionBlocks, ctx.secrets),
         reply.publishedMidTurnUserMessage || runAllowsSilentEmpty(run.trigger),
       );
+  if (unstreamedCallContinuation) {
+    const firstText = blocks.findIndex((block) => block.kind === "text");
+    const block = blocks[firstText];
+    if (block?.kind === "text") blocks[firstText] = { ...block, callSpeechContinues: true };
+  }
   const text = ctx.state.handedOff
     ? ""
     : redactSecrets(completionNotificationBody(silentReply.assembled, blocks), ctx.secrets);

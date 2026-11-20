@@ -107,6 +107,33 @@ describe("Speaker", () => {
     expect(speaker.state.status).toBe("idle");
   });
 
+  it("aborts the active synthesis when a streaming call is stopped", async () => {
+    const speaker = new Speaker();
+    const owner = speaker.claim()!;
+    const preparation = vi
+      .spyOn(
+        speaker as unknown as {
+          prepare: (text: string, options: unknown, signal: AbortSignal) => Promise<string[]>;
+        },
+        "prepare",
+      )
+      .mockImplementation(async (text) => [text]);
+    const fetchRequest = vi.fn(
+      (_url: string, _init: RequestInit) => new Promise<Response>(() => undefined),
+    );
+    vi.stubGlobal("fetch", fetchRequest);
+    const stream = speaker.startStream({ owner, botId: "call-bot", spaceId: "space-test" });
+    stream.add(["First sentence.", "Second sentence."]);
+    await vi.waitFor(() => expect(fetchRequest).toHaveBeenCalledOnce());
+    speaker.stop(owner);
+    const request = fetchRequest.mock.calls[0]?.[1];
+    expect(request?.signal?.aborted).toBe(true);
+    expect(preparation).toHaveBeenCalledOnce();
+    await expect(stream.settled).resolves.toBeUndefined();
+    expect(speaker.state).toEqual({ status: "idle" });
+    owner.release();
+  });
+
   it("does not report a failure for a request a newer one replaced", async () => {
     const speaker = new Speaker();
     let fail: (error: Error) => void = () => undefined;

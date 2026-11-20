@@ -2538,6 +2538,10 @@ msgstr "Could not show the credential"
 msgid "Could not sign in"
 msgstr "Could not sign in"
 
+#: src/lib/tts.ts
+msgid "Could not speak that."
+msgstr "Could not speak that."
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "Could not start OAuth"

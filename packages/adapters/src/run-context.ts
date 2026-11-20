@@ -129,6 +129,10 @@ export interface ReplyState {
   pendingProgress: string;
   lastProgressAt: number;
   hasStreamedText: boolean;
+  /** Append-only public chat text for voice playback, independent of transient tool status. */
+  publicText?: string;
+  publicTextSegmentStart?: number;
+  publicTextLimitReached?: boolean;
   rosterProgress?: string;
   /**
    * Set by a tool call or a new assistant message: the next text starts a new

@@ -4,18 +4,21 @@
 // Modified by Ork contributors for call speaker ownership; see LICENSE.md.
 
 import type { BotAvatarSet } from "@orkbot/contracts";
-import type { CallExchange, SpeakerClaim } from "@orkbot/core";
+import type { CallExchange, CallSpeechSink, SpeakerClaim } from "@orkbot/core";
 import {
   ACTIVE_RUN_STATUSES,
   AiConsentBlocked,
   abortableDelay,
   CALL_FAREWELL_TIMEOUT_MS,
+  CallSpeechTurn,
   callClientNonce,
+  callSpeechCompletion,
   createCallSendTracker,
   createInterimBargeIn,
   isCallBargeIn,
   isFarewell,
   isRetryableError,
+  isRunTerminalEvent,
   latestSpokenCallReply,
   newClientId,
   readJsonObjectWithin,
@@ -26,6 +29,7 @@ import {
 import type { AudioRecorder } from "expo-audio";
 import { File } from "expo-file-system";
 import { useSyncExternalStore } from "react";
+import { Platform } from "react-native";
 import type { ApiRequestContext, MobileSnapshot } from "./api";
 import {
   applyMobileThreadEvent,
@@ -51,7 +55,13 @@ import { fetchServer } from "./server-headers";
 import { currentSessionGeneration, subscribeSessionGeneration } from "./session";
 import { errorText, voiceAccountErrorText } from "./user-error";
 import type { SpeechOwner } from "./voice";
-import { claimSpeaker, createSpeechOwner, speakText, stopSpeaking } from "./voice";
+import {
+  claimSpeaker,
+  createSpeechOwner,
+  speakText,
+  startSpeechStream,
+  stopSpeaking,
+} from "./voice";
 
 export type CallPhase = "listening" | "thinking" | "speaking";
 
@@ -90,6 +100,7 @@ export type CallDeps = {
   /** Tells the server the caller hung up, so it files the call marker and the wrap-up run. */
   endCall: (botId: string, callId: string) => Promise<void>;
   speak: (botId: string, text: string) => Promise<void>;
+  stream?: (botId: string, onClip: (text: string) => void) => CallSpeechSink;
   /** Cuts the reply off when the caller talks over it. */
   stopSpeaking: () => void;
   /** The opening cue as the call starts, the closing one once the caller's turn is heard. */
@@ -98,8 +109,15 @@ export type CallDeps = {
   waitSound: (action: "preload" | "start" | "stop" | "release") => void;
   watch: (
     botId: string,
-    onReply: (messageId: string, text: string, runId?: string) => void,
+    onReply: (
+      messageId: string,
+      text: string,
+      runId?: string,
+      completion?: ReturnType<typeof callSpeechCompletion>,
+    ) => void,
     onCallEnded: (ended: CallEnded) => void,
+    onProgress: (runId: string, publicText: string, segmentStart?: number) => void,
+    onRunEnded: (runId: string) => void,
   ) => () => void;
 };
 
@@ -127,6 +145,7 @@ const METER_POLL_MS = 200;
 /** How long a starting recorder may go without a level (web reports one once it records). */
 const METER_START_MS = 1_000;
 const MAX_CLIP_MS = 30_000;
+const ECHO_GUARD_MS = 600;
 
 let state: CallState | null = null;
 let speakerClaim: SpeakerClaim | undefined;
@@ -152,6 +171,10 @@ let consentBlocked = false;
 let botEndedCall = false;
 let hangUpTimer: ReturnType<typeof setTimeout> | null = null;
 let spokenMessageId: string | null = null;
+let streamedReply: { runId: string; turn: CallSpeechTurn; finishing?: true } | undefined;
+const stoppedSpeechRuns = new Set<string>();
+const finishedSpeechStreams = new Set<string>();
+let echoGuardTimer: ReturnType<typeof setTimeout> | undefined;
 let failures = 0;
 /** Counts the caller's turns, so a closing cue that ends late starts no waiting sound for a newer turn. */
 let turnSeq = 0;
@@ -171,6 +194,7 @@ let bargedIn = false;
 const interim = createInterimBargeIn(() => {
   if (state?.phase !== "speaking") return;
   bargedIn = true;
+  stopStreamedReply(true);
   deps.stopSpeaking();
   set({ phase: "listening", caption: "" });
 });
@@ -263,7 +287,7 @@ export function startCall(
   };
   const openedCallId = callId;
   try {
-    unwatch = deps.watch(call.botId, onReply, onCallEnded);
+    unwatch = deps.watch(call.botId, onReply, onCallEnded, onStreamProgress, onStreamRunEnded);
     emit();
     void openCall(openedCallId, call.greeting).catch((error: unknown) => {
       if (!state || callId !== openedCallId) return;
@@ -310,6 +334,7 @@ export function endCall(): void {
     void closed.then(() => hangUps.delete(closed));
   }
   if (state) {
+    stopStreamedReply();
     deps.waitSound("release");
     // A reply can still be playing when the caller hangs up: cut it with the call.
     deps.stopSpeaking();
@@ -328,6 +353,10 @@ export function endCall(): void {
   botEndedCall = false;
   callRunId = null;
   spokenMessageId = null;
+  stoppedSpeechRuns.clear();
+  finishedSpeechStreams.clear();
+  clearTimeout(echoGuardTimer);
+  echoGuardTimer = undefined;
   failures = 0;
   micOpen = false;
   opening = false;
@@ -390,7 +419,7 @@ export function toggleTranscript(): void {
 }
 
 async function listen(): Promise<void> {
-  if (!state) return;
+  if (!state || streamedReply || echoGuardTimer) return;
   // The caller said goodbye: every path back to listening hangs up instead.
   if (hangUpAfterReply) {
     endCall();
@@ -403,7 +432,14 @@ async function listen(): Promise<void> {
 
 /** Opens one microphone session, unless one is already running or the call is muted. */
 async function openMic(): Promise<void> {
-  if (!state || micOpen || state.muted) return;
+  if (
+    !state ||
+    micOpen ||
+    state.muted ||
+    echoGuardTimer ||
+    (streamedReply && (Platform.OS === "android" || onDevice === false))
+  )
+    return;
   micOpen = true;
   const controller = new AbortController();
   turn = controller;
@@ -490,6 +526,7 @@ async function handleTranscript(raw: string): Promise<void> {
     // The caller talked over the reply: cut the audio, and never resume that message.
     bargedIn = true;
     interim.clear();
+    stopStreamedReply(true);
     deps.stopSpeaking();
     set({ phase: "thinking", caption: "" });
   }
@@ -507,6 +544,7 @@ async function handleTranscript(raw: string): Promise<void> {
   // The call this turn belongs to: hanging up and calling the same bot again before
   // send resolves must not hand the new call the old run.
   const turnCallId = callId;
+  callRunId = null;
   set({
     phase: "thinking",
     heard: text,
@@ -533,12 +571,12 @@ async function handleTranscript(raw: string): Promise<void> {
     const sendRequest = deps.send(botId, text, callClientNonce(turnCallId));
     releasePendingSend = callSends.track(turnCallId, sendRequest);
     const runId = await sendRequest;
-    if (state?.botId === botId && callId === turnCallId) {
+    if (state?.botId === botId && callId === turnCallId && turnSeq === cueTurn) {
       callRunId = runId ?? null;
       if (hangUpAfterReply) farewellSent = true;
     }
   } catch (error) {
-    if (state?.botId !== botId || callId !== turnCallId) return;
+    if (state?.botId !== botId || callId !== turnCallId || turnSeq !== cueTurn) return;
     if (error instanceof AiConsentBlocked) {
       // Bot already closed server-side: do not clear its hang-up into a muted stuck call.
       if (botEndedCall) {
@@ -601,13 +639,106 @@ function heardInterim(text: string): void {
   interim.hear(text);
 }
 
-function onReply(messageId: string, text: string, runId?: string): void {
+function onReply(
+  messageId: string,
+  text: string,
+  runId?: string,
+  completion?: ReturnType<typeof callSpeechCompletion>,
+): void {
   // Work the bot files after hanging up belongs in the thread, not in the caller's ear.
   if (!state || switching || botEndedCall || messageId === spokenMessageId) return;
   // A reply to something typed into the thread mid-call belongs on screen only.
-  if (callRunId && runId && runId !== callRunId) return;
+  if (runId && (stoppedSpeechRuns.has(runId) || (callRunId && runId !== callRunId))) return;
   spokenMessageId = messageId;
+  if (streamedReply && streamedReply.runId === runId) {
+    const finalText = completion?.text ?? text;
+    if (finalText)
+      set({ exchanges: [...state.exchanges, { role: "bot", text: finalText }], heard: "" });
+    finishStreamedReply(finalText || undefined, completion?.append);
+    return;
+  }
   speakAndListen(text);
+}
+
+function stopStreamedReply(interrupted = false) {
+  const reply = streamedReply;
+  streamedReply = undefined;
+  if (!reply) return;
+  if (interrupted) stoppedSpeechRuns.add(reply.runId);
+  reply.turn.cancel();
+}
+
+function onStreamProgress(runId: string, text: string, segmentStart?: number) {
+  if (
+    !state ||
+    opening ||
+    switching ||
+    botEndedCall ||
+    consentBlocked ||
+    state.phase === "listening" ||
+    stoppedSpeechRuns.has(runId) ||
+    finishedSpeechStreams.has(runId)
+  )
+    return;
+  const expected = streamedReply?.runId ?? callRunId;
+  if (expected && expected !== runId) return;
+  if (!streamedReply) {
+    const startStream = deps.stream;
+    if (!startStream) return;
+    const { botId } = state;
+    const turnSpeech = new CallSpeechTurn(() => {
+      bargedIn = false;
+      interim.clear();
+      if (!onDevice || Platform.OS === "android") {
+        turn?.abort();
+        turn = null;
+        micOpen = false;
+      }
+      set({ phase: "speaking", heard: "" });
+      if (onDevice && Platform.OS !== "android") void openMic();
+      return startStream(botId, (caption) => {
+        spokenMemory.remember(caption);
+        set({ caption });
+      });
+    });
+    streamedReply = { runId, turn: turnSpeech };
+    void turnSpeech.settled.catch((error: unknown) => {
+      if (streamedReply?.turn !== turnSpeech) return;
+      if (error instanceof AiConsentBlocked) {
+        stopStreamedReply(true);
+        if (botEndedCall || farewellSent) endCall();
+        else blockForConsent(error);
+      } else set({ caption: errorText(error, t("Could not speak that.")) });
+    });
+  }
+  streamedReply.turn.update(text, segmentStart);
+}
+
+function finishStreamedReply(text?: string, append?: boolean) {
+  const reply = streamedReply;
+  if (!reply || reply.finishing) return;
+  reply.finishing = true;
+  finishedSpeechStreams.add(reply.runId);
+  void reply.turn
+    .finish(text, append)
+    .catch(() => undefined)
+    .then(() => {
+      if (streamedReply !== reply) return;
+      streamedReply = undefined;
+      if (bargedIn) return;
+      if (Platform.OS !== "android" || hangUpAfterReply) {
+        void listen();
+        return;
+      }
+      echoGuardTimer = setTimeout(() => {
+        echoGuardTimer = undefined;
+        void listen();
+      }, ECHO_GUARD_MS);
+    });
+}
+
+function onStreamRunEnded(runId: string) {
+  if (streamedReply?.runId === runId) finishStreamedReply();
 }
 
 /** The bot on the line says it is handing over, then this call hangs up and the other bot rings. */
@@ -705,6 +836,7 @@ function onCallEnded(ended: CallEnded): void {
   if (!state || switching || ended.callId !== callId || botEndedCall) return;
   hangUpAfterReply = true;
   botEndedCall = true;
+  stopStreamedReply();
   if (hangUpTimer) clearTimeout(hangUpTimer);
   hangUpTimer = setTimeout(endCall, CALL_FAREWELL_TIMEOUT_MS);
   const farewell = ended.farewell?.trim();
@@ -746,6 +878,8 @@ function productionDeps(
     },
     endCall: async (botId, id) => closeCall(botId, id, await callContext()),
     speak: (botId, text) => speakReply(botId, text, speechOwner, requestContext),
+    stream: (botId, onClip) =>
+      startSpeechStream({ botId, owner: speechOwner, requestContext }, onClip),
     stopSpeaking: () => stopSpeaking(speechOwner),
     cue: playCallCue,
     waitSound: (action) => {
@@ -754,7 +888,8 @@ function productionDeps(
       else if (action === "preload") void preloadWaitSound().catch(() => undefined);
       else releaseWaitSound();
     },
-    watch: (botId, onReply, onEnded) => watchReplies(botId, onReply, onEnded, requestContext),
+    watch: (botId, onReply, onEnded, onProgress, onRunEnded) =>
+      watchReplies(botId, onReply, onEnded, onProgress, onRunEnded, requestContext),
   };
   return own;
 }
@@ -906,8 +1041,10 @@ async function speakReply(
 /** Live feed for the bot on the call, independent of whichever thread is on screen. */
 function watchReplies(
   botId: string,
-  onNewReply: (messageId: string, text: string, runId?: string) => void,
+  onNewReply: Parameters<CallDeps["watch"]>[1],
   onEnded: (ended: CallEnded) => void,
+  onProgress: (runId: string, text: string, segmentStart?: number) => void,
+  onRunEnded: (runId: string) => void,
   requestContext?: ApiRequestContext,
 ): () => void {
   const controller = new AbortController();
@@ -932,6 +1069,17 @@ function watchReplies(
           );
           lastSeen = latestSpokenCallReply(snapshot.messages, watchedCallId)?.id ?? null;
           cursor = snapshot.cursor ?? 0;
+          for (const message of snapshot.messages) {
+            if (!message.runId || !message.id.startsWith("progress:")) continue;
+            const block = message.blocks.at(-1);
+            if (
+              block?.kind === "progress" &&
+              block.publicTextCallId === watchedCallId &&
+              block.publicText
+            ) {
+              onProgress(message.runId, block.publicText, block.publicTextSegmentStart);
+            }
+          }
         }
         await subscribeThread(
           { botId },
@@ -947,17 +1095,41 @@ function watchReplies(
             }
             snapshot = applyMobileThreadEvent(snapshot, event) ?? snapshot;
             if (!snapshot) return;
+            if (
+              event.type === "thread.progress" &&
+              event.runId &&
+              event.payload?.publicTextCallId === watchedCallId &&
+              typeof event.payload?.publicText === "string"
+            ) {
+              onProgress(
+                event.runId,
+                event.payload.publicText,
+                typeof event.payload.publicTextSegmentStart === "number"
+                  ? event.payload.publicTextSegmentStart
+                  : undefined,
+              );
+            }
             const message = latestSpokenCallReply(snapshot.messages, watchedCallId);
-            if (!message || message.id === lastSeen) return;
             // Wait for the message's own run to settle so half-written blocks are never
             // spoken; another run still working says nothing about this one.
-            const run = snapshot?.run;
-            const fromAnotherRun = Boolean(message.runId && message.runId !== run?.id);
-            if (!fromAnotherRun && run && ACTIVE_RUN_STATUSES.some((s) => s === run.status)) return;
-            const text = blockText(message).trim();
-            if (!text) return;
-            lastSeen = message.id;
-            onNewReply(message.id, text, message.runId);
+            const run =
+              snapshot.activeRuns?.find((candidate) => candidate.id === message?.runId) ??
+              snapshot.run;
+            if (
+              message &&
+              message.id !== lastSeen &&
+              !message.id.startsWith("progress:") &&
+              (!run ||
+                (message.runId && message.runId !== run.id) ||
+                !ACTIVE_RUN_STATUSES.some((status) => status === run.status))
+            ) {
+              const text = blockText(message).trim();
+              if (text) {
+                lastSeen = message.id;
+                onNewReply(message.id, text, message.runId, callSpeechCompletion(message.blocks));
+              }
+            }
+            if (event.runId && isRunTerminalEvent(event)) onRunEnded(event.runId);
           },
           controller.signal,
           requestContext,
