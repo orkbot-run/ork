@@ -82,6 +82,13 @@ describe("procedureSecurityEvent", () => {
         actor,
       )?.metadata,
     ).toMatchObject({ spaceId: "space-2", allowed: true });
+    expect(
+      procedureSecurityEvent(
+        ["organizationVault", "setCredentialWorkspaceAccess"],
+        { name: "deploy-key", spaceId: "space-2", allowed: true },
+        actor,
+      )?.metadata,
+    ).toMatchObject({ name: "deploy-key", spaceId: "space-2", allowed: true });
   });
 
   it("lists which deployment settings changed without the allowlist itself", () => {
