@@ -313,7 +313,6 @@ function SubscriptionShot() {
         onSectionChange={() => undefined}
         memoryConfig={null}
         onMemoryConfigChange={() => undefined}
-        onUsageOpen={() => undefined}
         timezone="UTC"
         onTimezoneChange={async () => undefined}
         onClose={() => undefined}

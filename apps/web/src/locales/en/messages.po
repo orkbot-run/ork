@@ -8087,3 +8087,84 @@ msgstr "The bot joins visibly, records audio and creates a transcript. Inform ev
 #: src/pages/shell/meetings.tsx
 msgid "Title (optional)"
 msgstr "Title (optional)"
+
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "All models"
+msgstr "All models"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "By bot"
+msgstr "By bot"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "By model"
+msgstr "By model"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Cost (USD)"
+msgstr "Cost (USD)"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Could not load usage."
+msgstr "Could not load usage."
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Could not refresh usage. Showing the last available numbers."
+msgstr "Could not refresh usage. Showing the last available numbers."
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Deleted"
+msgstr "Deleted"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Deleted bot"
+msgstr "Deleted bot"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Input tokens"
+msgstr "Input tokens"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Last 30 days"
+msgstr "Last 30 days"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Last 7 days"
+msgstr "Last 7 days"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Loading usage"
+msgstr "Loading usage"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "No usage in this period. Try another period or filter."
+msgstr "No usage in this period. Try another period or filter."
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Output tokens"
+msgstr "Output tokens"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Period"
+msgstr "Period"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Runs over time"
+msgstr "Runs over time"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Runs over time. Exact values are available in the timeline data table."
+msgstr "Runs over time. Exact values are available in the timeline data table."
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Timeline data"
+msgstr "Timeline data"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "— = not reported"
+msgstr "— = not reported"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Date"
+msgstr "Date"

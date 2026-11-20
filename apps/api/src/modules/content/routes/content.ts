@@ -24,6 +24,7 @@ import {
   listSpaceArtifacts,
 } from "../artifacts.js";
 import { querySpaceSearch } from "../search.js";
+import { loadUsageBreakdown } from "../usage-breakdown.js";
 
 const EXPORT_MESSAGE_PAGE_SIZE = 500;
 
@@ -116,6 +117,9 @@ export function contentRoutes(ctx: RouterContext) {
       }),
     },
     usage: {
+      breakdown: authed.usage.breakdown.handler(({ context, input }) =>
+        loadUsageBreakdown(deps.prisma, context.actor, input),
+      ),
       list: authed.usage.list.handler(async ({ context }) => {
         const rows = await deps.prisma.usageRecord.findMany({
           where: { spaceId: context.actor.spaceId, userId: context.actor.userId },

@@ -8149,3 +8149,84 @@ msgstr "Bot dołącza jako widoczny uczestnik, nagrywa dźwięk i tworzy transkr
 #: src/pages/shell/meetings.tsx
 msgid "Title (optional)"
 msgstr "Tytuł (opcjonalnie)"
+
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "All models"
+msgstr "Wszystkie modele"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "By bot"
+msgstr "Według bota"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "By model"
+msgstr "Według modelu"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Cost (USD)"
+msgstr "Koszt (USD)"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Could not load usage."
+msgstr "Nie udało się wczytać zużycia."
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Could not refresh usage. Showing the last available numbers."
+msgstr "Nie udało się odświeżyć zużycia. Wyświetlono ostatnie dostępne dane."
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Deleted"
+msgstr "Usunięty"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Deleted bot"
+msgstr "Usunięty bot"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Input tokens"
+msgstr "Tokeny wejściowe"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Last 30 days"
+msgstr "Ostatnie 30 dni"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Last 7 days"
+msgstr "Ostatnie 7 dni"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Loading usage"
+msgstr "Ładowanie zużycia"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "No usage in this period. Try another period or filter."
+msgstr "Brak zużycia w tym okresie. Zmień okres lub filtr."
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Output tokens"
+msgstr "Tokeny wyjściowe"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Period"
+msgstr "Okres"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Runs over time"
+msgstr "Uruchomienia w czasie"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Runs over time. Exact values are available in the timeline data table."
+msgstr "Uruchomienia w czasie. Dokładne wartości są dostępne w tabeli danych osi czasu."
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Timeline data"
+msgstr "Dane osi czasu"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "— = not reported"
+msgstr "— = brak danych"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Date"
+msgstr "Data"

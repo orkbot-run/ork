@@ -128,7 +128,7 @@ import {
 } from "../lib/composer-enter-to-send-pref";
 import { getRemoteImagesEnabled } from "../lib/remote-images-preference";
 import { TOOL_ACTIVITY_STORAGE_KEY } from "../lib/tool-activity-preference";
-import { GeneralSettingsPanels, UsageSettingsPanel } from "./AccountSettingsOverlay";
+import { GeneralSettingsPanels } from "./AccountSettingsOverlay";
 
 afterEach(() => {
   localStorage.clear();
@@ -285,64 +285,6 @@ it("updates the Enter preference from Settings and reflects external changes", a
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     await act(async () => setComposerEnterToSend(true));
     expect(toggle.getAttribute("aria-checked")).toBe("true");
-  } finally {
-    await act(async () => root.unmount());
-    vi.unstubAllGlobals();
-  }
-});
-
-it("shows usage totals and a per-model breakdown", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const container = document.createElement("div");
-  const root = createRoot(container);
-  try {
-    await act(async () =>
-      root.render(
-        <UsageSettingsPanel
-          usage={{
-            runs: 2,
-            inputTokens: 1200,
-            outputTokens: 34,
-            totalTokens: 1234,
-            costUsd: 0.5,
-            modelCalls: 3,
-            models: [
-              {
-                provider: "openai",
-                model: "model-a",
-                modelCalls: 2,
-                inputTokens: 1000,
-                outputTokens: 30,
-                totalTokens: 1030,
-                costUsd: 0.5,
-              },
-              {
-                provider: "local",
-                model: "model-b",
-                modelCalls: 1,
-                inputTokens: 200,
-                outputTokens: 4,
-                totalTokens: 204,
-                costUsd: null,
-              },
-            ],
-          }}
-        />,
-      ),
-    );
-    expect([...container.querySelectorAll("dd")].map((node) => node.textContent)).toEqual([
-      "2",
-      "1,234",
-      "$0.50",
-    ]);
-    expect(
-      [...container.querySelectorAll("tbody tr")].map((row) =>
-        [...row.querySelectorAll("td")].map((cell) => cell.textContent),
-      ),
-    ).toEqual([
-      ["model-aopenai", "2", "1,000", "30", "$0.50"],
-      ["model-blocal", "1", "200", "4", "—"],
-    ]);
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

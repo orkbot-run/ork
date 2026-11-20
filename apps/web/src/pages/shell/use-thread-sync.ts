@@ -395,7 +395,13 @@ export function useThreadSync({
         } else if (isComputerStatusEvent(event)) {
           void refreshComputerScreen(active.id).catch(() => undefined);
         }
-        if (isRunTerminalEvent(event)) refreshRoutineHistory(event.runId);
+        if (isRunTerminalEvent(event)) {
+          refreshRoutineHistory(event.runId);
+          void queryClient.invalidateQueries({
+            queryKey: queries.usage.breakdown.key(),
+            refetchType: "active",
+          });
+        }
       },
     });
     return () => {
@@ -483,7 +489,13 @@ export function useThreadSync({
           // waiting_input: reconcile ask cards if a stale post-send refresh raced SSE.
           void snapshotRefresh.invalidate().catch(() => undefined);
         }
-        if (isRunTerminalEvent(event)) refreshRoutineHistory(event.runId);
+        if (isRunTerminalEvent(event)) {
+          refreshRoutineHistory(event.runId);
+          void queryClient.invalidateQueries({
+            queryKey: queries.usage.breakdown.key(),
+            refetchType: "active",
+          });
+        }
       },
     });
     return () => {

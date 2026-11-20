@@ -61,6 +61,7 @@ export * from "./server-updates.js";
 export * from "./settings-scope.js";
 export * from "./source-presets.js";
 export * from "./terminal.js";
+export * from "./usage-breakdown.js";
 export * from "./user-devices.js";
 export * from "./vault-items.js";
 export * from "./voice-errors.js";

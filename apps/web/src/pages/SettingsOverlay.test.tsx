@@ -39,11 +39,12 @@ vi.mock("@orkbot/ui-web", () => ({
   DialogTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
 }));
 
+vi.mock("./UsageSettingsPanel", () => ({ UsageSettingsPanel: () => null }));
+
 vi.mock("./AccountSettingsOverlay", () => ({
   ComputerSettingsPanel: () => null,
   GeneralSettingsPanels: () => null,
   UpdatesSettingsPanel: () => null,
-  UsageSettingsPanel: () => null,
 }));
 const { memoryConfigs, memoryConfigChange, providerConfig, updaterStatus, policyState } =
   vi.hoisted(() => ({
@@ -160,7 +161,6 @@ async function render(props: Partial<React.ComponentProps<typeof SettingsOverlay
         <QueryClientProvider client={queryClient}>
           <SettingsOverlay
             name="Jamie"
-            onUsageOpen={() => undefined}
             timezone={null}
             onTimezoneChange={async () => undefined}
             memoryConfig={null}

@@ -217,6 +217,7 @@ import {
 } from "./server-updates.js";
 import { SettingsScopeSchema, SpaceSettingSchema, settingsScopeInput } from "./settings-scope.js";
 import { SourcePresetInstallSchema, SourcePresetSchema } from "./source-presets.js";
+import { UsageBreakdownInputSchema, UsageBreakdownSchema } from "./usage-breakdown.js";
 
 const botId = z.object({ botId: Id });
 const takeoverCard = botId.extend({ runId: Id, messageId: Id });
@@ -1558,6 +1559,7 @@ export const appContract = {
   usage: {
     list: oc.output(z.array(UsageRecordSchema)),
     summary: oc.output(UsageSummarySchema),
+    breakdown: oc.input(UsageBreakdownInputSchema).output(UsageBreakdownSchema),
   },
   export: {
     bot: oc.input(botId).output(ExportManifestSchema),

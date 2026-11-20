@@ -2,18 +2,9 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 code remains separately licensed. Generator-only avatar editing is an Ork addition.
 
-import type {
-  Bot,
-  BotAvatarSet,
-  Me,
-  Space,
-  SpaceMemoryConfig,
-  UsageSummary,
-} from "@orkbot/contracts";
+import type { Bot, BotAvatarSet, Me, Space, SpaceMemoryConfig } from "@orkbot/contracts";
 import { writeSaved } from "@orkbot/core/query";
-import { useQuery } from "@tanstack/react-query";
 import type { RefObject } from "react";
-import { useCallback } from "react";
 import { lazyOverlay } from "../../components/ErrorBoundary";
 import type { connectedAppMarks } from "../../lib/connected-apps";
 import type { SpaceQueries } from "../../lib/query";
@@ -136,11 +127,6 @@ export function SettingsOverlays({
   active: Bot | undefined;
   peerBot: (botId: string) => { color: string; avatarSet?: BotAvatarSet } | undefined;
 }) {
-  // Read when Usage opens; a reopened Usage shows the last summary while it refreshes.
-  const usageQuery = useQuery({ ...queries.usage.summary.queryOptions(), enabled: false });
-  const usage: UsageSummary | null = usageQuery.data ?? null;
-  const refetchUsage = usageQuery.refetch;
-  const refreshUsage = useCallback(() => void refetchUsage(), [refetchUsage]);
   const voiceStatusKey = queries.voice.status.queryKey();
   return (
     <>
@@ -159,8 +145,6 @@ export function SettingsOverlays({
             await refetchSession();
           }}
           email={user?.email}
-          usage={usage}
-          onUsageOpen={refreshUsage}
           section={overlay.section}
           onSectionChange={(section) => setOverlay({ ...overlay, section })}
           billingEnabled={bootstrapMe?.billingEnabled === true}

@@ -3,7 +3,7 @@
 // Inherited Apache-2.0 code remains separately licensed. Generator-only avatar editing is an Ork addition.
 
 import { useLingui } from "@lingui/react/macro";
-import type { ComputerCapabilities, Me, SpaceMemoryConfig, UsageSummary } from "@orkbot/contracts";
+import type { ComputerCapabilities, Me, SpaceMemoryConfig } from "@orkbot/contracts";
 import { organizationDashboardUrl } from "@orkbot/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web";
 import { ORPCError } from "@orpc/client";
@@ -26,7 +26,6 @@ import {
   ComputerSettingsPanel,
   GeneralSettingsPanels,
   UpdatesSettingsPanel,
-  UsageSettingsPanel,
 } from "./AccountSettingsOverlay";
 import { BillingSettingsPanel } from "./BillingSettingsPanel";
 import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
@@ -42,6 +41,7 @@ import { SpaceSettingsPanel } from "./SpaceSettingsPanel";
 import { useSettingsNavItems } from "./settings-nav";
 import type { SettingsSpace } from "./shell/dialogs";
 import type { SettingsSection } from "./shell-overlay";
+import { UsageSettingsPanel } from "./UsageSettingsPanel";
 import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
 
 export function SettingsOverlay({
@@ -52,8 +52,6 @@ export function SettingsOverlay({
   onDeleteSpace,
   email,
   name,
-  usage,
-  onUsageOpen,
   section: requestedSection,
   onSectionChange,
   onNameSaved,
@@ -81,8 +79,6 @@ export function SettingsOverlay({
   onDeleteSpace?: (spaceId: string) => Promise<void>;
   email?: string | null;
   name: string;
-  usage?: UsageSummary | null;
-  onUsageOpen: () => void;
   section: SettingsSection;
   onSectionChange: (section: SettingsSection) => void;
   onNameSaved?: () => Promise<void>;
@@ -196,10 +192,9 @@ export function SettingsOverlay({
 
   useEffect(() => {
     if (section === "usage") {
-      onUsageOpen();
       usageRef.current?.focus();
     }
-  }, [section, onUsageOpen]);
+  }, [section]);
 
   const allNavItems = useSettingsNavItems({
     messaging: messagingEnabled,
@@ -571,9 +566,7 @@ export function SettingsOverlay({
                   {section === "wallet" && paymentWalletProvider ? (
                     <PaymentWalletSettingsPanel provider={paymentWalletProvider} />
                   ) : null}
-                  {section === "usage" ? (
-                    <UsageSettingsPanel usage={usage} panelRef={usageRef} />
-                  ) : null}
+                  {section === "usage" ? <UsageSettingsPanel panelRef={usageRef} /> : null}
                   {section === "computer" && showComputer ? (
                     <ComputerSettingsPanel
                       computerCapabilities={computerCapabilities}

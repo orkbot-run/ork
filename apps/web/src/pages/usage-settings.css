@@ -1,0 +1,11 @@
+/* SPDX-FileCopyrightText: 2026 Ork contributors (modifications) */
+/* SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 */
+.usage-table-region {
+  max-inline-size: 100%;
+  max-block-size: 24rem;
+  overflow: auto;
+}
+/* Keep the shared table's inner scrolling viewport keyboard reachable through its region. */
+.usage-table-region [data-slot="table-container"] {
+  overflow: visible;
+}
