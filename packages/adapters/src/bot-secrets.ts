@@ -102,25 +102,41 @@ async function vaultFields(client: VaultClient, scope: BotSecretScope) {
 }
 
 /** Organization entries are visible only under the workspace's database grant. */
-async function organizationVaultRows(prisma: PrismaClient, scope: BotSecretScope) {
+async function organizationVaultRows(
+  prisma: PrismaClient,
+  scope: BotSecretScope,
+  policy: Awaited<ReturnType<typeof organizationVaultPolicy>>,
+) {
   const context = currentDbContext();
   // Explicit account/space settings are private vault views, not the organization's vault.
   if (scope.vault) return [];
   // Unscoped calls cannot access protected rows; preserve that boundary for callers without one.
   if (!context) return [];
+  if (policy.kind !== "shared" || !policy.granted) return [];
   if (
     context?.kind === "tenant" &&
     (context.userId !== scope.userId || context.spaceId !== scope.spaceId)
   )
     throw new Error("Workspace access denied");
-  return runAsTenant(
+  const rows = await runAsTenant(
     {
       userId: scope.userId,
       spaceId: scope.spaceId,
       personalDeviceId: context?.kind === "tenant" ? context.personalDeviceId : undefined,
     },
-    () => prisma.organizationVaultCredential.findMany({ orderBy: { name: "asc" } }),
+    () =>
+      prisma.organizationVaultCredential.findMany({
+        where: { organizationId: policy.organizationId },
+        orderBy: { name: "asc" },
+      }),
   );
+  const current = await organizationVaultPolicy(prisma, scope);
+  return current.kind === "shared" &&
+    current.granted &&
+    current.organizationId === policy.organizationId &&
+    current.bindingVersion === policy.bindingVersion
+    ? rows
+    : [];
 }
 
 /** Even system workers must resolve credentials as the acting workspace and user. */
@@ -137,6 +153,7 @@ async function readVault<T>(
     (context.userId !== scope.userId || context.spaceId !== scope.spaceId)
   )
     throw new Error("Workspace access denied");
+  const policy = await organizationVaultPolicy(prisma, scope);
   return runAsTenant(
     {
       userId: scope.userId,
@@ -145,8 +162,10 @@ async function readVault<T>(
     },
     async () => {
       const [own, organization] = await Promise.all([
-        personal(),
-        organizationVaultRows(prisma, scope),
+        policy.kind === "personal" || policy.kind === "unmanaged"
+          ? personal()
+          : Promise.resolve([]),
+        organizationVaultRows(prisma, scope, policy),
       ]);
       return [
         ...own,
@@ -1150,6 +1169,7 @@ export async function revealBotSecret(input: {
   scope: BotSecretScope;
   name: string;
 }): Promise<LoginSecretValue | { card: CardSecretValue } | { value: string } | null> {
+  await assertPersonalVaultWritable(input.prisma, input.scope);
   const row = await input.prisma.vaultCredential.findFirst({
     where: { ...(await vaultFields(input.prisma, input.scope)), name: input.name },
   });

@@ -27,11 +27,13 @@ function fixture() {
   const grant = { spaceId: "space", organizationId: "org", bindingVersion: 2 };
   const prisma = {
     space: { findUnique: vi.fn().mockResolvedValue({ centralBinding: binding }) },
+    centralWorkspaceBinding: { findFirst: vi.fn().mockResolvedValue(null) },
     centralWorkspaceAccess: { findUnique: vi.fn().mockResolvedValue({ active: true }) },
     installationIdentity: { findUnique: vi.fn().mockResolvedValue(installation) },
     organizationVaultGrant: { findUnique: vi.fn().mockResolvedValue(grant) },
+    $queryRaw: vi.fn().mockResolvedValue([{ allowed: true }]),
   };
-  return { prisma: prisma as never, binding, installation, grant };
+  return { prisma: prisma as never, raw: prisma, binding, installation, grant };
 }
 
 const actor = { spaceId: "space", userId: "user" };
@@ -65,5 +67,31 @@ describe("organization vault policy", () => {
     await expect(
       runAsTenant({ ...actor, userId: "other" }, () => organizationVaultPolicy(f.prisma, actor)),
     ).rejects.toThrow("Workspace access denied");
+  });
+
+  it("allows an expired Personal admission only when the device has offline access", async () => {
+    const f = fixture();
+    f.binding.organizationType = "personal";
+    f.binding.validUntil = new Date(0);
+    const personalActor = { ...actor, personalDeviceId: "device" };
+    await expect(
+      runAsTenant(personalActor, () => organizationVaultPolicy(f.prisma, actor)),
+    ).resolves.toEqual({ kind: "personal" });
+    f.raw.$queryRaw.mockResolvedValue([{ allowed: false }]);
+    await expect(
+      runAsTenant(personalActor, () => organizationVaultPolicy(f.prisma, actor)),
+    ).rejects.toThrow("Workspace access denied");
+  });
+
+  it("does not treat a missing managed binding as an unmanaged workspace", async () => {
+    const f = fixture();
+    f.raw.space.findUnique.mockResolvedValue({
+      centralBinding: null,
+      admissionWorkspaceId: "missing",
+      organizationId: "org",
+    } as never);
+    await expect(organizationVaultPolicy(f.prisma, actor)).resolves.toEqual({
+      kind: "unverified",
+    });
   });
 });
