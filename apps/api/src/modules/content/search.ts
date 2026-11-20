@@ -272,6 +272,7 @@ export async function querySpaceSearch(
     where: {
       spaceId: actor.spaceId,
       userId: actor.userId,
+      completedOneShotAt: null,
       OR: [
         { name: { contains: likeQuery, mode: "insensitive" } },
         { prompt: { contains: likeQuery, mode: "insensitive" } },

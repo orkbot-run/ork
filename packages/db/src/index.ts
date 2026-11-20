@@ -48,6 +48,7 @@ export * from "./page-shares.js";
 export * from "./provider-transactions.js";
 export * from "./repos.js";
 export * from "./roster-changes.js";
+export * from "./routine-lifecycle.js";
 export * from "./row-security.js";
 export * from "./run-reader-version.js";
 export * from "./run-secrets.js";

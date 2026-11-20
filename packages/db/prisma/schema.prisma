@@ -1317,6 +1317,10 @@ model Routine {
   watchState     Json?
   lastRunAt      DateTime?
   nextRunAt      DateTime?
+  /// Archiving pauses an active routine and retains its pending occurrence for restore.
+  resumeOnRestore Boolean  @default(false)
+  /// Successful one-shot routines leave active views while their run history retains its id.
+  completedOneShotAt DateTime?
   /// Runs in a row the model provider refused for the account; each one spaces out the schedule.
   accountFailures Int      @default(0)
   createdAt      DateTime  @default(now())

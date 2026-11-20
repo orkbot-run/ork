@@ -3,6 +3,7 @@ import { ModelAccountError, routineWakeupJob } from "@orkbot/adapter-kit";
 import type { RunErrorKind } from "@orkbot/contracts";
 import { nextCronDateAcross, nextRoutineRunDateAcross, normalizeRunError } from "@orkbot/core";
 import type { Prisma, PrismaClient } from "@orkbot/db";
+import { runAsSystem } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 
 /** The first account-error failure holds the routine this long; each further one doubles it. */
@@ -15,6 +16,9 @@ interface RoutineBackoffDeps {
 }
 
 type RoutineSchedule = {
+  userId: string;
+  bot: { archivedAt: Date | null };
+  thread: { group: { archivedAt: Date | null } | null } | null;
   active: boolean;
   crons: string[];
   timezone: string;
@@ -117,6 +121,47 @@ export async function clearRoutineBackoff(
 }
 
 /**
+ * Credentials are personal across spaces. Only release this owner's account-error holds;
+ * never turn a paused routine back on. Recheck each candidate under its scheduling lock so
+ * a pause, successful run or new failure after the list read is respected.
+ */
+export async function releaseUserRoutineAccountBackoffs(
+  deps: RoutineBackoffDeps,
+  userId: string,
+  now = new Date(),
+): Promise<void> {
+  try {
+    await runAsSystem("release personal model connection routine backoffs", async () => {
+      const routines = await deps.prisma.routine.findMany({
+        where: { userId, accountFailures: { gt: 0 } },
+        select: { id: true },
+      });
+      for (const { id } of routines) {
+        await updateSchedule(deps, id, "routine.backoff_reconnect", (routine) => {
+          if (routine.userId !== userId || routine.accountFailures === 0) return null;
+          if (
+            !routine.active ||
+            !routine.nextRunAt ||
+            routine.bot.archivedAt != null ||
+            routine.thread?.group?.archivedAt != null
+          ) {
+            return { accountFailures: 0 };
+          }
+          const nextRunAt =
+            routine.watch != null ? now : nextCronDateAcross(routine.crons, now, routine.timezone);
+          return nextRunAt && nextRunAt < routine.nextRunAt
+            ? { accountFailures: 0, nextRunAt }
+            : { accountFailures: 0 };
+        });
+      }
+    });
+  } catch (error) {
+    // Saving a working key must still succeed if scheduling or its database is unavailable.
+    getLogger().error("routine.backoff_reconnect", error);
+  }
+}
+
+/**
  * Reads and writes the routine under its row lock, so a success and a failure of overlapping
  * runs cannot interleave and undo each other's schedule.
  */
@@ -132,6 +177,9 @@ async function updateSchedule(
       const routine = await tx.routine.findUnique({
         where: { id: routineId },
         select: {
+          userId: true,
+          bot: { select: { archivedAt: true } },
+          thread: { select: { group: { select: { archivedAt: true } } } },
           active: true,
           crons: true,
           timezone: true,
@@ -142,7 +190,7 @@ async function updateSchedule(
       });
       const data = routine ? change(routine) : null;
       if (!data) return null;
-      await tx.routine.update({ where: { id: routineId }, data });
+      await tx.routine.update({ where: { id: routineId, userId: routine!.userId }, data });
       return data.nextRunAt ?? null;
     });
     if (nextRunAt) await deps.jobs.enqueue(routineWakeupJob(routineId, nextRunAt));

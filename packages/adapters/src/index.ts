@@ -180,6 +180,7 @@ export * from "./realtime.js";
 export * from "./release-watch.js";
 export * from "./remote-mcp.js";
 export * from "./resend-email.js";
+export * from "./routine-backoff.js";
 export * from "./routine-watch.js";
 export * from "./run-resources.js";
 export * from "./run-secret.js";

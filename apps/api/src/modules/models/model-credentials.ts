@@ -14,6 +14,7 @@ import {
   parseModelSecret,
   prepareAllowedThinkingLevels as prepareModelThinkingLevels,
   providerCatalogCache,
+  releaseUserRoutineAccountBackoffs,
   resolveCodexOAuthDefaultModel,
   validateModelAuthAvailability,
   verifyCatalogProviderApiKey,
@@ -302,6 +303,7 @@ export async function persistModelCredential(
     }),
   );
   (deps.providerCatalog ?? providerCatalogCache).invalidate(canonicalPiProviderId(input.provider));
+  await releaseUserRoutineAccountBackoffs(deps, actor.userId);
   return modelCredentialDto(cred, input.plaintext);
 }
 

@@ -17,7 +17,7 @@ import {
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
 } from "@orkbot/core";
-import { IsolationError, isRecordNotFound, Prisma } from "@orkbot/db";
+import { IsolationError, isRecordNotFound, Prisma, routineConversationOpen } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { assertRoutineModel } from "#modules/models/model-pins";
@@ -54,7 +54,11 @@ export function routinesRoutes(ctx: RouterContext) {
           select: { id: true },
         });
         const rows = await deps.prisma.routine.findMany({
-          where: { botId: { in: bots.map((bot) => bot.id) }, spaceId: actor.spaceId },
+          where: {
+            botId: { in: bots.map((bot) => bot.id) },
+            spaceId: actor.spaceId,
+            completedOneShotAt: null,
+          },
         });
         return bots.map((bot) => ({
           botId: bot.id,
@@ -100,6 +104,7 @@ export function routinesRoutes(ctx: RouterContext) {
             spaceId: context.actor.spaceId,
             userId: context.actor.userId,
             bot: { archivedAt: null },
+            completedOneShotAt: null,
           },
         });
         if (!existing) throw new ORPCError("NOT_FOUND");
@@ -217,7 +222,9 @@ export function routinesRoutes(ctx: RouterContext) {
           });
         }
         const nextRunAt = !active
-          ? null
+          ? existing.resumeOnRestore && input.active === undefined
+            ? existing.nextRunAt
+            : null
           : watch
             ? // Turning a watch on, or changing it, checks right away; otherwise keep its rhythm.
               !existing.active || watchChanged || !existing.nextRunAt
@@ -240,6 +247,8 @@ export function routinesRoutes(ctx: RouterContext) {
             where: {
               id: existing.id,
               bot: { archivedAt: null },
+              completedOneShotAt: null,
+              ...(input.active === true ? routineConversationOpen : {}),
               // Optimistic fence: every write must match the snapshot it was
               // computed from, so concurrent edits never silently overwrite
               // each other's prompt/name/notify/any other field.
@@ -260,6 +269,7 @@ export function routinesRoutes(ctx: RouterContext) {
               crons: input.crons,
               timezone: input.timezone,
               active: input.active,
+              ...(input.active !== undefined ? { resumeOnRestore: false } : {}),
               notify: input.notify,
               webhookEnabled: input.webhookEnabled,
               githubEnabled: input.githubEnabled,
@@ -284,6 +294,7 @@ export function routinesRoutes(ctx: RouterContext) {
                     spaceId: context.actor.spaceId,
                     userId: context.actor.userId,
                     bot: { archivedAt: null },
+                    completedOneShotAt: null,
                   },
                   select: { id: true },
                 })
@@ -324,6 +335,7 @@ export function routinesRoutes(ctx: RouterContext) {
             id: input.routineId,
             spaceId: context.actor.spaceId,
             userId: context.actor.userId,
+            completedOneShotAt: null,
           },
         });
         if (!existing) throw new IsolationError();

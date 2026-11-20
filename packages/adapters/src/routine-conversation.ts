@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { Prisma } from "@orkbot/db";
+import { ROUTINE_SCHEDULE_NONCE_PREFIX } from "@orkbot/db";
 
 export const ROUTINE_TIMER_NONCE_PREFIX = "routine-timer:";
-const SCHEDULE_PREFIX = "routine-schedule:";
+const SCHEDULE_PREFIX = ROUTINE_SCHEDULE_NONCE_PREFIX;
 const SCHEDULE_PREFIXES = [ROUTINE_TIMER_NONCE_PREFIX, SCHEDULE_PREFIX];
 
 export function scheduledRoutineNonce(routineId: string, scheduledFor: string): string {

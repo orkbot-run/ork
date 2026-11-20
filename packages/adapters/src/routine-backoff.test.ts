@@ -5,6 +5,7 @@ import {
   backOffRoutineAfterAccountError,
   clearRoutineBackoff,
   modelAccountRefusal,
+  releaseUserRoutineAccountBackoffs,
   routineAccountBackoffMs,
 } from "./routine-backoff.js";
 
@@ -12,6 +13,9 @@ const NOW = new Date("2026-03-02T09:00:30.000Z");
 const MINUTE = 60_000;
 
 interface Row {
+  userId: string;
+  bot: { archivedAt: Date | null };
+  thread: { group: { archivedAt: Date | null } | null } | null;
   active: boolean;
   crons: string[];
   timezone: string;
@@ -22,6 +26,9 @@ interface Row {
 
 function fakeRoutine(overrides: Partial<Row> = {}) {
   const row: Row = {
+    userId: "user-1",
+    bot: { archivedAt: null },
+    thread: null,
     active: true,
     crons: ["*/1 * * * *"],
     timezone: "UTC",
@@ -31,6 +38,7 @@ function fakeRoutine(overrides: Partial<Row> = {}) {
     ...overrides,
   };
   const routine = {
+    findMany: vi.fn(async () => [{ id: "routine-1" }]),
     count: vi.fn(async () => (row.accountFailures > 0 ? 1 : 0)),
     findUnique: vi.fn(async () => ({ ...row })),
     update: vi.fn(async ({ data }: { data: Partial<Row> }) => Object.assign(row, data)),
@@ -214,4 +222,86 @@ describe("clearRoutineBackoff when the database is unavailable", () => {
 
     await expect(clearRoutineBackoff(deps, "routine-1", NOW)).resolves.toBeUndefined();
   });
+});
+
+describe("releaseUserRoutineAccountBackoffs", () => {
+  it("finds only the owner's holds and restores timers to their next cron occurrence", async () => {
+    const { deps, row, enqueue } = fakeRoutine({
+      accountFailures: 5,
+      nextRunAt: new Date("2026-03-03T09:00:00Z"),
+    });
+    await releaseUserRoutineAccountBackoffs(deps, "user-1", NOW);
+    expect(deps.prisma.routine.findMany).toHaveBeenCalledWith({
+      where: { userId: "user-1", accountFailures: { gt: 0 } },
+      select: { id: true },
+    });
+    expect(row.accountFailures).toBe(0);
+    expect(row.nextRunAt).toEqual(new Date("2026-03-02T09:01:00Z"));
+    expect(enqueue).toHaveBeenCalledOnce();
+  });
+
+  it("makes a backed-off watch due now", async () => {
+    const { deps, row, enqueue } = fakeRoutine({
+      accountFailures: 3,
+      watch: { kind: "files" },
+      crons: [],
+      nextRunAt: new Date("2026-03-03T09:00:00Z"),
+    });
+    await releaseUserRoutineAccountBackoffs(deps, "user-1", NOW);
+    expect(row.accountFailures).toBe(0);
+    expect(row.nextRunAt).toEqual(NOW);
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ availableAt: NOW }));
+  });
+
+  it.each([{ active: false }, { nextRunAt: null }, { bot: { archivedAt: NOW } }])(
+    "keeps paused or archived schedules unchanged: %j",
+    async (overrides) => {
+      const { deps, row, enqueue } = fakeRoutine({ accountFailures: 3, ...overrides });
+      const before = row.nextRunAt;
+      await releaseUserRoutineAccountBackoffs(deps, "user-1", NOW);
+      expect(row.accountFailures).toBe(0);
+      expect(row.nextRunAt).toEqual(before);
+      expect(row.active).toBe(overrides.active ?? true);
+      expect(enqueue).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([{ userId: "other-user", accountFailures: 3 }, { accountFailures: 0 }])(
+    "rechecks ownership and holds under lock: %j",
+    async (overrides) => {
+      const { deps, enqueue } = fakeRoutine(overrides);
+      await releaseUserRoutineAccountBackoffs(deps, "user-1", NOW);
+      expect(deps.prisma.routine.update).not.toHaveBeenCalled();
+      expect(enqueue).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps a key save successful when listing holds or publishing fails", async () => {
+    const listing = fakeRoutine({ accountFailures: 3 });
+    vi.mocked(listing.deps.prisma.routine.findMany).mockRejectedValueOnce(
+      new Error("database unavailable"),
+    );
+    await expect(
+      releaseUserRoutineAccountBackoffs(listing.deps, "user-1", NOW),
+    ).resolves.toBeUndefined();
+    const publishing = fakeRoutine({ accountFailures: 3 });
+    publishing.enqueue.mockRejectedValueOnce(new Error("queue unavailable"));
+    await expect(
+      releaseUserRoutineAccountBackoffs(publishing.deps, "user-1", NOW),
+    ).resolves.toBeUndefined();
+    expect(publishing.row.accountFailures).toBe(0);
+  });
+});
+
+it("does not clear a hold belonging to another user after the candidate read", async () => {
+  const { deps, row, enqueue } = fakeRoutine({ userId: "other", accountFailures: 3 });
+  await releaseUserRoutineAccountBackoffs(deps, "user-1", NOW);
+  expect(row.accountFailures).toBe(3);
+  expect(enqueue).not.toHaveBeenCalled();
+});
+
+it("keeps a successfully saved key usable when releasing holds cannot read the database", async () => {
+  const { deps } = fakeRoutine();
+  vi.mocked(deps.prisma.routine.findMany).mockRejectedValueOnce(new Error("connection lost"));
+  await expect(releaseUserRoutineAccountBackoffs(deps, "user-1", NOW)).resolves.toBeUndefined();
 });

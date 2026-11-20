@@ -4,7 +4,7 @@
 // Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { randomBytes } from "node:crypto";
-import { runContinueJob } from "@orkbot/adapter-kit";
+import { routineWakeupJob, runContinueJob } from "@orkbot/adapter-kit";
 import {
   archiveBot,
   checkpointAndStopComputer,
@@ -46,7 +46,7 @@ import {
   isRecordNotFound,
   recordComputerRunEnd,
   recordSecurityEvent,
-  restoreBotUnderComputerQuota,
+  restoreBotWithRoutines,
   SpaceDeletionInProgressError,
   settingsTarget,
   THREAD_LOCK_TRANSACTION_OPTIONS,
@@ -80,6 +80,23 @@ function mapSpaceLifecycleError(error: unknown): unknown {
     return new ORPCError("BAD_REQUEST", { message: error.message });
   }
   return error;
+}
+
+async function enqueueRestoredRoutines(
+  jobs: RouterDeps["jobs"],
+  routines: Array<{ id: string; nextRunAt: Date | null }>,
+) {
+  await Promise.all(
+    routines.map(async (routine) => {
+      if (routine.nextRunAt) {
+        await jobs
+          .enqueue(routineWakeupJob(routine.id, routine.nextRunAt))
+          .catch((error) =>
+            getLogger().error("routine.restore_wakeup_failed", error, { "routine.id": routine.id }),
+          );
+      }
+    }),
+  );
 }
 
 const BOT_SECRET_INPUT_ERRORS = [
@@ -610,17 +627,10 @@ export function botsRoutes(ctx: RouterContext) {
       }),
       restore: authed.bots.restore.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId, { includeArchived: true });
-        if (!bot.archivedAt) return { ok: true as const };
+        const scope = { spaceId: context.actor.spaceId, userId: context.actor.userId };
         try {
-          if (bot.computer) {
-            await restoreBotUnderComputerQuota(deps.prisma, {
-              userId: context.actor.userId,
-              botId: bot.id,
-              computerId: bot.computer.id,
-            });
-          } else {
-            await deps.prisma.bot.update({ where: { id: bot.id }, data: { archivedAt: null } });
-          }
+          const wakeups = await restoreBotWithRoutines(deps.prisma, { ...scope, botId: bot.id });
+          await enqueueRestoredRoutines(deps.jobs, wakeups);
         } catch (error) {
           throw mapSpaceLifecycleError(error);
         }
@@ -733,7 +743,8 @@ export function botsRoutes(ctx: RouterContext) {
       }),
       restore: authed.groups.restore.handler(async ({ context, input }) => {
         try {
-          await groupRepos.restoreGroup(context.actor, input.groupId);
+          const wakeups = await groupRepos.restoreGroup(context.actor, input.groupId);
+          await enqueueRestoredRoutines(deps.jobs, wakeups);
         } catch (error) {
           throw mapSpaceLifecycleError(error);
         }

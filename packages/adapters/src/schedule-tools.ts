@@ -20,7 +20,7 @@ import {
   zonedDateTime,
 } from "@orkbot/core";
 import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
-import { runAsSystemInTransaction } from "@orkbot/db";
+import { routineConversationOpen, runAsSystemInTransaction } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 
 import { localDateTime } from "./current-time.js";
@@ -744,6 +744,7 @@ export async function listSchedulesFromTool(
       spaceId: input.spaceId,
       botId: input.botId,
       userId: input.userId,
+      completedOneShotAt: null,
     },
     orderBy: { createdAt: "desc" },
   });
@@ -755,7 +756,7 @@ export async function listSchedulesFromTool(
       prompt: row.prompt,
       crons: row.crons,
       active: row.active,
-      nextRunAt: row.nextRunAt?.toISOString() ?? null,
+      nextRunAt: row.active ? (row.nextRunAt?.toISOString() ?? null) : null,
       oneShot: isOneShotRoutineCrons(row.crons),
       ...describeRoutineTiming(row),
       ...(row.watch ? { watch: row.watch, lastCheck: row.watchState ?? null } : {}),
@@ -824,6 +825,7 @@ export async function updateScheduleFromTool(
     spaceId: input.spaceId,
     botId: input.botId,
     userId: input.userId,
+    completedOneShotAt: null,
     ...(input.scopeThreadId ? { threadId: input.scopeThreadId } : {}),
   };
   const existing = await deps.prisma.routine.findFirst({
@@ -838,6 +840,7 @@ export async function updateScheduleFromTool(
             userId: input.userId,
             id: routineId,
             bot: { archivedAt: null },
+            completedOneShotAt: null,
             OR: [{ threadId: null }, { threadId: { not: input.scopeThreadId } }],
           },
           select: { id: true },
@@ -902,7 +905,7 @@ export async function updateScheduleFromTool(
       }
     } else nextRunAt = nextCronDateAcross(crons, new Date(), timezone);
   }
-  if (!active) nextRunAt = null;
+  if (!active && (input.active === false || !existing.resumeOnRestore)) nextRunAt = null;
   const timingChanged =
     retime || active !== existing.active || nextRunAt?.getTime() !== existing.nextRunAt?.getTime();
 
@@ -914,11 +917,13 @@ export async function updateScheduleFromTool(
       ...scope,
       id: existing.id,
       bot: { archivedAt: null },
+      ...(input.active === true ? routineConversationOpen : {}),
       ...(timingChanged ? { active: existing.active, nextRunAt: existing.nextRunAt } : {}),
     },
     data: {
       ...(name === undefined ? {} : { name }),
       ...(prompt === undefined ? {} : { prompt }),
+      ...(input.active !== undefined ? { resumeOnRestore: false } : {}),
       ...(timingChanged ? { crons, timezone, active, nextRunAt } : {}),
     },
   });
@@ -985,6 +990,7 @@ export async function cancelScheduleFromTool(
     spaceId: input.spaceId,
     botId: input.botId,
     userId: input.userId,
+    completedOneShotAt: null,
     ...(input.threadId ? { threadId: input.threadId } : {}),
   };
   const existing = await deps.prisma.routine.findFirst({
@@ -997,6 +1003,7 @@ export async function cancelScheduleFromTool(
             spaceId: input.spaceId,
             botId: input.botId,
             userId: input.userId,
+            completedOneShotAt: null,
             ...(routineId ? { id: routineId } : { name: name! }),
             OR: [{ threadId: null }, { threadId: { not: input.threadId } }],
           },

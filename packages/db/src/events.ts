@@ -74,6 +74,7 @@ import {
   partialReplyClientNonce,
   RunHistoryWriteError,
 } from "./messages.js";
+import { retireSuccessfulOneShot } from "./routine-lifecycle.js";
 import { deleteRunSecretsInTransaction } from "./run-secrets.js";
 import { isRunResponse, readRunTimingFields } from "./run-timing.js";
 import { RUN_TURN_CHECKPOINT_KIND } from "./run-turn-checkpoint.js";
@@ -222,6 +223,7 @@ export type FinalizeRunInput = FinalizeRunBase &
         outcome: "completed";
         blocks: MessageBlock[];
         markUnread?: boolean;
+        retireOneShotRoutine?: boolean;
       }
     | {
         outcome: "failed";
@@ -2063,6 +2065,9 @@ async function finalizeRunOnce(
       data: { status: input.outcome },
     });
     if (task.count !== 1) throw new Error("Run task was not available to finalize");
+    if (input.outcome === "completed" && input.retireOneShotRoutine) {
+      await retireSuccessfulOneShot(tx, input.runId, now);
+    }
 
     let failureNotice: MessageBlock | undefined;
     if (input.outcome === "failed") {

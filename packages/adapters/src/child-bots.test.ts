@@ -2354,8 +2354,8 @@ describe("archiveBot", () => {
       );
 
       expect(disableRoutines).toHaveBeenCalledWith({
-        where: { botId: "bot-1" },
-        data: { active: false, nextRunAt: null },
+        where: { botId: "bot-1", spaceId: "workspace-1", userId: "user-1", active: true },
+        data: { active: false, resumeOnRestore: true },
       });
       expect(updateBot).toHaveBeenCalledWith({
         where: { id: "bot-1" },

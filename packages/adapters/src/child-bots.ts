@@ -30,6 +30,7 @@ import {
   deletePageShareSecrets,
   expireComputerExecutionLeases,
   legacyTeamHomeKey,
+  pauseRoutinesForArchive,
   recordComputerRunEnd,
   THREAD_LOCK_TRANSACTION_OPTIONS,
   withTransactionRetry,
@@ -329,9 +330,10 @@ export async function archiveBot(
   const now = new Date();
   const cancelledRuns = await deps.prisma.$transaction(async (tx) => {
     const cancelled = await cancelRunsInTransaction(tx, activeRuns, now);
-    await tx.routine.updateMany({
-      where: { botId: bot.id },
-      data: { active: false, nextRunAt: null },
+    await pauseRoutinesForArchive(tx, {
+      botId: bot.id,
+      spaceId: bot.spaceId,
+      userId: bot.userId,
     });
     await expireComputerExecutionLeases(tx, { botId: bot.id });
     await tx.computer.updateMany({

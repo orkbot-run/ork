@@ -45,6 +45,12 @@ when it changed. **What to watch** can be files or folders on the computer, a co
 read-only tool from a connected app, or a public HTTPS address. Turn on **Post "No changes" in chat** if you want a note every time. A
 watch can't be combined with a schedule.
 
+For a connected tool watch, argument values can be `{{today}}`, `{{today+2d}}`, or
+`{{today-7d}}`, using any whole-day offset. At each check these exact strings become
+`YYYY-MM-DD` dates in the routine's timezone. Nested objects and arrays are supported
+up to 20 levels. Other strings, including text containing a placeholder, stay literal.
+The saved arguments keep their placeholders, so date ranges move with each check.
+
 **HTTPS address** sends a GET from the server without starting the bot's computer. The first
 successful check records a baseline. A changed response starts the routine. For JSON responses,
 enter fields such as `id, modifiedTime` to compare each item by its ID and modification time.

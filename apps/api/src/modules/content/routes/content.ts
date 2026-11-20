@@ -216,7 +216,7 @@ export function contentRoutes(ctx: RouterContext) {
             where: { botId: input.botId, spaceId: context.actor.spaceId },
           }),
           deps.prisma.routine.findMany({
-            where: { botId: input.botId, spaceId: context.actor.spaceId },
+            where: { botId: input.botId, spaceId: context.actor.spaceId, completedOneShotAt: null },
           }),
           (async () => {
             const exported: ExportManifest["files"] = [];

@@ -12,6 +12,7 @@ import { expireComputerExecutionLeases, restoreBotUnderComputerQuota } from "./c
 import { transientRunEventsWhere } from "./events.js";
 import { deletePageShareSecrets } from "./page-shares.js";
 import { withNewestThreadMessages } from "./preview-messages.js";
+import { pauseRoutinesForArchive, resumeArchivedRoutines } from "./routine-lifecycle.js";
 import { IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
 import {
@@ -598,7 +599,16 @@ export function createGroupRepos(prisma: PrismaClient) {
           select: { archivedAt: true, thread: { select: { id: true } } },
         });
         if (!current?.thread) throw new IsolationError();
-        if (current.archivedAt) return resumeArchivedGroupTeardown(tx, current.thread.id);
+        const routineScope = {
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          threadId: current.thread.id,
+        };
+        if (current.archivedAt) {
+          const teardown = await resumeArchivedGroupTeardown(tx, current.thread.id);
+          await pauseRoutinesForArchive(tx, routineScope);
+          return teardown;
+        }
 
         const activeRuns = await tx.run.findMany({
           where: {
@@ -618,6 +628,7 @@ export function createGroupRepos(prisma: PrismaClient) {
         // acquiring a computer, and an expired lease not yet reclaimed still names a screen.
         const { targets } = await snapshotRunTeardownTargets(tx, runIds);
 
+        await pauseRoutinesForArchive(tx, routineScope);
         await tx.chatGroup.update({
           where: { id: groupId },
           data: { archivedAt: now, pinned: false },
@@ -646,7 +657,7 @@ export function createGroupRepos(prisma: PrismaClient) {
      * computer's quota and all in one transaction: one that doesn't fit leaves everything archived.
      */
     async restoreGroup(actor: Actor, groupId: string) {
-      await withTransactionRetry(() =>
+      return withTransactionRetry(() =>
         prisma.$transaction(async (tx) => {
           await lockOwnedGroup(tx, actor, groupId);
           const archived = await tx.chatGroupMember.findMany({
@@ -666,6 +677,11 @@ export function createGroupRepos(prisma: PrismaClient) {
             }
           }
           await tx.chatGroup.update({ where: { id: groupId }, data: { archivedAt: null } });
+          return resumeArchivedRoutines(tx, {
+            spaceId: actor.spaceId,
+            userId: actor.userId,
+            OR: [{ thread: { groupId } }, { botId: { in: archived.map(({ bot }) => bot.id) } }],
+          });
         }),
       );
     },

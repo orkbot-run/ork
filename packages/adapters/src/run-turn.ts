@@ -997,6 +997,7 @@ export async function completeRun(ctx: RunContext) {
       leaseFence: ctx.fence,
       outcome: "completed",
       blocks,
+      ...(run.trigger === "routine" && run.routineId ? { retireOneShotRoutine: true } : {}),
       markUnread:
         !groupSilentEnd &&
         completionMarksUnread(run.trigger, text, ctx.source.peerMessage?.repliesToRequest === true),

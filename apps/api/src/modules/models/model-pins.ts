@@ -33,7 +33,12 @@ async function compatibleModelPins(
           select: { ...pin, name: true },
         }),
         deps.prisma.routine.findMany({
-          where: { ...where, modelProvider: provider, bot: { archivedAt: null } },
+          where: {
+            ...where,
+            modelProvider: provider,
+            bot: { archivedAt: null },
+            completedOneShotAt: null,
+          },
           select: { ...pin, name: true },
         }),
         deps.prisma.userModelRoleChoice.findMany({ where: { ...where, provider }, select: role }),

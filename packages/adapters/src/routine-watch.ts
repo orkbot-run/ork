@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+// Inherited material remains Apache-2.0; Ork thread-lock budgets and relative watch dates are PolyForm-covered.
 
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
@@ -19,7 +19,12 @@ import { routineJobKey, routineWakeupJob } from "@orkbot/adapter-kit";
 import type { RoutineWatch, RoutineWatchState } from "@orkbot/contracts";
 import { RoutineWatchSchema, RoutineWatchStateSchema } from "@orkbot/contracts";
 import type { ActionApprovalRule } from "@orkbot/core";
-import { connectorKindFromToolName, redactSecrets, watchToolRefusal } from "@orkbot/core";
+import {
+  connectorKindFromToolName,
+  redactSecrets,
+  wallClock,
+  watchToolRefusal,
+} from "@orkbot/core";
 import type { ComputerMode, PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   appendEventInTransaction,
@@ -81,6 +86,7 @@ export type RoutineWatchTarget = {
   spaceId: string;
   userId: string;
   botId: string;
+  timezone?: string;
   watch: unknown;
   watchState: unknown;
 };
@@ -133,7 +139,7 @@ export async function checkRoutineWatch(
     watch.kind === "http"
       ? await readHttp(deps, watch)
       : watch.kind === "tool"
-        ? await readTool(deps, routine, watch)
+        ? await readTool(deps, routine, watch, now)
         : await readComputer(deps, routine, watch);
   return compareReading(previous, reading, now);
 }
@@ -237,7 +243,9 @@ const TITLE_FIELDS = ["name", "title", "subject", "summary", "filename", "snippe
 function itemTitle(signature: string | undefined): string | null {
   if (!signature?.startsWith(ITEM_SIGNATURE)) return null;
   try {
-    const { title } = JSON.parse(signature.slice(ITEM_SIGNATURE.length)) as { title?: unknown };
+    const { title } = JSON.parse(signature.slice(ITEM_SIGNATURE.length)) as {
+      title?: unknown;
+    };
     return typeof title === "string" && title ? title : null;
   } catch {
     return null;
@@ -606,10 +614,43 @@ async function run(
   return { stdout, stderr, code };
 }
 
+/** Resolve whole-value calendar dates afresh for each check, leaving the saved args intact. */
+export function resolveWatchDateArgs(
+  args: Record<string, unknown>,
+  now: Date,
+  timezone = "UTC",
+): Record<string, unknown> {
+  const today = wallClock(now, timezone).slice(0, 10);
+  function resolve(value: unknown, depth: number): unknown {
+    if (typeof value === "string") {
+      const match = /^\{\{today(?:([+-])(\d+)d)?\}\}$/.exec(value);
+      if (!match || match[0] !== value) return value;
+      const days = Number(match[2] ?? 0) * (match[1] === "-" ? -1 : 1);
+      const date = new Date(`${today}T00:00:00.000Z`);
+      date.setUTCDate(date.getUTCDate() + days);
+      // Keep unsupported offsets literal, just like any other unsupported placeholder.
+      if (
+        !Number.isFinite(date.getTime()) ||
+        date.getUTCFullYear() < 0 ||
+        date.getUTCFullYear() > 9999
+      )
+        return value;
+      return date.toISOString().slice(0, 10);
+    }
+    if (depth >= 20 || value === null || typeof value !== "object") return value;
+    if (Array.isArray(value)) return value.map((entry) => resolve(entry, depth + 1));
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, resolve(entry, depth + 1)]),
+    );
+  }
+  return resolve(args, 0) as Record<string, unknown>;
+}
+
 async function readTool(
   deps: RoutineWatchDeps,
   routine: RoutineWatchTarget,
   watch: RoutineWatch,
+  now: Date,
 ): Promise<Reading> {
   const connector = deps.connector;
   if (!connector) throw new RoutineWatchError("No integrations are available to check.");
@@ -623,7 +664,11 @@ async function readTool(
   }
   // Discovery waits on every provider; the tool call gets its own full budget.
   ctx.signal = AbortSignal.timeout(CHECK_TIMEOUT_MS);
-  const call = { tool: toolName, args: watch.args ?? {}, executionId: ctx.operationId };
+  const call = {
+    tool: toolName,
+    args: resolveWatchDateArgs(watch.args ?? {}, now, routine.timezone),
+    executionId: ctx.operationId,
+  };
   const tool = tools.find((candidate) => candidate.name === toolName);
   const resolved = tool
     ? { call: { ...call, route: tool.route }, tool }

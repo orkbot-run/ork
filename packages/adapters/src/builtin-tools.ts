@@ -176,7 +176,11 @@ const scheduleTimingSpecs = {
       paths: { type: "array", items: { type: "string" } },
       command: { type: "string" },
       tool: { type: "string" },
-      args: { type: "object" },
+      args: {
+        type: "object",
+        description:
+          "Read-only tool arguments. Exact string values {{today}}, {{today+2d}} or {{today-7d}} (any whole-day offset) become YYYY-MM-DD at each check in the routine timezone, including nested objects and arrays up to 20 levels. Other strings stay literal; saved arguments keep their placeholders.",
+      },
       url: { type: "string", description: "Public HTTPS address for kind http." },
       track: {
         type: "array",

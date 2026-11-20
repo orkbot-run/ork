@@ -18,7 +18,13 @@ import {
   isOneShotRoutineCrons,
   nextRoutineRunDateAcross,
 } from "@orkbot/core";
-import { isUniqueViolation, lockSpaceForWork, SpaceDeletionInProgressError } from "@orkbot/db";
+import {
+  isUniqueViolation,
+  lockSpaceForWork,
+  pauseRoutinesForArchive,
+  routineConversationOpen,
+  SpaceDeletionInProgressError,
+} from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { sanitizedError } from "@orkbot/logging/monitoring";
 import { protectedComputerLifecycleRefusal } from "./desktop-command-guard.js";
@@ -124,7 +130,10 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
   if (!Number.isFinite(scheduledAt.getTime())) return;
   const routine = await deps.prisma.routine.findUnique({
     where: { id: routineId },
-    include: { space: { select: { deletingAt: true } } },
+    include: {
+      space: { select: { deletingAt: true } },
+      thread: { select: { group: { select: { archivedAt: true } } } },
+    },
   });
   // A Space being deleted runs nothing; its routines resume if the deletion is called off.
   if (
@@ -138,11 +147,14 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
     where: { id: routine.botId },
     include: { thread: true },
   });
-  if (bot?.archivedAt) {
-    // Archiving pauses a bot's routines; re-pause one that slipped back to active.
-    await deps.prisma.routine.updateMany({
-      where: { id: routine.id, active: true },
-      data: { active: false, nextRunAt: null },
+  if (bot?.archivedAt || routine.thread?.group?.archivedAt) {
+    // Recheck the owner in the update so a concurrent restore can keep the schedule live.
+    await pauseRoutinesForArchive(deps.prisma, {
+      id: routine.id,
+      OR: [
+        { bot: { archivedAt: { not: null } } },
+        { thread: { group: { archivedAt: { not: null } } } },
+      ],
     });
     return;
   }
@@ -206,6 +218,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         active: true,
         nextRunAt: scheduledAt,
         bot: { archivedAt: null },
+        ...routineConversationOpen,
       },
       data: {
         lastRunAt: new Date(),
@@ -379,6 +392,7 @@ export async function retryRoutineRun(deps: ExecutorDeps, runId: string) {
       active: true,
       crons: true,
       nextRunAt: true,
+      completedOneShotAt: true,
       bot: { select: { archivedAt: true } },
     },
   });
@@ -395,6 +409,7 @@ export async function retryRoutineRun(deps: ExecutorDeps, runId: string) {
   // A one-time routine turns itself off when it fires, so only a recurring one counts as paused.
   if (
     !routine ||
+    routine.completedOneShotAt ||
     (!routine.active && !isOneShotRoutineCrons(routine.crons)) ||
     routine.bot.archivedAt
   ) {
@@ -419,6 +434,7 @@ export async function retryRoutineRun(deps: ExecutorDeps, runId: string) {
         where: {
           id: failed.routineId!,
           active: routine.active,
+          completedOneShotAt: null,
           ...(!routine.active ? { crons: { equals: routine.crons } } : {}),
           bot: { archivedAt: null },
         },

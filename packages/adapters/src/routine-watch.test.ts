@@ -16,6 +16,7 @@ import {
   FILES_SCRIPT,
   parseRoutineWatch,
   readItems,
+  resolveWatchDateArgs,
   resolveWatchPath,
   stableStringify,
   tickRoutineWatch,
@@ -31,6 +32,63 @@ vi.mock("./computer-lifecycle.js", async (original) => ({
 vi.mock("./computer-idle.js", () => ({ scheduleComputerSleep: vi.fn() }));
 
 const NOW = new Date("2026-10-16T12:00:00.000Z");
+
+describe("relative watch dates", () => {
+  it("uses local calendar dates with offsets across DST, months and leap years", () => {
+    const args = {
+      today: "{{today}}",
+      next: "{{today+2d}}",
+      prior: "{{today-7d}}",
+    };
+    expect(resolveWatchDateArgs(args, new Date("2026-03-28T23:30:00Z"), "Europe/Warsaw")).toEqual({
+      today: "2026-03-29",
+      next: "2026-03-31",
+      prior: "2026-03-22",
+    });
+    expect(
+      resolveWatchDateArgs(args, new Date("2024-03-01T00:30:00Z"), "America/Los_Angeles"),
+    ).toEqual({ today: "2024-02-29", next: "2024-03-02", prior: "2024-02-22" });
+    expect(resolveWatchDateArgs({ day: "{{today+2d}}" }, new Date("2026-12-31T12:00:00Z"))).toEqual(
+      { day: "2027-01-02" },
+    );
+  });
+
+  it("resolves nested arrays and objects without mutating stored arguments", () => {
+    const args = {
+      nested: [{ date: "{{today}}", values: [null, false, 3, "{{today-7d}}"] }],
+    };
+    const saved = structuredClone(args);
+    expect(resolveWatchDateArgs(args, NOW)).toEqual({
+      nested: [{ date: "2026-10-16", values: [null, false, 3, "2026-10-09"] }],
+    });
+    expect(args).toEqual(saved);
+  });
+
+  it("preserves literal strings and unsupported or out-of-range placeholders", () => {
+    const values = [
+      "on {{today}}",
+      "{{today}} ",
+      "{{today}}\n",
+      "{{today+2h}}",
+      "{{Today}}",
+      "2020-01-01",
+      "{{today+99999999999999999999d}}",
+    ];
+    expect(resolveWatchDateArgs({ values }, NOW)).toEqual({ values });
+  });
+
+  it("bounds recursion even for cyclic non-JSON input", () => {
+    const args: Record<string, unknown> = { date: "{{today}}" };
+    args.child = args;
+    let resolved = resolveWatchDateArgs(args, NOW);
+    for (let depth = 0; depth < 20; depth++) {
+      expect(resolved.date).toBe("2026-10-16");
+      resolved = resolved.child as Record<string, unknown>;
+    }
+    expect(resolved).toBe(args);
+    expect(args.date).toBe("{{today}}");
+  });
+});
 
 describe("RoutineWatchSchema", () => {
   it("defaults to every 15 minutes, quiet", () => {
@@ -622,7 +680,9 @@ describe("tickRoutineWatch on a computer", () => {
     computer = { id: "computer-1", scope: "team", kind: "vm" },
     options?: {
       vault?: ReturnType<typeof fakeDatabase>;
-      secretStore?: { load(ciphertext: string, recordId: string): Promise<string> };
+      secretStore?: {
+        load(ciphertext: string, recordId: string): Promise<string>;
+      };
       shell?: { platform: string; shell: string; home: string };
     },
   ) {
@@ -1554,6 +1614,34 @@ describe("watch tool guard", () => {
     const { deps, routine, execute } = setupTool({ name: "send_email" }, {});
     await expect(checkRoutineWatch(deps, routine)).rejects.toThrow(/can change data/);
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("refreshes dates for every execution using the check time and routine timezone", async () => {
+    const { deps, routine, execute } = setupTool(
+      { name: "brain_search", readOnly: true },
+      { from: "{{today}}", nested: [{ to: "{{today+2d}}" }] },
+    );
+    const target = { ...routine, timezone: "America/Los_Angeles" };
+    await checkRoutineWatch(deps, target, new Date("2026-11-20T00:30:00Z"));
+    await checkRoutineWatch(deps, target, new Date("2026-11-21T00:30:00Z"));
+    expect(execute).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        args: { from: "2026-11-19", nested: [{ to: "2026-11-21" }] },
+      }),
+      expect.anything(),
+    );
+    expect(execute).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        args: { from: "2026-11-20", nested: [{ to: "2026-11-22" }] },
+      }),
+      expect.anything(),
+    );
+    expect(routine.watch.args).toEqual({
+      from: "{{today}}",
+      nested: [{ to: "{{today+2d}}" }],
+    });
   });
 
   it("refuses a write action on a tool that takes one", async () => {

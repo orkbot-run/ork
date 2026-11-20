@@ -7465,8 +7465,11 @@ describe("bot restore computer quota", () => {
       : null;
     const botApi = {
       findFirst: vi.fn(async () => bot),
+      findFirstOrThrow: vi.fn(async () => bot),
       update: vi.fn(async () => ({})),
     };
+    const routine = { findMany: vi.fn(async () => [] as Array<{ id: string; nextRunAt: Date }>) };
+    const enqueue = vi.fn(async () => undefined);
     const computer = {
       count: vi.fn(async (args: { where: { id?: string } }) => (args.where.id ? 0 : inUse)),
     };
@@ -7476,11 +7479,15 @@ describe("bot restore computer quota", () => {
       computer,
       $queryRaw,
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
-        callback({ $queryRaw, computer, bot: botApi }),
+        callback({ $queryRaw, computer, bot: botApi, routine }),
       ),
     };
     const handler = new RPCHandler(
-      createRouter({ prisma, env: { sandboxProvider: "fake" } } as unknown as RouterDeps),
+      createRouter({
+        prisma,
+        jobs: { enqueue },
+        env: { sandboxProvider: "fake" },
+      } as unknown as RouterDeps),
     );
     const call = async () =>
       handle(
@@ -7502,7 +7509,7 @@ describe("bot restore computer quota", () => {
           },
         },
       );
-    return { prisma, call };
+    return { prisma, call, routine, enqueue };
   }
 
   it("archives, creates, then restores is refused when the restore would exceed the cap", async () => {
@@ -7530,6 +7537,17 @@ describe("bot restore computer quota", () => {
     expect(response.status).toBe(200);
     expect(prisma.bot.update).toHaveBeenCalledOnce();
   });
+
+  it("repairs wakeup publication after a restore already committed", async () => {
+    const { prisma, call, routine, enqueue } = fixture({ archivedAt: null });
+    const due = new Date(Date.now() + 60_000);
+    routine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "routine-1", nextRunAt: due }]);
+    expect((await call()).status).toBe(200);
+    expect(prisma.bot.update).not.toHaveBeenCalled();
+    expect(enqueue).toHaveBeenCalledExactlyOnceWith(routineWakeupJob("routine-1", due));
+  });
 });
 
 describe("group restore with archived bots", () => {
@@ -7539,6 +7557,7 @@ describe("group restore with archived bots", () => {
     const tx = {
       bot,
       chatGroup,
+      routine: { findMany: vi.fn(async () => []) },
       chatGroupMember: { findMany: vi.fn(async () => archivedBots.map((item) => ({ bot: item }))) },
       computer: {
         count: vi.fn(async (args: { where: { id?: string } }) => (args.where.id ? 0 : inUse)),
@@ -7886,8 +7905,14 @@ describe("routines.update", () => {
     expect(response.status).toBe(200);
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "routine-1", bot: { archivedAt: null }, nextRunAt: null, active: false },
-        data: expect.objectContaining({ active: true }),
+        where: expect.objectContaining({
+          id: "routine-1",
+          bot: { archivedAt: null },
+          nextRunAt: null,
+          active: false,
+          completedOneShotAt: null,
+        }),
+        data: expect.objectContaining({ active: true, resumeOnRestore: false }),
       }),
     );
     expect(enqueue).toHaveBeenCalledOnce();
@@ -7911,11 +7936,32 @@ describe("routines.update", () => {
     const { call, update } = fixture(false, false, ownModel);
     expect((await call({ name: "Renamed", active: undefined, runAt: undefined })).status).toBe(200);
     expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "routine-1", bot: { archivedAt: null } } }),
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: "routine-1",
+          bot: { archivedAt: null },
+          completedOneShotAt: null,
+        }),
+      }),
     );
     const data = update.mock.calls[0]![0].data;
     for (const column of ["modelProvider", "modelId", "thinkingLevel"])
       expect(data).not.toHaveProperty(column);
+  });
+
+  it("clears automatic restoration when an archived group's routine is manually paused", async () => {
+    const { call, update, enqueue } = fixture(false, false, {
+      active: false,
+      resumeOnRestore: true,
+      nextRunAt: new Date(Date.now() + 60_000),
+    });
+    expect((await call({ active: false, runAt: undefined })).status).toBe(200);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ active: false, resumeOnRestore: false, nextRunAt: null }),
+      }),
+    );
+    expect(enqueue).not.toHaveBeenCalled();
   });
 
   it.each(["modelProvider", "modelId", "thinkingLevel"])(
@@ -8080,7 +8126,13 @@ describe("routines.update", () => {
 
 describe("routines.remove", () => {
   function fixture() {
-    const routine = { id: "routine-1", botId: "bot-1", spaceId: "space-1", userId: "user-a" };
+    const routine = {
+      id: "routine-1",
+      botId: "bot-1",
+      spaceId: "space-1",
+      userId: "user-a",
+      completedOneShotAt: null,
+    };
     const remove = vi.fn(async () => routine);
     const cancel = vi.fn(async () => undefined);
     const router = createRouter({
@@ -9296,6 +9348,7 @@ describe("groups.archive", () => {
       },
       attempt: { updateMany: vi.fn() },
       task: { updateMany: vi.fn() },
+      routine: { updateMany: vi.fn(async () => ({ count: 0 })) },
       secret: { deleteMany: vi.fn() },
       computerExecutionLease: {
         findMany: vi

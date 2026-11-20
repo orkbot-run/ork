@@ -8,6 +8,7 @@ import {
   asSystem,
   createDb,
   provisionMessagingIdentity,
+  restoreBotWithRoutines,
   runAsSystem,
   runAsTenant,
 } from "@orkbot/db";
@@ -45,6 +46,21 @@ it.skipIf(process.env.VERIFY_DATABASE !== "1" || !url)(
       const completed = await startRun();
       const failed = await startRun();
       const active = await startRun();
+      const at = new Date(Date.now() + 2 * 60 * 60_000);
+      const [armed, paused] = await Promise.all(
+        [true, false].map((active) =>
+          system.routine.create({
+            data: {
+              ...fields,
+              name: "Reminder",
+              prompt: "Notify",
+              crons: ["@once"],
+              active,
+              nextRunAt: active ? at : null,
+            },
+          }),
+        ),
+      );
       const endedAt = new Date("2026-11-19T15:00:00.000Z");
       let raced = false;
       const prisma = db.prisma.$extends({
@@ -108,9 +124,31 @@ it.skipIf(process.env.VERIFY_DATABASE !== "1" || !url)(
           status,
         });
       }
-      expect(cancel).toHaveBeenCalledExactlyOnceWith(`run:${active.id}`);
+      expect(cancel.mock.calls.map(([key]) => key).sort()).toEqual([
+        `routine:${armed!.id}`,
+        `run:${active.id}`,
+      ]);
       expect(await system.bot.findUniqueOrThrow({ where: { id: botId } })).toMatchObject({
         archivedAt: expect.any(Date),
+      });
+      expect(await system.routine.findUnique({ where: { id: armed!.id } })).toMatchObject({
+        active: false,
+        resumeOnRestore: true,
+        nextRunAt: at,
+      });
+      const restore = () =>
+        runAsTenant(identity, () => restoreBotWithRoutines(db.prisma, { botId, userId, spaceId }));
+      await expect(restore()).resolves.toEqual([{ id: armed!.id, nextRunAt: at }]);
+      await expect(restore()).resolves.toEqual([{ id: armed!.id, nextRunAt: at }]);
+      expect(await system.routine.findUnique({ where: { id: armed!.id } })).toMatchObject({
+        active: true,
+        resumeOnRestore: false,
+        nextRunAt: at,
+      });
+      expect(await system.routine.findUnique({ where: { id: paused!.id } })).toMatchObject({
+        active: false,
+        resumeOnRestore: false,
+        nextRunAt: null,
       });
     } finally {
       try {
