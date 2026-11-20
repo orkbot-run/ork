@@ -112,35 +112,32 @@ it("never creates a workspace after the active selection changes", async () => {
     bindingVersion: 1,
     keyFingerprint: "a".repeat(64),
   };
-  const fetcher = vi
-    .fn()
-    .mockResolvedValue(
-      Response.json({
-        version: 2,
-        defaultOrganizationId: organizationId,
-        organizations: [
+  const response = Response.json({
+    version: 2,
+    defaultOrganizationId: organizationId,
+    organizations: [
+      {
+        id: organizationId,
+        name: "Company",
+        type: "shared",
+        role: "admin",
+        servers: [
           {
-            id: organizationId,
-            name: "Company",
-            type: "shared",
-            role: "admin",
-            servers: [
-              {
-                id: serverId,
-                name: "Server",
-                state: "ready",
-                bindingVersion: 1,
-                keyFingerprint: target.keyFingerprint,
-                routes: [],
-                workspaces: [
-                  { id: remote.id, name: "Team", state: "ready", canOpen: true, role: "admin" },
-                ],
-              },
+            id: serverId,
+            name: "Server",
+            state: "ready",
+            bindingVersion: 1,
+            keyFingerprint: target.keyFingerprint,
+            routes: [],
+            workspaces: [
+              { id: remote.id, name: "Team", state: "ready", canOpen: true, role: "admin" },
             ],
           },
         ],
-      }),
-    );
+      },
+    ],
+  });
+  const fetcher = vi.fn().mockResolvedValue(response);
   vi.stubGlobal("fetch", fetcher);
   await expect(
     createAccountWorkspace(
