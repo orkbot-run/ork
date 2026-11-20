@@ -1,7 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useLinkPrompt } from "@orkbot/chat-ui/web";
 import type { MessageBlock } from "@orkbot/contracts";
-import { appConnectedInput, waitForConnection } from "@orkbot/core";
+import { appConnectedInput, watchConnectionAuthorization } from "@orkbot/core";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -12,7 +12,7 @@ import type { ArtifactTarget } from "../../lib/artifact-open";
 import { chartViewport } from "../../lib/chart-viewport";
 import { connectMcpOauth } from "../../lib/mcp-connect";
 import { importChunk } from "../../lib/preload-recovery";
-import { rpc } from "../../lib/rpc";
+import { captureRpcContext, rpc } from "../../lib/rpc";
 import { useArtifactImage } from "../../lib/use-artifact-image";
 import type { ErrorDetails } from "../../lib/user-error";
 import { errorDetails, errorText } from "../../lib/user-error";
@@ -150,49 +150,79 @@ export function AppConnectCard({
 }) {
   const { t } = useLingui();
   const [busy, setBusy] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const [localStatus, setLocalStatus] = useState<"pending" | "connected">(block.status);
   const [error, setError] = useState<string | null>(null);
   const connectionAttempt = useRef<AbortController | null>(null);
   const status = block.status === "connected" ? "connected" : localStatus;
-  useEffect(() => () => connectionAttempt.current?.abort(), []);
+  useEffect(
+    () => () => {
+      const active = connectionAttempt.current;
+      connectionAttempt.current = null;
+      active?.abort();
+    },
+    [],
+  );
+  useEffect(() => {
+    if (block.status === "connected") connectionAttempt.current?.abort();
+  }, [block.status]);
 
   async function authorize() {
     connectionAttempt.current?.abort();
     const controller = new AbortController();
     connectionAttempt.current = controller;
     setBusy(true);
+    setWaiting(false);
     setError(null);
+    const { client, isCurrent } = captureRpcContext();
     try {
-      const started = await rpc.connections.begin({
-        connectorId: block.connectorId,
-        provider: block.provider,
-        displayName: block.name,
-      });
+      const started = await client.connections.begin(
+        { connectorId: block.connectorId, provider: block.provider, displayName: block.name },
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted || !isCurrent()) return;
       if (started.authorizationUrl) {
         window.open(started.authorizationUrl, "orkbot-app-connect", "popup,width=560,height=720");
       }
-      const result = await waitForConnection(
+      const result = await watchConnectionAuthorization(
         started.connectionId,
-        (input) => rpc.connections.complete(input, { signal: controller.signal }),
-        { signal: controller.signal, attempts: 60 },
+        (input) => client.connections.complete(input, { signal: controller.signal }),
+        {
+          signal: controller.signal,
+          isCurrent,
+          subscribeToResume: (resume) => {
+            const onVisible = () => {
+              if (document.visibilityState === "visible") resume();
+            };
+            window.addEventListener("focus", resume);
+            document.addEventListener("visibilitychange", onVisible);
+            return () => {
+              window.removeEventListener("focus", resume);
+              document.removeEventListener("visibilitychange", onVisible);
+            };
+          },
+          onWaiting: () => {
+            setBusy(false);
+            setWaiting(true);
+          },
+        },
       );
-      if (result.status === "aborted") return;
-      if (result.status === "connected") {
-        setLocalStatus("connected");
-        await rpc.onboarding
-          .appConnected(appConnectedInput(botId, threadId, block, messageId))
-          .catch(() => undefined);
-        return;
-      }
-      setError(t`Authorization timed out. Please try again.`);
+      if (controller.signal.aborted || !isCurrent() || result.status !== "connected") return;
+      setLocalStatus("connected");
+      await client.onboarding
+        .appConnected(appConnectedInput(botId, threadId, block, messageId), {
+          signal: controller.signal,
+        })
+        .catch(() => undefined);
     } catch (error) {
-      if (!controller.signal.aborted) {
+      if (!controller.signal.aborted && isCurrent()) {
         setError(errorText(error, t`Could not authorize this app`));
       }
     } finally {
       if (connectionAttempt.current === controller) {
         connectionAttempt.current = null;
         setBusy(false);
+        setWaiting(false);
       }
     }
   }
@@ -224,9 +254,16 @@ export function AppConnectCard({
           <SuccessPop label={t`Connected`} />
         ) : (
           <Button disabled={busy} onClick={() => void authorize()}>
-            {busy ? t`Waiting…` : t`Connect`}
+            {busy ? t`Waiting…` : waiting ? t`Start over` : t`Connect`}
           </Button>
         )}
+      </div>
+      <div role="status">
+        {waiting && status !== "connected" ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            <Trans>Waiting for authorization.</Trans>
+          </p>
+        ) : null}
       </div>
       {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
     </BuiCard>

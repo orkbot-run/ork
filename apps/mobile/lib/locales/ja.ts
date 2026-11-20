@@ -963,8 +963,8 @@ export const JA_MESSAGES: Record<string, string> = {
   "Could not submit answer": "回答を送信できませんでした",
   Deny: "拒否",
   "Please try again.": "もう一度お試しください。",
-  "Authorization timed out. Please try again.":
-    "認可がタイムアウトしました。もう一度お試しください。",
+  "Waiting for authorization.": "認証を待っています。",
+  "Start over": "最初からやり直す",
   "Could not authorize this app": "このアプリを認可できませんでした",
   "{name} connection": "{name}の接続",
   "Notifications silenced": "通知をミュート中",

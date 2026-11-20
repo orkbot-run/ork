@@ -982,8 +982,8 @@ export const DE_MESSAGES: Record<string, string> = {
   "Could not submit answer": "Antwort konnte nicht gesendet werden",
   Deny: "Ablehnen",
   "Please try again.": "Versuche es erneut.",
-  "Authorization timed out. Please try again.":
-    "Zeitüberschreitung bei der Autorisierung. Versuche es erneut.",
+  "Waiting for authorization.": "Autorisierung steht noch aus.",
+  "Start over": "Neu starten",
   "Could not authorize this app": "App konnte nicht autorisiert werden",
   "{name} connection": "Verbindung mit {name}",
   "Notifications silenced": "Benachrichtigungen stumm",

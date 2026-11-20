@@ -4,6 +4,34 @@ import { mergeConnectedPlugins } from "./composio-connector.js";
 import { persistLivePluginConnections, selectRunConnections } from "./connection-context.js";
 
 describe("run connection selection", () => {
+  it("does not activate an account revoked by a concurrent request", async () => {
+    const rows = [
+      {
+        id: "pending",
+        connectorId: "composio",
+        provider: "gmail",
+        providerRef: "ca-work",
+        displayName: "Work",
+        status: "pending",
+      },
+    ];
+    const updateManyAndReturn = vi.fn().mockResolvedValue([]);
+    await persistLivePluginConnections(
+      { connection: { updateManyAndReturn } } as unknown as PrismaClient,
+      { userId: "user", spaceId: "space" },
+      rows,
+      ["gmail"],
+      ["ca-work"],
+    );
+    expect(updateManyAndReturn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: { in: ["pending", "error"] } }),
+      }),
+    );
+    expect(rows[0]?.status).toBe("pending");
+    expect(selectRunConnections(rows, [])).toEqual([]);
+  });
+
   it("uses synchronized account statuses in the current run", async () => {
     const rows = [
       { id: "gmail", provider: "gmail", status: "error" },
@@ -12,18 +40,24 @@ describe("run connection selection", () => {
       { id: "gmail-duplicate", provider: "gmail", status: "pending" },
     ].map((row) => ({ ...row, connectorId: "composio", displayName: row.provider }));
     const prisma = {
-      connection: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+      connection: {
+        updateManyAndReturn: vi
+          .fn()
+          .mockImplementation(async ({ where }) => where.id.in.map((id: string) => ({ id }))),
+      },
     } as unknown as PrismaClient;
     const liveSlugs = ["gmail", "slack"];
+    Object.assign(rows[0]!, { providerRef: "ca-gmail" });
 
     await persistLivePluginConnections(
       prisma,
       { userId: "user", spaceId: "space" },
       rows,
       liveSlugs,
+      ["ca-gmail"],
     );
 
-    expect(rows.map((row) => row.status)).toEqual(["connected", "revoked", "revoked", "revoked"]);
+    expect(rows.map((row) => row.status)).toEqual(["connected", "revoked", "revoked", "pending"]);
     expect(
       selectRunConnections(
         rows,

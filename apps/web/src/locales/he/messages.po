@@ -1013,9 +1013,11 @@ msgstr "פרמטרים להרשאה (אופציונלי)"
 msgid "Authorization server"
 msgstr "שרת הרשאות"
 
-#: src/pages/shell/message-cards.tsx
-msgid "Authorization timed out. Please try again."
-msgstr "תם הזמן לאישור ההרשאה. אפשר לנסות שוב."
+msgid "Waiting for authorization."
+msgstr "ממתינים לאישור הרשאה."
+
+msgid "Start over"
+msgstr "להתחיל מחדש"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize"

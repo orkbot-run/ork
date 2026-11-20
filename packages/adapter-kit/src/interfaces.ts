@@ -325,6 +325,8 @@ export interface ManagedConnectorProvider
   isConfigured?(): Promise<boolean>;
   catalog(context: AdapterContext, query?: string): Promise<ConnectorCatalogItem[]>;
   listConnectedExternalIds(context: AdapterContext): Promise<string[]>;
+  /** Active remote account refs; undefined means the underlying provider lacks this capability. */
+  listActiveConnectionRefs?(context: AdapterContext): Promise<string[] | undefined>;
   /** Connection refs the provider reports as dead until the user reconnects them. */
   listReconnectRefs?(context: AdapterContext): Promise<string[]>;
   connectionReady(context: AdapterContext, externalId: string): Promise<boolean>;

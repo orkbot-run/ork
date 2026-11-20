@@ -1013,9 +1013,11 @@ msgstr "認証パラメーター（任意）"
 msgid "Authorization server"
 msgstr "認証サーバー"
 
-#: src/pages/shell/message-cards.tsx
-msgid "Authorization timed out. Please try again."
-msgstr "認証がタイムアウトしました。もう一度お試しください。"
+msgid "Waiting for authorization."
+msgstr "認証を待っています。"
+
+msgid "Start over"
+msgstr "最初からやり直す"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize"

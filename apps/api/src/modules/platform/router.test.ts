@@ -3304,6 +3304,69 @@ describe("connections.begin", () => {
 });
 
 describe("connections.complete", () => {
+  it.each(["own-active", "sibling-active", "lookup-failed"])(
+    "settles only this authorization's active account (%s)",
+    async (outcome) => {
+      const row = {
+        id: "retry",
+        connectorId: "fixture",
+        provider: "mail",
+        providerRef: "ca-retry",
+        displayName: "Mail",
+        status: "pending",
+        createdAt: new Date(),
+      };
+      const connection = {
+        findFirst: vi.fn(async ({ where }: { where: { id: string | { not: string } } }) =>
+          typeof where.id === "string" ? { ...row } : null,
+        ),
+        findMany: vi.fn(async () => [{ providerRef: "ca-abandoned", status: "pending" }]),
+        updateMany: vi.fn(async ({ data }: { data: { status: string } }) => {
+          row.status = data.status;
+          return { count: 1 };
+        }),
+      };
+      const tx = {
+        connection,
+        $executeRaw: vi.fn(),
+        $queryRaw: vi.fn(async () => [{ locked: true }]),
+      };
+      const provider = {
+        connectionReady: vi.fn(async () => true),
+        listActiveConnectionRefs: vi.fn(async () => {
+          if (outcome === "lookup-failed") throw new Error("provider unavailable");
+          return outcome === "own-active" ? ["ca-retry"] : ["ca-abandoned"];
+        }),
+        resolveConnectedAccountId: vi.fn(async () => undefined),
+      };
+      const client = createRouterClient(
+        createRouter({
+          prisma: {
+            connection,
+            $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+          },
+          connectors: { managed: () => provider },
+          env: { webOrigin: "https://example.test" },
+        } as unknown as RouterDeps),
+        {
+          context: {
+            actor: {
+              spaceId: "workspace",
+              userId: "user",
+              email: "user@example.test",
+              isDeploymentOwner: true,
+            },
+          } as never,
+        },
+      );
+      const result = await client.connections.complete({ connectionId: row.id });
+      expect(result.status).toBe(outcome === "own-active" ? "connected" : "pending");
+      expect(provider.connectionReady).not.toHaveBeenCalled();
+      expect(provider.resolveConnectedAccountId).not.toHaveBeenCalled();
+      expect(connection.updateMany).toHaveBeenCalledTimes(outcome === "own-active" ? 1 : 0);
+    },
+  );
+
   it.each([
     ["complete", false],
     ["complete", true],
@@ -3958,8 +4021,8 @@ describe("connections.complete", () => {
     const row = { id: "conn-1", provider: "gmail", displayName: "Gmail", status: "pending" };
     const connection = {
       findMany: vi.fn(async () => [{ ...row }]),
-      updateMany: vi.fn(async ({ where }: { where: { id?: string; status: string } }) => {
-        if (where.id !== row.id || row.status !== where.status) return { count: 0 };
+      updateMany: vi.fn(async ({ where }: { where: { id?: string; status: { in: string[] } } }) => {
+        if (where.id !== row.id || !where.status.in.includes(row.status)) return { count: 0 };
         row.status = "connected";
         return { count: 1 };
       }),

@@ -1013,9 +1013,11 @@ msgstr "ऑथराइज़ेशन पैरामीटर (वैकल्
 msgid "Authorization server"
 msgstr "प्राधिकरण सर्वर"
 
-#: src/pages/shell/message-cards.tsx
-msgid "Authorization timed out. Please try again."
-msgstr "ऑथराइज़ेशन का समय समाप्त हो गया। कृपया पुनः प्रयास करें।"
+msgid "Waiting for authorization."
+msgstr "अनुमति का इंतज़ार है।"
+
+msgid "Start over"
+msgstr "फिर से शुरू करें"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize"

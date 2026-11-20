@@ -1013,9 +1013,11 @@ msgstr "Paramètres d'autorisation (optionnel)"
 msgid "Authorization server"
 msgstr "Serveur d'autorisation"
 
-#: src/pages/shell/message-cards.tsx
-msgid "Authorization timed out. Please try again."
-msgstr "L'autorisation a expiré. Veuillez réessayer."
+msgid "Waiting for authorization."
+msgstr "En attente d’autorisation."
+
+msgid "Start over"
+msgstr "Recommencer"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize"

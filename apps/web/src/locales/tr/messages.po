@@ -1013,9 +1013,11 @@ msgstr "Yetkilendirme parametreleri (isteğe bağlı)"
 msgid "Authorization server"
 msgstr "Yetkilendirme sunucusu"
 
-#: src/pages/shell/message-cards.tsx
-msgid "Authorization timed out. Please try again."
-msgstr "Yetkilendirme zaman aşımına uğradı. Lütfen tekrar dene."
+msgid "Waiting for authorization."
+msgstr "Yetkilendirme bekleniyor."
+
+msgid "Start over"
+msgstr "Baştan başla"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize"

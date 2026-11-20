@@ -98,6 +98,8 @@ export function nextCatalogAccountLabel(
 
 const CATALOG_CONNECT_POLL_ATTEMPTS = 45;
 const CATALOG_CONNECT_POLL_MS = 2_000;
+const CARD_CONNECT_POLL_ATTEMPTS = 60;
+const RESUMED_CONNECT_POLL_ATTEMPTS = 3;
 
 /**
  * Begin a catalog connection, open its authorization page, and wait for it to finish.
@@ -161,6 +163,59 @@ export async function waitForConnection<Row extends { status: string }>(
     await abortableDelay(CATALOG_CONNECT_POLL_MS, options.signal);
   }
   return stopped() ? { status: "aborted" } : { status: "pending" };
+}
+
+/** A card can keep watching a slow authorization without polling an idle app indefinitely. */
+export async function watchConnectionAuthorization<Row extends { status: string }>(
+  connectionId: string,
+  complete: (input: { connectionId: string }) => Promise<Row>,
+  options: {
+    signal: AbortSignal;
+    isCurrent?: () => boolean;
+    subscribeToResume: (onResume: () => void) => () => void;
+    onWaiting: () => void;
+  },
+) {
+  const { signal, isCurrent, subscribeToResume, onWaiting } = options;
+  const stopped = () => signal.aborted || isCurrent?.() === false;
+  if (stopped()) return { status: "aborted" } as const;
+  let resumed = false;
+  let wake: (() => void) | undefined;
+  const stopListening = subscribeToResume(() => {
+    resumed = true;
+    wake?.();
+  });
+  const wakeOnAbort = () => wake?.();
+  signal.addEventListener("abort", wakeOnAbort, { once: true });
+  try {
+    let result = await waitForConnection(connectionId, complete, {
+      signal,
+      isCurrent,
+      attempts: CARD_CONNECT_POLL_ATTEMPTS,
+    });
+    if (result.status !== "pending") return result;
+    onWaiting();
+    while (!stopped()) {
+      if (!resumed) {
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+        wake = undefined;
+      }
+      if (stopped()) break;
+      resumed = false;
+      result = await waitForConnection(connectionId, complete, {
+        signal,
+        isCurrent,
+        attempts: RESUMED_CONNECT_POLL_ATTEMPTS,
+      });
+      if (result.status !== "pending") return result;
+    }
+    return { status: "aborted" } as const;
+  } finally {
+    stopListening();
+    signal.removeEventListener("abort", wakeOnAbort);
+  }
 }
 
 /** The server's NOT_FOUND code, not any 404 a proxy or an older server might send. */

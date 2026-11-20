@@ -1013,9 +1013,11 @@ msgstr "Параметры авторизации (необязательно)"
 msgid "Authorization server"
 msgstr "Сервер авторизации"
 
-#: src/pages/shell/message-cards.tsx
-msgid "Authorization timed out. Please try again."
-msgstr "Время авторизации истекло. Пожалуйста, попробуйте еще раз."
+msgid "Waiting for authorization."
+msgstr "Ожидаем авторизацию."
+
+msgid "Start over"
+msgstr "Начать заново"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize"

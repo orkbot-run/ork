@@ -218,6 +218,9 @@ class ConfiguredIntegrationProvider implements ManagedConnectorProvider {
   async listConnectedExternalIds(context: AdapterContext) {
     return (await this.resolve())?.listConnectedExternalIds(context) ?? [];
   }
+  async listActiveConnectionRefs(context: AdapterContext) {
+    return (await this.required()).listActiveConnectionRefs?.(context);
+  }
   async listReconnectRefs(context: AdapterContext) {
     return (await (await this.resolve())?.listReconnectRefs?.(context)) ?? [];
   }

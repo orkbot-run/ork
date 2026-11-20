@@ -553,8 +553,8 @@ export const RU_MESSAGES: Record<string, string> = {
   Attach: "Вложение",
   "Attach file": "Прикрепить файл",
   "Authorization code": "Код авторизации",
-  "Authorization timed out. Please try again.":
-    "Время авторизации истекло. Пожалуйста, попробуйте еще раз.",
+  "Waiting for authorization.": "Ожидаем авторизацию.",
+  "Start over": "Начать заново",
   "Bearer token": "Bearer-токен",
   "Back to sign in": "Вернуться ко входу",
   Back: "Назад",

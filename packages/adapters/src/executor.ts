@@ -812,6 +812,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               connectorId: true,
               provider: true,
               providerRef: true,
+              createdAt: true,
+              updatedAt: true,
               displayName: true,
               status: true,
             },
@@ -909,21 +911,34 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           run.trigger === "background_helper"
             ? []
             : storedConnections.filter((connection) => connection.connectorId === "composio");
-        let liveSlugs: string[] = [];
         if (needsLivePluginSync(composioRows)) {
-          const listing = await loadLivePluginSlugs(deps.listConnectedPluginSlugs, run.userId);
-          if (listing.ok) {
-            liveSlugs = listing.slugs;
-            await persistLivePluginConnections(deps.prisma, run, composioRows, listing.slugs).catch(
-              () => undefined,
-            );
+          const [listing, activeRefs] = await Promise.all([
+            loadLivePluginSlugs(deps.listConnectedPluginSlugs, run.userId, attemptSignal),
+            Promise.resolve()
+              .then(() => deps.listActivePluginConnectionRefs?.(run.userId, attemptSignal))
+              .catch(() => {
+                getLogger().warn(
+                  "Active connection lookup failed; pending authorizations retained",
+                );
+                return null;
+              }),
+          ]);
+          if (listing.ok || Array.isArray(activeRefs)) {
+            await persistLivePluginConnections(
+              deps.prisma,
+              run,
+              composioRows,
+              listing.ok ? listing.slugs : [],
+              activeRefs,
+            ).catch(() => undefined);
           }
         }
-        const connectedComposio = mergeConnectedPlugins(composioRows, liveSlugs);
-        const connectedPlugins = selectRunConnections(
-          storedConnections,
-          connectedComposio.map((connection) => connection.provider),
+        // Only the rows actually persisted as connected may contribute account refs.
+        const connectedComposio = mergeConnectedPlugins(
+          composioRows.filter((row) => row.status === "connected"),
+          [],
         );
+        const connectedPlugins = selectRunConnections(storedConnections, []);
         const context = {
           operationId: runId,
           traceId: runId,

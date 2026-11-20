@@ -1013,9 +1013,11 @@ msgstr "Autorisatieparameters (optioneel)"
 msgid "Authorization server"
 msgstr "Autorisatieserver"
 
-#: src/pages/shell/message-cards.tsx
-msgid "Authorization timed out. Please try again."
-msgstr "De autorisatie is verlopen. Probeer het opnieuw."
+msgid "Waiting for authorization."
+msgstr "Wachten op autorisatie."
+
+msgid "Start over"
+msgstr "Opnieuw beginnen"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize"

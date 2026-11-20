@@ -1013,9 +1013,11 @@ msgstr "授权参数（可选）"
 msgid "Authorization server"
 msgstr "授权服务器"
 
-#: src/pages/shell/message-cards.tsx
-msgid "Authorization timed out. Please try again."
-msgstr "授权超时，请重试。"
+msgid "Waiting for authorization."
+msgstr "正在等待授权。"
+
+msgid "Start over"
+msgstr "重新开始"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize"

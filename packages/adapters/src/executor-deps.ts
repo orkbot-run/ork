@@ -76,7 +76,11 @@ export interface ExecutorDeps {
     hasIdentity(botId: string): Promise<boolean>;
     publishProgress?(runId: string): Promise<void>;
   };
-  listConnectedPluginSlugs?: (userId: string) => Promise<string[]>;
+  listConnectedPluginSlugs?: (userId: string, signal?: AbortSignal) => Promise<string[]>;
+  listActivePluginConnectionRefs?: (
+    userId: string,
+    signal?: AbortSignal,
+  ) => Promise<string[] | undefined>;
   /** Builtin web_search / web_fetch. Defaults to keyless HTTP when omitted. */
   web?: WebProvider;
   mediaGeneration?: MediaGenerationProvider;

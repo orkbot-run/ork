@@ -372,7 +372,7 @@ async function main() {
     artifacts,
     connector: stack.connector,
     connectors: stack.connector,
-    listConnectedPluginSlugs: async (userId) => {
+    listConnectedPluginSlugs: async (userId, signal) => {
       const provider = await integrationSettings.resolve("composio");
       if (!provider) return [];
       return provider.listConnectedExternalIds({
@@ -380,7 +380,22 @@ async function main() {
         spaceId: "",
         operationId: "connections.sync",
         traceId: "connections.sync",
-        signal: AbortSignal.timeout(15_000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+          : AbortSignal.timeout(15_000),
+      });
+    },
+    listActivePluginConnectionRefs: async (userId, signal) => {
+      const provider = await integrationSettings.resolve("composio");
+      if (!provider) return undefined;
+      return provider.listActiveConnectionRefs?.({
+        userId,
+        spaceId: "",
+        operationId: "connections.sync",
+        traceId: "connections.sync",
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+          : AbortSignal.timeout(15_000),
       });
     },
     secrets: [
