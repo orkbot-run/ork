@@ -14,6 +14,7 @@ import type {
 import { DecisionProviderError } from "@orkbot/adapter-kit";
 import { z } from "zod";
 import { decisionModel } from "./decision-models.js";
+import { assertModelProviderAllowed } from "./model-provider-policy.js";
 import { readBodyCapped } from "./web-ssrf.js";
 
 const answerSchema = z.object({
@@ -44,6 +45,7 @@ export class HttpDecisionProvider implements DecisionProvider {
   }
 
   async decide(request: DecisionRequest, context: AdapterContext): Promise<DecisionResult> {
+    assertModelProviderAllowed(this.provider);
     context.signal.throwIfAborted();
     const body = JSON.stringify(request);
     const callId = randomUUID();

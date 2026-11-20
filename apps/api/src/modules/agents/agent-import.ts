@@ -9,6 +9,7 @@ import type { AgentImportSettings, ImportedMcpServer } from "@orkbot/adapters";
 import {
   BUILTIN_AGENT_SKILLS,
   isCatalogModelChoice,
+  isModelProviderAllowed,
   readAgentImportSettings,
 } from "@orkbot/adapters";
 import type {
@@ -196,7 +197,7 @@ async function buildPlan(
   });
 
   let model: AgentImportPlan["model"] = null;
-  if (settings.model) {
+  if (settings.model && isModelProviderAllowed(settings.model.provider)) {
     const { title, provider, providerName, modelId, known } = settings.model;
     const usable = (await services.validateBotModel(actor, provider, modelId)) === null;
     const status = usable ? "ready" : known ? "needs_key" : "unknown";
@@ -206,6 +207,11 @@ async function buildPlan(
   const skipped = [...plan.skipped, ...settings.skipped];
   const apiKeys: AgentImportPlan["apiKeys"] = [];
   for (const key of settings.apiKeys) {
+    if (!isModelProviderAllowed(key.provider)) {
+      skipped.push({ path: key.source, reason: "unsupported" });
+      connectedKeyIds.add(key.id);
+      continue;
+    }
     if (await services.hasModelConnection(actor, key.provider)) {
       skipped.push({ path: key.source, reason: "connected" });
       connectedKeyIds.add(key.id);
@@ -367,7 +373,10 @@ export async function createImportedBot<PreparedKey>(
     input.selection.apiKeys.filter((id) => !connectedKeyIds.has(id)),
   );
   const model = input.selection.model ? plan.model : null;
-  if (input.selection.model) {
+  if (
+    input.selection.model &&
+    (!settings?.model || isModelProviderAllowed(settings.model.provider))
+  ) {
     const keyed = keys.some((key) => key.provider === model?.provider);
     const usable =
       model?.status === "ready" ||

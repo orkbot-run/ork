@@ -5,6 +5,7 @@ import type { OAuthAuth, OAuthCredential } from "@earendil-works/pi-ai";
 import type { ModelCredentialFailedState, SecretStore } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { runAsSystem } from "@orkbot/db";
+import { ModelProviderBlockedError } from "./model-provider-policy.js";
 import { withOAuthRefreshLock } from "./oauth-refresh-lock.js";
 import {
   oauthCredentialAccountId,
@@ -180,7 +181,8 @@ export async function resolveServerAIAuth(
       );
       if (updated.count) await deps.catalog.notifyAccount(expected.id);
     }
-    if (error instanceof AIConnectionError) throw error;
+    if (error instanceof AIConnectionError || error instanceof ModelProviderBlockedError)
+      throw error;
     throw new AIConnectionError("unavailable");
   }
 }

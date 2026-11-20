@@ -31,6 +31,7 @@ import { getLogger } from "@orkbot/logging";
 import { ModelImageLimitError, pruneForRebuild } from "./context-pruning.js";
 import { groqRequestContextWindow } from "./groq-request-budget.js";
 import { estimateModelContextTokens } from "./model-context.js";
+import { assertModelEndpointAllowed, assertModelProviderAllowed } from "./model-provider-policy.js";
 import { IMAGE_RETURNING_COMPUTER_TOOLS } from "./model-vision.js";
 import { affordableOpenRouterOutput } from "./openrouter-output-budget.js";
 import { estimatePiImageTokens } from "./pi-image-context.js";
@@ -393,6 +394,7 @@ export function fallbackAwareModelStream(
           reason,
         });
       try {
+        assertModelProviderAllowed(choice.provider);
         const config = state.request.resolveFallbackModel
           ? await state.request.resolveFallbackModel(
               choice.provider,
@@ -516,6 +518,7 @@ export function fallbackAwareModelStream(
         operatorMaxTokens(sentTarget.model),
       );
       try {
+        assertModelEndpointAllowed(target.model.provider, target.config.baseUrl);
         const apiKey = target.credentials?.accessToken ?? target.apiKey;
         const reasoning = thinkingLevel === "off" ? undefined : thinkingLevel;
         stream = state.stream(

@@ -48,11 +48,13 @@ export function ModelProviders({
       return {
         credential,
         name,
-        detail: credential.reconnectRequired
-          ? t("Sign in again")
-          : name.startsWith(provider)
-            ? undefined
-            : provider,
+        detail: credential.blockedByPolicy
+          ? t("Blocked by the server administrator")
+          : credential.reconnectRequired
+            ? t("Sign in again")
+            : name.startsWith(provider)
+              ? undefined
+              : provider,
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -93,10 +95,15 @@ export function ModelProviders({
       {rows.map(({ credential, name, detail }) => {
         const actions: MenuAction[] = [
           ...(Platform.OS === "ios" ? [{ id: "rename", title: t("Rename") }] : []),
-          {
-            id: "manage",
-            title: credential.authKind === "oauth" ? t("Sign in again") : t("Replace API key"),
-          },
+          ...(credential.blockedByPolicy
+            ? []
+            : [
+                {
+                  id: "manage",
+                  title:
+                    credential.authKind === "oauth" ? t("Sign in again") : t("Replace API key"),
+                },
+              ]),
           { id: "disconnect", title: t("Disconnect"), attributes: { destructive: true } },
         ];
         return (
@@ -111,7 +118,11 @@ export function ModelProviders({
               title={name}
               detail={detail}
               chevron="right"
-              onPress={() => onManage(credential)}
+              onPress={() =>
+                credential.blockedByPolicy
+                  ? act(credential, name, "disconnect")
+                  : onManage(credential)
+              }
               accessibilityActions={actions.map((action) => ({
                 name: action.id ?? action.title,
                 label: action.title,

@@ -7,6 +7,13 @@ import { AIBudgetSchema, AIModelsSchema } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "@orkbot/db";
 import { runAsSystem, workspaceAdmissionBinding } from "@orkbot/db";
 import { z } from "zod";
+import {
+  assertModelEndpointAllowed,
+  assertModelProviderAllowed,
+  isModelEndpointAllowed,
+  isModelProviderAllowed,
+  ModelProviderBlockedError,
+} from "./model-provider-policy.js";
 import { withOAuthRefreshLock } from "./oauth-refresh-lock.js";
 import { oauthCredentialAccountId, parseModelSecret } from "./pi-oauth.js";
 
@@ -238,6 +245,26 @@ export class ServerAICatalog {
     };
   }
 
+  private async blockedByPolicy(connection: {
+    provider: string;
+    secretId: string;
+    secretRef: string;
+  }): Promise<boolean> {
+    if (!isModelProviderAllowed(connection.provider)) return true;
+    if (isModelEndpointAllowed(connection.provider)) return false;
+    try {
+      const secret = parseModelSecret(
+        await this.deps.secrets.load(connection.secretRef, connection.secretId),
+      );
+      return !isModelEndpointAllowed(
+        connection.provider,
+        secret.kind === "openai_compatible" ? secret.baseUrl : undefined,
+      );
+    } catch {
+      return true;
+    }
+  }
+
   async list(actor: AIActor) {
     return runAsSystem("read assigned AI connection metadata", () =>
       this.deps.prisma.$transaction(async (tx) => {
@@ -252,29 +279,33 @@ export class ServerAICatalog {
           include: { connection: true },
           orderBy: [{ priority: "asc" }, { connectionId: "asc" }],
         });
-        return rows.flatMap((row) => {
-          const accountModels = modelsSchema.parse(row.connection.models);
-          const assignedModels = modelsSchema.parse(row.allowedModels);
-          const usableModels = assignedModels.filter((model) => accountModels.includes(model));
-          if (!workspace.administrator && !usableModels.length) return [];
-          return [
-            {
-              ...this.metadata({
-                ...row.connection,
-                models: workspace.administrator ? accountModels : usableModels,
-              }),
-              enabled: row.enabled,
-              allowedModels: workspace.administrator ? assignedModels : usableModels,
-              defaultModelId: row.defaultModelId,
-              isDefault: row.isDefault,
-              fallback: row.fallback,
-              priority: row.priority,
-              assignmentRevision: row.revision,
-              monthlyBudgetMicros:
-                row.monthlyBudgetMicros === null ? null : Number(row.monthlyBudgetMicros),
-            },
-          ];
-        });
+        const assigned = await Promise.all(
+          rows.map(async (row) => {
+            const accountModels = modelsSchema.parse(row.connection.models);
+            const assignedModels = modelsSchema.parse(row.allowedModels);
+            const usableModels = assignedModels.filter((model) => accountModels.includes(model));
+            if (!workspace.administrator && !usableModels.length) return [];
+            return [
+              {
+                ...this.metadata({
+                  ...row.connection,
+                  models: workspace.administrator ? accountModels : usableModels,
+                }),
+                ...((await this.blockedByPolicy(row.connection)) ? { blockedByPolicy: true } : {}),
+                enabled: row.enabled,
+                allowedModels: workspace.administrator ? assignedModels : usableModels,
+                defaultModelId: row.defaultModelId,
+                isDefault: row.isDefault,
+                fallback: row.fallback,
+                priority: row.priority,
+                assignmentRevision: row.revision,
+                monthlyBudgetMicros:
+                  row.monthlyBudgetMicros === null ? null : Number(row.monthlyBudgetMicros),
+              },
+            ];
+          }),
+        );
+        return assigned.flat();
       }),
     );
   }
@@ -284,12 +315,16 @@ export class ServerAICatalog {
       "read server AI catalog as a delegated connection administrator",
       async () => {
         const admin = await this.serverAdmin(actor);
-        return (
-          await this.deps.prisma.serverAIConnection.findMany({
-            where: { localOrganizationId: admin.organizationId },
-            orderBy: { createdAt: "asc" },
-          })
-        ).map((row) => this.metadata(row));
+        const rows = await this.deps.prisma.serverAIConnection.findMany({
+          where: { localOrganizationId: admin.organizationId },
+          orderBy: { createdAt: "asc" },
+        });
+        return Promise.all(
+          rows.map(async (row) => ({
+            ...this.metadata(row),
+            ...((await this.blockedByPolicy(row)) ? { blockedByPolicy: true } : {}),
+          })),
+        );
       },
     );
   }
@@ -456,6 +491,10 @@ export class ServerAICatalog {
           });
           if (expectedRevision !== undefined && account.revision !== expectedRevision)
             return deny("conflict");
+          assertModelEndpointAllowed(
+            account.provider,
+            next.kind === "openai_compatible" ? next.baseUrl : undefined,
+          );
           const current = parseModelSecret(
             await this.deps.secrets.load(account.secretRef, account.secretId),
           );
@@ -529,11 +568,16 @@ export class ServerAICatalog {
       })
       .strict()
       .parse(input);
+    let secret: ReturnType<typeof parseModelSecret>;
     try {
-      parseModelSecret(data.plaintext);
+      secret = parseModelSecret(data.plaintext);
     } catch {
       return deny("invalid");
     }
+    assertModelEndpointAllowed(
+      data.provider,
+      secret.kind === "openai_compatible" ? secret.baseUrl : undefined,
+    );
     const id = randomUUID();
     return runAsSystem("create an installation-owned AI account", async () => {
       const admin = await this.serverAdmin(actor);
@@ -643,6 +687,8 @@ export class ServerAICatalog {
           space.organizationId !== admin.organizationId
         )
           return deny("forbidden");
+        if (available && (await this.blockedByPolicy(connection)))
+          throw new ModelProviderBlockedError();
         const workspaces = await this.organizationWorkspaces(tx, admin);
         if (!workspaces.some((workspace) => workspace.spaceId === spaceId))
           return deny("forbidden");
@@ -735,6 +781,8 @@ export class ServerAICatalog {
           account.localOrganizationId !== workspace.organizationId
         )
           return deny("forbidden");
+        if (data.enabled && (await this.blockedByPolicy(account)))
+          throw new ModelProviderBlockedError();
         if (data.expectedRevision !== undefined && data.expectedRevision !== assignment.revision)
           return deny("conflict");
         const models = modelsSchema.parse(account.models);
@@ -885,6 +933,7 @@ export class ServerAICatalog {
           where: { localOrganizationId: admin.organizationId, isDefault: true },
         });
         if (!account?.defaultModelId || account.state !== "active") return deny("unavailable");
+        if (await this.blockedByPolicy(account)) throw new ModelProviderBlockedError();
         await tx.workspaceAIConnection.updateMany({
           where: { spaceId: actor.spaceId },
           data: { enabled: false, isDefault: false, revision: { increment: 1 } },
@@ -994,6 +1043,7 @@ export class ServerAICatalog {
       .filter(
         (row) =>
           row.enabled &&
+          !row.blockedByPolicy &&
           row.state === "active" &&
           (row.isDefault || row.fallback) &&
           row.defaultModelId &&
@@ -1094,6 +1144,7 @@ export class ServerAICatalog {
             !modelsSchema.parse(account.models).includes(input.modelId)
           )
             return deny("forbidden");
+          assertModelProviderAllowed(account.provider);
           const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
           const dbNow = clock!.now;
           const previous = await tx.aIUsageReservation.findUnique({
@@ -1227,6 +1278,7 @@ export class ServerAICatalog {
       !modelsSchema.parse(account.models).includes(modelId)
     )
       return deny("forbidden");
+    assertModelProviderAllowed(account.provider);
     if (account.blockedUntil) {
       const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS now`;
       if (account.blockedUntil.getTime() > clock!.now.getTime()) return deny("busy");
@@ -1284,6 +1336,7 @@ export class ServerAICatalog {
       reservation.bindingVersion !== workspace.version
     )
       return deny("forbidden");
+    assertModelProviderAllowed(account.provider);
     return { account, assignment, reservation };
   }
 

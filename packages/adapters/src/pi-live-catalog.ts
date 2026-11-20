@@ -9,6 +9,7 @@ import type { SecretStore } from "@orkbot/adapter-kit";
 import { canonicalPiProviderId } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import type { ModelCatalogReads } from "./model-catalog-reads.js";
+import { isModelProviderAllowed } from "./model-provider-policy.js";
 import type { ModelCredentialAuthKind } from "./pi-catalog-availability.js";
 import { LiveCatalogCache, liveModelCatalogEnabled } from "./pi-live-cache.js";
 import { isChatModelId, liveModelSibling } from "./pi-live-model.js";
@@ -109,7 +110,7 @@ export function applyProviderLiveCatalog(
   };
   const additions: PiCatalogEntry[] = [];
   for (const provider of new Set(base.map((entry) => entry.provider))) {
-    if (!catalogProviderProbeBaseUrl(provider)) continue;
+    if (!isModelProviderAllowed(provider) || !catalogProviderProbeBaseUrl(provider)) continue;
     const ids = new Set([
       ...(live.get(auth.secretIdByProvider?.[provider] ?? "") ?? []),
       ...Object.values(auth.secretIdByModel?.[provider] ?? {}).flatMap(
@@ -183,7 +184,11 @@ export class ProviderCatalogCache {
     this.cache.invalidate(`${provider}:`);
   }
   read(credential: ProviderCatalogCredential, waitMs?: number): Promise<string[] | undefined> {
-    if (!this.enabled || !catalogProviderProbeBaseUrl(credential.provider))
+    if (
+      !isModelProviderAllowed(credential.provider) ||
+      !this.enabled ||
+      !catalogProviderProbeBaseUrl(credential.provider)
+    )
       return Promise.resolve(undefined);
     return this.cache.read(
       `${credential.provider}:${credential.secretId}:${credential.version}`,
@@ -212,13 +217,14 @@ export async function providerLiveCatalogsForSpace(
   if (!cache.enabled) return new Map();
   const slots = new Map<string, string>();
   for (const provider of Object.keys(auth.byProvider)) {
+    if (!isModelProviderAllowed(provider)) continue;
     if (auth.byProvider[provider] === "api_key" && catalogProviderProbeBaseUrl(provider)) {
       const id = auth.secretIdByProvider?.[provider];
       if (id) slots.set(id, provider);
     }
   }
   for (const [provider, models] of Object.entries(auth.byModel)) {
-    if (!catalogProviderProbeBaseUrl(provider)) continue;
+    if (!isModelProviderAllowed(provider) || !catalogProviderProbeBaseUrl(provider)) continue;
     for (const [model, kind] of Object.entries(models ?? {})) {
       const id = auth.secretIdByModel?.[provider]?.[model];
       if (kind === "api_key" && id) slots.set(id, provider);
@@ -276,6 +282,7 @@ export async function providerLiveListsModel(
 ): Promise<boolean> {
   provider = canonicalPiProviderId(provider);
   if (
+    !isModelProviderAllowed(provider) ||
     !cache.enabled ||
     !catalogProviderProbeBaseUrl(provider) ||
     !liveCatalogEntry(provider, modelId)

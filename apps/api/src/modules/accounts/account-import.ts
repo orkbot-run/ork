@@ -11,7 +11,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import type { AdapterContext } from "@orkbot/adapter-kit";
-import { normalizeWorkspacePath, resolveBotWorkspacePath } from "@orkbot/adapters";
+import {
+  isModelEndpointAllowed,
+  normalizeWorkspacePath,
+  resolveBotWorkspacePath,
+} from "@orkbot/adapters";
 import type {
   AccountExportManifest,
   AccountExportRecord,
@@ -668,6 +672,7 @@ class AccountImporter implements ArchiveSink {
       }
       case "routine": {
         const botId = space.mapped(record.botId);
+        const keepModel = !record.modelProvider || isModelEndpointAllowed(record.modelProvider);
         await prisma.routine.create({
           data: {
             id: newId(),
@@ -683,9 +688,13 @@ class AccountImporter implements ArchiveSink {
             active: false,
             notify: record.notify,
             messageProvider: record.messageProvider,
-            modelProvider: record.modelProvider,
-            modelId: record.modelId,
-            thinkingLevel: record.thinkingLevel,
+            ...(keepModel
+              ? {
+                  modelProvider: record.modelProvider,
+                  modelId: record.modelId,
+                  thinkingLevel: record.thinkingLevel,
+                }
+              : {}),
             watch: jsonValue(record.watch),
             createdAt: new Date(record.createdAt),
           },
@@ -783,6 +792,7 @@ class AccountImporter implements ArchiveSink {
   private async importBot(record: RecordOf<"bot">) {
     const space = this.current!;
     if (space.ids.has(record.id)) throw unreadable();
+    const keepModel = !record.modelProvider || isModelEndpointAllowed(record.modelProvider);
     const bot = await this.repos.createBot(space.actor, {
       name: record.name,
       description: record.description,
@@ -795,9 +805,13 @@ class AccountImporter implements ArchiveSink {
       ...(record.avatarSeed ? { avatarSeed: record.avatarSeed } : {}),
       // Bot ids pick the avatar shape; keep the look the bot had.
       avatarFamily: organicAvatarFamily(record.id),
-      modelProvider: record.modelProvider,
-      modelId: record.modelId,
-      thinkingLevel: record.thinkingLevel,
+      ...(keepModel
+        ? {
+            modelProvider: record.modelProvider,
+            modelId: record.modelId,
+            thinkingLevel: record.thinkingLevel,
+          }
+        : {}),
       disabledBuiltinTools: record.disabledBuiltinTools,
       seed: async (tx, botId) => {
         await tx.bot.update({

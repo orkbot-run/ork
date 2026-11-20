@@ -61,6 +61,7 @@ import {
   previewAgentImport,
 } from "#modules/agents/agent-import";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "#modules/agents/agent-secrets";
+import { canCopyModelPin } from "#modules/models/model-pins";
 import type { RouterDeps } from "#modules/platform/router";
 import type { RouterContext } from "#modules/platform/routes/context";
 import {
@@ -366,6 +367,7 @@ export function botsRoutes(ctx: RouterContext) {
       ),
       duplicate: authed.bots.duplicate.handler(async ({ context, input }) => {
         const source = await repos.getBot(context.actor, input.botId);
+        const keepModel = await canCopyModelPin(deps, context.actor, source);
         const duplicate = await repos
           .createBot(context.actor, {
             name: duplicateBotName(source.name),
@@ -378,10 +380,14 @@ export function botsRoutes(ctx: RouterContext) {
             avatarSet: resolveBotAvatarSet(source.avatarSet),
             avatarSetPinned: source.avatarSetPinned,
             computerMode: source.computer?.scope === "dedicated" ? "dedicated" : "team",
-            modelProvider: source.modelProvider,
-            modelId: source.modelId,
-            modelConnectionId: source.modelConnectionId,
-            thinkingLevel: source.thinkingLevel,
+            ...(keepModel
+              ? {
+                  modelProvider: source.modelProvider,
+                  modelId: source.modelId,
+                  modelConnectionId: source.modelConnectionId,
+                  thinkingLevel: source.thinkingLevel,
+                }
+              : {}),
             disabledBuiltinTools: source.disabledBuiltinTools,
           })
           .catch((error: unknown) => {

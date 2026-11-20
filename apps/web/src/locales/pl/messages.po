@@ -7867,3 +7867,8 @@ msgstr "Sprawdzenia bez zmian pojawiają się w historii. Możesz też publikowa
 #: src/lib/approval-messages.ts
 msgid "Watching an HTTPS address requires approval."
 msgstr "Obserwowanie adresu HTTPS wymaga zatwierdzenia."
+
+#: src/pages/ServerAISettings.tsx
+#: src/pages/model-settings/providers-section.tsx
+msgid "Blocked by the server administrator"
+msgstr "Zablokowane przez administratora serwera"

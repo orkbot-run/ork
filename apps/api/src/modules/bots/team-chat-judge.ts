@@ -11,6 +11,8 @@ import {
   formatCurrentTimeInstruction,
   hasHostedModelCredits,
   hostedModelCreditObserver,
+  isModelEndpointAllowed,
+  isModelProviderAllowed,
   parseModelSecret,
   resolveMemberMainModel,
   resolveStoredModelAuth,
@@ -246,12 +248,13 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
     );
     const requestedProvider = this.deps.providerOverride ?? bot.modelProvider;
     const requestedModel = this.deps.modelOverride ?? bot.modelId;
-    const overrideCredential = requestedProvider
+    const requestedProviderAllowed = requestedProvider && isModelProviderAllowed(requestedProvider);
+    const overrideCredential = requestedProviderAllowed
       ? await findModelCredential(this.deps.prisma, scope, requestedProvider)
       : null;
     const explicitJudgeOverride = Boolean(this.deps.providerOverride && this.deps.modelOverride);
     const useOverride = Boolean(
-      requestedProvider && requestedModel && (explicitJudgeOverride || overrideCredential),
+      requestedProviderAllowed && requestedModel && (explicitJudgeOverride || overrideCredential),
     );
     // The member's main model runs on its connection, or on funded deployment credits.
     const main =
@@ -268,12 +271,13 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
     const credential = useOverride ? overrideCredential : (main?.credential ?? null);
     const provider = useOverride ? requestedProvider : (main ?? fallback)?.provider;
     const modelId = useOverride ? requestedModel : (main ?? fallback)?.modelId;
-    if (!provider || !modelId) return null;
+    if (!provider || !modelId || !isModelProviderAllowed(provider)) return null;
 
     const hosted =
       settings?.modelCreditsEnabled &&
       (await hasHostedModelCredits(this.deps.prisma, scope, provider));
     if (!credential || hosted) {
+      if (!isModelEndpointAllowed(provider)) return null;
       const apiKey =
         provider === this.deps.deploymentProvider ? this.deps.deploymentModelKey : undefined;
       const callObserver = settings?.modelCreditsEnabled
@@ -287,12 +291,20 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
     });
     if (!secret) return null;
     const plaintext = await this.deps.secrets.load(secret.ciphertext, secret.id);
+    const parsedSecret = parseModelSecret(plaintext);
+    if (
+      !isModelEndpointAllowed(
+        provider,
+        parsedSecret.kind === "openai_compatible" ? parsedSecret.baseUrl : undefined,
+      )
+    )
+      return null;
     const retire = retireToReconnectMarker(
       this.deps.prisma,
       this.deps.secrets,
       { userId: bot.userId, spaceId: bot.spaceId },
       credential,
-      parseModelSecret(plaintext).maxTokens,
+      parsedSecret.maxTokens,
     );
     const auth = await resolveStoredModelAuth(
       this.deps.prisma,

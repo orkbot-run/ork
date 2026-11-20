@@ -664,7 +664,7 @@ export function useModelSettings(onClose: () => void, scope: SettingsScope) {
   }
 
   async function disconnectCredential() {
-    if (!selected || !credential) return;
+    if (!credential) return;
     const form = formState.capture();
     if (!form.isSelected()) return;
     cancelOAuthAttempt();
@@ -672,7 +672,7 @@ export function useModelSettings(onClose: () => void, scope: SettingsScope) {
     setNotice(null);
     setPending("disconnect");
     try {
-      await rpc.models.disconnect({ provider: selected.provider, credentialId: credential.id });
+      await rpc.models.disconnect({ provider: credential.provider, credentialId: credential.id });
       if (!form.isSelected()) return;
       setCredentialId(null);
       if (!form.isCurrent()) {

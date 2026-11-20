@@ -1,5 +1,6 @@
 import { getEnvApiKey } from "@earendil-works/pi-ai/compat";
 import type { ModelUsageLookup } from "@orkbot/adapter-kit";
+import { isModelProviderAllowed } from "./model-provider-policy.js";
 import { OpenRouterUsageLookup } from "./openrouter-usage.js";
 import { LOCAL_PROVIDER_ID, localModelIds } from "./pi-local-provider-id.js";
 
@@ -47,8 +48,10 @@ export function resolveDeploymentModel(env: NodeJS.ProcessEnv = process.env) {
     deepseek: "deepseek-flash",
   };
   const explicitModel = env.PI_DEFAULT_MODEL?.trim();
-  const key = keys[provider];
+  const allowed = isModelProviderAllowed(provider);
+  const key = allowed ? keys[provider] : undefined;
   const hostCredentials =
+    allowed &&
     !key &&
     Boolean(explicitModel) &&
     env.PI_DEFAULT_CREDENTIALS?.trim() === "host" &&

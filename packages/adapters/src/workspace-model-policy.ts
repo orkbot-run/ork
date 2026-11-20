@@ -4,6 +4,7 @@
 import type { AgentRunModel, SecretStore } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { modelFromAIConnection } from "./ai-connection-model.js";
+import { assertModelProviderAllowed, ModelProviderBlockedError } from "./model-provider-policy.js";
 import { parseModelSecret, secretValuesToRedact } from "./pi-oauth.js";
 import type { InstallationModelScope, ServerAIModels } from "./server-ai-runtime.js";
 
@@ -33,6 +34,7 @@ export async function resolveWorkspaceModel(
   }
   const policy = await findWorkspaceModelPolicy(deps.prisma, spaceId);
   if (!policy) return null;
+  assertModelProviderAllowed(policy.provider);
   // Do not leak store or provider errors: they can contain secret material.
   try {
     const secret = parseModelSecret(await deps.secretStore.load(policy.secretRef, policy.secretId));
@@ -44,7 +46,8 @@ export async function resolveWorkspaceModel(
       { allowPrivateEndpoint: deps.mcpAllowPrivateEndpoint },
     );
     return { model, redact: secretValuesToRedact(secret), secretId: policy.secretId };
-  } catch {
+  } catch (error) {
+    if (error instanceof ModelProviderBlockedError) throw error;
     throw new Error(
       "The workspace model connection is unavailable. Ask the workspace owner to check it.",
     );

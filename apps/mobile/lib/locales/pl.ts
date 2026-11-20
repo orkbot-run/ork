@@ -8,6 +8,7 @@ export const PL_MESSAGES: Record<string, string> = {
     "Nie udało się otworzyć Ork Accounts. Spróbuj ponownie.",
   "This workspace was closed or your access was removed.":
     "Ta przestrzeń została zamknięta lub odebrano Ci do niej dostęp.",
+  "Blocked by the server administrator": "Zablokowane przez administratora serwera",
   "HTTPS address": "Adres HTTPS",
   "Enter a public HTTPS address without credentials or a fragment":
     "Wpisz publiczny adres HTTPS bez danych logowania i fragmentu",

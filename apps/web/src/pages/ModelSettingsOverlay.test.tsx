@@ -1604,6 +1604,38 @@ it("replaces one connection's key and disconnects only that connection", async (
   }
 });
 
+it("offers only the allowed preset and lets a member remove an old blocked connection", async () => {
+  models.list.mockResolvedValue([
+    {
+      ...compatibleEntry,
+      connection: { ...compatibleEntry.connection, customEndpointAllowed: false },
+    },
+  ]);
+  models.role.mockResolvedValue({ primary: null, backups: [] });
+  models.credentials.mockResolvedValue([{ ...deepseekCredential, blockedByPolicy: true }]);
+  const view = await renderSettings();
+  try {
+    const row = providersSection().querySelector<HTMLElement>(
+      '[data-testid="model-provider-cred-deepseek"]',
+    )!;
+    expect(row.textContent).toContain("Blocked by the server administrator");
+    await click(buttons(providersSection(), "Add provider")[0]);
+    expect(pickerOptions()).toEqual(["Ollama Cloud"]);
+    await choose("Ollama Cloud");
+    await click(row.querySelector("button") ?? undefined);
+    expect(view.container.textContent).not.toContain("Replace API key");
+    await click(buttons(view.container, "Disconnect")[0]);
+    const confirm = buttons(view.container, "Disconnect");
+    await click(confirm[confirm.length - 1]);
+    expect(models.disconnect).toHaveBeenCalledWith({
+      provider: "deepseek",
+      credentialId: "cred-deepseek",
+    });
+  } finally {
+    await view.unmount();
+  }
+});
+
 it("keeps another connection's form when an earlier save finishes", async () => {
   models.list.mockResolvedValue([deepseekEntry, openrouterEntry]);
   models.credentials.mockResolvedValue([deepseekCredential]);

@@ -16,11 +16,14 @@ import {
   createModelCatalogReads,
   decisionModelCatalog,
   deploymentModelRole,
+  filterAllowedModelCatalog,
   findConnectedModelCredential,
   hiddenCatalogModel,
+  isModelProviderAllowed,
   kickModelCredentialRefresh,
   listAvailablePiCatalog,
   McpOAuthBroker,
+  ModelProviderBlockedError,
   modelCredentialAuthKindsForSpace,
   offeredCatalog,
   providerCatalogCache,
@@ -51,6 +54,7 @@ import { createBotRemoval } from "#modules/bots/bot-removal";
 import { createMcpServers } from "#modules/mcp/mcp-servers";
 import { installationCatalog } from "#modules/models/installation-catalog";
 import {
+  assertAllowedModelProvider,
   createModelConnector,
   prepareAllowedThinkingLevels,
 } from "#modules/models/model-credentials";
@@ -126,7 +130,10 @@ export function createRouterContext(deps: RouterDeps) {
     secretStore: deps.secrets,
     codexCatalog,
     refreshExpiredCredential,
-    hostedProvider: deps.billing?.modelCreditsEnabled ? deps.env.defaultProvider : undefined,
+    hostedProvider:
+      deps.billing?.modelCreditsEnabled && isModelProviderAllowed(deps.env.defaultProvider)
+        ? deps.env.defaultProvider
+        : undefined,
     defaultModel: async () => {
       const me = await meDto(deps, actor);
       return { provider: me.defaultProvider, model: me.defaultModel };
@@ -152,14 +159,18 @@ export function createRouterContext(deps: RouterDeps) {
     const installation = await installationCatalog(deps, actor);
     if (installation) return installation;
     const catalog = await catalogForSpace(actor, reads);
-    return deps.env.agentRuntime === "scripted" ? [...catalog, scriptedCatalogEntry] : catalog;
+    return filterAllowedModelCatalog(
+      deps.env.agentRuntime === "scripted" ? [...catalog, scriptedCatalogEntry] : catalog,
+    );
   };
   const catalogForSpace = async (actor: Actor, reads: ModelCatalogReads) => {
     const auth = await modelCredentialAuthKindsForSpace(
       deps.prisma,
       deps.secrets,
       actor,
-      deps.billing?.modelCreditsEnabled ? deps.env.defaultProvider : undefined,
+      deps.billing?.modelCreditsEnabled && isModelProviderAllowed(deps.env.defaultProvider)
+        ? deps.env.defaultProvider
+        : undefined,
       reads,
     );
     const available = listAvailablePiCatalog(auth.byProvider, auth.byModel);
@@ -225,14 +236,21 @@ export function createRouterContext(deps: RouterDeps) {
               : null,
           }
         : { env: process.env };
-    return { ...settings, deploymentPrimary: deploymentModelRole(role, defaults).primary };
+    const permitted = (choice: ModelRoleChoice | null) =>
+      choice && isModelProviderAllowed(choice.provider) ? choice : null;
+    return {
+      ...settings,
+      primary: permitted(settings.primary),
+      backups: settings.backups.filter((choice) => isModelProviderAllowed(choice.provider)),
+      deploymentPrimary: permitted(deploymentModelRole(role, defaults).primary),
+    };
   };
   const modelRoleCatalog = async (actor: Actor, role: ModelRole): Promise<ModelCatalogEntry[]> => {
     const installation = await installationCatalog(deps, actor);
     if (installation) return installation.filter((entry) => modelSupportsRole(entry, role));
     const reads = createModelCatalogReads(deps.prisma, deps.secrets, actor.userId);
     const catalog = await chatCatalog(actor, reads);
-    const decisions = role === "approval" ? decisionModelCatalog() : [];
+    const decisions = role === "approval" ? filterAllowedModelCatalog(decisionModelCatalog()) : [];
     const managedProviders = new Set(
       catalog.filter((entry) => "managed" in entry && entry.managed).map((entry) => entry.provider),
     );
@@ -261,6 +279,7 @@ export function createRouterContext(deps: RouterDeps) {
     });
     const byProvider = new Map<string, typeof connections>();
     for (const connection of connections) {
+      if (!isModelProviderAllowed(connection.provider)) continue;
       const provider = canonicalPiProviderId(connection.provider);
       byProvider.set(provider, [...(byProvider.get(provider) ?? []), connection]);
     }
@@ -300,6 +319,7 @@ export function createRouterContext(deps: RouterDeps) {
     choices: ModelRoleChoice[],
   ): Promise<void> => {
     if (choices.length === 0) return;
+    for (const choice of choices) assertAllowedModelProvider(choice.provider);
     const catalog = await modelRoleCatalog(actor, role);
     for (const choice of choices) {
       const entry = catalog.find(
@@ -391,7 +411,13 @@ export function createRouterContext(deps: RouterDeps) {
     .use(async ({ context, next }) => {
       const actor = context.actor;
       if (!actor) throw new ORPCError("UNAUTHORIZED");
-      return asTenant(actor, () => next({ context: { ...context, actor } }));
+      try {
+        return await asTenant(actor, () => next({ context: { ...context, actor } }));
+      } catch (error) {
+        if (error instanceof ModelProviderBlockedError)
+          throw new ORPCError("FORBIDDEN", { message: error.message, cause: error });
+        throw error;
+      }
     })
     .use(async ({ context, next, path }, input) => {
       const result = await next();

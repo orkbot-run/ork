@@ -36,6 +36,18 @@ the API and worker, for models that have no stored credential.
 
 `ORKBOT_LIVE_MODEL_CATALOG=off` disables provider and Codex live catalog probing; the default is on.
 
+## Restrict model providers
+
+Set `ORKBOT_MODEL_PROVIDER_ALLOWLIST` to a comma-separated list of provider IDs from
+the model catalog, such as `anthropic,openrouter`. A blank value allows all providers.
+Use the same value for the API and worker and recreate both services after editing
+the installation environment.
+
+`openai-compatible` allows custom endpoints. Add `ollama-cloud` separately to allow
+the preset at `ollama.com`. Existing blocked connections appear in model settings
+with an explanation and cannot be used for runs. The compatible endpoint network
+settings also apply to custom URLs.
+
 ## Approvals
 
 Approvals have three modes in **Settings → Approvals**: Never ask runs every action, Auto lets an

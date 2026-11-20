@@ -18,6 +18,7 @@ export const ServerAIAccountSchema = z.object({
   id: z.string(),
   label: z.string(),
   provider: z.string(),
+  blockedByPolicy: z.boolean().optional(),
   models: AIModelsSchema,
   state: z.enum(["active", "disabled", "reconnect-required"]),
   revision: z.number().int(),

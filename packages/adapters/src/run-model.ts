@@ -25,6 +25,11 @@ import {
   HostedModelCreditsRequiredError,
   hostedModelCreditObserver,
 } from "./model-credit-observer.js";
+import {
+  assertModelEndpointAllowed,
+  assertModelProviderAllowed,
+  ModelProviderBlockedError,
+} from "./model-provider-policy.js";
 import { resolveMemberMainModel, selectConfiguredModel } from "./model-roles.js";
 import {
   enabledOpenAiCompatibleModelIds,
@@ -63,6 +68,7 @@ export function runtimeFallbackModel(runtime: AgentRuntime) {
 
 export function isTerminalModelSetupError(error: unknown): boolean {
   return (
+    error instanceof ModelProviderBlockedError ||
     error instanceof UnavailableModelForAuthError ||
     error instanceof HostedModelCreditsRequiredError ||
     isRetiredModelCredentialError(error) ||
@@ -164,6 +170,7 @@ export async function modelCreditBillingEnabled(
 
 export async function resolveModelKey(...args: Parameters<typeof resolveModelKeyMaterial>) {
   const [deps, userId, spaceId, , provider] = args;
+  assertModelProviderAllowed(provider);
   const billingEnabled = await modelCreditBillingEnabled(deps);
   const scope = { userId, spaceId };
   const personalAllowed = await deps.serverAIModels?.personalModelsAllowed(scope);
@@ -260,6 +267,7 @@ async function resolveModelKeyMaterial(
   ownCredential?: true;
   redact: string[];
 }> {
+  assertModelProviderAllowed(provider);
   if (credential) {
     return withModelCredentialLock(credential.secretId, async () => {
       const row = await deps.prisma.secret.findFirst({
@@ -276,7 +284,12 @@ async function resolveModelKeyMaterial(
         return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
       }
       const plaintext = await deps.secretStore.load(row.ciphertext, row.id);
-      registerSecrets?.(secretValuesToRedact(parseModelSecret(plaintext)));
+      const storedSecret = parseModelSecret(plaintext);
+      assertModelEndpointAllowed(
+        provider,
+        storedSecret.kind === "openai_compatible" ? storedSecret.baseUrl : undefined,
+      );
+      registerSecrets?.(secretValuesToRedact(storedSecret));
       const persist = persistStoredModelSecret(
         deps.prisma,
         deps.secretStore,
@@ -492,6 +505,7 @@ export async function resolveConnectedModelKey(
   requireStoredSecret = false,
   credentialId?: string,
 ) {
+  assertModelProviderAllowed(provider);
   const central = Boolean(await deps.serverAIModels?.actor(scope));
   const hostedProvider =
     !central && (await modelCreditBillingEnabled(deps))

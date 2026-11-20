@@ -156,7 +156,9 @@ function LegacyModelSettingsOverlay({
     id;
   const connected = Boolean(
     credential &&
-      (!isOpenAiCompatible || savedCompatibleEndpointMatches(baseUrl, credential.baseUrl)),
+      (credential.blockedByPolicy ||
+        !isOpenAiCompatible ||
+        savedCompatibleEndpointMatches(baseUrl, credential.baseUrl)),
   );
 
   /** Opens a connection by id, or connects a new one for the provider. */
@@ -197,7 +199,9 @@ function LegacyModelSettingsOverlay({
     </Button>
   ) : null;
 
-  const connection = selected ? (
+  const connection = credential?.blockedByPolicy ? (
+    disconnectButton
+  ) : selected ? (
     isOpenAiCompatible ? (
       <>
         <CompatibleModelFields {...model} />
@@ -285,7 +289,7 @@ function LegacyModelSettingsOverlay({
       ) : null}
       {/* Edits made while a save is in flight would be replaced by what it saved. */}
       <fieldset className="contents" disabled={pending === "connect" || pending === "settings"}>
-        {connected && credential ? (
+        {connected && credential && !credential.blockedByPolicy ? (
           <ConnectionNameField
             key={credential.id}
             credential={credential}

@@ -358,7 +358,13 @@ export function ServerAISettings({
                 <div className="min-w-0">
                   <h3 className="break-words text-sm font-medium">{row.label}</h3>
                   <p className="text-sm text-muted-foreground">
-                    {row.state !== "active" ? t`Reconnect` : row.enabled ? t`Enabled` : t`Disabled`}
+                    {row.blockedByPolicy
+                      ? t`Blocked by the server administrator`
+                      : row.state !== "active"
+                        ? t`Reconnect`
+                        : row.enabled
+                          ? t`Enabled`
+                          : t`Disabled`}
                   </p>
                 </div>
                 {value.canManageWorkspace ? (
@@ -381,7 +387,7 @@ export function ServerAISettings({
                   >
                     <span className="min-w-0 break-all">{model}</span>
                     <span className="text-xs text-muted-foreground">
-                      {!row.allowedModels.includes(model)
+                      {row.blockedByPolicy || !row.allowedModels.includes(model)
                         ? t`Unavailable`
                         : model === row.defaultModelId && row.isDefault && row.enabled
                           ? t`Default`
@@ -408,7 +414,10 @@ export function ServerAISettings({
                         <Trans>Enabled</Trans>
                         <Switch
                           checked={row.enabled}
-                          disabled={busy || (!row.enabled && row.state !== "active")}
+                          disabled={
+                            busy ||
+                            (!row.enabled && (row.blockedByPolicy || row.state !== "active"))
+                          }
                           onCheckedChange={(enabled) => void configure(row, { enabled })}
                         />
                       </Label>
@@ -416,7 +425,9 @@ export function ServerAISettings({
                         <Trans>Default</Trans>
                         <Switch
                           checked={row.enabled && row.isDefault}
-                          disabled={busy || !row.enabled || row.state !== "active"}
+                          disabled={
+                            busy || row.blockedByPolicy || !row.enabled || row.state !== "active"
+                          }
                           onCheckedChange={(isDefault) => void configure(row, { isDefault })}
                         />
                       </Label>
@@ -424,7 +435,9 @@ export function ServerAISettings({
                         <Trans>Fallback</Trans>
                         <Switch
                           checked={row.fallback}
-                          disabled={busy || !row.enabled || row.state !== "active"}
+                          disabled={
+                            busy || row.blockedByPolicy || !row.enabled || row.state !== "active"
+                          }
                           onCheckedChange={(fallback) => void configure(row, { fallback })}
                         />
                       </Label>
@@ -496,6 +509,11 @@ export function ServerAISettings({
                   {value.accounts.map((row) => (
                     <div className="grid gap-2 border-b border-border pb-3" key={row.id}>
                       <span className="text-sm font-medium">{row.label}</span>
+                      {row.blockedByPolicy ? (
+                        <span className="text-sm text-muted-foreground">
+                          <Trans>Blocked by the server administrator</Trans>
+                        </span>
+                      ) : null}
                       {row.isDefault ? (
                         <span className="text-sm text-muted-foreground">
                           <Trans>Default</Trans>
@@ -563,7 +581,7 @@ export function ServerAISettings({
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={busy || row.state !== "active"}
+                            disabled={busy || row.blockedByPolicy || row.state !== "active"}
                             onClick={() =>
                               void action((signal) =>
                                 owner.client.serverAI.offer(

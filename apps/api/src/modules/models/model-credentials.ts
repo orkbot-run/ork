@@ -5,11 +5,14 @@
 
 import type { CodexLiveCatalog } from "@orkbot/adapters";
 import {
+  assertModelEndpointAllowed,
+  assertModelProviderAllowed,
   buildModelConnectPlaintext,
   CHATGPT_OAUTH_PROVIDER,
   codexLiveListsModel,
   compatibleThinkingLevels,
   defaultCatalogModelId,
+  ModelProviderBlockedError,
   modelCredentialDto,
   parseModelSecret,
   prepareAllowedThinkingLevels as prepareModelThinkingLevels,
@@ -44,6 +47,35 @@ import type { RouterDeps } from "#modules/platform/router";
 import { withSerializableRetry } from "#modules/platform/serializable-retry";
 import { assertNoDanglingModelPins } from "./model-pins.js";
 
+/** Keep policy failures readable at the RPC boundary, including connector validation. */
+export function assertAllowedModelProvider(provider: string) {
+  try {
+    assertModelProviderAllowed(provider);
+  } catch (error) {
+    if (error instanceof ModelProviderBlockedError)
+      throw new ORPCError("FORBIDDEN", { message: error.message, cause: error });
+    throw error;
+  }
+}
+
+export function assertAllowedModelEndpoint(provider: string, baseUrl?: string | null) {
+  try {
+    assertModelEndpointAllowed(provider, baseUrl);
+  } catch (error) {
+    if (error instanceof ModelProviderBlockedError)
+      throw new ORPCError("FORBIDDEN", { message: error.message, cause: error });
+    throw error;
+  }
+}
+
+export function assertAllowedModelSecret(provider: string, plaintext: string) {
+  const secret = parseModelSecret(plaintext);
+  assertAllowedModelEndpoint(
+    provider,
+    secret.kind === "openai_compatible" ? secret.baseUrl : undefined,
+  );
+}
+
 export function prepareAllowedThinkingLevels(
   deps: RouterDeps,
   actor: Actor,
@@ -51,6 +83,7 @@ export function prepareAllowedThinkingLevels(
   modelId: string,
   resolution?: { credentialId?: string | null },
 ) {
+  assertAllowedModelProvider(provider);
   return prepareModelThinkingLevels(
     { prisma: deps.prisma, secretStore: deps.secrets },
     actor,
@@ -123,6 +156,7 @@ export async function prepareModelCredential(
   input: ModelCredentialInput,
   codexCatalog: CodexLiveCatalog,
 ) {
+  assertAllowedModelSecret(input.provider, input.plaintext);
   throwIfAborted(input.signal);
   const parsedSecret = parseModelSecret(input.plaintext);
   const requestedModelId = usableModelId(input.modelId);
@@ -317,6 +351,8 @@ export function createModelConnector(deps: RouterDeps, codexCatalog: CodexLiveCa
     input: ModelConnectInput,
     signal: AbortSignal | undefined,
   ) => {
+    assertAllowedModelProvider(input.provider);
+    if (input.baseUrl !== undefined) assertAllowedModelEndpoint(input.provider, input.baseUrl);
     const credential = await modelConnectionTarget(deps, actor, input.provider, input.credentialId);
     let plaintext: string;
     const secretValues = [input.apiKey ?? "", ...Object.values(input.headers ?? {})];
@@ -331,10 +367,12 @@ export function createModelConnector(deps: RouterDeps, codexCatalog: CodexLiveCa
         if (secret) {
           try {
             previousPlaintext = await deps.secrets.load(secret.ciphertext, credential.secretId);
+            assertAllowedModelSecret(input.provider, previousPlaintext);
           } catch (error) {
             // Explicit key replacement must still succeed when the prior ciphertext is
             // unreadable. Omitting visionModelIds keeps a partial one-model list from
             // wiping other enabled models.
+            if (error instanceof ORPCError && error.code === "FORBIDDEN") throw error;
             if (input.apiKey === undefined) throw error;
             if (input.provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
               omitVisionModelIds = true;
@@ -346,6 +384,7 @@ export function createModelConnector(deps: RouterDeps, codexCatalog: CodexLiveCa
         omitVisionModelIds,
         allowPrivateEndpoint: mayUsePrivateEndpoint(deps),
       });
+      assertAllowedModelSecret(input.provider, plaintext);
       if (input.provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
         const saved = parseModelSecret(plaintext);
         if (saved.kind === "openai_compatible") {
@@ -378,6 +417,9 @@ export function createModelConnector(deps: RouterDeps, codexCatalog: CodexLiveCa
         }
       }
     } catch (error) {
+      if (error instanceof ORPCError && error.code === "FORBIDDEN") throw error;
+      if (error instanceof ModelProviderBlockedError)
+        throw new ORPCError("FORBIDDEN", { message: error.message, cause: error });
       throw new ORPCError("BAD_REQUEST", {
         message:
           error instanceof Error

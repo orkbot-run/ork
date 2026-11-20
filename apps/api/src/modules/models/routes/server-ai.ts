@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { AIActor } from "@orkbot/adapters";
-import { AIConnectionError, listPiCatalog } from "@orkbot/adapters";
+import {
+  AIConnectionError,
+  filterAllowedModelCatalog,
+  listPiCatalog,
+  ModelProviderBlockedError,
+} from "@orkbot/adapters";
 import type { Actor, ModelConnectInput } from "@orkbot/contracts";
 import { canonicalPiProviderId } from "@orkbot/contracts";
 import { ORPCError } from "@orpc/server";
@@ -20,6 +25,8 @@ export function serverAIRoutes(ctx: RouterContext) {
       return await work();
     } catch (error) {
       if (error instanceof ORPCError) throw error;
+      if (error instanceof ModelProviderBlockedError)
+        throw new ORPCError("FORBIDDEN", { message: error.message });
       if (error instanceof AIConnectionError) {
         const code = (
           {
@@ -50,7 +57,12 @@ export function serverAIRoutes(ctx: RouterContext) {
         context.signal,
       );
       return { actor, plaintext: result.plaintext };
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof ModelProviderBlockedError ||
+        (error instanceof ORPCError && error.code === "FORBIDDEN")
+      )
+        throw error;
       throw new ORPCError("BAD_REQUEST", { message: "Could not verify the AI connection." });
     }
   };
@@ -92,7 +104,7 @@ export function serverAIRoutes(ctx: RouterContext) {
           const actor = await actorOf(context);
           if (!(await deps.serverAI!.permissions(actor)).canManageServer)
             throw new ORPCError("FORBIDDEN");
-          return listPiCatalog();
+          return filterAllowedModelCatalog(listPiCatalog());
         }),
       ),
       status: authed.serverAI.status.handler(({ context }) =>

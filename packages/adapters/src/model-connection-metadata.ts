@@ -62,6 +62,7 @@ const definitions: Readonly<Record<string, ConnectionDefinition>> = {
     metadata: {
       presets: dedupeModelConnectionPresets([
         {
+          id: "ollama-cloud",
           label: "Ollama Cloud",
           baseUrl: "https://ollama.com/v1",
           apiProtocol: "chat-completions",

@@ -70,6 +70,8 @@ services:
   api:
     <<: *runtime
     stop_grace_period: 30s
+    environment:
+      ORKBOT_MODEL_PROVIDER_ALLOWLIST: "${ORKBOT_MODEL_PROVIDER_ALLOWLIST:-}"
     working_dir: /app/apps/api
     command: [node, /app/infra/compose/selfhost-runtime.mjs, /run/orkbot/environment.json, node, --enable-source-maps, dist/index.js]
     volumes: [api-configuration:/run/orkbot:ro, server-data:/data]
@@ -95,6 +97,7 @@ services:
     environment:
       RUN_DRAIN_ENABLED: "${RUN_DRAIN_ENABLED:-true}"
       RUN_DRAIN_MS: "${RUN_DRAIN_MS:-}"
+      ORKBOT_MODEL_PROVIDER_ALLOWLIST: "${ORKBOT_MODEL_PROVIDER_ALLOWLIST:-}"
     pids_limit: 512
     mem_limit: 2g
     volumes: [worker-configuration:/run/orkbot:ro, server-data:/data]

@@ -66,6 +66,26 @@ function fixture(canManageServer = true) {
 }
 
 describe("installation AI RPC boundary", () => {
+  it("filters the managed catalog and blocks setup before probing under the operator policy", async () => {
+    vi.stubEnv("ORKBOT_MODEL_PROVIDER_ALLOWLIST", "ollama-cloud");
+    try {
+      const { client, serverAI, deps } = fixture();
+      const catalog = await client.serverAI.catalog();
+      expect(new Set(catalog.map((entry) => entry.provider))).toEqual(
+        new Set(["openai-compatible"]),
+      );
+      expect(catalog.find((entry) => entry.connection?.presets)?.connection).toMatchObject({
+        customEndpointAllowed: false,
+        presets: [{ id: "ollama-cloud" }],
+      });
+      await expect(client.serverAI.create(input)).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(deps.modelConnectionFetch).not.toHaveBeenCalled();
+      expect(serverAI.create).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("checks explicit server delegation before probing or receiving a saved credential", async () => {
     const { client, serverAI, deps, principal } = fixture(false);
     const status = await client.serverAI.status();

@@ -1,9 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { ModelCatalogEntry, RpcOutput } from "@orkbot/contracts";
+import type { ModelApiProtocol, ModelCatalogEntry, RpcOutput } from "@orkbot/contracts";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
-import { formatAIBudget, parseAIBudget, ServerAIOAuthAttempt } from "@orkbot/core";
+import {
+  formatAIBudget,
+  modelConnectionOptions,
+  parseAIBudget,
+  ServerAIOAuthAttempt,
+} from "@orkbot/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Text, View } from "react-native";
 import type { rpc } from "../lib/api";
@@ -36,11 +41,25 @@ export function ServerAIAccountForm({
       catalog.filter((row) => row.protocol !== "decisions").map((row) => [row.provider, row]),
     ).values(),
   ];
-  const [provider, setProvider] = useState(account?.provider ?? providers[0]?.provider ?? "");
+  const options = modelConnectionOptions(catalog.filter((row) => row.protocol !== "decisions"));
+  const initialOption = account
+    ? undefined
+    : (options.find((option) => option.id === providers[0]?.provider && !option.baseUrl) ??
+      options.find((option) => option.id === providers[0]?.provider) ??
+      options[0]);
+  const optionKey = (option: (typeof options)[number]) =>
+    option.baseUrl ? JSON.stringify([option.id, option.baseUrl]) : option.id;
+  const [choice, setChoice] = useState(
+    initialOption ? optionKey(initialOption) : (account?.provider ?? ""),
+  );
+  const [provider, setProvider] = useState(account?.provider ?? initialOption?.id ?? "");
   const [label, setLabel] = useState(account?.label ?? "");
   const [models, setModels] = useState(account?.models.join("\n") ?? "");
   const [key, setKey] = useState("");
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(initialOption?.baseUrl ?? "");
+  const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>(
+    initialOption?.apiProtocol ?? "chat-completions",
+  );
   const [budget, setBudget] = useState(formatAIBudget(account?.monthlyBudgetMicros ?? null));
   const [concurrency, setConcurrency] = useState(String(account?.concurrencyLimit ?? 8));
   const [routing, setRouting] = useState<Record<string, string>>({});
@@ -150,7 +169,7 @@ export function ServerAIAccountForm({
         apiKey: key.trim(),
         credentialId: null,
         ...(provider === OPENAI_COMPATIBLE_PROVIDER_ID
-          ? { baseUrl: url.trim(), enabledModelIds: allowed }
+          ? { baseUrl: url.trim(), enabledModelIds: allowed, apiProtocol }
           : {}),
         ...(fields.length ? { routing } : {}),
       };
@@ -192,14 +211,16 @@ export function ServerAIAccountForm({
         />
         <MenuPickerMenu
           label={t("Provider")}
-          choices={providers.map((row) => ({
-            key: row.provider,
-            label: row.providerName ?? row.provider,
-          }))}
-          value={provider}
+          choices={options.map((option) => ({ key: optionKey(option), label: option.name }))}
+          value={choice}
           disabled={locked || !!account}
           onChange={(value) => {
-            setProvider(value);
+            const option = options.find((option) => optionKey(option) === value);
+            if (!option) return;
+            setChoice(value);
+            setProvider(option.id);
+            setUrl(option.baseUrl ?? "");
+            setApiProtocol(option.apiProtocol ?? "chat-completions");
             setModels("");
             setKey("");
             setRouting({});
@@ -208,7 +229,11 @@ export function ServerAIAccountForm({
           <View>
             <SettingsRow
               title={t("Provider")}
-              value={providers.find((row) => row.provider === provider)?.providerName ?? provider}
+              value={
+                options.find((option) => optionKey(option) === choice)?.name ??
+                selected?.providerName ??
+                provider
+              }
               chevron="down"
             />
           </View>
@@ -233,7 +258,9 @@ export function ServerAIAccountForm({
             keyboardType="url"
             autoCapitalize="none"
             autoCorrect={false}
-            editable={!locked}
+            editable={
+              !locked && (!!account || selected?.connection?.customEndpointAllowed !== false)
+            }
           />
         ) : null}
         {fields.map((field) => (

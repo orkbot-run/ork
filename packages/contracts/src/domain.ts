@@ -1605,6 +1605,7 @@ export const ModelRoutingFieldSchema = z.object({
 });
 export type ModelRoutingField = z.infer<typeof ModelRoutingFieldSchema>;
 export const ModelConnectionPresetSchema = z.object({
+  id: z.string().trim().min(1).max(100).optional(),
   label: z.string().trim().min(1).max(80),
   baseUrl: z
     .string()
@@ -1628,11 +1629,13 @@ export const ModelConnectionMetadataSchema = z.object({
     .refine((fields) => new Set(fields.map((field) => field.key)).size === fields.length)
     .optional(),
   presets: z.array(ModelConnectionPresetSchema).max(16).optional(),
+  customEndpointAllowed: z.boolean().optional(),
 });
 export type ModelConnectionMetadata = z.infer<typeof ModelConnectionMetadataSchema>;
 
 export const ModelCredentialSchema = z.object({
   managed: z.boolean().optional(),
+  blockedByPolicy: z.boolean().optional(),
   /** Computed space preference order; credentials themselves remain newest first. */
   preferenceRank: z.number().int().nonnegative().optional(),
   ...ModelContextLimitsSchema.shape,

@@ -71,7 +71,11 @@ export function ProvidersSection({
                 <span className="min-w-0 flex-1 truncate text-[15px] text-foreground">
                   {nameOf(credential)}
                 </span>
-                {credential.reconnectRequired ? (
+                {credential.blockedByPolicy ? (
+                  <span className="text-end text-[13px] text-warning">
+                    <Trans>Blocked by the server administrator</Trans>
+                  </span>
+                ) : credential.reconnectRequired ? (
                   <span className="shrink-0 text-[13px] text-warning">
                     <Trans>Sign in again</Trans>
                   </span>

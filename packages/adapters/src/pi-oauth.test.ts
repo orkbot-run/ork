@@ -2354,8 +2354,29 @@ describe("PiOAuthLogins hand-off between API processes", () => {
         scope: { not: { startsWith: "server-ai:" } },
         createdAt: { gte: expect.any(Date) },
       },
-      select: { ciphertext: true },
+      select: { ciphertext: true, provider: true },
     });
+  });
+
+  it("refuses a blocked provider's OAuth handoff before loading its verifier", async () => {
+    const { store, secrets } = handoffStore();
+    const first = apiProcess(store);
+    const started = await first.logins.begin({ ...member, provider: "anthropic" });
+    const second = apiProcess(store);
+    vi.stubEnv("ORKBOT_MODEL_PROVIDER_ALLOWLIST", "openrouter");
+    try {
+      await expect(second.logins.submit(started.loginId, member, "the-code")).rejects.toThrow(
+        "This model provider is blocked by the server administrator.",
+      );
+      expect(() => first.logins.complete(started.loginId, member)).toThrow(
+        "This model provider is blocked by the server administrator.",
+      );
+      expect(secrets.load).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      await first.logins.cancel(started.loginId, member);
+      await second.logins.cancel(started.loginId, member);
+    }
   });
 
   it("does not resume an expired sign-in", async () => {

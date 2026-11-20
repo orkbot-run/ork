@@ -140,6 +140,7 @@ export * from "./model-connect-check.js";
 export * from "./model-connection-metadata.js";
 export { hostedModelCreditObserver } from "./model-credit-observer.js";
 export * from "./model-credit-reconciler.js";
+export * from "./model-provider-policy.js";
 export * from "./model-roles.js";
 export * from "./model-selection.js";
 export * from "./model-vision.js";

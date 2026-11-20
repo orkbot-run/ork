@@ -13,6 +13,7 @@ import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { AgentRunRequest } from "@orkbot/adapter-kit";
 import { canonicalPiProviderId, usableModelId } from "@orkbot/contracts";
 import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";
+import { assertModelEndpointAllowed } from "./model-provider-policy.js";
 import { PiRuntimeCredentialStore, toOAuthCredential } from "./pi-credentials.js";
 import { liveModelSibling, withLiveImageInput } from "./pi-live-model.js";
 import { registerLocalProvider } from "./pi-local-provider.js";
@@ -86,6 +87,7 @@ export function resolveRuntimeModel(modelConfig: AgentRunRequest["model"]): {
   const provider = canonicalPiProviderId(
     modelConfig.provider === "scripted" ? "openrouter" : modelConfig.provider,
   );
+  assertModelEndpointAllowed(provider, modelConfig.baseUrl);
   const envDefaultModel = process.env.PI_DEFAULT_MODEL?.trim();
   const envDefaultProvider = process.env.PI_DEFAULT_PROVIDER?.trim() || "openrouter";
   const requestedId =

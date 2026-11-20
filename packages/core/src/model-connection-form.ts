@@ -51,7 +51,7 @@ export function modelConnectionOptions(
 ): ModelConnectionOption[] {
   const options = new Map<string, ModelConnectionOption>();
   for (const entry of catalog) {
-    if (!options.has(entry.provider))
+    if (entry.connection?.customEndpointAllowed !== false && !options.has(entry.provider))
       options.set(entry.provider, {
         id: entry.provider,
         name: entry.providerName ?? entry.provider,
@@ -76,10 +76,10 @@ export function modelConnectionOptions(
 
 export function hasModelConnection(
   option: ModelConnectionOption,
-  credentials: readonly Pick<ModelCredential, "provider" | "baseUrl">[],
+  credentials: readonly Pick<ModelCredential, "provider" | "baseUrl" | "blockedByPolicy">[],
 ): boolean {
   return credentials.some((credential) => {
-    if (credential.provider !== option.id) return false;
+    if (credential.blockedByPolicy || credential.provider !== option.id) return false;
     if (!option.baseUrl) return true;
     try {
       return (

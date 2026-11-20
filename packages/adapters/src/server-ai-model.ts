@@ -4,6 +4,7 @@
 import type { AgentRunModel, SecretStore } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { modelFromAIConnection } from "./ai-connection-model.js";
+import { ModelProviderBlockedError } from "./model-provider-policy.js";
 import { toOAuthCredential } from "./pi-credentials.js";
 import { secretValuesToRedact } from "./pi-oauth.js";
 import { resolveServerAIAuth, retireServerAIAuth } from "./server-ai-auth.js";
@@ -32,7 +33,8 @@ export async function serverAIModel(
       resolved.value.apiKey,
       { allowPrivateEndpoint: deps.allowPrivateEndpoint },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof ModelProviderBlockedError) throw error;
     throw new AIConnectionError("unavailable");
   }
   const observer = serverAIObserver(deps.catalog, actor, connectionId, modelId, resolved.provider);

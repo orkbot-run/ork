@@ -572,7 +572,13 @@ export const appContract = {
         managed: z.boolean().optional(),
         personalModelsAllowed: z.boolean().optional(),
         modelSetupMode: z.enum(["pending", "organization", "personal", "legacy"]).optional(),
-        policy: z.object({ provider: z.string(), modelId: z.string() }).nullable(),
+        policy: z
+          .object({
+            provider: z.string(),
+            modelId: z.string(),
+            blockedByPolicy: z.boolean().optional(),
+          })
+          .nullable(),
       }),
     ),
     setWorkspacePolicy: oc.input(ModelConnectInputSchema).output(z.object({ ok: z.literal(true) })),

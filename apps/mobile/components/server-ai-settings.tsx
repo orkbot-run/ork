@@ -224,26 +224,34 @@ export function ServerAISettings({
           <SettingsGroup key={row.id} label={row.label}>
             <SettingsRow
               title={row.provider}
-              value={row.state === "active" ? (row.defaultModelId ?? "") : t("Reconnect")}
+              value={
+                row.blockedByPolicy
+                  ? t("Blocked by the server administrator")
+                  : row.state === "active"
+                    ? (row.defaultModelId ?? "")
+                    : t("Reconnect")
+              }
             />
             {value.canManageWorkspace ? (
               <>
                 <SettingsSwitch
                   label={t("Enabled")}
                   value={row.enabled}
-                  disabled={busy || (!row.enabled && row.state !== "active")}
+                  disabled={
+                    busy || (!row.enabled && (row.blockedByPolicy || row.state !== "active"))
+                  }
                   onChange={(enabled) => void configure(row, { enabled })}
                 />
                 <SettingsSwitch
                   label={t("Default")}
                   value={row.isDefault && row.enabled}
-                  disabled={busy || !row.enabled || row.state !== "active"}
+                  disabled={busy || row.blockedByPolicy || !row.enabled || row.state !== "active"}
                   onChange={(isDefault) => void configure(row, { isDefault })}
                 />
                 <SettingsSwitch
                   label={t("Fallback")}
                   value={row.fallback}
-                  disabled={busy || !row.enabled || row.state !== "active"}
+                  disabled={busy || row.blockedByPolicy || !row.enabled || row.state !== "active"}
                   onChange={(fallback) => void configure(row, { fallback })}
                 />
               </>
@@ -303,7 +311,9 @@ export function ServerAISettings({
                 ) : null}
                 <SettingsRow
                   title={row.label}
-                  detail={row.provider}
+                  detail={
+                    row.blockedByPolicy ? t("Blocked by the server administrator") : row.provider
+                  }
                   onPress={() => {
                     setAdding(false);
                     setEditingAccount(editingAccount === row.id ? null : row.id);
@@ -329,7 +339,7 @@ export function ServerAISettings({
                 ) : (
                   <SettingsRow
                     title={t("Make available to organization")}
-                    disabled={busy || row.state !== "active"}
+                    disabled={busy || row.blockedByPolicy || row.state !== "active"}
                     onPress={() =>
                       void action((signal) =>
                         send(

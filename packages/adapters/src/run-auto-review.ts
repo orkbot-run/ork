@@ -21,6 +21,7 @@ import { DecisionAutoReviewProvider } from "./decision-auto-review.js";
 import { decisionModel } from "./decision-models.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { HttpDecisionProvider } from "./http-decisions.js";
+import { assertModelProviderAllowed, isModelProviderAllowed } from "./model-provider-policy.js";
 import type { EffectiveModelRole } from "./model-roles.js";
 import { findConnectedModelCredential, hasHostedModelCredits } from "./model-selection.js";
 import { resolveModelKey } from "./run-model.js";
@@ -47,7 +48,8 @@ export function selectAutoReviewCandidates(
   ];
   try {
     const checker = resolveAutoReviewChecker(env);
-    if (!checker) return candidates;
+    if (!checker)
+      return candidates.filter((candidate) => isModelProviderAllowed(candidate.provider));
     const configured = isAutoReviewCheckerConfigured({ env });
     // With no explicit choice, retain the legacy ability to use a member's key
     // for the deployment's model. A last-resort checker needs its own instance key.
@@ -70,7 +72,7 @@ export function selectAutoReviewCandidates(
       "provider_construction",
     );
   }
-  return candidates;
+  return candidates.filter((candidate) => isModelProviderAllowed(candidate.provider));
 }
 
 /** An organization-owned model is resolved once and owns the entire review. */
@@ -135,11 +137,15 @@ export async function prepareAutoReviewCheckers(
   }
   const personalModels = await deps.serverAIModels?.personalModelsAllowed(scope);
   if (personalModels === false) throw new AutoReviewConnectionUnavailableError();
-  const eligible =
-    personalModels === true ? candidates.filter((checker) => !checker.instance) : candidates;
+  const eligible = candidates.filter(
+    (checker) =>
+      (injectedReview || isModelProviderAllowed(checker.provider)) &&
+      (personalModels !== true || !checker.instance),
+  );
   if (eligible.length === 0) throw new AutoReviewConnectionUnavailableError();
   const providerFor = async (checker: AutoReviewCandidate): Promise<AutoReviewProvider> => {
     if (injectedReview) return injectedReview;
+    assertModelProviderAllowed(checker.provider);
     if (checker.instance && (checker.provider === "jev" || checker.provider === "scripted")) {
       try {
         return createAutoReviewProvider(checker.provider, { model: checker.model });

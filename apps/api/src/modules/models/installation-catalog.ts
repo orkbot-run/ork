@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { listPiCatalog } from "@orkbot/adapters";
+import { filterAllowedModelCatalog, isModelProviderAllowed, listPiCatalog } from "@orkbot/adapters";
 import type { Actor, ModelCatalogEntry, ModelCredential } from "@orkbot/contracts";
 import type { RouterDeps } from "#modules/platform/router";
 
@@ -14,10 +14,16 @@ export async function installationCatalog(
   if (!scoped || !deps.serverAI) return null;
   if (await deps.serverAIModels?.personalModelsAllowed(actor)) return null;
   if ((await deps.serverAI.setupMode(scoped)) === "pending") return [];
-  const catalog = listPiCatalog();
+  const catalog = filterAllowedModelCatalog(listPiCatalog());
   const offered = new Map<string, ModelCatalogEntry>();
   for (const account of await deps.serverAI.list(scoped)) {
-    if (!account.enabled || account.state !== "active") continue;
+    if (
+      !account.enabled ||
+      account.blockedByPolicy ||
+      account.state !== "active" ||
+      !isModelProviderAllowed(account.provider)
+    )
+      continue;
     for (const id of account.allowedModels.filter((model) => account.models.includes(model))) {
       const key = JSON.stringify([account.provider, id]);
       const known = catalog.find((row) => row.provider === account.provider && row.id === id);
@@ -42,7 +48,13 @@ export async function installationCredentials(
   if (await deps.serverAIModels?.personalModelsAllowed(actor)) return null;
   if ((await deps.serverAI.setupMode(scoped)) === "pending") return [];
   return (await deps.serverAI.list(scoped))
-    .filter((account) => account.enabled && account.state === "active")
+    .filter(
+      (account) =>
+        account.enabled &&
+        !account.blockedByPolicy &&
+        account.state === "active" &&
+        isModelProviderAllowed(account.provider),
+    )
     .map((account) => ({
       id: account.id,
       provider: account.provider,
