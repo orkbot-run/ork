@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 listing logic is preserved; live activity run identity follows LICENSE.md.
+
 import { ACTIVE_RUN_STATUSES, BACKGROUND_RUN_TRIGGERS, plainTextFromMarkdown } from "@orkbot/core";
 
 import type { PrismaClient } from "./client.js";
@@ -17,7 +21,7 @@ export const activeRunSelection = {
     trigger: { notIn: backgroundRunTriggers },
   },
   orderBy: { createdAt: "desc" as const },
-  select: { status: true, threadId: true },
+  select: { id: true, status: true, threadId: true },
 } as const;
 
 /** Waiting, running, then leased work wins over queued work, regardless of creation order. */

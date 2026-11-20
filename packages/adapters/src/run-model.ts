@@ -25,6 +25,11 @@ import {
   HostedModelCreditsRequiredError,
   hostedModelCreditObserver,
 } from "./model-credit-observer.js";
+import {
+  assertModelEndpointAllowed,
+  assertModelProviderAllowed,
+  ModelProviderBlockedError,
+} from "./model-provider-policy.js";
 import { resolveMemberMainModel, selectConfiguredModel } from "./model-roles.js";
 import {
   enabledOpenAiCompatibleModelIds,
@@ -63,6 +68,7 @@ export function runtimeFallbackModel(runtime: AgentRuntime) {
 
 export function isTerminalModelSetupError(error: unknown): boolean {
   return (
+    error instanceof ModelProviderBlockedError ||
     error instanceof UnavailableModelForAuthError ||
     error instanceof HostedModelCreditsRequiredError ||
     isRetiredModelCredentialError(error) ||
@@ -97,7 +103,9 @@ export async function fleetPrepareDeps(
       defaultModel: async () => {
         const [main, settings] = await Promise.all([
           resolveMemberMainModel(deps, scope),
-          deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+          deps.prisma.deploymentSettings.findUnique({
+            where: { id: "default" },
+          }),
         ]);
         const selected = selectConfiguredModel({
           override: null,
@@ -109,7 +117,10 @@ export async function fleetPrepareDeps(
             deployment: deps.deploymentModelConfigured ? resolveDeploymentModel() : null,
           },
         });
-        return { provider: selected.provider ?? null, model: selected.id ?? null };
+        return {
+          provider: selected.provider ?? null,
+          model: selected.id ?? null,
+        };
       },
     },
   };
@@ -164,9 +175,11 @@ export async function modelCreditBillingEnabled(
 
 export async function resolveModelKey(...args: Parameters<typeof resolveModelKeyMaterial>) {
   const [deps, userId, spaceId, , provider] = args;
+  assertModelProviderAllowed(provider);
   const billingEnabled = await modelCreditBillingEnabled(deps);
   const scope = { userId, spaceId };
   const personalAllowed = await deps.serverAIModels?.personalModelsAllowed(scope);
+  let creditConnectionZdr: boolean | undefined;
   if (personalAllowed === false)
     throw new Error("The organization model changed. Start the run again.");
   if (personalAllowed === true && !deps.runtime?.describe().capabilities.scripted)
@@ -176,6 +189,17 @@ export async function resolveModelKey(...args: Parameters<typeof resolveModelKey
     billingEnabled &&
     (await hasHostedModelCredits(deps.prisma, scope, provider))
   ) {
+    if (provider === "openrouter" && args[3]) {
+      const connection = args[3];
+      creditConnectionZdr = await withModelCredentialLock(connection.secretId, async () => {
+        const row = await deps.prisma.secret.findFirst({
+          where: { id: connection.secretId, userId, spaceId: null },
+        });
+        if (!row) throw new UnavailableModelForAuthError("Connect that model provider again.");
+        const secret = parseModelSecret(await deps.secretStore.load(row.ciphertext, row.id));
+        return secret.kind === "api_key" ? secret.zeroDataRetention : undefined;
+      });
+    }
     args[3] = null;
     // Funded managed backups use deployment credentials just like the primary.
     args[7] = { ...args[7], requireStoredSecret: false };
@@ -211,7 +235,12 @@ export async function resolveModelKey(...args: Parameters<typeof resolveModelKey
       : !credential && billingEnabled
         ? await hostedModelCreditObserver(deps.prisma, scope)
         : undefined;
-  return { ...material, apiKey: material.apiKey ?? runtimeKey, callObserver };
+  return {
+    ...material,
+    ...(creditConnectionZdr !== undefined ? { zeroDataRetention: creditConnectionZdr } : {}),
+    apiKey: material.apiKey ?? runtimeKey,
+    callObserver,
+  };
 }
 
 async function resolveModelKeyMaterial(
@@ -228,9 +257,13 @@ async function resolveModelKeyMaterial(
   provider: string,
   modelId: string,
   registerSecrets?: (values: string[]) => void,
-  { requireStoredSecret = false }: { requireStoredSecret?: boolean } = {},
+  {
+    requireStoredSecret = false,
+    deploymentApiKey,
+  }: { requireStoredSecret?: boolean; deploymentApiKey?: string } = {},
 ): Promise<{
   apiKey?: string;
+  zeroDataRetention?: boolean;
   routing?: AgentRunRequest["model"]["routing"];
   accountId?: string;
   gatewayId?: string;
@@ -257,6 +290,7 @@ async function resolveModelKeyMaterial(
   ownCredential?: true;
   redact: string[];
 }> {
+  assertModelProviderAllowed(provider);
   if (credential) {
     return withModelCredentialLock(credential.secretId, async () => {
       const row = await deps.prisma.secret.findFirst({
@@ -273,7 +307,12 @@ async function resolveModelKeyMaterial(
         return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
       }
       const plaintext = await deps.secretStore.load(row.ciphertext, row.id);
-      registerSecrets?.(secretValuesToRedact(parseModelSecret(plaintext)));
+      const storedSecret = parseModelSecret(plaintext);
+      assertModelEndpointAllowed(
+        provider,
+        storedSecret.kind === "openai_compatible" ? storedSecret.baseUrl : undefined,
+      );
+      registerSecrets?.(secretValuesToRedact(storedSecret));
       const persist = persistStoredModelSecret(
         deps.prisma,
         deps.secretStore,
@@ -357,6 +396,8 @@ async function resolveModelKeyMaterial(
       cloudflareProviderEnv({ provider, accountId, gatewayId });
       return {
         apiKey: resolved.apiKey,
+        zeroDataRetention:
+          resolved.secret.kind === "api_key" ? resolved.secret.zeroDataRetention : undefined,
         routing: routing?.routing,
         accountId,
         gatewayId,
@@ -442,7 +483,10 @@ async function resolveModelKeyMaterial(
   }
   if (requireStoredSecret) throw new Error("Backup model credential is no longer available");
   cloudflareProviderEnv({ provider });
-  return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
+  return {
+    apiKey: deploymentApiKey ?? deploymentKeyFor(deps, provider),
+    redact: [],
+  };
 }
 
 /** Translate resolved credentials and capabilities consistently for every run path. */
@@ -452,6 +496,9 @@ export function resolvedModelRunFields(
   return {
     apiKey: resolved.oauth ? undefined : resolved.apiKey,
     callObserver: resolved.callObserver,
+    ...(resolved.zeroDataRetention !== undefined
+      ? { zeroDataRetention: resolved.zeroDataRetention }
+      : {}),
     ...(resolved.routing ? { routing: resolved.routing } : {}),
     ...(resolved.accountId ? { accountId: resolved.accountId } : {}),
     ...(resolved.gatewayId ? { gatewayId: resolved.gatewayId } : {}),
@@ -489,6 +536,7 @@ export async function resolveConnectedModelKey(
   requireStoredSecret = false,
   credentialId?: string,
 ) {
+  assertModelProviderAllowed(provider);
   const central = Boolean(await deps.serverAIModels?.actor(scope));
   const hostedProvider =
     !central && (await modelCreditBillingEnabled(deps))
@@ -664,7 +712,9 @@ export async function resolveRunModel(
     provider,
     id,
     undefined,
-    { requireStoredSecret: central && !deps.runtime.describe().capabilities.scripted },
+    {
+      requireStoredSecret: central && !deps.runtime.describe().capabilities.scripted,
+    },
   );
   return {
     provider,

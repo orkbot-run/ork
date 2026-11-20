@@ -1,9 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Provider policy changes follow LICENSE.md.
 
-import type { CodexLiveCatalog, parseModelSecret } from "@orkbot/adapters";
-import { findConnectedModelCredential, validateConnectedModelChoice } from "@orkbot/adapters";
+import type { CodexLiveCatalog } from "@orkbot/adapters";
+import {
+  findConnectedModelCredential,
+  isModelEndpointAllowed,
+  isModelProviderAllowed,
+  loadStoredModelSecret,
+  MODEL_PROVIDER_BLOCKED_MESSAGE,
+  parseModelSecret,
+  validateConnectedModelChoice,
+} from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import { OPENAI_COMPATIBLE_PROVIDER_ID, usableModelId } from "@orkbot/contracts";
 import { modelRoleTarget, runAsSystem } from "@orkbot/db";
@@ -33,7 +42,12 @@ async function compatibleModelPins(
           select: { ...pin, name: true },
         }),
         deps.prisma.routine.findMany({
-          where: { ...where, modelProvider: provider, bot: { archivedAt: null } },
+          where: {
+            ...where,
+            modelProvider: provider,
+            bot: { archivedAt: null },
+            completedOneShotAt: null,
+          },
           select: { ...pin, name: true },
         }),
         deps.prisma.userModelRoleChoice.findMany({ where: { ...where, provider }, select: role }),
@@ -154,5 +168,52 @@ export async function assertRoutineModel(
     model.modelId,
     { codexCatalog },
   );
-  if (message) throw new ORPCError("BAD_REQUEST", { message });
+  if (message)
+    throw new ORPCError(message === MODEL_PROVIDER_BLOCKED_MESSAGE ? "FORBIDDEN" : "BAD_REQUEST", {
+      message,
+    });
+}
+
+export async function canCopyModelPin(
+  deps: RouterDeps,
+  actor: Actor,
+  pin: {
+    modelProvider?: string | null;
+    modelId?: string | null;
+    modelConnectionId?: string | null;
+  },
+): Promise<boolean> {
+  const provider = pin.modelProvider;
+  if (!provider || isModelEndpointAllowed(provider)) return true;
+  if (!isModelProviderAllowed(provider) || !pin.modelId) return false;
+  const managed = await deps.serverAIModels?.validateSelection(actor, {
+    provider,
+    modelId: pin.modelId,
+    connectionId: pin.modelConnectionId ?? undefined,
+  });
+  if (managed != null) return managed;
+  const credential = await findConnectedModelCredential(
+    deps.prisma,
+    deps.secrets,
+    actor,
+    provider,
+    pin.modelId,
+    {
+      credentialId: pin.modelConnectionId,
+    },
+  );
+  if (!credential) return false;
+  const stored = await loadStoredModelSecret(
+    deps.prisma,
+    deps.secrets,
+    actor.userId,
+    credential.secretId,
+  );
+  if (stored.status !== "loaded") return false;
+  try {
+    const secret = parseModelSecret(stored.plaintext);
+    return secret.kind === "openai_compatible" && isModelEndpointAllowed(provider, secret.baseUrl);
+  } catch {
+    return false;
+  }
 }

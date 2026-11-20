@@ -11,6 +11,7 @@ import {
   ServerError,
   TooManyRequestsError,
 } from "@modelcontextprotocol/sdk/server/auth/errors.js";
+import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import { createLogger, createTestSink, getLogger, installLogger } from "@orkbot/logging";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { ConnectorRegistry } from "./composio-connector.js";
@@ -21,7 +22,7 @@ import { DIRECT_TOOL_LIMIT } from "./lazy-tool-catalog.js";
 import { MCP_CLOSE_TIMEOUT_MS } from "./mcp-close.js";
 import { allowlistDrift, McpConnector } from "./mcp-connector.js";
 import type { McpOAuthBroker, OAuthMaterial } from "./mcp-oauth.js";
-import { StoredMcpOAuthProvider } from "./mcp-oauth.js";
+import { McpOAuthGrantUpdatedError, StoredMcpOAuthProvider } from "./mcp-oauth.js";
 import { McpSession } from "./mcp-transport.js";
 import { InMemoryRealtimeFanout } from "./realtime.js";
 import { checkRoutineWatch, validateRoutineWatch } from "./routine-watch.js";
@@ -62,6 +63,18 @@ const ASSIGNMENT = {
   allowedTools: [],
   server: SERVER,
 };
+
+/** Simulate the server announcing a catalog change before faulting discovery. */
+async function notifyToolListChanged(connector: McpConnector): Promise<void> {
+  const { sessions } = connector as unknown as { sessions: Map<string, { session: McpSession }> };
+  for (const { session } of sessions.values()) {
+    session.client.transport?.onmessage?.({
+      jsonrpc: "2.0",
+      method: "notifications/tools/list_changed",
+    });
+  }
+  await Promise.resolve();
+}
 
 const TEST_NETWORK = {
   // Read the global per call so a fetch stubbed after construction still wins.
@@ -250,6 +263,8 @@ describe("MCP connector session cache", () => {
       if (scenario === "revision") assignment.server.revision += 1;
       else if (scenario.startsWith("expired")) state.sessionNotFound = 1;
       else state.failNext = true;
+      if (scenario === "discovery failure" || scenario === "expired listing")
+        await notifyToolListChanged(connector);
       const result = scenario.includes("call") ? execute() : connector.discoverTools(context);
       await vi.advanceTimersByTimeAsync(MCP_CLOSE_TIMEOUT_MS);
       if (scenario === "call failure") expect(await result).toMatchObject([{ type: "error" }]);
@@ -776,6 +791,7 @@ describe("MCP connector session cache", () => {
     await expect(connector.discoverTools(context)).resolves.not.toEqual([]);
 
     state.failNext = true;
+    await notifyToolListChanged(connector);
     const close = vi.spyOn(McpSession.prototype, "close").mockRejectedValue(new Error("busy"));
     try {
       await expect(connector.discoverTools(context)).resolves.toEqual(unavailableOnly());
@@ -1270,6 +1286,121 @@ describe("MCP connector session cache", () => {
     await connector.close();
   });
 
+  it("keeps concurrent discovery alive when another run cancels its listing", async () => {
+    const state = { failNext: false, initializations: 0 };
+    const baseFetch = mcpFetch(state);
+    let firstStarted!: () => void;
+    const firstRequest = new Promise<void>((resolve) => {
+      firstStarted = resolve;
+    });
+    let secondStarted!: () => void;
+    const secondRequest = new Promise<void>((resolve) => {
+      secondStarted = resolve;
+    });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let lists = 0;
+    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (request.method === "POST") {
+        const message = await request.clone().json();
+        if (message.method === "tools/list") {
+          lists += 1;
+          if (lists === 1) {
+            firstStarted();
+            return new Response(null, { status: 202 });
+          }
+          secondStarted();
+          await released;
+        }
+      }
+      return baseFetch(input, init);
+    });
+    const connector = new McpConnector(
+      {
+        mcpServer: NO_SHARED_SERVERS,
+        botMcpServer: { findMany: vi.fn().mockResolvedValue([ASSIGNMENT]) },
+      } as never,
+      {} as never,
+      { network: TEST_NETWORK },
+    );
+    const controller = new AbortController();
+    const context = { spaceId: "w1", userId: "u1", botId: "bot-1", signal: controller.signal };
+    try {
+      const first = connector.discoverTools(context as never);
+      await firstRequest;
+      const second = connector.discoverTools({
+        ...context,
+        signal: new AbortController().signal,
+      } as never);
+      await secondRequest;
+      controller.abort(new Error("cancelled run"));
+      await first;
+      release();
+      expect((await second).map((entry) => entry.name)).toEqual(["mcp__demo__echo"]);
+      expect(state.initializations).toBe(1);
+      expect(lists).toBe(2);
+    } finally {
+      release();
+      await connector.close();
+    }
+  });
+
+  it("reuses discovery across runs while applying current bot permissions and fresh probes", async () => {
+    const state = {
+      failNext: false,
+      initializations: 0,
+      tools: [
+        { name: "first", inputSchema: { type: "object" } },
+        { name: "second", inputSchema: { type: "object" } },
+      ],
+    };
+    const fetch = mcpFetch(state);
+    vi.stubGlobal("fetch", fetch);
+    const assignment = { ...ASSIGNMENT, allowAllTools: false, allowedTools: ["first"] };
+    const connector = new McpConnector(
+      {
+        mcpServer: NO_SHARED_SERVERS,
+        botMcpServer: { findMany: vi.fn(async () => [assignment]) },
+      } as never,
+      {} as never,
+      { network: TEST_NETWORK },
+    );
+    const context = {
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never;
+    try {
+      expect(
+        (await connector.discoverTools(context)).map((entry) => entry.route?.toolName),
+      ).toEqual(["first"]);
+      const requests = fetch.mock.calls.length;
+      assignment.allowedTools = ["second"];
+      expect(
+        (await connector.discoverTools(context)).map((entry) => entry.route?.toolName),
+      ).toEqual(["second"]);
+      expect(fetch.mock.calls).toHaveLength(requests);
+      state.tools = [{ name: "third", inputSchema: { type: "object" } }];
+      expect(await connector.probe(SERVER as never, { spaceId: "w1", userId: "u1" })).toMatchObject(
+        { status: "ok", toolCount: 1 },
+      );
+      expect(fetch.mock.calls.length).toBeGreaterThan(requests);
+      assignment.allowedTools = ["third"];
+      const afterProbe = fetch.mock.calls.length;
+      expect(
+        (await connector.discoverTools(context)).map((entry) => entry.route?.toolName),
+      ).toEqual(["third"]);
+      expect(fetch.mock.calls).toHaveLength(afterProbe);
+      expect(state.initializations).toBe(1);
+    } finally {
+      await connector.close();
+    }
+  });
+
   it("returns no tools when the MCP catalog is empty", async () => {
     const connector = new McpConnector(
       {
@@ -1736,6 +1867,48 @@ describe("MCP connector session cache", () => {
     },
   );
 
+  it.each([false, true])(
+    "retries an externally updated grant once with a fresh session (repeated failure: %s)",
+    async (repeatFailure) => {
+      const updated = new McpOAuthGrantUpdatedError("server-1");
+      const connect = vi
+        .spyOn(McpSession.prototype, "connectRemote")
+        .mockRejectedValueOnce(updated);
+      if (repeatFailure) connect.mockRejectedValueOnce(updated);
+      else connect.mockResolvedValueOnce({ transport: "streamable-http", usedFallback: false });
+      const close = vi.spyOn(McpSession.prototype, "close").mockResolvedValue(undefined);
+      const replaceRejectedToken = vi.fn();
+      const connector = new McpConnector({} as never, {} as never, { network: TEST_NETWORK }, {
+        providerFor: vi.fn().mockResolvedValue({ replaceRejectedToken }),
+      } as unknown as McpOAuthBroker);
+      try {
+        const pending = (
+          connector as unknown as {
+            connectSession: (
+              server: unknown,
+              context: unknown,
+              onRef: () => void,
+            ) => Promise<unknown>;
+          }
+        ).connectSession(
+          SERVER,
+          { spaceId: "w1", userId: "u1", signal: new AbortController().signal },
+          () => undefined,
+        );
+        if (repeatFailure) await expect(pending).rejects.toBe(updated);
+        else await expect(pending).resolves.toMatchObject({ session: expect.any(McpSession) });
+        expect(connect).toHaveBeenCalledTimes(2);
+        expect(connect.mock.contexts[0]).not.toBe(connect.mock.contexts[1]);
+        expect(replaceRejectedToken).not.toHaveBeenCalled();
+        expect(close).toHaveBeenCalled();
+      } finally {
+        connect.mockRestore();
+        close.mockRestore();
+        await connector.close();
+      }
+    },
+  );
+
   it.each(["localhost", "127.0.0.1", "[::1]"])(
     "blocks OAuth rediscovery to HTTP %s after invalid_client from a public server",
     async (host) => {
@@ -2068,29 +2241,125 @@ describe("MCP connector session cache", () => {
     }
   });
 
-  it.each(["changed configuration", "missing replacement secret"])(
-    "does not connect with a stale server when the %s prevents loading credentials",
-    async (scenario) => {
-      const assignment = { ...ASSIGNMENT, server: { ...SERVER, secretId: "old" } };
-      const network = { ...TEST_NETWORK, fetch: vi.fn() };
-      const load = vi.fn();
+  it.each([
+    "changed revision",
+    "changed endpoint",
+    "changed transport",
+    "changed owner",
+    "disabled server",
+    "disconnected server",
+    "missing replacement secret",
+    "unchanged pointer",
+  ])("offers a reconnect without reporting a server error after %s", async (scenario) => {
+    const assignment = { ...ASSIGNMENT, server: { ...SERVER, secretId: "old" } };
+    const network = { ...TEST_NETWORK, fetch: vi.fn() };
+    const load = vi.fn();
+    const current = {
+      ...assignment.server,
+      userId: "u1",
+      enabled: true,
+      secretId: "new" as string | null,
+    };
+    if (scenario === "changed revision") current.revision++;
+    if (scenario === "changed endpoint") current.endpoint = "https://other.example/mcp";
+    if (scenario === "changed transport") current.transport = "sse";
+    if (scenario === "changed owner") current.userId = "other-owner";
+    if (scenario === "disabled server") current.enabled = false;
+    if (scenario === "disconnected server") current.secretId = null;
+    if (scenario === "unchanged pointer") current.secretId = "old";
+    const prisma = {
+      botMcpServer: { findMany: vi.fn().mockResolvedValue([assignment]) },
+      mcpServer: {
+        ...NO_SHARED_SERVERS,
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+          Object.entries(where).every(
+            ([key, value]) => key === "OR" || current[key as keyof typeof current] === value,
+          )
+            ? { secretId: current.secretId }
+            : null,
+        ),
+      },
+      secret: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+    const connector = new McpConnector(prisma as never, { load } as never, { network });
+    const context = {
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never;
+    const error = vi.spyOn(getLogger(), "error");
+    const warn = vi.spyOn(getLogger(), "warn");
+    try {
+      const tools = await connector.discoverTools(context);
+      expect(tools).toEqual(unavailableOnly());
+      expect(tools[0]?.description).toContain("Reconnect the server");
+      expect(error).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        "mcp discovery failed for server demo",
+        expect.objectContaining({ reason: expect.stringContaining("Reconnect the server") }),
+      );
+      expect(prisma.mcpServer.findFirst).toHaveBeenCalledTimes(1);
+      expect(prisma.mcpServer.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: SERVER.id,
+          revision: SERVER.revision,
+          transport: SERVER.transport,
+          endpoint: SERVER.endpoint,
+          userId: "u1",
+          enabled: true,
+          OR: expect.any(Array),
+        },
+        select: { secretId: true },
+      });
+      expect(prisma.secret.findFirst).toHaveBeenCalledTimes(
+        scenario === "missing replacement secret" ? 2 : 1,
+      );
+      for (const [query] of prisma.secret.findFirst.mock.calls as unknown as Array<
+        [{ where: { userId: string; OR: unknown[] } }]
+      >) {
+        expect(query.where).toMatchObject({
+          userId: "u1",
+          OR: [{ spaceId: "w1" }, { spaceId: null }],
+        });
+      }
+      expect(load).not.toHaveBeenCalled();
+      expect(network.fetch).not.toHaveBeenCalled();
+      // A missing replacement is not retried indefinitely, even after another rotation.
+      await connector.discoverTools(context);
+      expect(prisma.mcpServer.findFirst).toHaveBeenCalledTimes(1);
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+      await connector.close();
+    }
+  });
+
+  it.each(["initial row", "current pointer", "replacement row", "secret store"])(
+    "preserves transient failures from the %s during rotation recovery",
+    async (stage) => {
+      const failure = new SecretStoreUnavailableError();
       const prisma = {
         mcpServer: {
-          findFirst: vi.fn(async ({ where }: { where: { revision: number } }) =>
-            scenario === "changed configuration" && where.revision === 1
-              ? null
-              : { secretId: "new" },
-          ),
+          findFirst: vi.fn(async () => {
+            if (stage === "current pointer") throw failure;
+            return { secretId: "new" };
+          }),
         },
-        secret: { findFirst: vi.fn().mockResolvedValue(null) },
+        secret: {
+          findFirst: vi.fn(async ({ where }: { where: { id: string } }) => {
+            if (stage === "initial row" || (stage === "replacement row" && where.id === "new"))
+              throw failure;
+            return where.id === "new" ? { id: "new", ciphertext: "new-ref" } : null;
+          }),
+        },
       };
-      const connector = new McpConnector(prisma as never, { load } as never, { network });
-      const context = {
-        spaceId: "w1",
-        userId: "u1",
-        botId: "bot-1",
-        signal: new AbortController().signal,
-      } as never;
+      const connector = new McpConnector(
+        prisma as never,
+        { load: vi.fn().mockRejectedValue(failure) } as never,
+        { network: TEST_NETWORK },
+      );
       try {
         await expect(
           (
@@ -2101,13 +2370,12 @@ describe("MCP connector session cache", () => {
                 onRef: () => void,
               ) => Promise<unknown>;
             }
-          ).connectSession(assignment.server, context, () => undefined),
-        ).rejects.toThrow("MCP server secret is unavailable");
-        expect(prisma.mcpServer.findFirst).toHaveBeenCalledWith(
-          expect.objectContaining({ where: expect.objectContaining({ revision: 1 }) }),
-        );
-        expect(load).not.toHaveBeenCalled();
-        expect(network.fetch).not.toHaveBeenCalled();
+          ).connectSession(
+            { ...SERVER, secretId: "old" },
+            { spaceId: "w1", userId: "u1", signal: new AbortController().signal },
+            () => undefined,
+          ),
+        ).rejects.toBe(failure);
       } finally {
         await connector.close();
       }
@@ -2252,6 +2520,7 @@ describe("MCP connector session cache", () => {
         return events;
       })();
       await callArrived;
+      await notifyToolListChanged(connector);
 
       expect(await connector.discoverTools(context)).toMatchObject([
         { name: "mcp__demo__unavailable" },
@@ -2285,6 +2554,7 @@ describe("MCP connector session cache", () => {
 
     await connector.discoverTools(context);
     state.sessionNotFound = 1;
+    await notifyToolListChanged(connector);
     const tools = await connector.discoverTools(context);
     expect(tools.map((tool) => tool.name)).toEqual(["mcp__demo__echo"]);
     expect(state.initializations).toBe(2);
@@ -2324,6 +2594,7 @@ describe("MCP connector session cache", () => {
 
     await connector.discoverTools(context);
     state.sessionNotFound = 1;
+    await notifyToolListChanged(connector);
     expect((await connector.discoverTools(context)).map((tool) => tool.name)).toEqual([
       "mcp__demo__echo",
     ]);
@@ -2331,6 +2602,7 @@ describe("MCP connector session cache", () => {
 
     state.sessionNotFound = 1;
     state.sessionNotFoundResponse = { status: 400, body: "Bad Request: Invalid session parameter" };
+    await notifyToolListChanged(connector);
     // Not retried: the server's tools are replaced by the stand-in that carries the reason.
     expect((await connector.discoverTools(context)).map((tool) => tool.name)).toEqual([
       "mcp__demo__unavailable",
@@ -3381,4 +3653,138 @@ it("marks a Composio MCP server's multi-execute tool as a batch under its prefix
   } finally {
     await connector.close();
   }
+});
+
+describe("MCP call failure session retention", () => {
+  it.each([
+    "jsonrpc",
+    "cancel",
+    "tool-error",
+    "timeout",
+    "transport",
+    "unauthorized",
+    "closed",
+  ] as const)("handles %s without replaying the call", async (kind) => {
+    const { ErrorCode, McpError } = await import("@modelcontextprotocol/sdk/types.js");
+    const { McpToolTimeoutError } = await import("./mcp-tool-call.js");
+    const { RemoteMcpTransportError } = await import("./remote-mcp.js");
+    const state = { failNext: false, initializations: 0 };
+    vi.stubGlobal("fetch", mcpFetch(state));
+    const connector = new McpConnector(
+      {
+        mcpServer: NO_SHARED_SERVERS,
+        botMcpServer: { findMany: async () => [ASSIGNMENT], findFirst: async () => ASSIGNMENT },
+      } as never,
+      {} as never,
+      { network: TEST_NETWORK },
+    );
+    const controller = new AbortController();
+    const context = {
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: controller.signal,
+    } as never;
+    const execute = async () => {
+      const events = [];
+      for await (const event of connector.execute(
+        {
+          tool: "mcp__demo__echo",
+          args: {},
+          executionId: "call",
+          route: { connectorId: "mcp", resourceId: SERVER.id, toolName: "echo" },
+        },
+        context,
+      ))
+        events.push(event);
+      return events;
+    };
+    let call: ReturnType<typeof vi.spyOn> | undefined;
+    try {
+      await connector.discoverTools(context);
+      call = vi.spyOn(McpSession.prototype, "callTool").mockImplementationOnce(async function (
+        this: McpSession,
+      ) {
+        if (kind === "tool-error") return { content: [], isError: true };
+        if (kind === "cancel") {
+          controller.abort();
+          throw controller.signal.reason;
+        }
+        if (kind === "timeout") throw new McpToolTimeoutError("silent");
+        if (kind === "transport") throw new RemoteMcpTransportError("socket closed");
+        if (kind === "unauthorized") throw new StreamableHTTPError(401, "invalid_token");
+        if (kind === "closed") {
+          await this.close();
+          throw new McpError(ErrorCode.ConnectionClosed, "closed");
+        }
+        // This code is also used by SDK closure; a server response alone must not evict.
+        throw new McpError(ErrorCode.ConnectionClosed, "server application error");
+      });
+      expect(await execute()).toMatchObject([{ type: kind === "tool-error" ? "result" : "error" }]);
+      expect(call).toHaveBeenCalledTimes(1);
+      call.mockRestore();
+      // A new caller is independent of the cancelled run's signal.
+      (context as { signal: AbortSignal }).signal = new AbortController().signal;
+      expect(await execute()).toMatchObject([{ type: "result" }]);
+      expect(state.initializations).toBe(
+        ["timeout", "transport", "unauthorized", "closed"].includes(kind) ? 2 : 1,
+      );
+    } finally {
+      call?.mockRestore();
+      await connector.close();
+    }
+  });
+
+  it("does not evict the replacement when an old call fails", async () => {
+    const { RemoteMcpTransportError } = await import("./remote-mcp.js");
+    const state = { failNext: false, initializations: 0 };
+    vi.stubGlobal("fetch", mcpFetch(state));
+    const connector = new McpConnector(
+      {
+        mcpServer: NO_SHARED_SERVERS,
+        botMcpServer: { findMany: async () => [ASSIGNMENT], findFirst: async () => ASSIGNMENT },
+      } as never,
+      {} as never,
+      { network: TEST_NETWORK },
+    );
+    const context = {
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never;
+    const sessions = (connector as unknown as { sessions: Map<string, { session: McpSession }> })
+      .sessions;
+    let call: ReturnType<typeof vi.spyOn> | undefined;
+    let old: McpSession | undefined;
+    try {
+      await connector.discoverTools(context);
+      const [key, entry] = [...sessions][0]!;
+      old = entry.session;
+      const replacement = new McpSession();
+      const retire = vi.spyOn(replacement, "retire");
+      call = vi.spyOn(old, "callTool").mockImplementationOnce(async () => {
+        sessions.set(key, { ...entry, session: replacement });
+        throw new RemoteMcpTransportError("old connection failed");
+      });
+      const events = [];
+      for await (const event of connector.execute(
+        {
+          tool: "mcp__demo__echo",
+          args: {},
+          executionId: "call",
+          route: { connectorId: "mcp", resourceId: SERVER.id, toolName: "echo" },
+        },
+        context,
+      ))
+        events.push(event);
+      expect(events).toMatchObject([{ type: "error" }]);
+      expect(sessions.get(key)?.session).toBe(replacement);
+      expect(retire).not.toHaveBeenCalled();
+    } finally {
+      call?.mockRestore();
+      await old?.close();
+      await connector.close();
+    }
+  });
 });

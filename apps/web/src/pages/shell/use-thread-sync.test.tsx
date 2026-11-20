@@ -51,6 +51,7 @@ function syncInput({
   return {
     rpc: { threads: { get } },
     queries: {
+      usage: { breakdown: { key: () => ["usage-breakdown"] } },
       threads: { get: { queryKey: vi.fn(() => ["thread"]) } },
       routines: { list: { queryOptions: vi.fn() }, history: { key: vi.fn(() => ["history"]) } },
       skills: { list: { queryOptions: vi.fn() } },
@@ -126,6 +127,10 @@ it.each([false, true])(
     const event = { type: "run.completed", payload: {}, runId: "run-1" } as ProductEvent;
     const deliver = () => subscription.onEvent(event, snapshot);
     deliver();
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["usage-breakdown"],
+      refetchType: "active",
+    });
     expect(input.notifyBrowserForEvent).toHaveBeenCalledWith(
       event,
       snapshot.threadId,

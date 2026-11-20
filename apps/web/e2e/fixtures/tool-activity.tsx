@@ -82,7 +82,6 @@ function SettingsFixture() {
         name="Owner"
         memoryConfig={null}
         onMemoryConfigChange={() => {}}
-        onUsageOpen={() => {}}
         timezone="UTC"
         onTimezoneChange={async () => {}}
         onClose={() => {}}

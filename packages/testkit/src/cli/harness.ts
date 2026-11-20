@@ -10,6 +10,10 @@ import path from "node:path";
 import type { createApp } from "@orkbot/api/app";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import type { runAsSystem as RunAsSystem } from "@orkbot/db";
+import {
+  createMcpFormFixture,
+  MCP_FORM_FIXTURE_HOST,
+} from "../../../adapters/src/mcp-form.test-support.js";
 import { createModelConnectionFixtureFetch } from "../model-connection-fixture.js";
 import { PluginMarketplaceFixture } from "../plugin-marketplace-fixture.js";
 import { startPostgres } from "./postgres.js";
@@ -87,6 +91,8 @@ async function main() {
     process.env.VERIFY_DATABASE = "1";
     process.env.WAKEUP_DRIVER = "memory";
     process.env.SANDBOX_PROVIDER = sandboxProvider;
+    if (process.env.ORKBOT_MEETING_PROVIDER !== "emulator")
+      process.env.ORKBOT_MEETING_PROVIDER = "none";
     process.env.AGENT_RUNTIME = agentRuntime;
     process.env.ORKBOT_LIVE_MODEL_CATALOG = "off";
     if (!integration) {
@@ -184,6 +190,7 @@ async function main() {
       {
         ComposioConnector,
         FakeComposioClient,
+        ScriptedAgentRuntime,
         listPiCatalog,
         DestinationEmulator,
         EmailEmulator,
@@ -212,18 +219,145 @@ async function main() {
       { fetch: thirdParties.fetch, resolveHostname: thirdParties.resolveHostname },
     );
     const email = new EmailEmulator();
+    const composioClient = new FakeComposioClient();
+    const mcpForm = createMcpFormFixture();
+    // Keep the outgoing-draft journey on the same scripted model and offline Gmail connector.
+    class DraftFixtureRuntime extends ScriptedAgentRuntime {
+      override run(
+        ...[request, context]: Parameters<InstanceType<typeof ScriptedAgentRuntime>["run"]>
+      ) {
+        const scheduleMeetingFixture = /\bSchedule meeting fixture ([0-9TZ:.+-]+)/i.exec(
+          request.prompt,
+        );
+        if (scheduleMeetingFixture) {
+          return super.run(
+            {
+              ...request,
+              script: [
+                {
+                  toolCalls: [
+                    {
+                      name: "meeting_schedule",
+                      args: {
+                        url: "https://teams.microsoft.com/meet/1234567890123",
+                        title: "Calendar fixture",
+                        scheduledAt: scheduleMeetingFixture[1],
+                      },
+                    },
+                  ],
+                },
+                { assistant: "Meeting scheduling checked.", complete: true },
+              ],
+            },
+            context,
+          );
+        }
+        const meetingFixture = /\bRead meeting fixture ([a-z0-9_-]+)\b/i.exec(request.prompt);
+        if (meetingFixture) {
+          return super.run(
+            {
+              ...request,
+              script: [
+                { toolCalls: [{ name: "meeting_read", args: { meetingId: meetingFixture[1] } }] },
+                { assistant: "Meeting transcript checked.", complete: true },
+              ],
+            },
+            context,
+          );
+        }
+        const routineFixture = /\bRoutine event fixture (hooks|chat|edit)(?: ([a-z0-9]+))?/i.exec(
+          request.prompt,
+        );
+        if (routineFixture) {
+          const mode = routineFixture[1];
+          const call =
+            mode === "edit"
+              ? {
+                  name: "schedule_update",
+                  args: { routineId: routineFixture[2], on: { github: false } },
+                }
+              : {
+                  name: "schedule_create",
+                  args: {
+                    name: mode === "hooks" ? "Project events" : "Telegram events",
+                    prompt: "Summarize the incoming project event.",
+                    timezone: "UTC",
+                    on: mode === "hooks" ? { webhook: true, github: true } : { chat: "telegram" },
+                  },
+                };
+          return super.run(
+            {
+              ...request,
+              script: [
+                { toolCalls: [call] },
+                { assistant: "Routine tool finished.", complete: true },
+              ],
+            },
+            context,
+          );
+        }
+        if (/\bMCP form fixture \d+\b/.test(request.prompt)) {
+          return super.run(
+            {
+              ...request,
+              script: [
+                { toolCalls: [{ name: "mcp__project-forms__get_project", args: {} }] },
+                { assistant: "Project tool finished.", complete: true },
+              ],
+            },
+            context,
+          );
+        }
+        const id = /\bOutgoing draft fixture (\d+)\b/.exec(request.prompt)?.[1];
+        if (!id) return super.run(request, context);
+        const args = {
+          recipient_email: "original@example.test",
+          subject: `Fixture draft ${id}`,
+          body: "Original fixture body",
+        };
+        const direct = request.tools.some((tool) => tool.name === "GMAIL_SEND_EMAIL");
+        const call = direct
+          ? { name: "GMAIL_SEND_EMAIL", args }
+          : {
+              name: "COMPOSIO_MULTI_EXECUTE_TOOL",
+              args: { tools: [{ tool_slug: "GMAIL_SEND_EMAIL", arguments: args }] },
+            };
+        return super.run(
+          {
+            ...request,
+            script: [
+              { toolCalls: [call] },
+              { assistant: "Fixture request handled.", complete: true },
+            ],
+          },
+          context,
+        );
+      }
+    }
     // Scripted runs only: a real model would see a computer it could use in every spec.
     const userDevices = agentRuntime === "scripted" ? new UserDeviceEmulator() : undefined;
     const handles = await createApp({
       databaseUrl,
       modelConnectionFetch: createModelConnectionFixtureFetch(listPiCatalog()),
       prisma: undefined,
-      composio: new ComposioConnector({ client: new FakeComposioClient() }),
+      composio: new ComposioConnector({ client: composioClient }),
+      ...(agentRuntime === "scripted" ? { runtime: new DraftFixtureRuntime() } : {}),
       connectors: [new DestinationEmulator()],
       pipedream,
       email,
       remoteConnectors: {
-        fetch: marketplace.fetch,
+        fetch: (input, init) => {
+          const url = new URL(input instanceof Request ? input.url : String(input));
+          const headers = new Headers(
+            init?.headers ?? (input instanceof Request ? input.headers : undefined),
+          );
+          if (
+            url.hostname === MCP_FORM_FIXTURE_HOST ||
+            headers.get("host") === MCP_FORM_FIXTURE_HOST
+          )
+            return mcpForm.fetch(input, init);
+          return marketplace.fetch(input, init);
+        },
         resolveHostname: thirdParties.resolveHostname,
       },
       pluginRepoFetcher: marketplace.repo,
@@ -237,6 +371,15 @@ async function main() {
       fetch: async (request) => {
         if (new URL(request.url).pathname === "/__e2e/emails") {
           return Response.json(email.sent, { headers: { "cache-control": "no-store" } });
+        }
+        if (new URL(request.url).pathname === "/__e2e/mcp-form-answers") {
+          return Response.json(mcpForm.answers, { headers: { "cache-control": "no-store" } });
+        }
+        if (new URL(request.url).pathname === "/__e2e/outgoing-draft-deliveries") {
+          return Response.json(
+            composioClient.executions.filter((call) => call.tool === "GMAIL_SEND_EMAIL"),
+            { headers: { "cache-control": "no-store" } },
+          );
         }
         if (new URL(request.url).pathname === "/__e2e/user-device-requests") {
           return Response.json(userDevices?.requests ?? [], {
@@ -318,6 +461,7 @@ async function main() {
         await new Promise<void>((resolve) => requestWaiters.add(resolve));
       }
       await handles.stop().catch(() => undefined);
+      await mcpForm.close();
       for (let index = 0; index < computers.length; index += 4) {
         const results = await Promise.allSettled(
           computers.slice(index, index + 4).map((computer) =>

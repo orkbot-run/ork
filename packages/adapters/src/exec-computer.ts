@@ -423,6 +423,7 @@ function commandCwd(cwd: string | undefined): string {
 }
 
 const TAR_BLOCK = 512;
+const TAR_BODY_CHUNK_BYTES = 256 * 1024;
 const TAR_END = Buffer.alloc(TAR_BLOCK * 2);
 
 function tarHeader(name: string, type: string, size: number, mode: number): Buffer {
@@ -444,8 +445,10 @@ function tarHeader(name: string, type: string, size: number, mode: number): Buff
 }
 
 function* tarBody(content: Uint8Array): Iterable<Buffer> {
-  if (content.byteLength > 0)
-    yield Buffer.from(content.buffer, content.byteOffset, content.byteLength);
+  for (let offset = 0; offset < content.byteLength; offset += TAR_BODY_CHUNK_BYTES) {
+    const length = Math.min(TAR_BODY_CHUNK_BYTES, content.byteLength - offset);
+    yield Buffer.from(content.buffer, content.byteOffset + offset, length);
+  }
   const padding = (TAR_BLOCK - (content.byteLength % TAR_BLOCK)) % TAR_BLOCK;
   if (padding) yield Buffer.alloc(padding);
 }
@@ -476,9 +479,19 @@ function paxRecord(key: string, value: string): Buffer {
 
 /** Incremental reader for the regular files in a ustar/PAX stream. */
 export class TarReader {
-  private buffer: Buffer = Buffer.alloc(0);
+  private readonly header = Buffer.alloc(TAR_BLOCK);
+  private headerBytes = 0;
   private pending:
-    | { name: string; mode: number; size: number; kind: "file" | "pax" | "skip" }
+    | {
+        name: string;
+        mode: number;
+        size: number;
+        kind: "file" | "pax" | "skip";
+        bodyChunks: Buffer[];
+        tailBytes: number;
+        bodyBytes: number;
+        paddingBytes: number;
+      }
     | undefined;
   private paxPath: string | undefined;
   private ended = false;
@@ -486,31 +499,69 @@ export class TarReader {
   constructor(private readonly maxFileBytes: number) {}
 
   push(chunk: Buffer): PortableFile[] {
-    this.buffer = this.buffer.byteLength ? Buffer.concat([this.buffer, chunk]) : chunk;
+    if (this.ended) return [];
     const files: PortableFile[] = [];
-    while (!this.ended) {
+    let offset = 0;
+    while (true) {
       if (!this.pending) {
-        if (this.buffer.byteLength < TAR_BLOCK) break;
-        const header = this.buffer.subarray(0, TAR_BLOCK);
-        this.buffer = this.buffer.subarray(TAR_BLOCK);
-        if (header.every((byte) => byte === 0)) {
+        const length = Math.min(TAR_BLOCK - this.headerBytes, chunk.byteLength - offset);
+        chunk.copy(this.header, this.headerBytes, offset, offset + length);
+        this.headerBytes += length;
+        offset += length;
+        if (this.headerBytes < TAR_BLOCK) break;
+        this.headerBytes = 0;
+        if (this.header.every((byte) => byte === 0)) {
           this.ended = true;
+          this.paxPath = undefined;
           break;
         }
-        this.pending = this.parseHeader(header);
+        const entry = this.parseHeader(this.header);
+        this.pending = {
+          ...entry,
+          bodyChunks: [],
+          tailBytes: 0,
+          bodyBytes: 0,
+          paddingBytes: (TAR_BLOCK - (entry.size % TAR_BLOCK)) % TAR_BLOCK,
+        };
       }
-      const { size } = this.pending;
-      const padded = Math.ceil(size / TAR_BLOCK) * TAR_BLOCK;
-      if (this.buffer.byteLength < padded) break;
-      const body = this.buffer.subarray(0, size);
-      this.buffer = this.buffer.subarray(padded);
-      const { kind, name, mode } = this.pending;
+      // Fill bounded slabs as bytes arrive, then join once at completion. A
+      // declared size alone must not reserve memory, especially for uncapped PAX.
+      // Unsupported entries only advance the cursor and never allocate their body.
+      const pending = this.pending;
+      const length = Math.min(pending.size - pending.bodyBytes, chunk.byteLength - offset);
+      if (pending.kind !== "skip") {
+        let copied = 0;
+        while (copied < length) {
+          let tail = pending.bodyChunks.at(-1);
+          if (!tail || pending.tailBytes === tail.byteLength) {
+            tail = Buffer.allocUnsafe(
+              Math.min(TAR_BODY_CHUNK_BYTES, pending.size - pending.bodyBytes - copied),
+            );
+            pending.bodyChunks.push(tail);
+            pending.tailBytes = 0;
+          }
+          const count = Math.min(length - copied, tail.byteLength - pending.tailBytes);
+          chunk.copy(tail, pending.tailBytes, offset + copied, offset + copied + count);
+          pending.tailBytes += count;
+          copied += count;
+        }
+      }
+      pending.bodyBytes += length;
+      offset += length;
+      if (pending.bodyBytes < pending.size) break;
+      const padding = Math.min(pending.paddingBytes, chunk.byteLength - offset);
+      pending.paddingBytes -= padding;
+      offset += padding;
+      if (pending.paddingBytes > 0) break;
       this.pending = undefined;
+      const { kind, name, mode } = pending;
+      if (kind === "skip") continue;
+      const body = Buffer.concat(pending.bodyChunks, pending.size);
       if (kind === "pax") this.paxPath = parsePaxPath(body) ?? this.paxPath;
       else if (kind === "file") {
         files.push({
           path: normalizeWorkspacePath(name),
-          content: new Uint8Array(Buffer.from(body)),
+          content: new Uint8Array(body.buffer, body.byteOffset, body.byteLength),
           ...((mode & 0o111) !== 0 ? { executable: true } : {}),
         });
       }

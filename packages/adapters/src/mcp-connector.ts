@@ -31,6 +31,7 @@ import {
   resolveMcpOAuthEnv,
   resolveMcpOAuthFileTemplate,
 } from "@orkbot/contracts";
+import { outgoingDraftBindingForTool } from "@orkbot/core";
 import type { McpServer, PrismaClient, ThreadEvents } from "@orkbot/db";
 import { availableInSpace, itemSecretIn } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -59,6 +60,8 @@ import type { McpOAuthBroker, OAuthMaterial } from "./mcp-oauth.js";
 import {
   accessTokenExpiresAt,
   looksLikeSecretValue,
+  McpCredentialRefusedError,
+  McpOAuthGrantUpdatedError,
   McpReauthorizationRequiredError,
   oauthMaterialSecrets,
   TOKEN_REFRESH_SKEW_MS,
@@ -71,11 +74,17 @@ import {
   isNpxCommand,
   parseNpxLaunch,
 } from "./mcp-package-installer.js";
+import { prepareMcpImageResult } from "./mcp-result-images.js";
 import type { McpServerHealthUpdate } from "./mcp-server-health.js";
 import { needsMcpOAuthClient, recordMcpServerHealth } from "./mcp-server-health.js";
+import { isBrokenMcpCall } from "./mcp-tool-call.js";
 import { McpSession, mcpStdioRefusal } from "./mcp-transport.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
-import { ConnectorRedirectError, isMcpSessionGoneError } from "./remote-mcp.js";
+import {
+  ConnectorRedirectError,
+  isMcpSessionGoneError,
+  RemoteMcpTransportError,
+} from "./remote-mcp.js";
 import { appendToolCompletionAudit } from "./tool-completion-audit.js";
 
 type SessionEntry = {
@@ -153,7 +162,11 @@ function expectedFailure(error: unknown, depth = 0): ExpectedFailure | undefined
   if (depth > 5 || !(error instanceof Error)) return undefined;
   if (error instanceof McpConnectFailure) return error.expected;
   if (error instanceof McpDiscoveryTimeoutError) return "unreachable";
-  if (error instanceof McpReauthorizationRequiredError || error instanceof UnauthorizedError)
+  if (
+    error instanceof McpReauthorizationRequiredError ||
+    error instanceof McpCredentialRefusedError ||
+    error instanceof UnauthorizedError
+  )
     return "reconnect";
   if (error instanceof StreamableHTTPError) {
     // A timeout, rate limit or server error is the server's own outage.
@@ -386,6 +399,7 @@ export class McpConnector implements ConnectorProvider {
   private readonly installing = new Set<string>();
   private reaper?: ReturnType<typeof setInterval>;
   private resolvedPackagesRoot?: string;
+  private readonly isolatedCalls = new Set<AbortController>();
   private readonly inFlight = new WeakMap<McpSession, number>();
   private readonly expired = new WeakSet<McpSession>();
   // Discovery runs more than once per run: once up front, then again on every lazy
@@ -528,6 +542,7 @@ export class McpConnector implements ConnectorProvider {
               inputSchema: tool.inputSchema as Record<string, unknown>,
               readOnly: tool.annotations?.readOnlyHint,
               batch: composioToolBatch(tool.name),
+              outgoingDraft: outgoingDraftBindingForTool(tool.name),
               route: {
                 connectorId: "mcp",
                 resourceId: assignment.serverId,
@@ -564,7 +579,7 @@ export class McpConnector implements ConnectorProvider {
               },
             );
           // Cleanup must not turn one server's failure into losing every server's tools.
-          await this.evict(key).catch(() => undefined);
+          if (!context.signal.aborted) await this.evict(key).catch(() => undefined);
           this.unavailable.set(key, reason);
           // A cancelled run says nothing about the server, and an install that outlived the
           // deadline is still on its way.
@@ -700,20 +715,67 @@ export class McpConnector implements ConnectorProvider {
     // oauthMaterialSecrets(material) so in-place token refresh stays covered.
     let material: OAuthMaterial | undefined;
     let launchSecrets: string[] = [];
+    let usedEntry: SessionEntry | undefined;
     const sessionKey = this.sessionKey(assignment.server, context);
     try {
       const toolName = call.route.toolName;
-      const result = await this.withSession(assignment.server, context, (session) => {
-        material = this.sessions.get(sessionKey)?.material;
-        launchSecrets = this.sessions.get(sessionKey)?.launchSecrets ?? [];
-        return session.callTool(toolName, call.args, { signal: context.signal });
+      const result = await this.withSession(assignment.server, context, async (session) => {
+        const entry = this.sessions.get(sessionKey);
+        usedEntry = entry?.session === session ? entry : undefined;
+        material = usedEntry?.material;
+        launchSecrets = usedEntry?.launchSecrets ?? [];
+        const form = context.elicitMcpForm
+          ? {
+              integrationName: assignment.server.name,
+              elicit: context.elicitMcpForm,
+              secrets: () => [
+                ...(material ? oauthMaterialSecrets(material) : []),
+                ...launchSecrets,
+              ],
+            }
+          : undefined;
+        if (form && session.requiresIsolatedElicitation) {
+          // Dedicated invocation failures must not retire the discovery/other-run session.
+          usedEntry = undefined;
+          // SSE/stdio provide no request-stream association. One dedicated session
+          // per eligible invocation avoids routing a form to another concurrent run.
+          const controller = new AbortController();
+          this.isolatedCalls.add(controller);
+          const signal = combineSignals(context.signal, controller.signal);
+          try {
+            const isolated = await this.connectSession(
+              assignment.server,
+              { ...context, signal },
+              () => {},
+              true,
+            );
+            material = isolated.material;
+            launchSecrets = isolated.launchSecrets ?? [];
+            try {
+              return await isolated.session.callTool(toolName, call.args, { signal, form });
+            } finally {
+              await closeEntry(isolated);
+            }
+          } finally {
+            this.isolatedCalls.delete(controller);
+          }
+        }
+        return session.callTool(toolName, call.args, { signal: context.signal, form });
       });
       const secrets = [...(material ? oauthMaterialSecrets(material) : []), ...launchSecrets];
-      yield { type: "result", data: redactConnectorPayload(result, secrets) };
+      const redacted = redactConnectorPayload(result, secrets);
+      yield { type: "result", data: prepareMcpImageResult(redacted) ?? redacted };
     } catch (error) {
-      // A thrown call means the transport or auth broke; drop the session so the next call reconnects.
+      // Only a broken transport/auth or silence deadline retires the session.
       const secrets = [...(material ? oauthMaterialSecrets(material) : []), ...launchSecrets];
-      await this.evict(sessionKey);
+      if (
+        usedEntry &&
+        (usedEntry.session.connectionClosed ||
+          isBrokenMcpCall(error) ||
+          error instanceof RemoteMcpTransportError)
+      ) {
+        await this.evict(sessionKey, usedEntry);
+      }
       yield { type: "error", message: sanitizeConnectorError(error, secrets) };
     }
   }
@@ -773,6 +835,7 @@ export class McpConnector implements ConnectorProvider {
           return session.listTools({
             signal: context.signal,
             discoveryLimits: this.discoveryLimits,
+            fresh: true,
           });
         });
       } else {
@@ -826,6 +889,7 @@ export class McpConnector implements ConnectorProvider {
 
   async close(): Promise<void> {
     this.unsubscribe();
+    for (const controller of this.isolatedCalls) controller.abort();
     if (this.reaper) clearInterval(this.reaper);
     this.reaper = undefined;
     await Promise.allSettled([...this.probes.values()]);
@@ -881,9 +945,10 @@ export class McpConnector implements ConnectorProvider {
    * Stop reusing a session. A session other calls are still using is closed by the last of
    * them (see withSession), so one failure never cuts off another bot's running call.
    */
-  private async evict(sessionKey: string): Promise<void> {
+  private async evict(sessionKey: string, expected?: SessionEntry): Promise<void> {
     const entry = this.sessions.get(sessionKey);
-    if (!entry) return;
+    if (!entry || (expected && entry !== expected)) return;
+    entry.session.retire();
     this.sessions.delete(sessionKey);
     if ((this.inFlight.get(entry.session) ?? 0) > 0) {
       this.expired.add(entry.session);
@@ -917,6 +982,7 @@ export class McpConnector implements ConnectorProvider {
         // Stop reusing the expired session immediately, but let its other requests
         // receive their own responses before closing the shared SDK client.
         if (this.sessions.get(sessionKey)?.session === session) this.sessions.delete(sessionKey);
+        session.retire();
         this.expired.add(session);
       } finally {
         if (tracked) {
@@ -1032,6 +1098,7 @@ export class McpConnector implements ConnectorProvider {
     server: McpServer,
     context: AdapterContext,
     onRef: (ref: string, recordId: string, digest?: string) => void,
+    isolatedElicitation = false,
   ): Promise<{
     session: McpSession;
     material: OAuthMaterial;
@@ -1042,7 +1109,7 @@ export class McpConnector implements ConnectorProvider {
     credentialDir?: string;
     launchSecrets?: string[];
   }> {
-    let session = new McpSession({ name: `orkbot-${server.slug}` });
+    let session = new McpSession({ name: `orkbot-${server.slug}`, isolatedElicitation });
     let credentialDir: string | undefined;
     const launchSecrets: string[] = [];
     // Hoisted so a throw after the secret is decoded can still hand the material out.
@@ -1057,15 +1124,26 @@ export class McpConnector implements ConnectorProvider {
       if (server.secretId && !secret) {
         // OAuth refresh replaces the secret without updating this run's server snapshot.
         const current = await this.prisma.mcpServer.findFirst({
-          where: { id: server.id, revision: server.revision, ...availableInSpace(context) },
+          where: {
+            id: server.id,
+            revision: server.revision,
+            transport: server.transport,
+            endpoint: server.endpoint,
+            enabled: true,
+            ...availableInSpace(context),
+          },
           select: { secretId: true },
         });
-        if (current?.secretId) {
+        if (current?.secretId && current.secretId !== server.secretId) {
           secret = await this.prisma.secret.findFirst({
             where: { id: current.secretId, ...itemSecretIn(context) },
           });
         }
-        if (!secret) throw new Error("MCP server secret is unavailable; retry");
+        if (!secret)
+          throw new McpConnectFailure(
+            "MCP server credentials changed or are unavailable. Reconnect the server and try again.",
+            "reconnect",
+          );
       }
       let ref = secret?.ciphertext;
       let recordId = secret?.id;
@@ -1085,6 +1163,7 @@ export class McpConnector implements ConnectorProvider {
       launchSecrets.push(...oauthMaterialSecrets({ args }));
       const env = { ...(material.env ?? {}) };
       const onPersisted = (record: { id: string; ref: string; material: OAuthMaterial }) => {
+        session.invalidateToolCatalog();
         ref = record.ref;
         recordId = record.id;
         digest = credentialDigest(JSON.stringify(record.material));
@@ -1250,10 +1329,14 @@ export class McpConnector implements ConnectorProvider {
         try {
           await connect();
         } catch (error) {
-          if (!authProvider || !isRejectedTokenError(error)) throw error;
-          await authProvider.replaceRejectedToken();
+          if (
+            !authProvider ||
+            (!isRejectedTokenError(error) && !(error instanceof McpOAuthGrantUpdatedError))
+          )
+            throw error;
+          if (isRejectedTokenError(error)) await authProvider.replaceRejectedToken();
           await closeMcpResource(() => session.close());
-          session = new McpSession({ name: `orkbot-${server.slug}` });
+          session = new McpSession({ name: `orkbot-${server.slug}`, isolatedElicitation });
           await connect();
         }
       }

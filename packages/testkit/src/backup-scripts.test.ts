@@ -54,9 +54,11 @@ function fixture() {
       // Relocate only the fixed output directory: never write to real host backups.
       expect(source).toContain('BACKUP_ROOT="/var/backups/orkbot"');
       source = source.replace('BACKUP_ROOT="/var/backups/orkbot"', `BACKUP_ROOT="${snapshots}"`);
+      source = source.replace("/srv/orkbot", checkout);
     }
     write(path.join(checkout, script), source);
   }
+  write(path.join(checkout, "infra/compose/docker-compose.prod.yml"), "services: {}\n");
   write(path.join(checkout, ".env"), "EXAMPLE_SETTING=fake-value\n");
   write(path.join(root, "appdata/home.txt"), "example bot home");
   const docker = path.join(bin, "docker");
@@ -930,10 +932,67 @@ PATH=/usr/bin:/bin exec mv "$@"
   });
 });
 
+describe("production backup Compose layouts", () => {
+  it.each(["checkout", "images", "images-overlay", "dotenv", "explicit"])(
+    "backs up and verifies the %s layout with one consistent Compose stack",
+    (layout) => {
+      const f = fixture();
+      const production = path.join(f.checkout, "infra/compose/docker-compose.prod.yml");
+      write(path.join(f.checkout, "docker-compose.images.yml"), "services: {}\n");
+      write(path.join(f.checkout, "custom.yml"), "services: {}\n");
+      write(path.join(f.checkout, "override.yml"), "services: {}\n");
+      let expected = [production];
+      const overrides: Record<string, string> = {};
+      if (layout !== "checkout") rmSync(production);
+      if (layout === "images" || layout === "images-overlay") {
+        expected = [path.join(f.checkout, "docker-compose.images.yml")];
+        if (layout === "images-overlay") {
+          write(path.join(f.checkout, "docker-compose.override.yml"), "services: {}\n");
+          expected.push(path.join(f.checkout, "docker-compose.override.yml"));
+        }
+      } else if (layout === "dotenv" || layout === "explicit") {
+        write(path.join(f.checkout, ".env"), "ORKBOT_COMPOSE_FILE='custom.yml:override.yml'\n");
+        expected = [path.join(f.checkout, "custom.yml"), path.join(f.checkout, "override.yml")];
+        if (layout === "explicit") {
+          overrides.ORKBOT_COMPOSE_FILE = path.join(f.checkout, "docker-compose.images.yml");
+          expected = [overrides.ORKBOT_COMPOSE_FILE];
+        }
+      }
+      const backup = f.run("infra/compose/backup-prod.sh", [], overrides);
+      expect(backup.status, backup.stderr).toBe(0);
+      for (const args of f.commands().filter((args) => args[0] === "compose")) {
+        expect(args.filter((_, index) => args[index - 1] === "-f")).toEqual(expected);
+        expect(args[args.indexOf("--env-file") + 1]).toBe(path.join(f.checkout, ".env"));
+      }
+      const snapshot = backup.stdout.trim().split("written to ")[1]!;
+      const drill = f.run("infra/compose/backup-drill.sh", [snapshot]);
+      expect(drill.status, drill.stderr).toBe(0);
+      expect(drill.stdout).toContain("verifies");
+    },
+  );
+
+  it.each(["missing", "configured-missing", "empty-component"])(
+    "rejects %s before Docker or storage writes",
+    (kind) => {
+      const f = fixture();
+      rmSync(path.join(f.checkout, "infra/compose/docker-compose.prod.yml"));
+      const overrides: Record<string, string> =
+        kind === "missing"
+          ? {}
+          : { ORKBOT_COMPOSE_FILE: kind === "configured-missing" ? "missing.yml" : "a.yml::b.yml" };
+      const result = f.run("infra/compose/backup-prod.sh", [], overrides);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/Compose (stack|file)/);
+      expect(f.commands()).toEqual([]);
+      expect(existsSync(f.snapshots)).toBe(false);
+    },
+  );
+});
+
 describe("production backup deployment and archive behavior", () => {
   it.each([false, true])("uses the configured deployment directory: %s", (custom) => {
     const f = fixture();
-    const deployment = custom ? f.checkout : "/srv/orkbot";
+    const deployment = f.checkout;
     const result = f.run(
       "infra/compose/backup-prod.sh",
       [],

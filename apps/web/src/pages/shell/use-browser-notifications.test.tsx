@@ -12,6 +12,13 @@ import { i18n } from "../../lib/i18n";
 import type { RpcClient } from "../../lib/rpc";
 import { useBrowserNotifications } from "./use-browser-notifications";
 
+const { invalidateUsage } = vi.hoisted(() => ({ invalidateUsage: vi.fn(async () => {}) }));
+const usageQueries = { usage: { breakdown: { key: () => ["usage-breakdown"] } } };
+vi.mock("../../lib/query", () => ({
+  queryClient: { invalidateQueries: invalidateUsage },
+  useSpaceQueries: () => usageQueries,
+}));
+
 const context = vi.hoisted(() => ({
   generation: 0,
   server: "server-1",
@@ -163,6 +170,7 @@ async function send(alert: Partial<ChatAlert>) {
 const shown = () => FakeNotification.shown.map((n) => [n.title, n.options.body, n.options.tag]);
 
 beforeEach(() => {
+  invalidateUsage.mockClear();
   i18n.load("en", {});
   i18n.activate("en");
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -518,12 +526,20 @@ describe("roster invalidations", () => {
     await ready();
     expect(subscribeInputs).toEqual([{ roster: true }]);
     expect(refreshRoster).not.toHaveBeenCalled();
+    expect(invalidateUsage).not.toHaveBeenCalled();
     await open({ botId: "bot-b" });
     expect(streams).toHaveLength(1);
     streams[0]!.push({ type: "roster" });
     await flush();
     expect(refreshRoster).toHaveBeenCalledTimes(1);
+    expect(invalidateUsage).toHaveBeenCalledWith({
+      queryKey: ["usage-breakdown"],
+      refetchType: "active",
+    });
     expect(FakeNotification.shown).toHaveLength(0);
+    invalidateUsage.mockClear();
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+    expect(invalidateUsage).not.toHaveBeenCalled();
   });
 
   it("refreshes on delayed readiness unless another fetch already closed the gap", async () => {
@@ -531,6 +547,10 @@ describe("roster invalidations", () => {
     await act(() => vi.advanceTimersByTimeAsync(2_000));
     await ready();
     expect(refreshRoster).toHaveBeenCalledTimes(1);
+    expect(invalidateUsage).toHaveBeenCalledWith({
+      queryKey: ["usage-breakdown"],
+      refetchType: "active",
+    });
   });
 
   it("shares a recent fetch with delayed initial readiness", async () => {

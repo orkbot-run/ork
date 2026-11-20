@@ -372,7 +372,7 @@ async function runLoop(
   const finalText = finalBlocks
     .map((block) => (block as { kind: string; text?: string }).text ?? "")
     .join("");
-  return { requests, act, finalizeRun, finalText };
+  return { requests, act, listFiles, events, finalizeRun, finalText };
 }
 
 /** Every answer is a computer_act call. `sizes` gives the batch size per request; the last repeats. */
@@ -387,6 +387,11 @@ const runWithBatches = (sizes: number[], vary = true) =>
   }));
 
 const LISTING = { name: "list_files", args: { path: "downloads" } };
+// Numeric coordinates remain distinct in the existing input shape guard.
+const varyingAction = (request: number, size = 1) => ({
+  name: "computer_act",
+  args: { ...clickBatch(size, request), observe: false },
+});
 const unreadable = () => {
   throw new Error("permission denied");
 };
@@ -512,11 +517,15 @@ describe("repeated identical tool calls through the run loop", () => {
 
   it("keeps going when the model writes before each repeat", async () => {
     const { requests, finalText } = await runLoop(
-      () => ({ text: "Checking the download again.", calls: [LISTING] }),
+      (n) =>
+        n <= 10
+          ? { text: "Checking the download again.", calls: [LISTING] }
+          : { text: "Finished checking." },
       { listing: unreadable },
     );
 
-    expect(requests).toHaveLength(REQUEST_CAP + 1);
+    expect(requests).toHaveLength(11);
+    expect(finalText).toBe("Finished checking.");
     expect(isLoopGuardStopText(finalText)).toBe(false);
   }, 30_000);
 
@@ -531,5 +540,77 @@ describe("repeated identical tool calls through the run loop", () => {
       6,
       await runLoop(() => ({ calls: [LISTING, LISTING] }), { listing: unreadable }),
     );
+  }, 30_000);
+});
+
+describe("repeated tool results through the real Pi run loop", () => {
+  it.each([false, true])(
+    "stops after exactly 25 completed single-call responses with varying inputs (narration: %s)",
+    async (narration) => {
+      const run = await runLoop((n) => ({
+        ...(narration ? { text: `Clicking another position, attempt ${n}.` } : {}),
+        calls: [varyingAction(n)],
+      }));
+
+      expect(run.requests).toHaveLength(25);
+      expect(run.act).toHaveBeenCalledTimes(25);
+      expect(new Set(run.act.mock.calls.map(([, args]) => JSON.stringify(args))).size).toBe(25);
+      expect(toolResultTexts(run.requests[24]!.messages)).toHaveLength(24);
+      expect(run.finalizeRun).toHaveBeenCalledOnce();
+      expect(run.finalText).toContain("Computer act with the same result 25 times");
+      expect(isLoopGuardStopText(run.finalText)).toBe(true);
+      const stopEvents = (
+        run.events.append.mock.calls as unknown as Array<
+          [{ type: string; payload?: { toolLoopStop?: unknown } }]
+        >
+      )
+        .map(([event]) => event)
+        .filter((event) => event.payload?.toolLoopStop);
+      expect(stopEvents).toEqual([
+        expect.objectContaining({
+          type: "thread.meta",
+          payload: {
+            toolLoopStop: {
+              reason: "same_result",
+              name: "computer_act",
+              executionId: expect.any(String),
+              count: 25,
+            },
+          },
+        }),
+      ]);
+    },
+    30_000,
+  );
+
+  it.each(["same tool", "different tools"])(
+    "resets the result streak for a multi-call response containing %s",
+    async (batch) => {
+      const run = await runLoop((n) => ({
+        calls:
+          n === 13
+            ? [varyingAction(n), batch === "same tool" ? varyingAction(100 + n) : LISTING]
+            : [varyingAction(n)],
+      }));
+
+      // Twelve singles, one batch, then a fresh streak of 25 completed singles.
+      expect(run.requests).toHaveLength(38);
+      expect(run.act).toHaveBeenCalledTimes(batch === "same tool" ? 39 : 38);
+      expect(run.listFiles).toHaveBeenCalledTimes(batch === "same tool" ? 0 : 1);
+      expect(run.finalText).toContain("with the same result 25 times");
+      expect(isLoopGuardStopText(run.finalText)).toBe(true);
+    },
+    30_000,
+  );
+
+  it("starts a fresh result streak when a result changes despite varying inputs", async () => {
+    const run = await runLoop((n) =>
+      n <= 26 ? { calls: [varyingAction(n, n <= 13 ? 1 : 2)] } : { text: "Positions checked." },
+    );
+
+    expect(run.requests).toHaveLength(27);
+    expect(run.act).toHaveBeenCalledTimes(26);
+    expect(run.finalText).toBe("Positions checked.");
+    expect(isLoopGuardStopText(run.finalText)).toBe(false);
   }, 30_000);
 });

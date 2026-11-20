@@ -1,4 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors (inherited material)
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; directional-control filtering is an Ork addition.
+
 import type { MessageBlock } from "@orkbot/contracts";
+import { stripDirectionalControls } from "./directional-controls.js";
 import { identitySource, preserveIdentitySource } from "./identity-source.js";
 
 /** Deliberately narrow: complete tokens only, never substrings of prose or short handles. */
@@ -20,7 +26,7 @@ export function isOpaqueName(name: string): boolean {
 }
 
 export function displayName(name: string | null | undefined, fallback: string): string {
-  const trimmed = name?.trim() ?? "";
+  const trimmed = stripDirectionalControls(name ?? "").trim();
   return trimmed && /[\p{L}\p{N}]/u.test(trimmed) && !isOpaqueName(trimmed) ? trimmed : fallback;
 }
 

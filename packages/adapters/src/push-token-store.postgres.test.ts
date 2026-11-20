@@ -1,8 +1,15 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited database fixtures are preserved; multi-device push coverage is an Ork addition.
+
 import { randomUUID } from "node:crypto";
-import { createDb, runAsSystem, runAsTenant } from "@orkbot/db";
+import { readFileSync } from "node:fs";
+import { createDb, createPool, runAsSystem, runAsTenant } from "@orkbot/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { credentialDigest } from "./credential-digest.js";
 import { PrismaPushTokenStore, PushSessionEndedError } from "./push-token-store.js";
+import { EncryptedSecretStore } from "./secrets.js";
 
 const suite =
   process.env.VERIFY_DATABASE && process.env.DATABASE_URL ? describe.sequential : describe.skip;
@@ -45,9 +52,14 @@ suite("database push registrations", () => {
     });
   });
   beforeEach(async () => {
-    await runAsSystem("clear fixture push registrations", () =>
-      a.prisma.pushToken.deleteMany({ where: { userId: { startsWith: prefix } } }),
-    );
+    await runAsSystem("clear fixture push registrations", async () => {
+      await a.prisma.pushToken.deleteMany({ where: { userId: { startsWith: prefix } } });
+      await a.prisma.pushRegistration.deleteMany({ where: { userId: { startsWith: prefix } } });
+      await a.prisma.session.updateMany({
+        where: { userId: { startsWith: prefix } },
+        data: { expiresAt: new Date(Date.now() + 3600_000) },
+      });
+    });
   });
   afterAll(async () => {
     if (!a) return;
@@ -67,6 +79,7 @@ suite("database push registrations", () => {
     expect(row.tokenDigest).toBe(credentialDigest(token("a")));
     await runAsTenant({ userId: user("b"), spaceId: "unused" }, async () => {
       expect(await a.prisma.pushToken.findMany()).toEqual([]);
+      expect(await a.prisma.pushRegistration.findMany()).toEqual([]);
     });
   });
 
@@ -148,6 +161,143 @@ suite("database push registrations", () => {
       PushSessionEndedError,
     );
     expect((await api.load(user("a")))?.token).toBe(token("shared"));
+  });
+
+  it("retains two devices, replaces only the rotating session, and revokes only its registration", async () => {
+    await api.save(user("a"), token("first"), session("a"));
+    await worker.save(user("a"), token("second"), session("a2"));
+    expect((await api.list(user("a"))).map((row) => row.token).sort()).toEqual(
+      [token("first"), token("second")].sort(),
+    );
+    await api.save(user("a"), token("rotated"), session("a"));
+    expect((await worker.list(user("a"))).map((row) => row.token).sort()).toEqual(
+      [token("rotated"), token("second")].sort(),
+    );
+    await api.remove(user("a"), credentialDigest(token("first")));
+    expect(await worker.list(user("a"))).toHaveLength(2);
+    await api.endSession(user("a"), session("a"));
+    expect(await worker.list(user("a"))).toEqual([
+      { token: token("second"), sessionId: session("a2") },
+    ]);
+    expect(
+      await runAsSystem("legacy worker view", () =>
+        a.prisma.pushToken.findUnique({ where: { userId: user("a") } }),
+      ),
+    ).toMatchObject({ sessionId: session("a2") });
+  });
+
+  it("keeps a registration already made by the replacement session", async () => {
+    await api.save(user("a"), token("old"), session("a"));
+    await worker.save(user("a"), token("new"), session("a2"));
+    await api.endSession(user("a"), session("a"), session("a2"));
+    expect(await worker.list(user("a"))).toEqual([
+      { token: token("new"), sessionId: session("a2") },
+    ]);
+  });
+
+  it("mirrors older-node registrations and conditional removal without reviving stale tokens", async () => {
+    await api.save(user("a"), token("first"), session("a"));
+    const row = await runAsSystem("legacy node view", () =>
+      a.prisma.pushToken.findUniqueOrThrow({ where: { userId: user("a") } }),
+    );
+    await runAsSystem("old node registers another device", () =>
+      a.prisma.pushToken.update({
+        where: { userId: user("a") },
+        data: {
+          sessionId: session("a2"),
+          tokenDigest: credentialDigest(token("second")),
+          ciphertext: row.ciphertext,
+        },
+      }),
+    );
+    // Ciphertext is copied unchanged by the mirror, never decrypted in SQL.
+    expect(
+      await runAsSystem("inspect mirrored devices", () =>
+        a.prisma.pushRegistration.count({ where: { userId: user("a") } }),
+      ),
+    ).toBe(2);
+    await api.save(user("a"), token("rotated"), session("a2"));
+    const newRow = await runAsSystem("inspect rotated fixture", () =>
+      a.prisma.pushToken.findUniqueOrThrow({ where: { userId: user("a") } }),
+    );
+    // An old snapshot timestamp cannot overwrite the session's newer registration.
+    await runAsSystem("late legacy snapshot", () =>
+      a.prisma.pushToken.update({
+        where: { userId: user("a") },
+        data: {
+          tokenDigest: row.tokenDigest,
+          ciphertext: row.ciphertext,
+          updatedAt: new Date(row.updatedAt.getTime() - 1),
+        },
+      }),
+    );
+    expect(
+      await runAsSystem("inspect guarded rotation", () =>
+        a.prisma.pushRegistration.findUnique({ where: { tokenDigest: newRow.tokenDigest } }),
+      ),
+    ).not.toBeNull();
+    await runAsSystem("old node deletes stale snapshot", () =>
+      a.prisma.pushToken.delete({ where: { userId: user("a") } }),
+    );
+    expect((await worker.list(user("a"))).map((entry) => entry.token).sort()).toEqual(
+      [token("first"), token("rotated")].sort(),
+    );
+  });
+
+  it("backfills ciphertext and encryption context from the previous schema without keys in SQL", async () => {
+    await api.save(user("a"), token("migrated"), session("a"));
+    const owner = createPool(process.env.DATABASE_MIGRATION_URL!);
+    const client = await owner.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        "DROP TRIGGER mirror_legacy_push_registration ON push_tokens; DROP FUNCTION mirror_legacy_push_registration(); DROP TABLE push_registrations",
+      );
+      const sql = readFileSync(
+        new URL(
+          "../../db/prisma/migrations/20261130135000_push_registrations/migration.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      await client.query(sql.replace(/^BEGIN;\n/m, "").replace(/^COMMIT;\n/m, ""));
+      const { rows } = await client.query<{ ciphertext: string }>(
+        'SELECT ciphertext FROM push_registrations WHERE "userId" = $1',
+        [user("a")],
+      );
+      expect(rows).toHaveLength(1);
+      expect(
+        await new EncryptedSecretStore("offline-push-encryption-key").load(
+          rows[0]!.ciphertext,
+          `push-token:${user("a")}`,
+        ),
+      ).toBe(token("migrated"));
+    } finally {
+      await client.query("rollback");
+      client.release();
+      await owner.end();
+    }
+  });
+
+  it("cascades all registrations when the account is deleted", async () => {
+    const id = user("deleted");
+    await runAsSystem("seed deleted account fixture", async () => {
+      await a.prisma.user.create({ data: { id, name: "Fixture", email: `${id}@example.invalid` } });
+      for (const device of ["one", "two"])
+        await a.prisma.session.create({
+          data: {
+            id: session(`deleted-${device}`),
+            token: session(`deleted-${device}`),
+            userId: id,
+            expiresAt: new Date(Date.now() + 3600_000),
+          },
+        });
+    });
+    await api.save(id, token("deleted-one"), session("deleted-one"));
+    await worker.save(id, token("deleted-two"), session("deleted-two"));
+    expect(await worker.list(id)).toHaveLength(2);
+    await runAsSystem("delete account fixture", () => a.prisma.user.delete({ where: { id } }));
+    expect(await worker.list(id)).toEqual([]);
   });
 
   it("does not publish a registration after a concurrent session deletion commits", async () => {

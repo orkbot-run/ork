@@ -43,6 +43,7 @@ export function dedupeModelConnectionPresets(
 }
 
 const definitions: Readonly<Record<string, ConnectionDefinition>> = {
+  openrouter: { metadata: { supportsZeroDataRetention: true } },
   [CLOUDFLARE_AI_GATEWAY_PROVIDER_ID]: {
     metadata: {
       routingFields: [
@@ -62,6 +63,7 @@ const definitions: Readonly<Record<string, ConnectionDefinition>> = {
     metadata: {
       presets: dedupeModelConnectionPresets([
         {
+          id: "ollama-cloud",
           label: "Ollama Cloud",
           baseUrl: "https://ollama.com/v1",
           apiProtocol: "chat-completions",
@@ -80,6 +82,13 @@ export function modelConnectionMetadata(provider: string): ModelConnectionMetada
   const definition = definitionFor(provider);
   return definition ? ModelConnectionMetadataSchema.parse(definition.metadata) : undefined;
 }
+
+export function modelSupportsZeroDataRetention(provider: string): boolean {
+  return definitionFor(provider)?.metadata.supportsZeroDataRetention === true;
+}
+
+export const UNSUPPORTED_ZERO_DATA_RETENTION =
+  "This model provider does not support Zero Data Retention.";
 
 /** Project old records into generic form fields without discarding a valid partial route. */
 export function modelCredentialRouting(

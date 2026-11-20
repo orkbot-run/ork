@@ -3,6 +3,79 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const RU_MESSAGES: Record<string, string> = {
+  "Add a schedule or an HTTPS address to run this routine.":
+    "Добавьте расписание или HTTPS-адрес для запуска этой задачи.",
+  "Ask an owner to resume your plan.": "Попросите владельца возобновить ваш тарифный план.",
+  "Back to meetings": "Назад к встречам",
+  "Blocked by the server administrator": "Заблокировано администратором сервера",
+  "Check every 5 to 1,440 minutes and track up to five fields.":
+    "Проверяйте каждые 5–1440 минут и отслеживайте до пяти полей.",
+  "Check interval in minutes": "Интервал проверки в минутах",
+  "Confirm deletion": "Подтвердите удаление",
+  "Confirm that all participants have been informed before continuing.":
+    "Прежде чем продолжить, подтвердите, что все участники проинформированы.",
+  "Could not submit this answer": "Не удалось отправить этот ответ",
+  "Daily limit: {dailyLimit}. Maximum meeting length: {maxMinutes} minutes.":
+    "Дневной лимит: {dailyLimit}. Максимальная длительность встречи: {maxMinutes} мин.",
+  "Delete meeting": "Удалить встречу",
+  "Delete this meeting and its transcript? This cannot be undone.":
+    "Удалить эту встречу и её расшифровку? Это действие нельзя отменить.",
+  "Enter a future date and time in YYYY-MM-DDTHH:mm format.":
+    "Введите будущую дату и время в формате YYYY-MM-DDTHH:mm.",
+  "Enter a message body": "Введите текст сообщения",
+  "Enter a public HTTPS address without credentials or a fragment":
+    "Введите общедоступный HTTPS-адрес без учётных данных и фрагмента",
+  "Enter a recipient": "Укажите получателя",
+  "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link.":
+    "Введите поддерживаемую ссылку на встречу Google Meet, Zoom или Microsoft Teams.",
+  "Fields that mark a change": "Поля для определения изменений",
+  "Fields to compare, e.g. id, modifiedTime (optional)":
+    "Поля для сравнения, например id, modifiedTime (необязательно)",
+  "Google Meet, Zoom and Microsoft Teams links are supported.":
+    "Поддерживаются ссылки Google Meet, Zoom и Microsoft Teams.",
+  "HTTPS address": "HTTPS-адрес",
+  "I have informed all participants and have permission to record and transcribe this meeting.":
+    "Все участники проинформированы, и у меня есть разрешение на запись и расшифровку этой встречи.",
+  "Invite your bot to a meeting": "Пригласить бота на встречу",
+  "Keep meeting": "Сохранить встречу",
+  "Leave empty to join now. Scheduled time uses your device time zone.":
+    "Оставьте поле пустым, чтобы присоединиться сейчас. Запланированное время использует часовой пояс устройства.",
+  "Manage billing to resume your plan.":
+    "Откройте настройки оплаты, чтобы возобновить ваш тарифный план.",
+  "Meeting link": "Ссылка на встречу",
+  Meetings: "Встречи",
+  "Meetings are not available on this server.": "Встречи недоступны на этом сервере.",
+  "Message body": "Текст сообщения",
+  No: "Нет",
+  "No meetings yet.": "Встреч пока нет.",
+  "No transcript yet. It will appear after processing.":
+    "Расшифровки пока нет. Она появится после обработки.",
+  "Payment failed. Ask an owner to update the payment method.":
+    "Платёж не прошёл. Попросите владельца обновить способ оплаты.",
+  "Payment failed. Update your payment method to resume your plan.":
+    "Платёж не прошёл. Обновите способ оплаты, чтобы возобновить ваш тарифный план.",
+  'Post "No changes" in chat': "Публиковать «Без изменений» в чате",
+  "Recipient changed. Review the updated draft and press Send again.":
+    "Получатель изменился. Проверьте обновлённый черновик и снова нажмите «Отправить».",
+  Refresh: "Обновить",
+  Reject: "Отклонить",
+  "Remove change trigger": "Удалить триггер изменений",
+  "Route requests only to endpoints marked as eligible for zero data retention.":
+    "Направлять запросы только на конечные точки, отмеченные как подходящие для работы без хранения данных.",
+  "Schedule (optional)": "Расписание (необязательно)",
+  Subject: "Тема",
+  "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it.":
+    "Бот присоединяется как видимый участник, записывает звук и создаёт расшифровку. Прежде чем приглашать его, сообщите об этом всем участникам.",
+  "Title (optional)": "Название (необязательно)",
+  To: "Кому",
+  "Unchanged checks appear in history. You can also post them in chat.":
+    "Проверки без изменений отображаются в истории. Их также можно публиковать в чате.",
+  "Update payment method": "Обновить способ оплаты",
+  "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00":
+    "Используйте дату и время с часовым поясом, например 2026-11-20T14:30:00+01:00",
+  "Watch an HTTPS address": "Отслеживать HTTPS-адрес",
+  Yes: "Да",
+  "Zero data retention": "Без хранения данных",
   "Open Ork Accounts": "Открыть Ork Accounts",
   "Could not open Ork Accounts. Try again.": "Не удалось открыть Ork Accounts. Попробуйте ещё раз.",
   Checklist: "Контрольный список",
@@ -553,8 +626,8 @@ export const RU_MESSAGES: Record<string, string> = {
   Attach: "Вложение",
   "Attach file": "Прикрепить файл",
   "Authorization code": "Код авторизации",
-  "Authorization timed out. Please try again.":
-    "Время авторизации истекло. Пожалуйста, попробуйте еще раз.",
+  "Waiting for authorization.": "Ожидаем авторизацию.",
+  "Start over": "Начать заново",
   "Bearer token": "Bearer-токен",
   "Back to sign in": "Вернуться ко входу",
   Back: "Назад",
@@ -1023,6 +1096,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Waiting…": "Ожидание…",
   "What this bot is for": "Для чего нужен этот бот",
   Working: "Выполняется",
+  "Thinking…": "Думает…",
   "Working…": "Выполняется…",
   "Work stopped, but the thread could not refresh: {detail}":
     "Работа остановлена, но диалог не удалось обновить: {detail}",

@@ -147,7 +147,9 @@ test("a healthy running computer is not diagnosed while its screen URL loads", a
   const reading = new Promise<void>((resolve) => {
     readStarted = resolve;
   });
+  let screenReads = 0;
   await page.route("**/rpc/computer/screenUrl", async (route) => {
+    screenReads += 1;
     readStarted();
     await new Promise((resolve) => setTimeout(resolve, 800));
     await route.fulfill({
@@ -163,6 +165,7 @@ test("a healthy running computer is not diagnosed while its screen URL loads", a
   await captureScreenshot(page, testInfo, "computer-screen-url-loading");
   await expect(preview.locator("iframe")).toHaveAttribute("src", screenUrl);
   await expect(preview.getByRole("alert")).toHaveCount(0);
+  expect(screenReads).toBe(1);
   await expect(page.getByText("Screen not connected", { exact: true })).toHaveCount(0);
   await captureScreenshot(page, testInfo, "computer-screen-url-loaded");
 });

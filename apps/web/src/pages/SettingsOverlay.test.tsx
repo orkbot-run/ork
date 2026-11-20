@@ -4,6 +4,7 @@
 
 // @vitest-environment jsdom
 
+import { ORPCError } from "@orpc/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { act } from "react";
@@ -38,11 +39,12 @@ vi.mock("@orkbot/ui-web", () => ({
   DialogTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
 }));
 
+vi.mock("./UsageSettingsPanel", () => ({ UsageSettingsPanel: () => null }));
+
 vi.mock("./AccountSettingsOverlay", () => ({
   ComputerSettingsPanel: () => null,
   GeneralSettingsPanels: () => null,
   UpdatesSettingsPanel: () => null,
-  UsageSettingsPanel: () => null,
 }));
 const { memoryConfigs, memoryConfigChange, providerConfig, updaterStatus, policyState } =
   vi.hoisted(() => ({
@@ -55,6 +57,11 @@ const { memoryConfigs, memoryConfigChange, providerConfig, updaterStatus, policy
 vi.mock("../lib/rpc", () => ({
   rpc: { updater: { status: updaterStatus } },
   createSpaceRpc: () => ({
+    audit: {
+      events: async () => {
+        throw new ORPCError("FORBIDDEN");
+      },
+    },
     memory: { providerConfig: () => providerConfig("") },
     models: {
       workspacePolicy: async () => ({
@@ -66,6 +73,11 @@ vi.mock("../lib/rpc", () => ({
   }),
   selectedSpaceId: () => null,
   rpcForSpace: (spaceId: string) => ({
+    audit: {
+      events: async () => {
+        throw new ORPCError("FORBIDDEN");
+      },
+    },
     memory: { providerConfig: () => providerConfig(spaceId) },
     models: {
       workspacePolicy: async () => ({
@@ -149,7 +161,6 @@ async function render(props: Partial<React.ComponentProps<typeof SettingsOverlay
         <QueryClientProvider client={queryClient}>
           <SettingsOverlay
             name="Jamie"
-            onUsageOpen={() => undefined}
             timezone={null}
             onTimezoneChange={async () => undefined}
             memoryConfig={null}

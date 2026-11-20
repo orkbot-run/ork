@@ -10,6 +10,7 @@ const at = (day: number) => new Date(Date.UTC(2026, 0, 1) + day * DAY);
 const now = at(200);
 const billing = (fields: Record<string, unknown> = {}) => ({
   status: null,
+  firstPaidInvoiceAt: null,
   paidAt: null,
   endedAt: null,
   currentPeriodEndsAt: null,
@@ -29,7 +30,7 @@ describe("saved home deletion date", () => {
     for (const status of ["trialing", "active", "past_due", "unpaid", "paused"])
       expect(
         homeDeletionDue(
-          { billing: billing({ status, paidAt: at(0) }), modelCredits: null },
+          { billing: billing({ status, firstPaidInvoiceAt: at(0) }), modelCredits: null },
           at(0),
           now,
         ),
@@ -37,7 +38,7 @@ describe("saved home deletion date", () => {
   });
 
   it("never deletes while the organization can still run bots on credits or a free period", () => {
-    const canceled = billing({ status: "canceled", paidAt: at(0), endedAt: at(10) });
+    const canceled = billing({ status: "canceled", firstPaidInvoiceAt: at(0), endedAt: at(10) });
     expect(
       homeDeletionDue(
         { billing: canceled, modelCredits: credits({ balanceMicros: 1n }) },
@@ -56,16 +57,25 @@ describe("saved home deletion date", () => {
 
   it("gives an ended plan 30 days from its end or its last use, whichever is later", () => {
     const ended = {
-      billing: billing({ status: "canceled", paidAt: at(0), endedAt: at(100) }),
+      billing: billing({ status: "canceled", firstPaidInvoiceAt: at(0), endedAt: at(100) }),
       modelCredits: credits(),
     };
     expect(homeDeletionDue(ended, at(50), now)).toEqual({ at: at(130), reason: "plan-ended" });
     expect(homeDeletionDue(ended, at(110), now)).toEqual({ at: at(140), reason: "plan-ended" });
   });
 
+  it("keeps both grace periods for a legacy account awaiting payment verification", () => {
+    const legacy = {
+      billing: billing({ status: "canceled", paidAt: at(0), endedAt: at(190) }),
+      modelCredits: null,
+    };
+    expect(homeDeletionDue(legacy, at(50), now)).toEqual({ at: at(220), reason: "unused" });
+    expect(homeDeletionDue(legacy, at(150), now)).toEqual({ at: at(240), reason: "unused" });
+  });
+
   it("moves the date out from the latest credit purchase, even once those credits are spent", () => {
     const bought = {
-      billing: billing({ status: "canceled", paidAt: at(0), endedAt: at(100) }),
+      billing: billing({ status: "canceled", firstPaidInvoiceAt: at(0), endedAt: at(100) }),
       modelCredits: credits({ lots: [{ createdAt: at(120) }] }),
     };
     expect(homeDeletionDue(bought, at(50), now)).toEqual({ at: at(150), reason: "plan-ended" });

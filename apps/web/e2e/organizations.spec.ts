@@ -58,11 +58,10 @@ test("create, switch, rename and delete an organization", async ({ page }, testI
 
   let settings = await openUserSettings(page);
   await settings.getByTestId("settings-nav-organization").click();
-  await expect(
-    settings
-      .getByTestId("organization-settings")
-      .getByRole("button", { name: "Delete organization" }),
-  ).toHaveCount(0);
+  await settings.getByRole("button", { name: "Organization options" }).click();
+  await expect(page.getByRole("menuitem", { name: "Activity log" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Delete organization" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await captureScreenshot(page, testInfo, "org-settings-single");
   await settings.getByRole("button", { name: "Create organization" }).click();
   const create = page.getByRole("dialog", { name: "Create organization" });
@@ -163,7 +162,8 @@ test("create, switch, rename and delete an organization", async ({ page }, testI
     )
     .toEqual(["Personal", "Acme"]);
 
-  await organization.getByRole("button", { name: "Delete organization" }).click();
+  await settings.getByRole("button", { name: "Organization options" }).click();
+  await page.getByRole("menuitem", { name: "Delete organization" }).click();
   const confirm = page.getByRole("alertdialog", { name: "Delete Acme?" });
   const remove = confirm.getByRole("button", { name: "Delete", exact: true });
   await expect(remove).toBeDisabled();

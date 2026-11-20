@@ -86,6 +86,47 @@ function setup(initial: ComputerProviderSelection) {
 }
 
 describe("ConfiguredSandbox", () => {
+  it("cleans a new allocation only through its original account connection", async () => {
+    const primary = new FakeSandboxProvider();
+    const primaryDestroy = vi.spyOn(primary, "destroy");
+    const provider = new FakeSandboxProvider();
+    const destroy = vi.spyOn(provider, "destroy").mockResolvedValue(undefined);
+    const ref = { id: "ref", botId: "home", kind: "e2b", providerRef: "ref" } as const;
+    const own: StoredComputerSettings = { provider: "e2b", values: { apiKey: "original" } };
+    let userSettings = own;
+    const loadOwnForUser = vi.fn(async () => userSettings);
+    Object.assign(provider, {
+      describe: () => ({ ...primary.describe(), id: ref.kind }),
+      provision: async (input: Parameters<ConfiguredSandbox["provision"]>[0]) => {
+        await input.recordCreated?.(ref);
+        return ref;
+      },
+    });
+    const sandbox = new ConfiguredSandbox(
+      primary,
+      async () => ({ provider: "default", settings: null }),
+      {
+        loadOwn: async () => own,
+        loadOwnForUser,
+        createProvider: async () => provider,
+      },
+    );
+    const record =
+      vi.fn<NonNullable<Parameters<ConfiguredSandbox["provision"]>[0]["recordCreated"]>>();
+    await sandbox.provision({ botId: "home", homePath: "/unused", recordCreated: record }, ctx);
+    const connection = record.mock.calls[0]?.[1];
+    expect(connection).toMatch(/^account:[a-f0-9]{64}$/);
+    await sandbox.destroyUncommitted(ref, connection!, ctx);
+    expect(loadOwnForUser).toHaveBeenCalledWith(ctx.userId);
+    expect(destroy).toHaveBeenCalledExactlyOnceWith(ref, ctx);
+    userSettings = { ...own, values: { apiKey: "different-account" } };
+    await expect(sandbox.destroyUncommitted(ref, connection!, ctx)).rejects.toThrow(
+      "The connection that allocated the computer is unavailable",
+    );
+    expect(destroy).toHaveBeenCalledTimes(1);
+    expect(primaryDestroy).not.toHaveBeenCalled();
+  });
+
   it("sends new computers to the provider chosen in Settings", async () => {
     const { sandbox, select } = setup({ provider: "default", settings: null });
     await sandbox.refresh();

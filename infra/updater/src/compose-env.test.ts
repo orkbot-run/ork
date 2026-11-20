@@ -46,6 +46,8 @@ const KUBERNETES_SANDBOX =
 /** Read by code but never passed to the api or worker containers, with the reason. */
 const NOT_PASSED: Record<string, string> = {
   VITEST: "set by the test runner",
+  NODE_OPTIONS: "host Node runtime flags must not be inherited by Compose containers",
+  NODE_USE_ENV_PROXY: "host Node proxy opt-in must not be inherited by Compose containers",
   OWNER_EMAIL: "bootstrap-owner CLI input, passed on its own command line",
   OWNER_PASSWORD: "bootstrap-owner CLI input, passed on its own command line",
   PM2_HOME: "restart-supervisor detection for PM2 hosts; Compose restarts containers",

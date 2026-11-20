@@ -57,7 +57,7 @@ import { localSchemaReference } from "./openai-tool-parameters.js";
 import type { RemoteTransportDependencies, RemoteUrlPolicy } from "./remote-mcp.js";
 import {
   assertSafeRemoteUrl,
-  callRemoteMcpTool,
+  callRemoteMcpConnectorTool,
   createSafeRemoteFetch,
   listRemoteMcpTools,
   RemoteMcpSessionCache,
@@ -323,20 +323,24 @@ export class InstalledConnectorProvider implements ConnectorProvider {
       const remote = await this.remoteFor(context);
       if (install.kind === "mcp") {
         const config = McpConfigSchema.parse(install.config);
-        const result = await callRemoteMcpTool(
+        const result = await callRemoteMcpConnectorTool(
           {
             ...remote,
             endpoint: install.source,
             headers: connectorHeaders(config, credential),
             signal: context.signal,
             ...this.mcpSessionOptions(context, install),
+            form: context.elicitMcpForm
+              ? { integrationName: install.name, elicit: context.elicitMcpForm }
+              : undefined,
           },
           call.route?.toolName ?? call.tool,
           call.args,
+          credential ? [credential] : [],
         );
         yield {
           type: "result",
-          data: redactConnectorPayload(result, credential ? [credential] : []),
+          data: result,
         };
         return;
       }

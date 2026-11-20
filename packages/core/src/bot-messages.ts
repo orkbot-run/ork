@@ -28,6 +28,8 @@ export interface BotAddress {
   description?: string;
 }
 
+const BOT_RECIPIENT_SUGGESTION_LIMIT = 20;
+
 export function clampBotMessage(text: string): string {
   const trimmed = text.trim();
   return trimmed.length <= BOT_MESSAGE_MAX_LENGTH
@@ -47,7 +49,7 @@ export function botMessageHopExhausted(hop: number): boolean {
 export type BotMessageContext = Extract<MessageBlock, { kind: "bot_message_received" }>;
 
 export function botMessageContext(blocks: readonly MessageBlock[]): BotMessageContext | undefined {
-  return blocks.find((block): block is BotMessageContext => block.kind === "bot_message_received");
+  return blocks.find((block): block is BotMessageContext => block?.kind === "bot_message_received");
 }
 
 export function botMessageAllowsSilence(
@@ -71,6 +73,40 @@ export function resolveBotAddress<T extends BotAddress>(
   const lower = name.toLowerCase();
   const matches = bots.filter((bot) => bot.name.toLowerCase() === lower);
   return matches.length === 1 ? matches[0] : undefined;
+}
+
+export function describeMissingBotRecipient(
+  candidates: readonly (BotAddress & { thread: { id: string } | null })[],
+  senderId: string,
+  input: { botId?: string; name?: string },
+  hasFiles: boolean,
+): string {
+  const reachable = candidates.filter((bot) => bot.id !== senderId && bot.thread !== null);
+  const name = input.botId?.trim() ? undefined : input.name?.trim().toLowerCase();
+  const matches = name ? reachable.filter((bot) => bot.name.toLowerCase() === name) : [];
+  const ambiguous = matches.length > 1;
+  const suggestions = (ambiguous ? matches : reachable).sort(
+    (first, second) => first.name.localeCompare(second.name) || first.id.localeCompare(second.id),
+  );
+  const lines = [
+    ambiguous
+      ? "More than one reachable bot matches that name."
+      : "No bot found with that id or name.",
+  ];
+  if (suggestions.length === 0) {
+    lines.push("There are no bots you can message in this workspace.");
+  } else {
+    lines.push(
+      "Use bot_id to address a bot. Display names are escaped and may differ from stored names.",
+      ...formatBotRosterLines(
+        suggestions.slice(0, BOT_RECIPIENT_SUGGESTION_LIMIT).map(({ id, name }) => ({ id, name })),
+      ),
+    );
+    const remaining = suggestions.length - BOT_RECIPIENT_SUGGESTION_LIMIT;
+    if (remaining > 0) lines.push(`…and ${remaining} more.`);
+  }
+  if (hasFiles) lines.push("Nothing was sent.");
+  return lines.join("\n");
 }
 
 /**
@@ -118,6 +154,7 @@ export function renderBotDirectory(bots: readonly BotAddress[]): string | undefi
 /** Let bots address their groups from outside the group thread. */
 export function renderBotGroupDirectory(
   groups: readonly { id: string; name: string; members: readonly BotAddress[] }[],
+  options?: { currentGroupId: string | null; canPost: boolean },
 ): string | undefined {
   if (!groups.length) return undefined;
   return [
@@ -128,8 +165,16 @@ export function renderBotGroupDirectory(
         `- ${escapeDirectoryField(group.name)} (group_id: ${escapeDirectoryField(group.id)}): ${group.members.map((member) => `${escapeDirectoryField(member.name)} (id: ${escapeDirectoryField(member.id)})`).join(", ")}`,
     ),
     "</bot_groups>",
-    "Use message_bot to message a teammate directly, or handoff_to_bot with group_id and a member's bot_id to coordinate in a group. Choose the conversation that fits the work and follow the user's instructions. Send the relevant task or update, not unrelated chat history. Group replies appear in that group.",
-  ].join("\n");
+    options?.currentGroupId
+      ? undefined
+      : "Use message_bot to message a teammate directly, or handoff_to_bot with group_id and a member's bot_id to coordinate in a group. Group replies appear in that group.",
+    options?.canPost
+      ? "Use post_to_group to publish a requested report or update in a listed group. A post appears as your message without starting work for other bots."
+      : undefined,
+    "Choose the conversation that fits the work and follow the user's instructions. Share only information relevant to that conversation.",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /**

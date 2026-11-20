@@ -3,14 +3,40 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
 
+import { BlockList, isIP } from "node:net";
+import { getConnInfo } from "@hono/node-server/conninfo";
 import { logSinkHealth } from "@orkbot/logging";
+import type { Context } from "hono";
 import { Hono } from "hono";
 
-/**
- * `/health` is public liveness, so it stays a constant body. Deployment details are for
- * operators on the API port; a reverse proxy adds forwarding headers, so a request that
- * carries them came through the public edge and gets no details.
- */
+const internalPeers = new BlockList();
+for (const [address, prefix] of [
+  ["127.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["172.16.0.0", 12],
+  ["192.168.0.0", 16],
+] as const)
+  internalPeers.addSubnet(address, prefix, "ipv4");
+internalPeers.addAddress("::1", "ipv6");
+internalPeers.addSubnet("fc00::", 7, "ipv6");
+
+function hasInternalPeer(c: Context): boolean {
+  // app.request()/fetch() in-process calls have no server bindings. Real Node requests do.
+  if (!c.env || (!Object.hasOwn(c.env, "incoming") && !Object.hasOwn(c.env, "server"))) {
+    return true;
+  }
+  try {
+    const peer = getConnInfo(c).remote.address;
+    if (typeof peer !== "string") return false;
+    const family = isIP(peer);
+    // BlockList matches IPv4-mapped IPv6 (both dotted and hexadecimal forms) to IPv4 ranges.
+    return family !== 0 && internalPeers.check(peer, family === 6 ? "ipv6" : "ipv4");
+  } catch {
+    return false;
+  }
+}
+
+/** Public liveness stays constant; deployment diagnostics require a private socket peer. */
 export function healthRoutes(
   details: () => Record<string, unknown>,
   database?: () => Promise<unknown>,
@@ -52,7 +78,12 @@ export function healthRoutes(
   });
   app.get("/health", (c) => c.json({ ok: true }));
   app.get("/internal/health", async (c) => {
-    if (c.req.header("x-forwarded-for") || c.req.header("forwarded")) return c.notFound();
+    if (
+      c.req.raw.headers.has("x-forwarded-for") ||
+      c.req.raw.headers.has("forwarded") ||
+      !hasInternalPeer(c)
+    )
+      return c.notFound();
     const snapshot = { value: {} as Record<string, unknown> };
     const available =
       !internalDetails ||

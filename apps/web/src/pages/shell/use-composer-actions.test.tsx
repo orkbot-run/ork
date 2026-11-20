@@ -355,7 +355,7 @@ it("asks the chat to follow on submit, before the send lands", async () => {
   let finishSend!: () => void;
   rpc.threads.send.mockReturnValue(
     new Promise((resolve) => {
-      finishSend = () => resolve({ runId: "run-1", taskId: "task-1" });
+      finishSend = () => resolve({ runId: "run-1", taskId: "task-1", seq: 8 });
     }),
   );
   let sent!: Promise<boolean>;
@@ -363,9 +363,13 @@ it("asks the chat to follow on submit, before the send lands", async () => {
     sent = latest.sendMessage("hello", [], "nonce-1");
   });
   expect(latest.sentCount).toBe(1);
-  finishSend();
-  await act(async () => void (await sent));
+  expect(latest.sendReceipt).toBeUndefined();
+  await act(async () => {
+    finishSend();
+    await sent;
+  });
   expect(latest.sentCount).toBe(1);
+  expect(latest.sendReceipt).toMatchObject({ seq: 8, runIds: ["run-1"] });
 
   rpc.threads.sendWithRoutines.mockResolvedValue({ routineRunIds: ["routine-run"] });
   expect(await send("@digest", [digest])).toBe(true);
@@ -373,6 +377,7 @@ it("asks the chat to follow on submit, before the send lands", async () => {
     expect.not.objectContaining({ text: expect.anything() }),
   );
   expect(latest.sentCount).toBe(2);
+  expect(latest.sendReceipt).toBeUndefined();
 });
 
 it("names the open page only on text the chat itself sends", async () => {

@@ -3,10 +3,22 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 material is preserved; cross-chat routine discovery and diagnostics are Ork additions.
 
-import type { ConnectorProvider, JobPublisher } from "@orkbot/adapter-kit";
+import { randomBytes } from "node:crypto";
+import type {
+  ConnectorProvider,
+  JobPublisher,
+  SecretRecord,
+  SecretStore,
+} from "@orkbot/adapter-kit";
 import { routineJobKey, routineWakeupJob } from "@orkbot/adapter-kit";
 import type { RoutineWatch } from "@orkbot/contracts";
-import { ROUTINE_WATCH_MIN_MINUTES, RoutineWatchSchema, TimeZoneSchema } from "@orkbot/contracts";
+import {
+  ROUTINE_WATCH_MIN_MINUTES,
+  RoutineMessageProviderSchema,
+  RoutineWatchSchema,
+  routineTriggerIssue,
+  TimeZoneSchema,
+} from "@orkbot/contracts";
 import {
   cronFromPreset,
   formatCron,
@@ -20,7 +32,7 @@ import {
   zonedDateTime,
 } from "@orkbot/core";
 import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
-import { runAsSystemInTransaction } from "@orkbot/db";
+import { routineConversationOpen, runAsSystemInTransaction } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 
 import { localDateTime } from "./current-time.js";
@@ -81,6 +93,104 @@ export function compactScheduleInput(input: Record<string, unknown>): Record<str
   return Object.fromEntries(
     Object.entries(input).filter(([, value]) => isScheduleValueProvided(value)),
   );
+}
+
+type RoutineEventFlags = {
+  webhookEnabled?: boolean;
+  githubEnabled?: boolean;
+  messageProvider?: string | null;
+};
+const CHAT_ROUTING_NOTE =
+  "This routine handles incoming messages in this app instead of the bot's usual replies.";
+const WEBHOOK_SETUP_NOTE =
+  "Open the routine's settings to copy the endpoint and key. The webhook and GitHub triggers use the same bot key.";
+const EVENT_OWNER_ERROR = "Only the bot owner can configure its incoming routine triggers.";
+const EVENT_WRITE_CONFLICT = Symbol("event routine changed");
+
+export function parseScheduleEvents(
+  on: unknown,
+): { ok: true; patch: RoutineEventFlags } | { ok: false; error: string } {
+  if (on === undefined) return { ok: true, patch: {} };
+  if (
+    !on ||
+    typeof on !== "object" ||
+    Array.isArray(on) ||
+    Object.keys(on).some((key) => key !== "webhook" && key !== "github" && key !== "chat")
+  )
+    return { ok: false, error: "on must be an object with webhook, github, or chat." };
+  const { webhook, github, chat } = on as Record<string, unknown>;
+  if (
+    (webhook !== undefined && typeof webhook !== "boolean") ||
+    (github !== undefined && typeof github !== "boolean")
+  )
+    return { ok: false, error: "on.webhook and on.github must be true or false." };
+  const provider = RoutineMessageProviderSchema.nullable().safeParse(chat);
+  if (chat !== undefined && !provider.success)
+    return { ok: false, error: "on.chat must be a provider ID or null to turn it off." };
+  return {
+    ok: true,
+    patch: {
+      ...(webhook !== undefined ? { webhookEnabled: webhook } : {}),
+      ...(github !== undefined ? { githubEnabled: github } : {}),
+      ...(chat !== undefined ? { messageProvider: provider.data } : {}),
+    },
+  };
+}
+
+function hasEventTrigger(row: RoutineEventFlags): boolean {
+  return Boolean(row.webhookEnabled || row.githubEnabled || row.messageProvider);
+}
+
+export function describeRoutineEventTriggers(row: RoutineEventFlags) {
+  if (!hasEventTrigger(row)) return {};
+  return {
+    on: {
+      ...(row.webhookEnabled ? { webhook: true } : {}),
+      ...(row.githubEnabled ? { github: true } : {}),
+      ...(row.messageProvider ? { chat: row.messageProvider } : {}),
+    },
+    ...(row.webhookEnabled || row.githubEnabled ? { setup: WEBHOOK_SETUP_NOTE } : {}),
+    ...(row.messageProvider ? { messageRouting: CHAT_ROUTING_NOTE } : {}),
+  };
+}
+
+export function resolveScheduleCreation(
+  schedule: Record<string, unknown>,
+  timezone: string,
+):
+  | {
+      ok: true;
+      crons: string[];
+      nextRunAt: Date | null;
+      oneShot: boolean;
+      triggers: RoutineEventFlags;
+    }
+  | { ok: false; error: string } {
+  const events = parseScheduleEvents(schedule.on);
+  if (!events.ok) return events;
+  // With an event trigger there needn't be any clock job. A timing field still uses the usual parser.
+  if (
+    !TIMING_FIELDS.some((field) => isScheduleValueProvided(schedule[field])) &&
+    !isScheduleValueProvided(schedule.startAt)
+  ) {
+    const issue = routineTriggerIssue({ crons: [], ...events.patch });
+    return issue
+      ? { ok: false, error: issue.message }
+      : { ok: true, crons: [], nextRunAt: null, oneShot: false, triggers: events.patch };
+  }
+  const timing = resolveScheduleTiming(schedule, timezone);
+  if (!timing.ok) return timing;
+  const crons = [timing.cron];
+  const issue = routineTriggerIssue({ crons, ...events.patch });
+  return issue
+    ? { ok: false, error: issue.message }
+    : {
+        ok: true,
+        crons,
+        nextRunAt: timing.nextRunAt,
+        oneShot: timing.oneShot,
+        triggers: events.patch,
+      };
 }
 
 export function resolveScheduleTiming(
@@ -261,6 +371,60 @@ export interface ScheduleToolDeps {
   prisma: PrismaClient;
   events: ThreadEvents;
   jobs: JobPublisher;
+  secretStore?: Pick<SecretStore, "put">;
+}
+
+type EventBotScope = { spaceId: string; botId: string; userId: string };
+type EventBotCredential = { scope: EventBotScope; key?: SecretRecord; requiresKey: boolean };
+
+async function prepareEventBot(
+  deps: ScheduleToolDeps,
+  scope: EventBotScope,
+  events: RoutineEventFlags,
+): Promise<EventBotCredential | { error: string } | undefined> {
+  if (!hasEventTrigger(events)) return;
+  const bot = await deps.prisma.bot.findFirst({
+    where: { id: scope.botId, spaceId: scope.spaceId, userId: scope.userId, archivedAt: null },
+    select: { webhookSecretId: true },
+  });
+  if (!bot) return { error: EVENT_OWNER_ERROR };
+  const requiresKey = Boolean(events.webhookEnabled || events.githubEnabled);
+  if (bot.webhookSecretId || !requiresKey) return { scope, requiresKey };
+  if (!deps.secretStore) return { error: "Could not set up the webhook key. Try again." };
+  const operation = "schedule.prepare_event_key";
+  const key = await deps.secretStore.put(randomBytes(32).toString("base64url"), {
+    operationId: operation,
+    traceId: operation,
+    botId: scope.botId,
+    spaceId: scope.spaceId,
+    userId: scope.userId,
+    signal: AbortSignal.timeout(10_000),
+  });
+  return { scope, key, requiresKey };
+}
+
+async function lockEventBot(
+  tx: Prisma.TransactionClient,
+  credential: EventBotCredential,
+): Promise<boolean> {
+  const { scope, key } = credential;
+  const [bot] = await tx.$queryRaw<Array<{ webhookSecretId: string | null }>>`
+    SELECT "webhookSecretId" FROM bots WHERE id = ${scope.botId} AND "spaceId" = ${scope.spaceId}
+    AND "userId" = ${scope.userId} AND "archivedAt" IS NULL FOR UPDATE`;
+  if (!bot) return false;
+  if (!credential.requiresKey || bot.webhookSecretId) return true;
+  if (!key) return false;
+  await tx.secret.create({
+    data: {
+      id: key.id,
+      spaceId: scope.spaceId,
+      userId: scope.userId,
+      kind: "webhook",
+      ciphertext: key.ciphertext,
+    },
+  });
+  await tx.bot.update({ where: { id: scope.botId }, data: { webhookSecretId: key.id } });
+  return true;
 }
 
 /** The user's saved timezone, so "every morning at 9" means their 9, not UTC's. */
@@ -498,13 +662,25 @@ export async function createScheduleFromTool(
   if (input.schedule.watch !== undefined) {
     return createWatchFromTool(deps, { ...input, name, prompt });
   }
+  const parsed = parseScheduleEvents(input.schedule.on);
+  if (!parsed.ok) return { error: parsed.error };
+  const eventBot = await prepareEventBot(
+    deps,
+    { spaceId: input.spaceId, userId: input.userId, botId: routineBotId },
+    parsed.patch,
+  );
+  if (eventBot && "error" in eventBot) return eventBot;
   // A named zone needs no coordination with a zone change. The account's zone is read
   // under a share lock in the same transaction as the insert, so the two cannot cross.
-  let wakeAt: Date | undefined;
-  const insertRoutine = (client: Pick<Prisma.TransactionClient, "routine">, timezone: string) => {
-    const resolved = resolveScheduleTiming(input.schedule, timezone);
+  const insertRoutine = async (
+    client: Pick<Prisma.TransactionClient, "routine">,
+    timezone: string,
+    tx?: Prisma.TransactionClient,
+  ) => {
+    const resolved = resolveScheduleCreation(input.schedule, timezone);
     if (!resolved.ok) return { error: resolved.error } as const;
-    wakeAt = resolved.nextRunAt;
+    if (eventBot && (!tx || !(await lockEventBot(tx, eventBot))))
+      return { error: EVENT_OWNER_ERROR };
     return client.routine.create({
       data: {
         spaceId: input.spaceId,
@@ -513,25 +689,26 @@ export async function createScheduleFromTool(
         threadId: routineThreadId,
         name,
         prompt,
-        crons: [resolved.cron],
+        crons: resolved.crons,
         timezone,
         notify: true,
         active: true,
+        ...resolved.triggers,
         nextRunAt: resolved.nextRunAt,
       },
     });
   };
   const row =
-    input.timezone !== undefined
+    input.timezone !== undefined && !eventBot
       ? await insertRoutine(deps.prisma, input.timezone)
       : await deps.prisma.$transaction(async (tx) => {
-          const timezone = await sharedAccountZone(tx, input.userId);
-          return insertRoutine(tx, timezone);
+          const timezone = input.timezone ?? (await sharedAccountZone(tx, input.userId));
+          return insertRoutine(tx, timezone, tx);
         });
   if ("error" in row) return { error: row.error };
 
   try {
-    await deps.jobs.enqueue(routineWakeupJob(row.id, wakeAt!));
+    if (row.nextRunAt) await deps.jobs.enqueue(routineWakeupJob(row.id, row.nextRunAt));
   } catch {
     try {
       await deps.prisma.routine.delete({ where: { id: row.id } });
@@ -565,6 +742,7 @@ export async function createScheduleFromTool(
     nextRunAt: row.nextRunAt?.toISOString() ?? null,
     oneShot: isOneShotRoutineCrons(row.crons),
     ...describeRoutineTiming(row),
+    ...describeRoutineEventTriggers(row),
   };
 }
 
@@ -583,6 +761,7 @@ export function scheduleCreateFields(args: Record<string, unknown>) {
       delaySeconds: args.delaySeconds,
       startAt: args.startAt,
       watch: args.watch,
+      on: args.on,
     }),
   };
 }
@@ -601,6 +780,16 @@ export async function scheduleCreateError(
   const name = input.name.trim();
   if (!name) return "name is required.";
   if (!input.prompt.trim()) return "prompt is required.";
+  const events = parseScheduleEvents(input.schedule.on);
+  if (!events.ok) return events.error;
+  if (
+    hasEventTrigger(events.patch) &&
+    !(await prisma.bot.findFirst({
+      where: { id: input.botId, spaceId: input.spaceId, userId: input.userId, archivedAt: null },
+      select: { id: true },
+    }))
+  )
+    return EVENT_OWNER_ERROR;
   const conflict = await activeRoutineConflict(prisma, { ...input, name });
   if (conflict) return conflict;
   if (input.timezone !== undefined) {
@@ -613,7 +802,7 @@ export async function scheduleCreateError(
     const parsed = scheduleWatch(input.schedule);
     return parsed.success ? undefined : parsed.error;
   }
-  const resolved = resolveScheduleTiming(
+  const resolved = resolveScheduleCreation(
     input.schedule,
     input.timezone ?? (await userTimeZone(prisma, input.userId)),
   );
@@ -624,7 +813,7 @@ export async function scheduleCreateError(
 function scheduleWatch(
   schedule: Record<string, unknown>,
 ): { success: true; data: RoutineWatch } | { success: false; error: string } {
-  const others = Object.keys(schedule).filter((key) => key !== "watch");
+  const others = Object.keys(schedule).filter((key) => key !== "watch" && key !== "on");
   if (others.length) {
     const named =
       others.length > 1 ? `${others.slice(0, -1).join(", ")} or ${others.at(-1)}` : others[0];
@@ -668,6 +857,8 @@ async function createWatchFromTool(
 ) {
   const parsed = scheduleWatch(input.schedule);
   if (!parsed.success) return { error: parsed.error };
+  const events = parseScheduleEvents(input.schedule.on);
+  if (!events.ok) return { error: events.error };
   try {
     // Match routine editing's owner/space boundary before creating unattended work.
     const bot = await deps.prisma.bot.findFirst({
@@ -679,6 +870,8 @@ async function createWatchFromTool(
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Invalid change trigger." };
   }
+  const eventBot = await prepareEventBot(deps, input, events.patch);
+  if (eventBot && "error" in eventBot) return eventBot;
   const nextRunAt = new Date(Date.now() + 2_000);
   // As with a timed routine, a defaulted zone is read under a share lock in the same
   // transaction as the insert, so a zone change cannot cross the creation.
@@ -695,17 +888,20 @@ async function createWatchFromTool(
         timezone,
         notify: true,
         active: true,
+        ...events.patch,
         watch: parsed.data as Prisma.InputJsonValue,
         nextRunAt,
       },
     });
   const row =
-    input.timezone !== undefined
+    input.timezone !== undefined && !eventBot
       ? await insertWatch(deps.prisma, input.timezone)
       : await deps.prisma.$transaction(async (tx) => {
-          const timezone = await sharedAccountZone(tx, input.userId);
+          const timezone = input.timezone ?? (await sharedAccountZone(tx, input.userId));
+          if (eventBot && !(await lockEventBot(tx, eventBot))) return { error: EVENT_OWNER_ERROR };
           return insertWatch(tx, timezone);
         });
+  if ("error" in row) return { error: row.error };
   try {
     await deps.jobs.enqueue(routineWakeupJob(row.id, nextRunAt));
   } catch {
@@ -730,6 +926,7 @@ async function createWatchFromTool(
     routineId: row.id,
     name: row.name,
     watch: parsed.data,
+    ...describeRoutineEventTriggers(row),
     note: `Takes a first reading now, then checks every ${parsed.data.everyMinutes} minutes and runs only when it changes.`,
   };
 }
@@ -744,6 +941,7 @@ export async function listSchedulesFromTool(
       spaceId: input.spaceId,
       botId: input.botId,
       userId: input.userId,
+      completedOneShotAt: null,
     },
     orderBy: { createdAt: "desc" },
   });
@@ -755,9 +953,10 @@ export async function listSchedulesFromTool(
       prompt: row.prompt,
       crons: row.crons,
       active: row.active,
-      nextRunAt: row.nextRunAt?.toISOString() ?? null,
+      nextRunAt: row.active ? (row.nextRunAt?.toISOString() ?? null) : null,
       oneShot: isOneShotRoutineCrons(row.crons),
       ...describeRoutineTiming(row),
+      ...describeRoutineEventTriggers(row),
       ...(row.watch ? { watch: row.watch, lastCheck: row.watchState ?? null } : {}),
     })),
   };
@@ -824,6 +1023,7 @@ export async function updateScheduleFromTool(
     spaceId: input.spaceId,
     botId: input.botId,
     userId: input.userId,
+    completedOneShotAt: null,
     ...(input.scopeThreadId ? { threadId: input.scopeThreadId } : {}),
   };
   const existing = await deps.prisma.routine.findFirst({
@@ -838,13 +1038,32 @@ export async function updateScheduleFromTool(
             userId: input.userId,
             id: routineId,
             bot: { archivedAt: null },
+            completedOneShotAt: null,
             OR: [{ threadId: null }, { threadId: { not: input.scopeThreadId } }],
           },
           select: { id: true },
         })
       : null;
-    return { error: outside ? OUTSIDE_CHAT_SCHEDULE_ERROR : "Schedule not found." };
+    return {
+      error: outside
+        ? OUTSIDE_CHAT_SCHEDULE_ERROR
+        : input.schedule.on === undefined
+          ? "Schedule not found."
+          : "Schedule not found or owned by another member.",
+    };
   }
+
+  const parsedEvents = parseScheduleEvents(input.schedule.on);
+  if (!parsedEvents.ok) return { error: parsedEvents.error };
+  const editsEvents = Object.keys(parsedEvents.patch).length > 0;
+  const events = {
+    webhookEnabled: parsedEvents.patch.webhookEnabled ?? existing.webhookEnabled,
+    githubEnabled: parsedEvents.patch.githubEnabled ?? existing.githubEnabled,
+    messageProvider:
+      parsedEvents.patch.messageProvider === undefined
+        ? existing.messageProvider
+        : parsedEvents.patch.messageProvider,
+  };
 
   let timezone = existing.timezone;
   if (input.timezone !== undefined) {
@@ -857,7 +1076,13 @@ export async function updateScheduleFromTool(
   const hasTiming = TIMING_FIELDS.some((field) => isScheduleValueProvided(input.schedule[field]));
   const retime =
     hasTiming || isScheduleValueProvided(input.schedule.startAt) || timezone !== existing.timezone;
-  if (!retime && name === undefined && prompt === undefined && input.active === undefined) {
+  if (
+    !retime &&
+    !editsEvents &&
+    name === undefined &&
+    prompt === undefined &&
+    input.active === undefined
+  ) {
     return { error: "Nothing to update." };
   }
   if (retime && existing.watch != null) {
@@ -902,31 +1127,58 @@ export async function updateScheduleFromTool(
       }
     } else nextRunAt = nextCronDateAcross(crons, new Date(), timezone);
   }
-  if (!active) nextRunAt = null;
+  if (!active && (input.active === false || !existing.resumeOnRestore)) nextRunAt = null;
+  if (editsEvents) {
+    const issue = routineTriggerIssue({ crons, ...events, watch: existing.watch });
+    if (issue) return { error: issue.message };
+  }
+  const eventBot =
+    editsEvents || input.active === true ? await prepareEventBot(deps, input, events) : undefined;
+  if (eventBot && "error" in eventBot) return eventBot;
   const timingChanged =
     retime || active !== existing.active || nextRunAt?.getTime() !== existing.nextRunAt?.getTime();
 
   // The scope is part of the write, so the routine cannot change hands between the read and it.
   // A name or prompt edit writes only those fields, so a run claimed meanwhile keeps its advance;
   // a timing edit applies only if no run advanced the routine since the read.
-  const { count } = await deps.prisma.routine.updateMany({
-    where: {
-      ...scope,
-      id: existing.id,
-      bot: { archivedAt: null },
-      ...(timingChanged ? { active: existing.active, nextRunAt: existing.nextRunAt } : {}),
-    },
-    data: {
-      ...(name === undefined ? {} : { name }),
-      ...(prompt === undefined ? {} : { prompt }),
-      ...(timingChanged ? { crons, timezone, active, nextRunAt } : {}),
-    },
-  });
+  const write = (client: Pick<Prisma.TransactionClient, "routine">) =>
+    client.routine.updateMany({
+      where: {
+        ...scope,
+        id: existing.id,
+        bot: { archivedAt: null },
+        ...(input.active === true ? routineConversationOpen : {}),
+        ...(timingChanged ? { active: existing.active, nextRunAt: existing.nextRunAt } : {}),
+        ...(editsEvents ? { updatedAt: existing.updatedAt } : {}),
+      },
+      data: {
+        ...(name === undefined ? {} : { name }),
+        ...(prompt === undefined ? {} : { prompt }),
+        ...(input.active !== undefined ? { resumeOnRestore: false } : {}),
+        ...(timingChanged ? { crons, timezone, active, nextRunAt } : {}),
+        ...parsedEvents.patch,
+      },
+    });
+  const { count } = eventBot
+    ? await deps.prisma
+        .$transaction(async (tx) => {
+          if (!(await lockEventBot(tx, eventBot))) return { count: 0 };
+          const result = await write(tx);
+          // A concurrent edit may win while the key is staged. Roll back both writes.
+          if (result.count === 0) throw EVENT_WRITE_CONFLICT;
+          return result;
+        })
+        .catch((error: unknown) => {
+          if (error === EVENT_WRITE_CONFLICT) return { count: 0 };
+          throw error;
+        })
+    : await write(deps.prisma);
   if (count === 0) {
     return {
-      error: timingChanged
-        ? "The schedule changed while saving. Call schedule_list and try again."
-        : "Schedule not found.",
+      error:
+        timingChanged || editsEvents
+          ? "The schedule changed while saving. Call schedule_list and try again."
+          : "Schedule not found.",
     };
   }
 
@@ -957,6 +1209,8 @@ export async function updateScheduleFromTool(
     nextRunAt: nextRunAt?.toISOString() ?? null,
     oneShot: isOneShotRoutineCrons(crons),
     ...describeRoutineTiming({ crons, timezone, nextRunAt }),
+    ...(editsEvents ? { on: {} } : {}),
+    ...describeRoutineEventTriggers(events),
   };
 }
 
@@ -985,6 +1239,7 @@ export async function cancelScheduleFromTool(
     spaceId: input.spaceId,
     botId: input.botId,
     userId: input.userId,
+    completedOneShotAt: null,
     ...(input.threadId ? { threadId: input.threadId } : {}),
   };
   const existing = await deps.prisma.routine.findFirst({
@@ -997,6 +1252,7 @@ export async function cancelScheduleFromTool(
             spaceId: input.spaceId,
             botId: input.botId,
             userId: input.userId,
+            completedOneShotAt: null,
             ...(routineId ? { id: routineId } : { name: name! }),
             OR: [{ threadId: null }, { threadId: { not: input.threadId } }],
           },

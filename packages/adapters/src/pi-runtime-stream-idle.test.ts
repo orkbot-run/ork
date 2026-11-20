@@ -58,10 +58,10 @@ describe("Model stream idle watchdog", () => {
 
   it("waits out a configured idle bound longer than the default", async () => {
     vi.useFakeTimers();
-    vi.stubEnv("MODEL_STREAM_IDLE_TIMEOUT_MS", "240000");
+    vi.stubEnv("MODEL_STREAM_IDLE_TIMEOUT_MS", "360000");
     const watchdog = modelStreamIdleWatchdog(undefined);
     watchdog.ping();
-    await vi.advanceTimersByTimeAsync(240_000 - 1);
+    await vi.advanceTimersByTimeAsync(360_000 - 1);
     expect(watchdog.signal.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     expect((watchdog.signal.reason as Error).message).toBe(MODEL_STREAM_IDLE_TIMEOUT_MESSAGE);
@@ -640,4 +640,33 @@ it("pairs the default stream transport with the compatible provider's guarded di
     cause: { message: "Public model server hostname resolved to a private address" },
   });
   expect(resolve).toHaveBeenCalledOnce();
+});
+
+it.each([
+  ["UND_ERR_SOCKET", "other side closed", "terminated (other side closed)"],
+  ["ECONNRESET", "fixture private socket metadata", "terminated (connection reset)"],
+  ["UNKNOWN", "fixture private socket metadata", "terminated"],
+] as const)("reports a bounded transport reason for %s", async (code, message, expected) => {
+  const inner = new AssistantMessageEventStream();
+  const streamSimple = vi.fn(
+    (_model: Model<Api>, _context: Context, _options?: SimpleStreamOptions) => inner,
+  );
+  const close = new TypeError("terminated", { cause: Object.assign(new Error(message), { code }) });
+  reliableModelStream(
+    { streamSimple } as unknown as Models,
+    { provider: "openai-compatible", api: "openai-completions" } as Model<Api>,
+    context,
+    {
+      fetch: async () =>
+        new Response(new ReadableStream({ start: (stream) => stream.error(close) })),
+    },
+    undefined,
+  );
+  const options = streamSimple.mock.calls[0]![2]!;
+  const configured = createOpenAiCompatibleFetch(options.fetch, undefined, {
+    allowPrivate: true,
+    modelStream: true,
+  });
+  const response = await configured("http://127.0.0.1:1/v1/chat/completions");
+  await expect(response.text()).rejects.toMatchObject({ message: expected });
 });

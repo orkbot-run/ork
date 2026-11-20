@@ -8,7 +8,8 @@ import { trackToolCallStreak } from "@orkbot/core";
 import { toolResultError } from "./tool-result-error.js";
 
 const LOOP_GUARD_STOP_PREFIX = "I got stuck calling ";
-const LOOP_GUARD_STOP_COUNT_PATTERN = " with (?:(?:nearly )?the same input|too many actions) ";
+const LOOP_GUARD_STOP_COUNT_PATTERN =
+  " with (?:(?:nearly )?the same input|the same result|too many actions) ";
 const LOOP_GUARD_STOP_SUFFIX =
   " times in a row without making progress, so I stopped early. Try rephrasing this, or ask me to try a different approach.";
 const LOOP_GUARD_STOP_PATTERN = new RegExp(
@@ -28,6 +29,10 @@ export function overLimitStopText(toolName: string, count: number): string {
   return `${LOOP_GUARD_STOP_PREFIX}${toolName} with too many actions ${count}${LOOP_GUARD_STOP_SUFFIX}`;
 }
 
+export function sameToolResultStopText(toolName: string, count: number): string {
+  return `${LOOP_GUARD_STOP_PREFIX}${toolName} with the same result ${count}${LOOP_GUARD_STOP_SUFFIX}`;
+}
+
 export function isLoopGuardStopText(text: string): boolean {
   return LOOP_GUARD_STOP_PATTERN.test(text);
 }
@@ -37,7 +42,7 @@ const MAX_CONSECUTIVE_IDENTICAL_TOOL_CALLS = 6;
 // Arguments that differ only by digits in their text (`echo noop-1`, `echo noop-2`) can be a real
 // sequence such as reading a file in chunks or paging through a site, so they get more room. So
 // does an identical call that keeps succeeding with the same answer: it may be waiting on a page.
-const MAX_CONSECUTIVE_SIMILAR_TOOL_CALLS = 25;
+export const MAX_CONSECUTIVE_SIMILAR_TOOL_CALLS = 25;
 const FAILED_RESULT = "failed:";
 
 // A batch over the action limit is refused unrun. Sending another one is a loop the model rarely
@@ -100,10 +105,25 @@ export function toolResultFingerprint(result: unknown, error?: unknown): string 
         : "content" in record
           ? record.content
           : result;
-  const failed = error !== undefined || toolResultError(result) !== undefined;
+  const failed =
+    error !== undefined || record.isError === true || toolResultError(result) !== undefined;
   return `${failed ? FAILED_RESULT : ""}${createHash("sha256")
     .update(JSON.stringify(seen) ?? "")
     .digest("hex")}`;
+}
+
+type ToolResultStreak = { name: string; fingerprint: string; count: number };
+
+/** A step is the result of one completed model response with exactly one tool call. */
+export function advanceToolResultStreak(
+  previous: ToolResultStreak | undefined,
+  completed: { name: string; result: unknown },
+): ToolResultStreak {
+  const { name, result } = completed;
+  const fingerprint = toolResultFingerprint(result);
+  const count =
+    previous?.name === name && previous.fingerprint === fingerprint ? previous.count + 1 : 1;
+  return { name, fingerprint, count };
 }
 
 /** Model arguments are JSON values: object order and absent optional fields are not intent. */

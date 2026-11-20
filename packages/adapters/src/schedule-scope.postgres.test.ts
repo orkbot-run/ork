@@ -156,7 +156,7 @@ describePostgres("group routine discovery and source-chat writes (PostgreSQL)", 
     const listed = (await asOwner(() =>
       taskTools.schedule_list!(ctx, { args: { threadId: otherThreadId } } as never),
     )) as Awaited<ReturnType<typeof listSchedulesFromTool>>;
-    const catalog = (await asOwner(() => taskTools.task_catalog!(ctx, {} as never))) as {
+    const catalog = (await asOwner(() => taskTools.task_catalog!(ctx, { args: {} } as never))) as {
       routines: typeof listed.routines;
     };
     expect(catalog.routines).toEqual(listed.routines);

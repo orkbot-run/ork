@@ -23,6 +23,12 @@ import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import { stopOnShutdownSignals } from "@orkbot/core/node/shutdown-signals";
 import { startWorkerHealth, watchEventLoopStalls } from "./health.js";
 import { createWorkerSecretStore } from "./secret-store.js";
+import {
+  createWorkerShutdown,
+  DEFAULT_RUN_DRAIN_MS,
+  WORKER_SHUTDOWN_IO_MS,
+  waitForWorkerShutdownIo,
+} from "./shutdown.js";
 
 loadRootEnv();
 await unwrapEnvFromKeyManager();
@@ -40,6 +46,7 @@ import {
   createDeadJobPruner,
   createIdleComputerSweeper,
   createJobReconciler,
+  createMeetingConnection,
   createMessagingContextLoader,
   createModelCreditReconciler,
   createPaymentWalletProvider,
@@ -78,8 +85,10 @@ import {
   RunStarter,
   RunWorkerHost,
   reconcileCloudAgents,
+  reconcileComputerOrphans,
   reconcileComputerUpdates,
   reconcileMediaVideos,
+  reconcileMeetings,
   reconcilePurchases,
   resolveDeploymentModel,
   resolvePiSessionRoot,
@@ -132,6 +141,7 @@ async function main() {
   const created = createDb(databaseUrl, {
     poolMax,
     applicationName: "orkbot-worker",
+    queryTimeoutMs: 5_000,
     keyProvider: contentKeyProviderFromEnv(),
   });
   const { pool } = created;
@@ -308,8 +318,15 @@ async function main() {
   integrationSettings.warmDirectories();
   void home.removeStaleStaging().catch((error) => logger.error("home staging cleanup", error));
   const shutdown = new AbortController();
-  const inMemoryJobs = process.env.WAKEUP_DRIVER === "memory" ? new InMemoryJobQueue() : undefined;
-  const runs = new RunStarter(realtime, { signal: shutdown.signal });
+  const runAdmission = process.env.RUN_DRAIN_ENABLED === "true" ? new AbortController() : undefined;
+  const runDrainMs = runAdmission
+    ? parsePositiveInteger(process.env.RUN_DRAIN_MS, DEFAULT_RUN_DRAIN_MS)
+    : undefined;
+  const inMemoryJobs =
+    process.env.WAKEUP_DRIVER === "memory"
+      ? new InMemoryJobQueue({ stopExistingOnly: Boolean(runAdmission) })
+      : undefined;
+  const runs = new RunStarter(realtime, { signal: runAdmission?.signal ?? shutdown.signal });
   const jobs: JobPublisher =
     inMemoryJobs ?? new RunJobPublisher(prisma, new GraphileJobPublisher(pool, prisma), runs);
   const { messaging } = installedMessaging(
@@ -332,6 +349,7 @@ async function main() {
   });
   // One provider instance so emulator launches and polls share the same Map.
   const cloudAgent = createCloudAgentConnection();
+  const meetings = createMeetingConnection();
   const paymentWallet = await createPaymentWalletProvider();
   const maxUploadSizeBytes = uploadSizeFromEnv(process.env);
   // Shared with the reconciler so a stuck wait uses the same push path as a finish notice.
@@ -357,7 +375,7 @@ async function main() {
     artifacts,
     connector: stack.connector,
     connectors: stack.connector,
-    listConnectedPluginSlugs: async (userId) => {
+    listConnectedPluginSlugs: async (userId, signal) => {
       const provider = await integrationSettings.resolve("composio");
       if (!provider) return [];
       return provider.listConnectedExternalIds({
@@ -365,7 +383,22 @@ async function main() {
         spaceId: "",
         operationId: "connections.sync",
         traceId: "connections.sync",
-        signal: AbortSignal.timeout(15_000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+          : AbortSignal.timeout(15_000),
+      });
+    },
+    listActivePluginConnectionRefs: async (userId, signal) => {
+      const provider = await integrationSettings.resolve("composio");
+      if (!provider) return undefined;
+      return provider.listActiveConnectionRefs?.({
+        userId,
+        spaceId: "",
+        operationId: "connections.sync",
+        traceId: "connections.sync",
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+          : AbortSignal.timeout(15_000),
       });
     },
     secrets: [
@@ -388,6 +421,7 @@ async function main() {
     messaging: messaging ? createMessagingContextLoader(prisma, { messaging, jobs }) : undefined,
     web: createWebProvider(),
     cloudAgent,
+    meetings,
     // Device sockets live in an API process; the worker forwards to whichever one holds it.
     userDevices:
       process.env.USER_DEVICES_ENABLED === "false"
@@ -399,15 +433,21 @@ async function main() {
           }),
     paymentWallet,
     shutdownSignal: shutdown.signal,
+    runAdmissionSignal: runAdmission?.signal,
   });
 
   const jobHost: JobWorkerHost =
     inMemoryJobs ??
     withRunWorker(
-      new RunWorkerHost(prisma, realtime, runs, { pool }),
+      new RunWorkerHost(prisma, realtime, runs, {
+        pool,
+        shutdownIoTimeoutMs: runAdmission ? WORKER_SHUTDOWN_IO_MS : undefined,
+      }),
       createReservedGraphileJobWorkerHost(pool, {
         concurrency: parsePositiveInteger(process.env.GRAPHILE_WORKER_CONCURRENCY, 4),
+        idleStopTimeoutMs: runAdmission ? WORKER_SHUTDOWN_IO_MS : undefined,
       }),
+      { abandonStartupOnStop: Boolean(runAdmission) },
     );
 
   const jobHandlers = createBackgroundJobHandlers({
@@ -427,72 +467,117 @@ async function main() {
     deploymentModelConfigured,
     messaging,
     cloudAgent,
+    meetings,
     paymentWallet,
     notifications,
     mediaGeneration,
     maxUploadSizeBytes,
   });
-  const reconciler = createJobReconciler({
-    prisma,
-    jobs,
-    events,
-    notifications,
-    leadership: createPostgresReconciliationLeadership(pool),
-    reconcileModelCredits: createModelCreditReconciler({
+  const reconciler = createJobReconciler(
+    {
       prisma,
-      lookup: deploymentModelUsageLookup(),
-    }),
-    reconcileStrategicInitiatives: createStrategicInitiativeReconciler({ prisma, jobs }),
-    reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
-    reconcilePurchases: () => reconcilePurchases({ prisma, jobs, paymentWallet }),
-    reconcileMediaVideos: () => reconcileMediaVideos({ prisma, jobs, mediaGeneration }),
-    reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
-    reconcileRoutineRetryNotices: inMemoryJobs
-      ? undefined
-      : createRoutineRetryNoticeReconciler(pool, (runId) =>
-          executor.notifyRoutineRetryAttemptsExhausted(runId),
-        ),
-    reconcileSecurityEventRetention: createSecurityEventPruner(
-      prisma,
-      securityEventRetentionDays(),
-    ),
-    reconcileAuditLog: createAuditLogReconciler(prisma, auditLogConfig()),
-    reconcileHomeStorage: homeStorageSweeper(home),
-    reconcileIdleComputers: createIdleComputerSweeper({ prisma, jobs }),
-    reconcileDeadJobs: inMemoryJobs ? undefined : createDeadJobPruner(pool),
-  });
+      jobs,
+      events,
+      notifications,
+      leadership: createPostgresReconciliationLeadership(pool),
+      reconcileModelCredits: createModelCreditReconciler({
+        prisma,
+        lookup: deploymentModelUsageLookup(),
+      }),
+      reconcileStrategicInitiatives: createStrategicInitiativeReconciler({ prisma, jobs }),
+      reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
+      reconcileMeetings: () => reconcileMeetings({ prisma, jobs, meetings }),
+      reconcilePurchases: () => reconcilePurchases({ prisma, jobs, paymentWallet }),
+      reconcileMediaVideos: () => reconcileMediaVideos({ prisma, jobs, mediaGeneration }),
+      reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
+      reconcileComputerOrphans: () => reconcileComputerOrphans({ prisma, sandbox }),
+      reconcileRoutineRetryNotices: inMemoryJobs
+        ? undefined
+        : createRoutineRetryNoticeReconciler(pool, (runId) =>
+            executor.notifyRoutineRetryAttemptsExhausted(runId),
+          ),
+      reconcileSecurityEventRetention: createSecurityEventPruner(
+        prisma,
+        securityEventRetentionDays(),
+      ),
+      reconcileAuditLog: createAuditLogReconciler(prisma, auditLogConfig()),
+      reconcileHomeStorage: homeStorageSweeper(home),
+      reconcileIdleComputers: createIdleComputerSweeper({ prisma, jobs }),
+      reconcileDeadJobs: inMemoryJobs ? undefined : createDeadJobPruner(pool),
+    },
+    { stopPendingPass: Boolean(runAdmission) },
+  );
   let stopHealth: (() => Promise<void>) | undefined;
   let stopping = false;
-  let stopped: Promise<void> | undefined;
-  // Every caller waits for the same shutdown, which can take as long as the running jobs do.
-  const stop = () =>
-    (stopped ??= (async () => {
+  const shutdownTimedOut = (step: string) =>
+    logger.warn("worker.shutdown_io_timed_out", {
+      "shutdown.step": step,
+    });
+  const stop = createWorkerShutdown({
+    shutdown,
+    runDrainMs,
+    onRunDrainTimeout: () =>
+      logger.warn("worker.run_drain_timed_out", {
+        "runs.active": runs.activeRuns,
+        "run.drain_ms": runDrainMs,
+      }),
+    async stopWork() {
       stopping = true;
-      shutdown.abort();
-      await stopWorkspaceAuthority?.();
-      serverAI?.dispose();
-      stopStallWatch();
-      try {
+      if (!runAdmission) {
+        await stopWorkspaceAuthority?.();
+        serverAI?.dispose();
+        stopStallWatch();
         await stopHealth?.();
         await reconciler.stop();
         await jobHost.stop();
+        return;
+      }
+      runAdmission.abort();
+      stopStallWatch();
+      // Close both admission paths before waiting on readiness or reconciliation I/O.
+      const stoppedJobs = jobHost.stop();
+      const stoppedServices = waitForWorkerShutdownIo(
+        Promise.all([stopHealth?.(), reconciler.stop()]),
+        () => shutdownTimedOut("health_and_reconciliation"),
+      );
+      const results = await Promise.allSettled([stoppedJobs, stoppedServices]);
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+    },
+    async closeResources() {
+      let step = "providers";
+      const close = async () => {
+        // The workspace authority can revoke an in-flight turn. Keep it alive during drain.
+        if (runAdmission) {
+          await stopWorkspaceAuthority?.();
+          serverAI?.dispose();
+        }
         await jobs.close();
         await secrets.close();
         await realtime.close();
         await mcp.close();
         await installedConnectors.close();
+        step = "postgres_pool";
         await prisma.$disconnect().catch(() => undefined);
         await pool.end().catch(() => undefined);
-      } finally {
+      };
+      if (runAdmission) await waitForWorkerShutdownIo(close(), () => shutdownTimedOut(step));
+      else await close();
+    },
+    async flush() {
+      const flush = async () => {
         await analytics?.flush();
         await shutdownPiTelemetry();
         await logger.flush({ timeoutMs: 2_000 });
-      }
-    })());
+      };
+      if (runAdmission) await waitForWorkerShutdownIo(flush(), () => shutdownTimedOut("telemetry"));
+      else await flush();
+    },
+  });
   // Exit rather than wait on a hung job that was handed back, which another worker now retries.
   // process.exitCode keeps a crash that arrives while draining from exiting as a clean stop.
   stopOnShutdownSignals(() =>
-    stop().then(
+    stop(true).then(
       () => process.exit(),
       async (error) => {
         logger.error("worker shutdown failed", error);
@@ -533,9 +618,9 @@ async function main() {
         throw error;
       }
       logger.error("worker job host start waiting on database capacity", error);
-      await sleep(databaseCapacityBackoffMs(attempt), undefined, { signal: shutdown.signal }).catch(
-        () => undefined,
-      );
+      await sleep(databaseCapacityBackoffMs(attempt), undefined, {
+        signal: runAdmission?.signal ?? shutdown.signal,
+      }).catch(() => undefined);
     }
   }
   if (stopping) return;

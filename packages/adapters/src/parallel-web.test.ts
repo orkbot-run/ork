@@ -355,12 +355,14 @@ describe("optional Parallel web provider", () => {
 
   it.each(["cancel", "timeout"])("interrupts an active MCP call on %s", async (mode) => {
     let started!: () => void;
+    let activeRequest!: Request;
     const opened = new Promise<void>((resolve) => {
       started = resolve;
     });
     const peer = parallelMcpFixture({
       call: async (request) =>
         new Promise<Response>((_resolve, reject) => {
+          activeRequest = request;
           started();
           request.signal.addEventListener("abort", () => reject(request.signal.reason), {
             once: true,
@@ -378,8 +380,6 @@ describe("optional Parallel web provider", () => {
     await opened;
     if (mode === "cancel") controller.abort(new Error("Stopped"));
     expect(await result).toBeInstanceOf(Error);
-    expect(peer.requests.findLast((request) => request.method === "POST")!.signal.aborted).toBe(
-      true,
-    );
+    await expect.poll(() => activeRequest.signal.aborted).toBe(true);
   });
 });

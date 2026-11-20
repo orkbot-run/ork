@@ -15,8 +15,8 @@ export class McpResponseTooLargeError extends Error {
 
 /**
  * Fails the body once it grows past `maxBytes`, before the MCP SDK buffers and parses it.
- * Event streams stay open for a whole session, so they are limited per event instead, but only
- * when the request asked for one: other callers (OAuth discovery) buffer the whole body.
+ * Successful event streams requested by the caller can stay open for a whole session, so they are
+ * limited per event. The SDK buffers error responses and OAuth discovery bodies in full.
  */
 export function limitMcpResponseBody(
   response: Response,
@@ -25,6 +25,7 @@ export function limitMcpResponseBody(
 ): Response {
   if (!response.body) return response;
   const eventStream =
+    response.ok &&
     /text\/event-stream/i.test(new Headers(requestHeaders).get("accept") ?? "") &&
     /^\s*text\/event-stream/i.test(response.headers.get("content-type") ?? "");
   if (!eventStream && Number(response.headers.get("content-length")) > maxBytes) {

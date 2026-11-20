@@ -32,6 +32,27 @@ const context = {
 };
 
 describe("DaytonaSandboxProvider", () => {
+  it("records the new ID and rolls back a failed record", async () => {
+    const fixture = daytonaFixture();
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    const recordCreated = vi.fn(async () => {});
+    const request = { botId: "bot-a", homePath: "/unused", recordCreated };
+    const ref = await provider.provision(request, context);
+    expect(recordCreated).toHaveBeenCalledExactlyOnceWith({
+      kind: "daytona",
+      providerRef: ref.providerRef,
+    });
+    await provider.provision(
+      { ...request, providerKind: "daytona", providerRef: ref.providerRef },
+      context,
+    );
+    expect(recordCreated).toHaveBeenCalledOnce();
+    const failure = new Error("record unavailable");
+    recordCreated.mockRejectedValueOnce(failure);
+    await expect(provider.provision(request, context)).rejects.toBe(failure);
+    expect(fixture.deleteSandbox).toHaveBeenCalledOnce();
+    expect(fixture.remote.missing).toBe(true);
+  });
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.useRealTimers();

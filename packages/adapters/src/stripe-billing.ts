@@ -24,6 +24,8 @@ import {
   BILLING_CANCELLATION_REASONS,
   BYOK_TIERS,
   ByokTierSchema,
+  billingSubscriptionGrantsAccess,
+  billingSubscriptionHoldsCheckout,
   ModelCreditAmountSchema,
 } from "@orkbot/contracts";
 import { readBoundedJsonResponse } from "@orkbot/core";
@@ -206,7 +208,10 @@ export class StripeBillingProvider implements BillingProvider {
       // Credits include the own-key plan, which sync ends once credits start.
       if (
         (await this.listSubscriptions(input.customerId)).some(
-          (s) => !isByokPlan(s) && holdsBillingSubscription(mapStripeSubscriptionStatus(s.status)),
+          (s) =>
+            holdsBillingSubscription(mapStripeSubscriptionStatus(s.status)) &&
+            (!isByokPlan(s) ||
+              !billingSubscriptionGrantsAccess(mapStripeSubscriptionStatus(s.status))),
         )
       )
         throw new BillingCheckoutCompletedError();
@@ -255,7 +260,7 @@ export class StripeBillingProvider implements BillingProvider {
     const subscription = (await this.listSubscriptions(customerId)).find(
       (s) =>
         creditAmount(s.metadata?.orkbot_credit_cents) &&
-        holdsBillingSubscription(mapStripeSubscriptionStatus(s.status)),
+        billingSubscriptionGrantsAccess(mapStripeSubscriptionStatus(s.status)),
     );
     const item = subscription?.items.data[0];
     const previousAmount = creditAmount(subscription?.metadata?.orkbot_credit_cents);
@@ -630,12 +635,67 @@ export class StripeBillingProvider implements BillingProvider {
     return chosen ? toSnapshot(chosen.subscription, chosen.status) : null;
   }
 
+  /** Paid invoice history, including periods paid entirely with customer invoice balance. */
+  async getFirstPaidSubscriptionInvoiceAt(customerId: string): Promise<Date | null> {
+    const subscriptionReference = z.union([z.string().min(1), idSchema]).nullish();
+    const invoices = await this.listPages(
+      `/v1/invoices?customer=${encodeURIComponent(customerId)}&status=paid`,
+      z.object({
+        id: z.string(),
+        status: z.string(),
+        total: z.number().int(),
+        amount_paid: z.number().int(),
+        amount_due: z.number().int(),
+        amount_remaining: z.number().int(),
+        starting_balance: z.number().int(),
+        ending_balance: z.number().int().nullish(),
+        status_transitions: z.object({ paid_at: z.number().int().positive().nullish() }),
+        subscription: subscriptionReference,
+        parent: z
+          .object({
+            subscription_details: z.object({ subscription: subscriptionReference }).nullish(),
+          })
+          .nullish(),
+      }),
+    ).catch((error: unknown) => {
+      ignoreDeletedCustomer(error);
+      return [];
+    });
+    let earliest: number | null = null;
+    for (const invoice of invoices) {
+      const subscription =
+        invoice.parent?.subscription_details?.subscription ?? invoice.subscription;
+      const paidAt = invoice.status_transitions.paid_at;
+      // Invoice balance is applied at finalization: a negative starting balance is customer credit.
+      // Require the positive invoice total to have consumed that balance, excluding free trials,
+      // zero-total discounts and amounts carried forward below Stripe's minimum charge.
+      const coveredByBalance =
+        invoice.starting_balance <= -invoice.total &&
+        invoice.ending_balance != null &&
+        invoice.ending_balance <= 0 &&
+        invoice.ending_balance - invoice.starting_balance >= invoice.total &&
+        invoice.amount_due === 0 &&
+        invoice.amount_remaining === 0;
+      if (
+        !subscription ||
+        invoice.status !== "paid" ||
+        !paidAt ||
+        invoice.total <= 0 ||
+        (invoice.amount_paid <= 0 && !coveredByBalance)
+      )
+        continue;
+      earliest = earliest === null ? paidAt : Math.min(earliest, paidAt);
+    }
+    return earliest === null ? null : new Date(earliest * 1000);
+  }
+
   async updateSeats(customerId: string, seats: number) {
     // Ended subscriptions refuse updates, as do incomplete ones from Checkout. Unpaid and paused
     // ones accept them, so they resume with the right seats.
     for (;;) {
       const chosen = pickStripeSubscription(await this.listLiveSubscriptions(customerId));
-      if (!chosen || !holdsBillingSubscription(chosen.status)) return;
+      if (!chosen || !holdsBillingSubscription(chosen.status) || chosen.status === "incomplete")
+        return;
       if (
         creditAmount(chosen.subscription.metadata?.orkbot_credit_cents) ||
         isByokPlan(chosen.subscription)
@@ -864,7 +924,7 @@ export function pickBillingSubscription<
 >(subscriptions: T[]): T | undefined {
   const newestFirst = [...subscriptions].sort((a, b) => b.created - a.created);
   return (
-    newestFirst.find((s) => grantsAccess(s.status)) ??
+    newestFirst.find((s) => billingSubscriptionGrantsAccess(s.status)) ??
     newestFirst.find((s) => holdsBillingSubscription(s.status)) ??
     newestFirst[0]
   );
@@ -880,14 +940,8 @@ function pickStripeSubscription(subscriptions: StripeSubscription[]) {
   );
 }
 
-function grantsAccess(status: BillingSubscriptionStatus) {
-  return status === "trialing" || status === "active" || status === "past_due";
-}
-
-/** Grants access now or resumes once paid, so another checkout would bill twice. */
-export function holdsBillingSubscription(status: BillingSubscriptionStatus) {
-  return grantsAccess(status) || status === "unpaid" || status === "paused";
-}
+/** A live or recoverable subscription blocks another subscription checkout. */
+export const holdsBillingSubscription = billingSubscriptionHoldsCheckout;
 
 function toSnapshot(
   subscription: StripeSubscription,

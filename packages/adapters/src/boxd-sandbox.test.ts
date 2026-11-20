@@ -32,6 +32,26 @@ async function events(
 }
 
 describe("boxd computers", () => {
+  it("records only new boxd IDs and deletes the machine when recording fails", async () => {
+    const boxd = new FakeBoxd();
+    const provider = fakeBoxdProvider(boxd);
+    const recordCreated = vi.fn(async () => {});
+    const request = { botId: "bot", homePath: "/unused", recordCreated };
+    const ref = await provider.provision(request, ctx);
+    expect(recordCreated).toHaveBeenCalledExactlyOnceWith({
+      kind: "boxd",
+      providerRef: ref.providerRef,
+    });
+    await provider.provision(
+      { ...request, providerKind: "boxd", providerRef: ref.providerRef },
+      ctx,
+    );
+    expect(recordCreated).toHaveBeenCalledOnce();
+    const failure = new Error("record unavailable");
+    recordCreated.mockRejectedValueOnce(failure);
+    await expect(provider.provision({ ...request, botId: "other" }, ctx)).rejects.toBe(failure);
+    expect(boxd.machines.size).toBe(1);
+  });
   it("starts isolated computers from the desktop snapshot, with the screen proxy and no boxd idle suspend", async () => {
     const boxd = new FakeBoxd();
     const provider = fakeBoxdProvider(boxd);

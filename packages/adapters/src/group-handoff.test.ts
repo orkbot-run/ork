@@ -419,10 +419,12 @@ describe("explicit group destinations", () => {
       }),
     ).resolves.toMatchObject({ error: "group is no longer available" });
     expect(h.messageCreate).not.toHaveBeenCalled();
-    const groupLock = h.tx.$queryRaw.mock.calls.find(([query]) =>
-      String(query).includes("FROM chat_groups"),
+    expect(h.tx.$queryRaw).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining("FROM chat_groups"),
+        values: ["group-1", run.spaceId, run.userId],
+      }),
     );
-    expect(groupLock?.slice(1)).toEqual(["group-1", run.spaceId, run.userId]);
   });
 
   it("requires both bots to be active members of the destination", async () => {
@@ -473,4 +475,21 @@ it("discovers only active groups the bot belongs to under the same owner and spa
       },
     }),
   );
+});
+
+it("offers publication to other groups without advertising a handoff across groups", async () => {
+  const findMany = vi.fn(async () => [
+    { id: "reports", name: "Team reports", members: [{ bot: { id: run.botId, name: "Scout" } }] },
+  ]);
+  const directory = await loadBotGroupDirectory(
+    { chatGroup: { findMany } } as unknown as PrismaClient,
+    run,
+    { currentGroupId: "current", canPost: true },
+  );
+  expect(findMany).toHaveBeenCalledWith(
+    expect.objectContaining({ where: expect.objectContaining({ id: { not: "current" } }) }),
+  );
+  expect(directory).toContain("Team reports (group_id: reports)");
+  expect(directory).toContain("post_to_group");
+  expect(directory).not.toContain("handoff_to_bot");
 });

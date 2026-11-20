@@ -3,6 +3,28 @@ const SANDBOX_GONE_MESSAGE = /sandbox [^:]{0,60}not found|sandbox [^:]{0,60}does
 // The same words from a live sandbox: a missing binary or a missing file inside it.
 const SHELL_MISSING_TARGET = /command not found|no such file|^path .* not found/i;
 
+/** Identify an explicitly missing path at a file-read boundary. A provider or sandbox 404 alone
+ * may instead mean the entire computer is gone. */
+export function isComputerFileMissing(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = "code" in error ? error.code : undefined;
+  if (code === "ENOENT" || code === "ENOTDIR" || code === "file_not_found") return true;
+  for (const name of [error.name, error.constructor.name]) {
+    if (name === "FileNotFoundError" || name === "SandboxFileNotFoundError") return true;
+  }
+  if (error.message === "computer file not found") return true;
+  if (
+    /^(?:stat|cat): [^\r\n]*: (?:No such file or directory|Not a directory)\s*$/.test(error.message)
+  )
+    return true;
+  // The Docker supervisor returns a JSON error containing the Python file-read traceback.
+  const dockerError = 'sandbox file read failed: 404 {"error":"';
+  if (!error.message.startsWith(dockerError)) return false;
+  return /^(?:file not found"|Traceback[^\r\n]*?(?<!\\)\\n(?:FileNotFoundError: \[Errno 2\]|NotADirectoryError: \[Errno 20\]))/.test(
+    error.message.slice(dockerError.length),
+  );
+}
+
 /**
  * Only provider evidence of sandbox loss permits automatic replacement. Adapters report it by
  * throwing an error named `SandboxNotFoundError`.

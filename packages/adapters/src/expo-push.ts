@@ -12,6 +12,7 @@ import type {
   NotificationProvider,
 } from "@orkbot/adapter-kit";
 import { pushReceiptJob } from "@orkbot/adapter-kit";
+import { redactSecrets, userRunError } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
 import type { IncomingCallPush, VoipPushProvider } from "./apns-voip.js";
 import { combineSignals } from "./connector-safety.js";
@@ -34,6 +35,10 @@ const MAX_PUSH_BODY_CHARS = 180;
 const MAX_PUSH_PAYLOAD_BYTES = 3300;
 export const MAX_EXPO_PUSH_RESPONSE_BYTES = 64 * 1024;
 const RESPONSE_TOO_LARGE = "Expo push response is too large.";
+
+function redactExpoTokens(value: string): string {
+  return value.replace(/\b(?:Expo|Exponent)PushToken\[[^\]\r\n]*\]/g, "[Redacted]");
+}
 
 /** Data a notification tap uses to open the bot or group thread in its space.
  * `deliveryId` distinguishes this send from another push for the same thread:
@@ -195,7 +200,7 @@ export class ExpoPushProvider implements NotificationProvider {
   }
 
   async hasPushRecipient(userId: string): Promise<boolean> {
-    return Boolean(await this.deliverableToken(userId));
+    return (await this.deliverableTokens(userId)).length > 0;
   }
 
   async send(message: NotificationMessage, context: AdapterContext): Promise<void> {
@@ -295,8 +300,41 @@ export class ExpoPushProvider implements NotificationProvider {
    * Neither is an Expo acceptance, so callers must not record a reminder.
    */
   async deliver(message: NotificationMessage, context: AdapterContext): Promise<ExpoPushDelivery> {
-    const registration = await this.deliverableToken(context.userId);
-    if (!registration) return "undeliverable";
+    const registrations = await this.deliverableTokens(context.userId);
+    if (!registrations.length) return "undeliverable";
+    const results = await Promise.allSettled(
+      registrations.map(async (registration) => {
+        try {
+          const result = await this.deliverRegistration(message, context, registration);
+          if (result === "undeliverable")
+            getLogger().warn("push.delivery_failed", {
+              "push.registration_digest": credentialDigest(registration.token),
+              reason: "DeviceNotRegistered",
+            });
+          return result;
+        } catch (error) {
+          const failure = new Error(redactSecrets(userRunError(error), [registration.token]));
+          if (error instanceof Error) failure.name = error.name;
+          getLogger().error("push.delivery_failed", failure, {
+            "push.registration_digest": credentialDigest(registration.token),
+          });
+          throw failure;
+        }
+      }),
+    );
+    // A retry of the aggregate would duplicate devices that already accepted it.
+    if (results.some((result) => result.status === "fulfilled" && result.value === "delivered"))
+      return "delivered";
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
+    return "undeliverable";
+  }
+
+  private async deliverRegistration(
+    message: NotificationMessage,
+    context: AdapterContext,
+    registration: PushRecord,
+  ): Promise<ExpoPushDelivery> {
     const token = registration.token;
     const title = capped(message.title, MAX_PUSH_TITLE_CHARS);
     let bodyChars = MAX_PUSH_BODY_CHARS;
@@ -353,8 +391,7 @@ export class ExpoPushProvider implements NotificationProvider {
     const failure =
       expoUnauthorizedError(body, status, this.accessToken) ?? expoPushErrorMessage(body, status);
     if (failure) {
-      getLogger().error(failure);
-      throw new Error(failure);
+      throw new Error(redactSecrets(failure, [token]));
     }
     if (ticket?.id) await this.scheduleReceiptCheck(context.userId, token, ticket.id);
     return "delivered";
@@ -371,7 +408,7 @@ export class ExpoPushProvider implements NotificationProvider {
       return;
     }
     const failure = expoRequestError(body, status, this.accessToken);
-    if (failure) throw new Error(failure);
+    if (failure) throw new Error(redactExpoTokens(failure));
     const result = expoPushReceipts(body)[receipt.ticketId];
     // Still missing 15 minutes on means Expo lost it; there is nothing left to check.
     if (!result) {
@@ -380,6 +417,10 @@ export class ExpoPushProvider implements NotificationProvider {
     }
     if (result.status !== "error") return;
     if (result.details?.error === "DeviceNotRegistered") {
+      getLogger().warn("push.receipt_failed", {
+        "push.registration_digest": receipt.tokenDigest,
+        reason: "DeviceNotRegistered",
+      });
       const devices = (await this.tokens.devices?.(receipt.userId)) ?? [];
       await Promise.all(
         devices
@@ -395,7 +436,10 @@ export class ExpoPushProvider implements NotificationProvider {
       return;
     }
     getLogger().error(
-      `expo push receipt error: ${result.details?.error ?? result.message ?? "unknown"}`,
+      redactExpoTokens(
+        `expo push receipt error: ${result.details?.error ?? result.message ?? "unknown"}`,
+      ),
+      { "push.registration_digest": receipt.tokenDigest },
     );
   }
 
@@ -417,7 +461,11 @@ export class ExpoPushProvider implements NotificationProvider {
           new Date(Date.now() + EXPO_RECEIPT_DELAY_MS),
         ),
       )
-      .catch((error) => getLogger().error("expo push receipt enqueue", error));
+      .catch((error) =>
+        getLogger().error("expo push receipt enqueue", error, {
+          "push.registration_digest": credentialDigest(token),
+        }),
+      );
   }
 
   /**
@@ -426,8 +474,37 @@ export class ExpoPushProvider implements NotificationProvider {
    * row is removed. The token is read again after the lookup so a handover
    * during that wait is not sent.
    */
+  private async deliverableTokens(userId: string): Promise<PushRecord[]> {
+    const registrations = await this.tokens.list(userId);
+    const deliverable = await Promise.all(
+      registrations.map((saved) => this.authorizeRegistration(userId, saved)),
+    );
+    // Read/decrypt each registration only once after all session checks. A
+    // concurrent logout, rotation or device handover cannot send the old token.
+    const authorized = new Set(
+      deliverable
+        .filter((saved) => saved !== undefined)
+        .map((saved) => JSON.stringify([saved.token, saved.sessionId])),
+    );
+    const current = await this.tokens.list(userId);
+    return current.filter((saved) =>
+      authorized.has(JSON.stringify([saved.token, saved.sessionId])),
+    );
+  }
+
   private async deliverableToken(userId: string): Promise<PushRecord | undefined> {
     const saved = await this.tokens.load(userId);
+    if (!saved || !(await this.authorizeRegistration(userId, saved))) return undefined;
+    const current = await this.tokens.load(userId);
+    return current?.token === saved.token && current.sessionId === saved.sessionId
+      ? current
+      : undefined;
+  }
+
+  private async authorizeRegistration(
+    userId: string,
+    saved: PushRecord,
+  ): Promise<PushRecord | undefined> {
     if (!saved?.token) return undefined;
     if (!saved.sessionId) return saved;
     if (!this.sessionExpiresAt) return undefined;
@@ -435,7 +512,9 @@ export class ExpoPushProvider implements NotificationProvider {
     try {
       expiresAt = await this.sessionExpiresAt(saved.sessionId);
     } catch (error) {
-      getLogger().error("push session lookup failed", error);
+      getLogger().error("push session lookup failed", error, {
+        "push.registration_digest": credentialDigest(saved.token),
+      });
       return undefined;
     }
     if (!expiresAt) return undefined;
@@ -443,9 +522,7 @@ export class ExpoPushProvider implements NotificationProvider {
       await this.tokens.endSession(userId, saved.sessionId);
       return undefined;
     }
-    const current = await this.tokens.load(userId);
-    if (current?.token !== saved.token || current.sessionId !== saved.sessionId) return undefined;
-    return current;
+    return saved;
   }
 }
 

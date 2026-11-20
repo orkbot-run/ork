@@ -27,6 +27,7 @@ import {
   DialogTitle,
   ModelThinkingOptions,
   Spinner,
+  Switch,
 } from "@orkbot/ui-web";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
@@ -156,7 +157,9 @@ function LegacyModelSettingsOverlay({
     id;
   const connected = Boolean(
     credential &&
-      (!isOpenAiCompatible || savedCompatibleEndpointMatches(baseUrl, credential.baseUrl)),
+      (credential.blockedByPolicy ||
+        !isOpenAiCompatible ||
+        savedCompatibleEndpointMatches(baseUrl, credential.baseUrl)),
   );
 
   /** Opens a connection by id, or connects a new one for the provider. */
@@ -197,7 +200,9 @@ function LegacyModelSettingsOverlay({
     </Button>
   ) : null;
 
-  const connection = selected ? (
+  const connection = credential?.blockedByPolicy ? (
+    disconnectButton
+  ) : selected ? (
     isOpenAiCompatible ? (
       <>
         <CompatibleModelFields {...model} />
@@ -285,7 +290,7 @@ function LegacyModelSettingsOverlay({
       ) : null}
       {/* Edits made while a save is in flight would be replaced by what it saved. */}
       <fieldset className="contents" disabled={pending === "connect" || pending === "settings"}>
-        {connected && credential ? (
+        {connected && credential && !credential.blockedByPolicy ? (
           <ConnectionNameField
             key={credential.id}
             credential={credential}
@@ -294,6 +299,35 @@ function LegacyModelSettingsOverlay({
             // A rename touches only the label; keep any unsaved form fields.
             onRenamed={() => void refresh({ keepForm: true })}
           />
+        ) : null}
+        {selected?.connection?.supportsZeroDataRetention && !credential?.blockedByPolicy ? (
+          <>
+            <label
+              htmlFor={"model-zero-data-retention"}
+              className="my-4 flex items-center justify-between gap-3 text-sm"
+            >
+              <Trans>Zero data retention</Trans>
+              <Switch
+                id={"model-zero-data-retention"}
+                aria-label={t`Zero data retention`}
+                aria-describedby={"model-zero-data-retention-description"}
+                checked={model.zeroDataRetention}
+                disabled={busy}
+                onCheckedChange={(value) => {
+                  model.setZeroDataRetention(value);
+                  model.invalidatePreflight();
+                }}
+              />
+            </label>
+            <p
+              id={"model-zero-data-retention-description"}
+              className="text-sm text-muted-foreground"
+            >
+              <Trans>
+                Route requests only to endpoints marked as eligible for zero data retention.
+              </Trans>
+            </p>
+          </>
         ) : null}
         {connection}
       </fieldset>

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork review failure handling follows LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import type {
   AdapterContext,
@@ -10,6 +14,8 @@ import type {
 import { DecisionProviderError } from "@orkbot/adapter-kit";
 import { z } from "zod";
 import { decisionModel } from "./decision-models.js";
+import { assertModelProviderAllowed } from "./model-provider-policy.js";
+import { OpenRouterZdrUnsupportedError } from "./openrouter-zdr.js";
 import { readBodyCapped } from "./web-ssrf.js";
 
 const answerSchema = z.object({
@@ -34,12 +40,16 @@ const responseSchema = z.object({
 export class HttpDecisionProvider implements DecisionProvider {
   constructor(
     private readonly provider: "openrouter" | "typesafe",
-    private readonly options: DecisionProviderOptions,
+    private readonly options: DecisionProviderOptions & {
+      zeroDataRetention?: boolean;
+    },
   ) {
+    if (options.zeroDataRetention === true) throw new OpenRouterZdrUnsupportedError();
     if (!options.apiKey.trim()) throw new DecisionProviderError("authentication");
   }
 
   async decide(request: DecisionRequest, context: AdapterContext): Promise<DecisionResult> {
+    assertModelProviderAllowed(this.provider);
     context.signal.throwIfAborted();
     const body = JSON.stringify(request);
     const callId = randomUUID();
@@ -81,8 +91,17 @@ export class HttpDecisionProvider implements DecisionProvider {
       );
       if (!response.ok) {
         if (response.status >= 400 && response.status < 500)
-          usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, usageSource: "provider-rejected" };
+          usage = {
+            inputTokens: 0,
+            outputTokens: 0,
+            costUsd: 0,
+            usageSource: "provider-rejected",
+          };
         void response.body?.cancel().catch(() => undefined);
+        if (this.provider === "openrouter" && response.status === 402)
+          throw new DecisionProviderError("credits_required");
+        if (this.provider === "openrouter" && response.status === 404)
+          throw new DecisionProviderError("model_unavailable");
         throw new DecisionProviderError(
           response.status === 401 || response.status === 403
             ? "authentication"

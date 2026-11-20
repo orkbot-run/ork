@@ -2,7 +2,11 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
 
-import { COMPUTER_ACCOUNT_REFUSED_ERROR, COMPUTER_RATE_LIMIT_ERROR } from "@orkbot/contracts";
+import {
+  COMPUTER_ACCOUNT_REFUSED_ERROR,
+  COMPUTER_RATE_LIMIT_ERROR,
+  COMPUTER_UNRESPONSIVE_ERROR,
+} from "@orkbot/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   APPROVED_ACTION_NOT_RUN_ERROR,
@@ -452,6 +456,34 @@ describe("normalizeRunError", () => {
   });
 });
 
+it.each([
+  "reset 2026-10-21",
+  "resets at 2026-10-21",
+  "RESET ON: 2026-10-21",
+  "resets=2026-10-21",
+  `reset${" ".repeat(20_000)}invalid; resets on: 2026-10-21`,
+])("extracts reset dates with existing delimiters: %s", (message) => {
+  expect(
+    normalizeRunError(
+      `403: ${JSON.stringify({ message: `OpenRouter weekly key limit exceeded; ${message}` })}`,
+      undefined,
+      "en",
+      Date.parse("2026-10-20T00:00:00Z"),
+    ),
+  ).toMatchObject({ resetAt: Date.parse("2026-10-21T00:00:00Z") });
+});
+
+it("does not reinterpret a lowercase timestamp as a date-only reset", () => {
+  expect(
+    normalizeRunError(
+      '403: {"message":"OpenRouter weekly key limit exceeded; resets 2026-10-21t12:00:00z"}',
+      undefined,
+      "en",
+      Date.parse("2026-10-20T00:00:00Z"),
+    ).resetAt,
+  ).toBeUndefined();
+});
+
 it.each(["2026-10-19T00:00:00Z", "2026-10-20T00:00:00Z", "not-a-date"])(
   "does not promise a past or invalid reset: %s",
   (reset) => {
@@ -884,11 +916,14 @@ describe("the one action that fixes a failed run", () => {
   );
 });
 
-it("translates the canonical computer account refusal without suggesting model recovery", () => {
-  const translate = vi.fn((message: string) => `translated:${message}`);
-  expect(normalizeRunError(COMPUTER_ACCOUNT_REFUSED_ERROR, translate)).toEqual({
-    summary: `translated:${COMPUTER_ACCOUNT_REFUSED_ERROR}`,
-    details: COMPUTER_ACCOUNT_REFUSED_ERROR,
-  });
-  expect(translate).toHaveBeenCalledExactlyOnceWith(COMPUTER_ACCOUNT_REFUSED_ERROR);
-});
+it.each([COMPUTER_ACCOUNT_REFUSED_ERROR, COMPUTER_UNRESPONSIVE_ERROR])(
+  "translates the computer failure without suggesting model recovery: %s",
+  (details) => {
+    const translate = vi.fn((message: string) => `translated:${message}`);
+    expect(normalizeRunError(details, translate)).toEqual({
+      summary: `translated:${details}`,
+      details,
+    });
+    expect(translate).toHaveBeenCalledExactlyOnceWith(details);
+  },
+);

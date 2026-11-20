@@ -3,19 +3,21 @@
 // Inherited Apache-2.0 web CONNECT transport is preserved; shared extraction follows LICENSE.md.
 
 import type { LookupFunction } from "node:net";
-import type { Dispatcher } from "undici";
+import type { Agent, Dispatcher } from "undici";
 import { EnvHttpProxyAgent, Pool } from "undici";
 
 /** Honor standard proxy settings while checking the destination before every CONNECT. */
 export function createCheckedProxyDispatcher(
-  lookup: LookupFunction,
+  lookup: LookupFunction | undefined,
   checkedAuthority: (authority: string) => Promise<string>,
+  options?: Pick<Agent.Options, "headersTimeout" | "bodyTimeout" | "connectTimeout">,
 ): Dispatcher {
   const { env } = process;
   for (const proxy of [env.http_proxy ?? env.HTTP_PROXY, env.https_proxy ?? env.HTTPS_PROXY]) {
     if (proxy && !/^https?:\/\//i.test(proxy)) throw new Error("Only HTTP proxies are supported");
   }
   return new EnvHttpProxyAgent({
+    ...options,
     connect: { lookup },
     proxyTunnel: true,
     clientFactory: (origin, options) => {

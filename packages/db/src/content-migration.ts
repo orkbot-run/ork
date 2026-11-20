@@ -13,7 +13,7 @@ export type ContentMigrationMode = "encrypt" | "reencrypt" | "decrypt";
 
 interface TableSpec {
   model: keyof typeof ENCRYPTED_MODELS;
-  delegate: "message" | "event" | "memoryDocument" | "memoryRevision" | "thread";
+  delegate: "message" | "event" | "memoryDocument" | "memoryRevision" | "thread" | "meetingSession";
   column: string;
   json: boolean;
   /** Preserve @updatedAt so a migration does not reorder recently edited documents. */
@@ -30,7 +30,24 @@ interface ScannedRow {
   tokens?: boolean;
 }
 
+const MEETING_COLUMNS = ["title", "url", "transcript"] as const;
+
 const TABLES: TableSpec[] = [
+  ...MEETING_COLUMNS.map((column): TableSpec => {
+    const field = Prisma.raw(`"${column}"`);
+    return {
+      model: "MeetingSession",
+      delegate: "meetingSession",
+      column,
+      json: false,
+      updatedAt: true,
+      scan: (cursor, limit) => Prisma.sql`
+        SELECT id, ${field} AS value, "spaceId", "userId" AS owner FROM meeting_sessions
+        WHERE id > ${cursor} AND ${field} IS NOT NULL ORDER BY id LIMIT ${limit}`,
+      writePlaintext: (id, value) =>
+        Prisma.sql`UPDATE meeting_sessions SET ${field} = ${value as string} WHERE id = ${id}`,
+    };
+  }),
   {
     model: "Message",
     delegate: "message",
@@ -308,6 +325,10 @@ export async function contentEncryptionStatus(
     UNION ALL
     SELECT 'threads', count(*) FILTER (WHERE "historyCompactionSummary" IS NOT NULL),
       count(*) FILTER (WHERE "historyCompactionSummary" NOT LIKE 'rkz1:%') FROM threads
+    UNION ALL
+    SELECT 'meeting_sessions', count(*), count(*) FILTER (
+      WHERE title NOT LIKE 'rkz1:%' OR url NOT LIKE 'rkz1:%' OR transcript NOT LIKE 'rkz1:%'
+    ) FROM meeting_sessions
   `;
   const keys = await prisma.spaceKey.groupBy({ by: ["masterKeyId"], _count: { _all: true } });
   return {

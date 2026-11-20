@@ -1,5 +1,10 @@
 import type { AttachmentMimeType } from "@orkbot/contracts";
-import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_COUNT, attachmentSizeLabel } from "@orkbot/contracts";
+import {
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_MAX_COUNT,
+  attachmentSizeLabel,
+  isAttachmentImageMimeType,
+} from "@orkbot/contracts";
 import { newClientId } from "@orkbot/core";
 
 export type PickedAttachment = {
@@ -78,6 +83,8 @@ export function pickedAttachment(
     name: candidate.name,
     mimeType: candidate.mimeType as AttachmentMimeType,
     contentBase64: candidate.contentBase64,
-    previewUri: candidate.previewUri,
+    previewUri: isAttachmentImageMimeType(candidate.mimeType ?? "")
+      ? candidate.previewUri
+      : undefined,
   };
 }

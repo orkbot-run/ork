@@ -62,9 +62,9 @@ Each restore adds its own verification marker, including recovery without an app
 Startup and rollback must use an image that supports this verification. Earlier personal-access
 images ignore these markers.
 
-## Production backups
+## Production and image-installation backups
 
-For the single-VM production layout, install `infra/compose/backup-prod.sh` as
+For a source checkout, install `infra/compose/backup-prod.sh` as
 `/usr/local/sbin/orkbot-backup` and enable the supplied `orkbot-backup.timer`. It creates a verified
 Postgres custom-format dump plus an application-data archive under `/var/backups/orkbot`, with mode
 `0600`. It keeps up to `ORKBOT_BACKUP_KEEP` verified snapshots (default `3`), bounded by
@@ -77,13 +77,61 @@ verified snapshot when capacity is insufficient, caps output file sizes, and rem
 partial snapshot. Local snapshots alone do not survive losing the host; encrypt them and copy them
 off-site as described below.
 
+For an installation using ready-made images, opt in to the same nightly service when installing
+(or rerun the installer in the existing deployment directory):
+
+```sh
+sudo bash install-images.sh --install-backups
+# For the public HTTPS server installer, keep the original server arguments:
+sudo bash install-images.sh --server --url https://server.example.com --install-backups
+```
+
+This option requires a Linux host with systemd and root access. It installs the backup and drill
+scripts in `/usr/local/sbin`, copies `orkbot-backup.service` and `orkbot-backup.timer` into
+`/etc/systemd/system`, and enables the timer. The installer suggests this option when it is omitted;
+macOS and hosts without systemd continue to use manual backups. With `--offline --install-backups`,
+pre-place `backup-prod.sh`, `backup-drill.sh`, `orkbot-backup.service` and `orkbot-backup.timer` beside
+the image Compose file (units come from `infra/systemd` in the release). Existing backup settings
+are retained; the deployment directory is added to `/etc/orkbot/backup.env` if it was not already set.
+Review an existing `ORKBOT_DEPLOY_DIR` there before enabling the timer for a different installation.
+
+```sh
+sudo systemctl start orkbot-backup.service
+sudo systemctl status orkbot-backup.service
+sudo systemctl list-timers orkbot-backup.timer
+```
+
 The scheduled backup uses `/srv/orkbot` by default. For another deployment directory, set
-`ORKBOT_DEPLOY_DIR=/absolute/path/to/checkout` in a root-owned `/etc/orkbot/backup.env`
-(mode `0600`). The service reads this optional file on each run; the script uses the selected
-checkout's `.env` and production Compose file. If the stack was started with a custom `-p`,
-set the same `COMPOSE_PROJECT_NAME` in that file. Set the retention and space settings there too.
-When updating an existing installation, reinstall the script and units, then run
-`systemctl daemon-reload`; pulling the repository does not update `/usr/local/sbin` copies.
+`ORKBOT_DEPLOY_DIR=/absolute/path/to/deployment` in a root-owned `/etc/orkbot/backup.env`
+(mode `0600`). The service reads this optional file on each run. The script uses that deployment's
+`.env` and selects the Compose stack in this order:
+
+1. `ORKBOT_COMPOSE_FILE` in the service environment, then the literal setting in the deployment's
+   `.env` (the same colon-separated list used by the updater). Relative file paths resolve against
+   the deployment directory; an explicitly configured missing file fails without falling back.
+2. `infra/compose/docker-compose.prod.yml` for a checkout.
+3. `docker-compose.images.yml`, followed by `docker-compose.override.yml` if present, for an image
+   installation.
+
+All Docker Compose calls use this same file list and `.env`. No matching stack produces an explicit
+error. If the stack was started with a custom `-p`, set the same `COMPOSE_PROJECT_NAME` in the backup
+settings. Set retention, disk limits and encryption recipients there too. When updating an existing
+installation, reinstall the script and units, then run `systemctl daemon-reload`; pulling the
+repository does not update `/usr/local/sbin` copies.
+
+Verify a plaintext snapshot from either installation layout on a machine with PostgreSQL client
+tools installed (the dump's PostgreSQL major version or newer):
+
+```sh
+orkbot-backup-drill /var/backups/orkbot/<stamp>
+# Or from a checkout:
+bash infra/compose/backup-drill.sh /var/backups/orkbot/<stamp>
+```
+
+The drill checks checksums and reads the database and application archives fully without changing
+running services. It accepts an age identity as the second argument for encrypted snapshots, as
+shown below. Full recovery from either layout uses the same PostgreSQL custom-format dump and
+appdata archive; use the same Compose file list you selected for the backup when restoring.
 
 For a dedicated backup disk, mount it persistently and bind its `backups` directory onto
 `/var/backups` in `/etc/fstab`. Add `x-systemd.requires-mounts-for=/mnt/your-backup-volume` to the bind

@@ -175,6 +175,12 @@ import {
   IntegrationSetupStateSchema,
 } from "./integration-settings.js";
 import { McpAuthorizationUrlSchema } from "./mcp.js";
+import {
+  CreateMeetingInputSchema,
+  MeetingDetailSchema,
+  MeetingSummarySchema,
+  MeetingsStatusSchema,
+} from "./meetings.js";
 import { ModelHeadersSchema } from "./model-headers.js";
 import { ModelRoleSchema, ModelRoleUpdateSchema, ModelRoleViewSchema } from "./model-roles.js";
 import {
@@ -186,6 +192,7 @@ import {
 } from "./pages.js";
 import { PaymentWalletStatusSchema } from "./payments.js";
 import { MessageReactionSchema } from "./reactions.js";
+import { RoutineMessageProviderSchema, routineTriggerIssue } from "./routine-triggers.js";
 import { RoutineWatchSchema } from "./routine-watch.js";
 import {
   ROUTINE_HISTORY_PAGE_SIZE,
@@ -210,6 +217,7 @@ import {
 } from "./server-updates.js";
 import { SettingsScopeSchema, SpaceSettingSchema, settingsScopeInput } from "./settings-scope.js";
 import { SourcePresetInstallSchema, SourcePresetSchema } from "./source-presets.js";
+import { UsageBreakdownInputSchema, UsageBreakdownSchema } from "./usage-breakdown.js";
 
 const botId = z.object({ botId: Id });
 const takeoverCard = botId.extend({ runId: Id, messageId: Id });
@@ -283,6 +291,7 @@ const threadSendOutput = z.object({
   runId: Id,
   seq: z.number().int(),
   runIds: z.array(Id).optional(),
+  replyRunIds: z.array(Id).optional(),
 });
 
 /** Without text or attachments, only the routines run and no message is saved. */
@@ -537,6 +546,7 @@ export const appContract = {
       .input(
         z.object({
           connectionId: Id,
+          zeroDataRetention: z.boolean().optional(),
           label: z.string().trim().min(1).max(100),
           models: AIModelsSchema,
           concurrencyLimit: z.number().int().min(1).max(128),
@@ -571,7 +581,14 @@ export const appContract = {
         managed: z.boolean().optional(),
         personalModelsAllowed: z.boolean().optional(),
         modelSetupMode: z.enum(["pending", "organization", "personal", "legacy"]).optional(),
-        policy: z.object({ provider: z.string(), modelId: z.string() }).nullable(),
+        policy: z
+          .object({
+            provider: z.string(),
+            modelId: z.string(),
+            blockedByPolicy: z.boolean().optional(),
+            zeroDataRetention: z.boolean().optional(),
+          })
+          .nullable(),
       }),
     ),
     setWorkspacePolicy: oc.input(ModelConnectInputSchema).output(z.object({ ok: z.literal(true) })),
@@ -697,7 +714,14 @@ export const appContract = {
     remove: oc
       .input(z.object({ botId: Id, deleteMemories: z.boolean().default(false) }))
       .output(z.object({ ok: z.literal(true) })),
-    rotateWebhookSecret: oc.input(botId).output(
+    getWebhookConfig: oc
+      .input(botId)
+      .output(
+        z
+          .object({ secret: z.string(), path: z.string(), webhookConfigured: z.literal(true) })
+          .nullable(),
+      ),
+    rotateWebhookSecret: oc.input(botId.extend({ onlyIfMissing: z.boolean().optional() })).output(
       z.object({
         secret: z.string(),
         path: z.string(),
@@ -1004,13 +1028,7 @@ export const appContract = {
             notify: z.boolean().optional(),
             webhookEnabled: z.boolean().optional(),
             githubEnabled: z.boolean().optional(),
-            messageProvider: z
-              .string()
-              .min(1)
-              .max(50)
-              .regex(/^[a-z0-9._-]+$/i)
-              .nullable()
-              .optional(),
+            messageProvider: RoutineMessageProviderSchema.nullable().optional(),
             /** Null clears the routine's own model and runs it on the bot's. */
             modelProvider: z.string().trim().min(1).max(80).nullable().optional(),
             modelId: z.string().trim().min(1).max(200).nullable().optional(),
@@ -1021,19 +1039,17 @@ export const appContract = {
             watch: RoutineWatchSchema.nullable().optional(),
           })
           .superRefine((value, ctx) => {
+            // Partial updates need existing values; the route validates their merged state.
             if (
-              value.crons &&
-              value.crons.length === 0 &&
-              value.webhookEnabled === false &&
-              value.githubEnabled === false &&
-              value.messageProvider === null &&
-              value.watch === null
+              value.crons !== undefined &&
+              value.webhookEnabled !== undefined &&
+              value.githubEnabled !== undefined &&
+              value.messageProvider !== undefined &&
+              value.watch !== undefined
             ) {
-              ctx.addIssue({
-                code: "custom",
-                message: "Add a schedule, webhook, GitHub, message, or change trigger",
-                path: ["crons"],
-              });
+              const issue = routineTriggerIssue({ ...value, crons: value.crons });
+              if (issue)
+                ctx.addIssue({ code: "custom", message: issue.message, path: [issue.path] });
             }
           }),
       )
@@ -1543,6 +1559,7 @@ export const appContract = {
   usage: {
     list: oc.output(z.array(UsageRecordSchema)),
     summary: oc.output(UsageSummarySchema),
+    breakdown: oc.input(UsageBreakdownInputSchema).output(UsageBreakdownSchema),
   },
   export: {
     bot: oc.input(botId).output(ExportManifestSchema),
@@ -1632,6 +1649,14 @@ export const appContract = {
     /** Starts a sign-in the user finishes with the provider; `status` then reports it. */
     connect: oc.output(PaymentWalletStatusSchema),
     disconnect: oc.output(PaymentWalletStatusSchema),
+  },
+  meetings: {
+    status: oc.output(MeetingsStatusSchema),
+    list: oc.input(z.object({ botId: Id })).output(z.array(MeetingSummarySchema)),
+    get: oc.input(z.object({ meetingId: Id })).output(MeetingDetailSchema),
+    create: oc.input(CreateMeetingInputSchema).output(MeetingSummarySchema),
+    leave: oc.input(z.object({ meetingId: Id })).output(z.object({ ok: z.literal(true) })),
+    remove: oc.input(z.object({ meetingId: Id })).output(z.object({ ok: z.literal(true) })),
   },
   voice: {
     catalog: oc.output(z.array(VoiceCatalogEntrySchema)),

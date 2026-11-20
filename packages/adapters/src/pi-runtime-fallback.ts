@@ -31,8 +31,10 @@ import { getLogger } from "@orkbot/logging";
 import { ModelImageLimitError, pruneForRebuild } from "./context-pruning.js";
 import { groqRequestContextWindow } from "./groq-request-budget.js";
 import { estimateModelContextTokens } from "./model-context.js";
+import { assertModelEndpointAllowed, assertModelProviderAllowed } from "./model-provider-policy.js";
 import { IMAGE_RETURNING_COMPUTER_TOOLS } from "./model-vision.js";
 import { affordableOpenRouterOutput } from "./openrouter-output-budget.js";
+import { isOpenRouterZdrUnavailable } from "./openrouter-zdr.js";
 import { estimatePiImageTokens } from "./pi-image-context.js";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "./pi-openai-compatible-provider.js";
 import { assistantText, messageHasToolCall, sanitizeProviderError } from "./pi-runtime-errors.js";
@@ -85,6 +87,8 @@ export interface FallbackStreamState {
   cutReplies?: WeakMap<AssistantMessage["content"], CutReplyReason>;
   /** The next call continues a cut reply, so a dropped connection there is not continued again. */
   continuingCutReply?: boolean;
+  /** The next call is already one of the bounded requests for a missing post-tool reply. */
+  continuingSilentToolReply?: boolean;
   onSwitch(target: RuntimeModelTarget): Promise<void>;
   onContextLimit(contextWindow: number): void;
   isProviderFailure(message: AssistantMessage): boolean;
@@ -104,6 +108,7 @@ export interface FallbackStreamState {
     target: RuntimeModelTarget,
     context: TranscriptContext,
     options: ModelsSimpleStreamOptions | undefined,
+    onPacingWait?: (waitedMs: number) => void,
   ): AssistantMessageEventStream;
 }
 
@@ -117,15 +122,15 @@ function assistantHasVisibleOutput(message: AssistantMessage): boolean {
   );
 }
 
+// Tool arguments stay private until a successful terminal event authorizes the batch.
 function eventHasVisibleOutput(event: AssistantMessageEvent): boolean {
-  if (event.type === "toolcall_start" || event.type === "toolcall_end") return true;
-  if (event.type === "text_delta" || event.type === "toolcall_delta") {
-    if (event.delta.length > 0) return true;
+  if (event.type === "text_delta") {
+    if (event.delta.trim().length > 0) return true;
   }
-  if (event.type === "text_end" && event.content.length > 0) return true;
+  if (event.type === "text_end" && event.content.trim().length > 0) return true;
   if (event.type === "done") return assistantHasVisibleOutput(event.message);
   if (event.type === "error") return assistantHasVisibleOutput(event.error);
-  return assistantHasVisibleOutput(event.partial);
+  return Boolean(assistantText(event.partial).trim());
 }
 
 export const MAX_SELF_RECOVERIES_PER_RUN = 3;
@@ -315,14 +320,13 @@ export function fallbackAwareModelStream(
       reason: sanitizeProviderError(target.config.provider, error),
     });
   };
-  const finishWithThrownError = (target: RuntimeModelTarget, error: unknown) => {
+  const thrownFailure = (target: RuntimeModelTarget, error: unknown): AssistantMessage => {
     const message = error instanceof Error ? error.message : String(error);
-    recordFailure(target, message);
     const aborted = signalAborted() || /abort|cancel/i.test(message);
     const stopReason: "aborted" | "error" = aborted ? "aborted" : "error";
     const failure: AssistantMessage = {
       role: "assistant",
-      content: lastPartial?.content ?? [],
+      content: lastPartial?.content.filter((part) => part.type !== "toolCall") ?? [],
       api: target.model.api,
       provider: target.model.provider,
       model: target.model.id,
@@ -338,8 +342,38 @@ export function fallbackAwareModelStream(
       errorMessage: message,
       timestamp: Date.now(),
     };
-    output.push({ type: "error", reason: stopReason, error: failure });
+    return failure;
+  };
+  const finishWithThrownError = (target: RuntimeModelTarget, error: unknown) => {
+    const failure = thrownFailure(target, error);
+    recordFailure(target, failure.errorMessage ?? "Model request failed.");
+    output.push({
+      type: "error",
+      reason: failure.stopReason as "error" | "aborted",
+      error: failure,
+    });
     output.end(failure);
+  };
+  // A broken iterator can interrupt argument assembly without a provider error event.
+  const streamEvents = async function* (
+    stream: AssistantMessageEventStream,
+    target: RuntimeModelTarget,
+    hasBufferedToolCall: () => boolean,
+  ): AsyncGenerator<AssistantMessageEvent> {
+    let failure: AssistantMessage;
+    try {
+      yield* stream;
+      if (!hasBufferedToolCall()) return;
+      failure = thrownFailure(target, new Error("Model stream ended without finish_reason"));
+    } catch (error) {
+      if (!hasBufferedToolCall()) throw error;
+      failure = thrownFailure(target, error);
+    }
+    yield {
+      type: "error",
+      reason: failure.stopReason as "error" | "aborted",
+      error: failure,
+    };
   };
   const failIfAborted = (target: RuntimeModelTarget) => {
     if (!signalAborted()) return false;
@@ -365,7 +399,8 @@ export function fallbackAwareModelStream(
           reason,
         });
       try {
-        const config = state.request.resolveFallbackModel
+        assertModelProviderAllowed(choice.provider);
+        let config = state.request.resolveFallbackModel
           ? await state.request.resolveFallbackModel(
               choice.provider,
               choice.id,
@@ -382,6 +417,16 @@ export function fallbackAwareModelStream(
         if (!config.apiKey && !config.oauth && config.provider !== OPENAI_COMPATIBLE_PROVIDER_ID) {
           skip("No credential is available for the backup model.");
           continue;
+        }
+        if (
+          state.request.model.zeroDataRetention === true ||
+          current.config.zeroDataRetention === true
+        ) {
+          if (config.provider !== "openrouter") {
+            skip("The backup cannot enforce OpenRouter Zero Data Retention.");
+            continue;
+          }
+          config = { ...config, zeroDataRetention: true };
         }
         const resolved = resolveRuntimeModel(config);
         if (
@@ -421,6 +466,8 @@ export function fallbackAwareModelStream(
   const run = async () => {
     let buffered: AssistantMessageEvent[] = [];
     let retries = 0;
+    let emptyRetries = 0;
+    let emptyTarget: string | undefined;
     let recoveredIdle = false;
     let sizingFailure: Extract<AssistantMessageEvent, { type: "error" }> | undefined;
     // Bound same-model retries. Explicit backups retain their per-model header
@@ -435,6 +482,8 @@ export function fallbackAwareModelStream(
     state.nextCallRecovery = undefined;
     const continuingCutReply = Boolean(state.continuingCutReply);
     state.continuingCutReply = false;
+    const continuingSilentToolReply = Boolean(state.continuingSilentToolReply);
+    state.continuingSilentToolReply = false;
     while (!signalAborted()) {
       const remainingMs = timeoutMs - (Date.now() - startedAt);
       const failure = firstRetryableError ?? sizingFailure;
@@ -460,6 +509,7 @@ export function fallbackAwareModelStream(
       };
       lastPartial = undefined;
       let sawVisibleOutput = false;
+      let bufferedToolCall = false;
       let restart = false;
       let stream: AssistantMessageEventStream;
       const thinkingLevel =
@@ -483,6 +533,7 @@ export function fallbackAwareModelStream(
         operatorMaxTokens(sentTarget.model),
       );
       try {
+        assertModelEndpointAllowed(target.model.provider, target.config.baseUrl);
         const apiKey = target.credentials?.accessToken ?? target.apiKey;
         const reasoning = thinkingLevel === "off" ? undefined : thinkingLevel;
         stream = state.stream(
@@ -494,19 +545,88 @@ export function fallbackAwareModelStream(
             : thinkingOverride
               ? { ...attemptOptions, reasoning }
               : attemptOptions,
+          (waitedMs) => {
+            startedAt += waitedMs;
+          },
         );
       } catch (error) {
         finishWithThrownError(target, error);
         return;
       }
       try {
-        for await (const event of stream) {
+        for await (const event of streamEvents(
+          stream,
+          target,
+          () => bufferedToolCall && !sawVisibleOutput,
+        )) {
           if (event.type === "error") {
             recordFailure(target, event.error.errorMessage ?? "Model request failed.");
+            if (isOpenRouterZdrUnavailable(event.error.errorMessage)) {
+              output.push(event);
+              output.end(event.error);
+              return;
+            }
             let terminalEvent = event;
+            if (
+              bufferedToolCall &&
+              !sawVisibleOutput &&
+              !assistantText(event.error) &&
+              event.reason === "error" &&
+              !signalAborted() &&
+              isTransientModelError(event.error)
+            ) {
+              // Tool events are held until done: no tool from this attempt was authorized.
+              buffered = [];
+              lastPartial = undefined;
+              getLogger().info("model.retry", {
+                runId: state.request.runId,
+                provider: target.config.provider,
+                model: target.config.id,
+                reason: "interrupted_tool_call",
+              });
+              state.primaryFailure ??= sanitizeProviderError(
+                target.config.provider,
+                event.error.errorMessage ?? "Model request failed.",
+              );
+              const next = await resolveNext(target);
+              if (failIfAborted(target)) return;
+              if (next) {
+                state.messagesBeforeSwitch = context.messages.length;
+                await state.onSwitch(next);
+                if (failIfAborted(target)) return;
+                outputBudget = undefined;
+                thinkingOverride = undefined;
+                restart = true;
+                break;
+              }
+              const delay = MODEL_PROVIDER_RETRY_DELAYS_MS[state.selfRecoveries];
+              if (delay !== undefined && Date.now() - startedAt + delay < timeoutMs) {
+                state.selfRecoveries += 1;
+                await abortableDelay(delay, signal);
+                if (failIfAborted(target)) return;
+                if (Date.now() - startedAt < timeoutMs) {
+                  restart = true;
+                  break;
+                }
+              }
+            }
+            if (bufferedToolCall && !sawVisibleOutput && !assistantText(event.error)) {
+              // An unsuccessful tool call never enters the agent transcript, even on exhaustion.
+              buffered = [];
+              lastPartial = undefined;
+              terminalEvent = {
+                ...event,
+                error: {
+                  ...event.error,
+                  content: event.error.content.filter((part) => part.type !== "toolCall"),
+                },
+              };
+            }
+
             let requestLimitTooSmall = false;
             const hasTerminalVisibleOutput = assistantHasVisibleOutput(event.error);
             if (
+              !bufferedToolCall &&
               !sawVisibleOutput &&
               !hasTerminalVisibleOutput &&
               event.reason === "error" &&
@@ -550,7 +670,10 @@ export function fallbackAwareModelStream(
                     requestWindow === undefined
                       ? MODEL_CONTEXT_TOO_SMALL_ERROR
                       : MODEL_REQUEST_LIMIT_ERROR;
-                  terminalEvent = { ...event, error: { ...event.error, errorMessage: limitError } };
+                  terminalEvent = {
+                    ...event,
+                    error: { ...event.error, errorMessage: limitError },
+                  };
                   recordFailure(target, limitError);
                 } else {
                   state.onContextLimit(contextWindow);
@@ -582,6 +705,7 @@ export function fallbackAwareModelStream(
               }
             }
             const narrowedThinking =
+              !bufferedToolCall &&
               !sawVisibleOutput &&
               !hasTerminalVisibleOutput &&
               event.reason === "error" &&
@@ -597,6 +721,7 @@ export function fallbackAwareModelStream(
               break;
             }
             if (
+              !bufferedToolCall &&
               !sawVisibleOutput &&
               !hasTerminalVisibleOutput &&
               event.reason === "error" &&
@@ -611,6 +736,7 @@ export function fallbackAwareModelStream(
               break;
             }
             if (
+              !bufferedToolCall &&
               !sawVisibleOutput &&
               !hasTerminalVisibleOutput &&
               event.reason === "error" &&
@@ -703,13 +829,66 @@ export function fallbackAwareModelStream(
             buffered = [];
             const terminal =
               sawVisibleOutput && event.error.content.length === 0 && lastPartial
-                ? { ...event, error: { ...event.error, content: lastPartial.content } }
+                ? {
+                    ...event,
+                    error: { ...event.error, content: lastPartial.content },
+                  }
                 : terminalEvent;
             output.push(terminal);
             output.end(terminal.error);
             return;
           }
           if (event.type === "done") {
+            if (
+              !continuingCutReply &&
+              !continuingSilentToolReply &&
+              event.message.stopReason === "stop" &&
+              !event.message.errorMessage &&
+              !sawVisibleOutput &&
+              !assistantText(event.message).trim() &&
+              !messageHasToolCall(event.message) &&
+              !state.request.allowSilentEmpty &&
+              !signalAborted()
+            ) {
+              if (emptyTarget !== connectionKey) {
+                emptyTarget = connectionKey;
+                emptyRetries = 0;
+              }
+              const delay = MODEL_PROVIDER_RETRY_DELAYS_MS[emptyRetries];
+              if (
+                emptyRetries < 2 &&
+                delay !== undefined &&
+                Date.now() - startedAt + delay < timeoutMs
+              ) {
+                getLogger().info("model.retry", {
+                  runId: state.request.runId,
+                  provider: target.config.provider,
+                  model: target.config.id,
+                  reason: "empty_response",
+                  attempt: emptyRetries + 1,
+                });
+                emptyRetries += 1;
+                buffered = [];
+                await abortableDelay(delay, signal);
+                if (failIfAborted(target)) return;
+                if (Date.now() - startedAt < timeoutMs) {
+                  restart = true;
+                  break;
+                }
+              }
+              const next = await resolveNext(target);
+              if (failIfAborted(target)) return;
+              if (next) {
+                state.messagesBeforeSwitch = context.messages.length;
+                await state.onSwitch(next);
+                if (failIfAborted(target)) return;
+                outputBudget = undefined;
+                thinkingOverride = undefined;
+                buffered = [];
+                restart = true;
+                break;
+              }
+            }
             // A recovered call must not replace a later failure with its old error.
             state.primaryFailure = undefined;
             state.backupOutcomes.delete(targetKey);
@@ -760,7 +939,11 @@ export function fallbackAwareModelStream(
               };
               const message: AssistantMessage =
                 state.selfRecoveries >= MAX_SELF_RECOVERIES_PER_RUN
-                  ? { ...ended, stopReason: "error", errorMessage: MODEL_OUTPUT_CUT_ERROR }
+                  ? {
+                      ...ended,
+                      stopReason: "error",
+                      errorMessage: MODEL_OUTPUT_CUT_ERROR,
+                    }
                   : { ...ended, stopReason: "stop" };
               if (message.stopReason === "stop") {
                 state.selfRecoveries += 1;
@@ -812,6 +995,13 @@ export function fallbackAwareModelStream(
             ...event.partial,
             content: event.partial.content.map((part) => ({ ...part })),
           };
+          if (
+            event.type === "toolcall_start" ||
+            event.type === "toolcall_delta" ||
+            event.type === "toolcall_end"
+          ) {
+            bufferedToolCall = true;
+          }
           if (eventHasVisibleOutput(event)) {
             sawVisibleOutput = true;
             for (const pending of buffered) output.push(pending);

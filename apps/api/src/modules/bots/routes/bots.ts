@@ -4,7 +4,7 @@
 // Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { randomBytes } from "node:crypto";
-import { runContinueJob } from "@orkbot/adapter-kit";
+import { routineWakeupJob, runContinueJob } from "@orkbot/adapter-kit";
 import {
   archiveBot,
   checkpointAndStopComputer,
@@ -46,7 +46,7 @@ import {
   isRecordNotFound,
   recordComputerRunEnd,
   recordSecurityEvent,
-  restoreBotUnderComputerQuota,
+  restoreBotWithRoutines,
   SpaceDeletionInProgressError,
   settingsTarget,
   THREAD_LOCK_TRANSACTION_OPTIONS,
@@ -61,6 +61,7 @@ import {
   previewAgentImport,
 } from "#modules/agents/agent-import";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "#modules/agents/agent-secrets";
+import { canCopyModelPin } from "#modules/models/model-pins";
 import type { RouterDeps } from "#modules/platform/router";
 import type { RouterContext } from "#modules/platform/routes/context";
 import {
@@ -80,6 +81,23 @@ function mapSpaceLifecycleError(error: unknown): unknown {
     return new ORPCError("BAD_REQUEST", { message: error.message });
   }
   return error;
+}
+
+async function enqueueRestoredRoutines(
+  jobs: RouterDeps["jobs"],
+  routines: Array<{ id: string; nextRunAt: Date | null }>,
+) {
+  await Promise.all(
+    routines.map(async (routine) => {
+      if (routine.nextRunAt) {
+        await jobs
+          .enqueue(routineWakeupJob(routine.id, routine.nextRunAt))
+          .catch((error) =>
+            getLogger().error("routine.restore_wakeup_failed", error, { "routine.id": routine.id }),
+          );
+      }
+    }),
+  );
 }
 
 const BOT_SECRET_INPUT_ERRORS = [
@@ -349,6 +367,7 @@ export function botsRoutes(ctx: RouterContext) {
       ),
       duplicate: authed.bots.duplicate.handler(async ({ context, input }) => {
         const source = await repos.getBot(context.actor, input.botId);
+        const keepModel = await canCopyModelPin(deps, context.actor, source);
         const duplicate = await repos
           .createBot(context.actor, {
             name: duplicateBotName(source.name),
@@ -361,10 +380,14 @@ export function botsRoutes(ctx: RouterContext) {
             avatarSet: resolveBotAvatarSet(source.avatarSet),
             avatarSetPinned: source.avatarSetPinned,
             computerMode: source.computer?.scope === "dedicated" ? "dedicated" : "team",
-            modelProvider: source.modelProvider,
-            modelId: source.modelId,
-            modelConnectionId: source.modelConnectionId,
-            thinkingLevel: source.thinkingLevel,
+            ...(keepModel
+              ? {
+                  modelProvider: source.modelProvider,
+                  modelId: source.modelId,
+                  modelConnectionId: source.modelConnectionId,
+                  thinkingLevel: source.thinkingLevel,
+                }
+              : {}),
             disabledBuiltinTools: source.disabledBuiltinTools,
           })
           .catch((error: unknown) => {
@@ -610,17 +633,10 @@ export function botsRoutes(ctx: RouterContext) {
       }),
       restore: authed.bots.restore.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId, { includeArchived: true });
-        if (!bot.archivedAt) return { ok: true as const };
+        const scope = { spaceId: context.actor.spaceId, userId: context.actor.userId };
         try {
-          if (bot.computer) {
-            await restoreBotUnderComputerQuota(deps.prisma, {
-              userId: context.actor.userId,
-              botId: bot.id,
-              computerId: bot.computer.id,
-            });
-          } else {
-            await deps.prisma.bot.update({ where: { id: bot.id }, data: { archivedAt: null } });
-          }
+          const wakeups = await restoreBotWithRoutines(deps.prisma, { ...scope, botId: bot.id });
+          await enqueueRestoredRoutines(deps.jobs, wakeups);
         } catch (error) {
           throw mapSpaceLifecycleError(error);
         }
@@ -629,6 +645,24 @@ export function botsRoutes(ctx: RouterContext) {
       remove: authed.bots.remove.handler(async ({ context, input }) => {
         await removeBot(context.actor, input.botId, { deleteMemories: input.deleteMemories });
         return { ok: true as const };
+      }),
+      getWebhookConfig: authed.bots.getWebhookConfig.handler(async ({ context, input }) => {
+        const bot = await repos.getBot(context.actor, input.botId);
+        if (!bot.webhookSecretId) return null;
+        const secret = await deps.prisma.secret.findFirst({
+          where: {
+            id: bot.webhookSecretId,
+            userId: context.actor.userId,
+            spaceId: context.actor.spaceId,
+            kind: "webhook",
+          },
+        });
+        if (!secret) return null;
+        return {
+          secret: await deps.secrets.load(secret.ciphertext, secret.id),
+          path: `/api/v1/bots/${bot.id}/webhook`,
+          webhookConfigured: true as const,
+        };
       }),
       rotateWebhookSecret: authed.bots.rotateWebhookSecret.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
@@ -640,8 +674,24 @@ export function botsRoutes(ctx: RouterContext) {
           userId: context.actor.userId,
           signal: context.signal ?? new AbortController().signal,
         });
-        await deps.prisma.$transaction(async (tx) => {
-          const previousSecretId = bot.webhookSecretId;
+        const current = await deps.prisma.$transaction(async (tx) => {
+          const [locked] = await tx.$queryRaw<Array<{ webhookSecretId: string | null }>>`
+            SELECT "webhookSecretId" FROM bots WHERE id = ${bot.id} AND "spaceId" = ${context.actor.spaceId}
+            AND "userId" = ${context.actor.userId} AND "archivedAt" IS NULL FOR UPDATE`;
+          if (!locked) throw new ORPCError("NOT_FOUND");
+          const previousSecretId = locked.webhookSecretId;
+          if (input.onlyIfMissing && previousSecretId) {
+            const existing = await tx.secret.findFirst({
+              where: {
+                id: previousSecretId,
+                spaceId: context.actor.spaceId,
+                userId: context.actor.userId,
+                kind: "webhook",
+              },
+              select: { id: true, ciphertext: true },
+            });
+            if (existing) return existing;
+          }
           await tx.secret.create({
             data: {
               id: stored.id,
@@ -667,7 +717,7 @@ export function botsRoutes(ctx: RouterContext) {
           }
         });
         return {
-          secret: plaintext,
+          secret: current ? await deps.secrets.load(current.ciphertext, current.id) : plaintext,
           path: `/api/v1/bots/${bot.id}/webhook`,
           webhookConfigured: true as const,
         };
@@ -733,7 +783,8 @@ export function botsRoutes(ctx: RouterContext) {
       }),
       restore: authed.groups.restore.handler(async ({ context, input }) => {
         try {
-          await groupRepos.restoreGroup(context.actor, input.groupId);
+          const wakeups = await groupRepos.restoreGroup(context.actor, input.groupId);
+          await enqueueRestoredRoutines(deps.jobs, wakeups);
         } catch (error) {
           throw mapSpaceLifecycleError(error);
         }

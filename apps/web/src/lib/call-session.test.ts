@@ -5,6 +5,7 @@
 import type { ProductEvent, ThreadMessage, ThreadSnapshot } from "@orkbot/contracts";
 import type * as CoreModule from "@orkbot/core";
 import {
+  CallSpeechQueue,
   callIdFromClientNonce,
   groupVoiceChats,
   INTERIM_BARGE_IN_MS,
@@ -46,6 +47,7 @@ vi.mock("./tts.js", async () => ({
   speaker: {
     claim: vi.fn((await import("@orkbot/core")).createSpeakerOwnership().claim),
     speak: vi.fn(async () => undefined),
+    startStream: vi.fn(),
     stop: vi.fn(),
     isSpeaking: vi.fn(() => false),
     subscribe: vi.fn(() => () => undefined),
@@ -172,6 +174,69 @@ describe("call session", () => {
     expect(listen).toHaveBeenCalledTimes(2);
     expect(send).not.toHaveBeenCalled();
     expect(followUp).not.toHaveBeenCalled();
+    expect(getSnapshot()?.phase).toBe("listening");
+  });
+
+  it("plays marked text before the run finishes and drains only the final suffix", async () => {
+    await answeredCall({ botId: "call-bot", botName: "Ada", transcribe: false });
+    const feed = vi.mocked(runThreadSubscription).mock.calls.at(-1)![0];
+    const firstClip = deferred<void>();
+    const lastClip = deferred<void>();
+    const render = vi.fn(async (text: string) => [new Blob([text])]);
+    const play = vi.fn(async (_clip: Blob[], text: string) => {
+      vi.mocked(speaker.subscribe).mock.calls.at(-1)?.[0]({ status: "speaking", caption: text });
+      await (text.startsWith("First") ? firstClip.promise : lastClip.promise);
+    });
+    vi.mocked(speaker.startStream).mockReturnValueOnce(new CallSpeechQueue({ render, play }));
+    getThread.mockResolvedValue(snapshot([callerMessage("hello")], runningRun) as never);
+    await heard("hello");
+    const id = callIdFromClientNonce(send.mock.calls.at(-1)?.[0].clientNonce)!;
+    const event = { ...userMessageEvent(id), type: "thread.progress", runId: "run-1" } as const;
+    const head = { threadId: "thread-1", cursor: 3 };
+    feed.onEvent({ ...event, payload: { text: "Checking tool status.", activity: true } }, head);
+    feed.onEvent(
+      {
+        ...event,
+        payload: { publicText: "Other call. No.", publicTextCallId: "other" },
+      },
+      head,
+    );
+    expect(speaker.startStream).not.toHaveBeenCalled();
+    feed.onEvent(
+      {
+        ...event,
+        payload: { publicText: "First sentence. The last", publicTextCallId: id },
+      },
+      head,
+    );
+    await flushMicrotasks();
+    expect(play.mock.calls.map(([, text]) => text)).toEqual(["First sentence."]);
+    expect(getSnapshot()?.phase).toBe("speaking");
+
+    getThread.mockResolvedValue({
+      ...snapshot([
+        callerMessage("hello"),
+        botMessage("final", "First sentence. The last sentence."),
+      ]),
+      cursor: 12,
+    } as never);
+    await feed.refresh();
+    await flushMicrotasks();
+    expect(render.mock.calls.map(([text]) => text)).toEqual([
+      "First sentence.",
+      "The last sentence.",
+    ]);
+    expect(speak).not.toHaveBeenCalled();
+    firstClip.resolve();
+    await flushMicrotasks();
+    expect(play.mock.calls.map(([, text]) => text)).toEqual([
+      "First sentence.",
+      "The last sentence.",
+    ]);
+    expect(getSnapshot()?.phase).toBe("speaking");
+    lastClip.resolve();
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(ECHO_GUARD_MS);
     expect(getSnapshot()?.phase).toBe("listening");
   });
 

@@ -174,20 +174,6 @@ test("workspace icons switch the roster and restore the previous chat without re
   const firstMessage = "Remember this workspace conversation";
   await rpc(page, "threads/send", { botId: firstBot, text: firstMessage });
   await rpc(page, "threads/stop", { botId: firstBot });
-  await page.reload();
-  const rail = page.getByRole("navigation", { name: "Workspaces" });
-  const firstSpace = await rail.locator('[aria-current="true"]').getAttribute("aria-label");
-  expect(firstSpace).toBeTruthy();
-  const secondSpace = rail.getByRole("button", { name: "Second space" });
-  await expect(secondSpace).toBeVisible();
-  const railList = page.getByTestId("workspace-rail-list");
-  expect(await railList.evaluate((list) => list.scrollWidth <= list.clientWidth)).toBe(true);
-  await expect(page.getByTestId("bots-sidebar").getByRole("button", { name: /Scout/ })).toHaveCount(
-    0,
-  );
-  await expect(
-    page.getByTestId("transcript").getByText(firstMessage, { exact: true }),
-  ).toBeVisible();
 
   let releaseCold = () => {};
   let releaseWarm = () => {};
@@ -212,6 +198,20 @@ test("workspace icons switch the roster and restore the previous chat without re
     if (holdWarm) await warm;
     await route.continue();
   });
+  await page.reload();
+  const rail = page.getByRole("navigation", { name: "Workspaces" });
+  const firstSpace = await rail.locator('[aria-current="true"]').getAttribute("aria-label");
+  expect(firstSpace).toBeTruthy();
+  const secondSpace = rail.getByRole("button", { name: "Second space" });
+  await expect(secondSpace).toBeVisible();
+  const railList = page.getByTestId("workspace-rail-list");
+  expect(await railList.evaluate((list) => list.scrollWidth <= list.clientWidth)).toBe(true);
+  await expect(page.getByTestId("bots-sidebar").getByRole("button", { name: /Scout/ })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByTestId("transcript").getByText(firstMessage, { exact: true }),
+  ).toBeVisible();
 
   // A reload would drop this marker; an in-place switch keeps it. The observer
   // records any moment the sidebar lost its bots during the switch.
@@ -227,11 +227,22 @@ test("workspace icons switch the roster and restore the previous chat without re
     }).observe(document.body, { childList: true, subtree: true, characterData: true });
   });
   try {
-    await secondSpace.hover();
+    // The first switch already has an in-flight request before the user touches the rail.
     await expect.poll(() => coldRequests).toBe(1);
+    await expect(secondSpace).not.toHaveAttribute("aria-busy", "true");
     await secondSpace.click();
-    await expect(secondSpace).toHaveAttribute("aria-busy", "true");
-    await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
+    // Keep the network blocked until the destination is already active and visible.
+    await expect(secondSpace).toHaveAttribute("aria-current", "true");
+    await expect(page).toHaveURL(`/app/${scout.id}`);
+    const opening = page.getByTestId("workspace-opening");
+    await expect(opening.getByRole("heading", { name: "Scout", exact: true })).toBeVisible();
+    await expect(opening.getByTestId("bots-sidebar")).toContainText("Telescope");
+    await expect(page.getByPlaceholder("Message Chief")).toHaveCount(0);
+    await expect(page.getByPlaceholder("Message Scout")).toHaveCount(0);
+    expect(await page.evaluate(() => window.localStorage.getItem("orkbot:space-id"))).toBe(
+      space.id,
+    );
+    await captureScreenshot(page, testInfo, "space-switch-before-bootstrap");
   } finally {
     releaseCold();
   }

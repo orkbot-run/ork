@@ -12,7 +12,10 @@ import { clampThinkingLevel } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { AgentRunRequest } from "@orkbot/adapter-kit";
 import { canonicalPiProviderId, usableModelId } from "@orkbot/contracts";
+import { decisionModel } from "./decision-models.js";
 import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";
+import { assertModelEndpointAllowed } from "./model-provider-policy.js";
+import { OpenRouterZdrUnsupportedError } from "./openrouter-zdr.js";
 import { PiRuntimeCredentialStore, toOAuthCredential } from "./pi-credentials.js";
 import { liveModelSibling, withLiveImageInput } from "./pi-live-model.js";
 import { registerLocalProvider } from "./pi-local-provider.js";
@@ -86,6 +89,7 @@ export function resolveRuntimeModel(modelConfig: AgentRunRequest["model"]): {
   const provider = canonicalPiProviderId(
     modelConfig.provider === "scripted" ? "openrouter" : modelConfig.provider,
   );
+  assertModelEndpointAllowed(provider, modelConfig.baseUrl);
   const envDefaultModel = process.env.PI_DEFAULT_MODEL?.trim();
   const envDefaultProvider = process.env.PI_DEFAULT_PROVIDER?.trim() || "openrouter";
   const requestedId =
@@ -116,6 +120,17 @@ export function resolveRuntimeModel(modelConfig: AgentRunRequest["model"]): {
   }
   if (model && provider === CHATGPT_OAUTH_PROVIDER) {
     model = withLiveImageInput(model, modelConfig.acceptsImages);
+  }
+  if (modelConfig.zeroDataRetention === true) {
+    if (provider !== "openrouter")
+      throw new Error("Model unavailable: Zero Data Retention requires OpenRouter.");
+    if (decisionModel(provider, modelId)) throw new OpenRouterZdrUnsupportedError("Decisions");
+    if (
+      model &&
+      !["openai-completions", "anthropic-messages", "openai-responses"].includes(model.api)
+    )
+      throw new OpenRouterZdrUnsupportedError();
+    if (model) model = { ...model, ...{ zeroDataRetention: true } };
   }
   const apiKey = modelConfig.oauth
     ? undefined

@@ -379,6 +379,30 @@ describe("composio tool mapping", () => {
     );
   });
 
+  it("lists active refs for this user without falling back after a provider failure", async () => {
+    const previous = composioSdkState.connectedAccounts.list;
+    const list = vi.fn(async () => ({ items: [{ id: "ca-work" }] }));
+    composioSdkState.connectedAccounts.list = list;
+    const context = {
+      operationId: "test",
+      traceId: "test",
+      spaceId: "space",
+      userId: "user",
+      signal: new AbortController().signal,
+    } satisfies AdapterContext;
+    try {
+      const connector = new ComposioConnector();
+      await expect(connector.listActiveConnectionRefs(context)).resolves.toEqual(["ca-work"]);
+      expect(list).toHaveBeenCalledWith({ userIds: ["user"], statuses: ["ACTIVE"] });
+      list.mockRejectedValueOnce(new Error("provider unavailable"));
+      await expect(connector.listActiveConnectionRefs(context)).rejects.toThrow(
+        "provider unavailable",
+      );
+    } finally {
+      composioSdkState.connectedAccounts.list = previous;
+    }
+  });
+
   function stubActiveAccounts(ids: string[]) {
     const previous = composioSdkState.connectedAccounts.list;
     composioSdkState.connectedAccounts.list = async () => ({
@@ -1315,7 +1339,7 @@ describe("composio tool mapping", () => {
       ),
     ).toEqual({
       connectIds: ["row-gmail"],
-      revokeIds: ["row-dup", "row-err"],
+      revokeIds: ["row-err"],
     });
   });
 
@@ -1349,6 +1373,208 @@ describe("composio tool mapping", () => {
     ).toEqual({
       connectIds: [],
       revokeIds: ["row-err"],
+    });
+  });
+
+  it.each(["pending", "connected"])(
+    "revokes the abandoned first attempt when the authorized second attempt is %s",
+    (secondStatus) => {
+      const rows = [
+        {
+          id: "first",
+          provider: "gmail",
+          displayName: "Gmail",
+          status: "pending",
+          providerRef: "ca-first",
+          createdAt: new Date(Date.now() - 1000),
+        },
+        {
+          id: "second",
+          provider: "gmail",
+          displayName: "Gmail",
+          status: secondStatus,
+          providerRef: "ca-second",
+          createdAt: new Date(),
+        },
+      ];
+      expect(planLiveConnectionSync(rows, ["gmail"], ["ca-second"])).toEqual({
+        connectIds: secondStatus === "pending" ? ["second"] : [],
+        revokeIds: ["first"],
+      });
+    },
+  );
+
+  it("keeps a newer or provisional authorization when an older account completes", () => {
+    const now = Date.now();
+    const rows = [
+      {
+        id: "old",
+        provider: "gmail",
+        displayName: "Gmail",
+        status: "pending",
+        providerRef: "ca-old",
+        createdAt: new Date(now - 2000),
+      },
+      {
+        id: "new",
+        provider: "gmail",
+        displayName: "Gmail",
+        status: "pending",
+        providerRef: "ca-new",
+        createdAt: new Date(now),
+      },
+      {
+        id: "provisional",
+        provider: "gmail",
+        displayName: "Gmail",
+        status: "pending",
+        providerRef: null,
+        createdAt: new Date(now - 3000),
+      },
+    ];
+    expect(planLiveConnectionSync(rows, ["gmail"], ["ca-old"], now)).toEqual({
+      connectIds: ["old"],
+      revokeIds: [],
+    });
+  });
+
+  it("does not activate a provisional row before begin stores its provider ref", () => {
+    const rows = [
+      {
+        id: "provisional",
+        provider: "gmail",
+        displayName: "Gmail",
+        status: "pending",
+        providerRef: null,
+        createdAt: new Date(),
+      },
+    ];
+    expect(planLiveConnectionSync(rows, ["gmail"])).toEqual({ connectIds: [], revokeIds: [] });
+  });
+
+  it("keeps one local account for historical duplicate active refs", () => {
+    const now = Date.now();
+    const rows = [
+      {
+        id: "first",
+        provider: "gmail",
+        displayName: "Gmail",
+        status: "pending",
+        providerRef: "ca-shared",
+        createdAt: new Date(now - 1000),
+      },
+      {
+        id: "second",
+        provider: "gmail",
+        displayName: "Gmail",
+        status: "pending",
+        providerRef: "ca-shared",
+        createdAt: new Date(now),
+      },
+    ];
+    expect(planLiveConnectionSync(rows, [], ["ca-shared"], now)).toEqual({
+      connectIds: ["second"],
+      revokeIds: ["first"],
+    });
+    expect(
+      planLiveConnectionSync(
+        [{ ...rows[0]!, status: "connected" }, rows[1]!],
+        [],
+        ["ca-shared"],
+        now,
+      ),
+    ).toEqual({ connectIds: [], revokeIds: [] });
+  });
+
+  it("recovers the most recent attempt only when account listing is unsupported", () => {
+    const rows = [
+      {
+        id: "first",
+        provider: "gmail",
+        displayName: "Gmail",
+        status: "pending",
+        updatedAt: new Date(100),
+      },
+      {
+        id: "second",
+        provider: "gmail",
+        displayName: "Gmail",
+        status: "pending",
+        updatedAt: new Date(200),
+      },
+    ];
+    expect(planLiveConnectionSync(rows, ["gmail"])).toEqual({
+      connectIds: ["second"],
+      revokeIds: ["first"],
+    });
+    expect(planLiveConnectionSync(rows, ["gmail"], null)).toEqual({
+      connectIds: [],
+      revokeIds: [],
+    });
+    expect(planLiveConnectionSync(rows, ["gmail"], [])).toEqual({
+      connectIds: [],
+      revokeIds: ["first", "second"],
+    });
+  });
+
+  it("retains recent first authorization attempts when no account is active", () => {
+    const rows = [
+      {
+        id: "first",
+        provider: "gmail",
+        displayName: "Gmail",
+        status: "pending",
+        createdAt: new Date(100),
+      },
+    ];
+    expect(planLiveConnectionSync(rows, [], [], 200)).toEqual({ connectIds: [], revokeIds: [] });
+  });
+
+  it("connects additional active accounts and expires stale extra pending attempts", () => {
+    const rows = [
+      {
+        id: "personal",
+        provider: "gmail",
+        displayName: "Personal",
+        status: "connected",
+        providerRef: "ca-personal",
+      },
+      {
+        id: "work",
+        provider: "gmail",
+        displayName: "Work",
+        status: "pending",
+        providerRef: "ca-work",
+      },
+      {
+        id: "stale",
+        provider: "gmail",
+        displayName: "Stale",
+        status: "pending",
+        createdAt: new Date(0),
+      },
+      {
+        id: "recent",
+        provider: "gmail",
+        displayName: "Recent",
+        status: "pending",
+        createdAt: new Date(3_600_000),
+      },
+    ];
+    expect(planLiveConnectionSync(rows, ["gmail"], ["ca-personal", "ca-work"], 3_600_001)).toEqual({
+      connectIds: ["work"],
+      revokeIds: ["stale"],
+    });
+  });
+
+  it("does not guess after account lookup failure while cleaning failed rows", () => {
+    const rows = [
+      { id: "pending", provider: "gmail", displayName: "Gmail", status: "pending" },
+      { id: "failed", provider: "slack", displayName: "Slack", status: "error" },
+    ];
+    expect(planLiveConnectionSync(rows, ["gmail"], null)).toEqual({
+      connectIds: [],
+      revokeIds: ["failed"],
     });
   });
 

@@ -116,12 +116,15 @@ describe("running Docker computer reuse", () => {
     "preserves viewer authorization only for a confirmed running reference: %s",
     async (running) => {
       const f = await fixture();
-      const fetchMock = vi.fn(async () =>
-        Response.json(
+      const fetchMock = vi.fn(async (_url: string, request: RequestInit) => {
+        if (request.method === "POST") {
+          return Response.json({ stdout: "", stderr: "", code: 0 });
+        }
+        return Response.json(
           { running: running === true },
           { status: running === "unavailable" ? 503 : 200 },
-        ),
-      );
+        );
+      });
       vi.stubGlobal("fetch", fetchMock);
       if (running === "stopped") f.row.state = "stopped";
       try {
@@ -135,6 +138,10 @@ describe("running Docker computer reuse", () => {
           expect.objectContaining({ argv: expect.arrayContaining(["mkdir", "shared"]) }),
           context,
         );
+        expect(fetchMock).toHaveBeenCalledWith(
+          "http://supervisor.test/computers/provider/exec",
+          expect.objectContaining({ method: "POST" }),
+        );
         if (running !== "stopped") {
           expect(fetchMock).toHaveBeenCalledWith(
             "http://supervisor.test/computers/provider",
@@ -146,7 +153,12 @@ describe("running Docker computer reuse", () => {
               }),
             }),
           );
-        } else expect(fetchMock).not.toHaveBeenCalled();
+        } else {
+          expect(fetchMock).not.toHaveBeenCalledWith(
+            "http://supervisor.test/computers/provider",
+            expect.objectContaining({ method: "GET" }),
+          );
+        }
       } finally {
         await f.cleanup();
       }

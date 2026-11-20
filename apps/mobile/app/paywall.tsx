@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved; billing recovery changes follow LICENSE.md.
+
 // Modified by Ork contributors: canonical domain links now use ork.run.
 import { MenuView } from "@expo/ui/community/menu";
 import type { BillingStatus, ByokInterval } from "@orkbot/contracts";
@@ -36,6 +40,7 @@ import { rpc, signOut } from "../lib/api";
 import { replaceWithSignIn } from "../lib/auth-routing";
 import type { Plan } from "../lib/billing";
 import {
+  billingNeedsRecovery,
   currentPlan,
   openBillingPage,
   ownKeyOffer,
@@ -138,9 +143,11 @@ export default function Paywall() {
   async function choose() {
     if (!status || pending) return;
     setPending(true);
+    const recovering = billingNeedsRecovery(status);
     try {
-      const { url } =
-        plan === "credits"
+      const { url } = recovering
+        ? await rpc("billing/portal", { client: "mobile" })
+        : plan === "credits"
           ? await rpc("billing/purchaseCredits", {
               amountCents: amount,
               monthly: true,
@@ -151,7 +158,8 @@ export default function Paywall() {
             : await rpc("billing/selectFunding", { funding: "byok", client: "mobile", interval });
       const next = url ? await openBillingPage(url) : await rpc("billing/refresh");
       setStatus(next);
-      if (purchaseCompleted(status, next)) setStarted(plan);
+      if (recovering && !dismissible && next.access) router.replace("/");
+      else if (!recovering && purchaseCompleted(status, next)) setStarted(plan);
     } catch (err) {
       Alert.alert(errorText(err, t("Could not open billing")));
     } finally {
@@ -234,6 +242,35 @@ export default function Paywall() {
             <ActivityIndicator color={tokens.mutedForeground} accessibilityLabel={t("Loading…")} />
           )}
         </View>
+      </View>
+    );
+  }
+
+  if (billingNeedsRecovery(status)) {
+    return (
+      <View style={[styles.screen, { backgroundColor: tokens.background }]}>
+        {topBar}
+        <ScrollView contentContainerStyle={styles.content} contentInsetAdjustmentBehavior="never">
+          <Text
+            accessibilityLiveRegion="polite"
+            style={[styles.lead, { color: tokens.foreground }]}
+          >
+            {status.state === "past_due"
+              ? status.canManage
+                ? t("Payment failed. Update your payment method to resume your plan.")
+                : t("Payment failed. Ask an owner to update the payment method.")
+              : status.canManage
+                ? t("Manage billing to resume your plan.")
+                : t("Ask an owner to resume your plan.")}
+          </Text>
+          {status.canManage && status.hasCustomer ? (
+            <NativeActionButton
+              label={status.state === "past_due" ? t("Update payment method") : t("Manage billing")}
+              disabled={pending}
+              onPress={() => void choose()}
+            />
+          ) : null}
+        </ScrollView>
       </View>
     );
   }

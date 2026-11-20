@@ -131,17 +131,64 @@ it("authorizes a card in a normal chat and marks its thread connected", async ()
     );
     expect(host.querySelector("button")?.textContent).toBe("Connect");
     await act(async () => host.querySelector("button")?.click());
-    expect(calls.mark).toHaveBeenCalledWith({
-      botId: "bot",
-      threadId: "normal-chat",
-      connectorId: "fake",
-      provider: "gmail",
-    });
+    expect(calls.mark).toHaveBeenCalledWith(
+      { botId: "bot", threadId: "normal-chat", connectorId: "fake", provider: "gmail" },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(host.textContent).toContain("Connected");
     expect(host.querySelector("button")).toBeNull();
   } finally {
     await act(async () => root.unmount());
     host.remove();
+  }
+});
+
+it("keeps a slow authorization active and connects after window focus returns", async () => {
+  vi.useFakeTimers();
+  calls.complete.mockResolvedValue({ status: "pending" });
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <AppConnectCard
+          botId="bot"
+          threadId="normal-chat"
+          messageId="connection-card"
+          block={{
+            kind: "app_connect",
+            connectorId: "fake",
+            provider: "gmail",
+            name: "Gmail",
+            description: "",
+            logo: null,
+            status: "pending",
+          }}
+        />,
+      ),
+    );
+    await act(async () => host.querySelector("button")?.click());
+    await act(async () => vi.advanceTimersByTimeAsync(120_000));
+    expect(host.querySelector('[role="status"]')?.textContent).toBe("Waiting for authorization.");
+    expect(host.querySelector("button")?.textContent).toBe("Start over");
+    expect(host.querySelector("button")?.disabled).toBe(false);
+    expect(host.textContent).not.toMatch(/timed out/i);
+
+    calls.complete
+      .mockRejectedValueOnce(new Error("Temporary connection problem"))
+      .mockResolvedValue({ status: "connected" });
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    await act(async () => vi.advanceTimersByTimeAsync(2_000));
+    expect(calls.mark).toHaveBeenLastCalledWith(
+      expect.objectContaining({ messageId: "connection-card" }),
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(host.textContent).toContain("Connected");
+    expect(host.querySelector("button")).toBeNull();
+    expect(host.textContent).not.toContain("Waiting for authorization.");
+  } finally {
+    calls.complete.mockResolvedValue({ status: "connected" });
+    await act(async () => root.unmount());
   }
 });
 

@@ -14,6 +14,7 @@ import {
   botMessageHopExhausted,
   buildBotMessageWakePrompt,
   clampBotMessage,
+  describeMissingBotRecipient,
   nextBotMessageHop,
   resolveBotAddress,
 } from "@orkbot/core";
@@ -82,10 +83,12 @@ export async function loadBotMessageContext(
     ? (source.replyTo.blocks as MessageBlock[])
     : [];
   const repliesToRequest =
+    typeof context.fromBotId === "string" &&
+    context.fromBotId.length > 0 &&
     (context.intent === "result" || context.intent === "status" || context.intent === "fyi") &&
     replyBlocks.some(
       (block) =>
-        block.kind === "bot_message_sent" &&
+        block?.kind === "bot_message_sent" &&
         block.toBotId === context.fromBotId &&
         (block.intent === undefined || block.intent === "request" || block.intent === "question"),
     );
@@ -286,11 +289,16 @@ export async function messageBot(
     where: { spaceId: run.spaceId, userId: run.userId, archivedAt: null },
     select: { id: true, name: true, computerId: true, thread: { select: { id: true } } },
   });
-  const target = resolveBotAddress(candidates, {
+  const address = {
     botId: input.bot_id,
     name: input.confirm_name,
-  });
-  if (!target) return { ok: false as const, error: "no bot found with that id or name" };
+  };
+  const target = resolveBotAddress(candidates, address);
+  if (!target)
+    return {
+      ok: false as const,
+      error: describeMissingBotRecipient(candidates, sender.id, address, filePaths.length > 0),
+    };
   if (target.id === sender.id) return { ok: false as const, error: "a bot cannot message itself" };
   if (!target.thread)
     return { ok: false as const, error: `${target.name} has no chat to deliver to` };

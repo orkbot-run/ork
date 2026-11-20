@@ -37,6 +37,7 @@ import {
 import type { PrismaClient } from "@orkbot/db";
 import { retireModelCredential, runAsSystem, runAsTenant } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
+import { assertModelEndpointAllowed, assertModelProviderAllowed } from "./model-provider-policy.js";
 import { oauthRefreshSignal, withOAuthRefreshLock } from "./oauth-refresh-lock.js";
 import { createManualAnthropicOAuthLogin } from "./pi-anthropic-oauth.js";
 import { holdSecretNotifications } from "./secret-store-factory.js";
@@ -274,6 +275,7 @@ export type StoredModelSecret =
   | ({
       kind: "api_key";
       key: string;
+      zeroDataRetention?: boolean;
       maxTokens?: number;
       accountId?: string;
       gatewayId?: string;
@@ -519,6 +521,8 @@ export function parseModelSecret(plaintext: string): StoredModelSecret {
     if (typeof parsed.key !== "string" || !parsed.key) {
       throw new Error(CORRUPT_MODEL_SECRET_MESSAGE);
     }
+    if (parsed.zeroDataRetention !== undefined && typeof parsed.zeroDataRetention !== "boolean")
+      throw new Error(CORRUPT_MODEL_SECRET_MESSAGE);
     const maxTokens = parsedMaxTokens(parsed.maxTokens);
     const accountId = parsedRoutingId(parsed.accountId);
     const gatewayId = parsedRoutingId(parsed.gatewayId);
@@ -526,6 +530,9 @@ export function parseModelSecret(plaintext: string): StoredModelSecret {
     return {
       kind: "api_key",
       key: parsed.key,
+      ...(typeof parsed.zeroDataRetention === "boolean"
+        ? { zeroDataRetention: parsed.zeroDataRetention }
+        : {}),
       ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...(accountId ? { accountId } : {}),
       ...(gatewayId ? { gatewayId } : {}),
@@ -592,6 +599,7 @@ export function serializeModelSecret(secret: StoredModelSecret): string {
   }
   if (
     secret.maxTokens === undefined &&
+    secret.zeroDataRetention === undefined &&
     secret.accountId === undefined &&
     secret.gatewayId === undefined &&
     secret.routing === undefined &&
@@ -603,6 +611,9 @@ export function serializeModelSecret(secret: StoredModelSecret): string {
   return JSON.stringify({
     kind: "api_key",
     key: secret.key,
+    ...(secret.zeroDataRetention !== undefined
+      ? { zeroDataRetention: secret.zeroDataRetention }
+      : {}),
     ...(secret.maxTokens !== undefined ? { maxTokens: secret.maxTokens } : {}),
     ...(secret.accountId ? { accountId: secret.accountId } : {}),
     ...(secret.gatewayId ? { gatewayId: secret.gatewayId } : {}),
@@ -703,6 +714,10 @@ async function refreshModelAuth(
   opts?: ResolveModelOpts,
 ): Promise<Exclude<StoredModelSecret, { reconnectRequired: true }>> {
   const parsed = parseModelSecret(plaintext);
+  assertModelEndpointAllowed(
+    provider,
+    parsed.kind === "openai_compatible" ? parsed.baseUrl : undefined,
+  );
   if (parsed.kind === "api_key") return parsed;
   if (parsed.kind === "openai_compatible") return parsed;
   if (parsed.reconnectRequired) {
@@ -953,6 +968,7 @@ export async function resolveStoredModelAuth(
     modify?: (current: OAuthCredential) => Promise<OAuthCredential | undefined>;
   },
 ): Promise<Awaited<ReturnType<typeof resolveModelAuth>> | undefined> {
+  assertModelProviderAllowed(provider);
   if (opts?.plaintext !== undefined && !opts.modify) {
     const parsed = parseModelSecret(opts.plaintext);
     if (
@@ -1148,6 +1164,7 @@ export class PiOAuthLogins {
     loginId: string,
     verifier: string | undefined,
   ): Promise<PiOAuthBegin> {
+    assertModelProviderAllowed(input.provider);
     if (!SUBSCRIPTION_SIGN_IN_PROVIDERS[input.provider]) {
       throw new Error(
         "In-app subscription sign-in is only available for ChatGPT Plus/Pro, Claude Pro/Max, GitHub Copilot, and SuperGrok.",
@@ -1326,6 +1343,7 @@ export class PiOAuthLogins {
     }
     if (!session && normalizedCode) session = await this.resume(loginId, actor);
     if (!session) throw new ModelSignInError("Sign-in session not found. Start sign-in again.");
+    assertModelProviderAllowed(session.provider);
     if (session.error) throw new ModelSignInError(session.error);
     if (!normalizedCode) throw new ModelSignInError("Paste an authorization code or callback URL.");
     const resolve = session.submitCode;
@@ -1417,10 +1435,11 @@ export class PiOAuthLogins {
           scope: this.handoffScope(),
           createdAt: { gte: new Date(Date.now() - PASTED_CODE_TTL_SECONDS * 1000) },
         },
-        select: { ciphertext: true },
+        select: { ciphertext: true, provider: true },
       }),
     );
     if (!row) return undefined;
+    assertModelProviderAllowed(row.provider);
     if ((await this.forgetHandoff({ id: loginId, ...actor })) !== 1) return undefined;
     let stored: HandedOffSignIn;
     try {
@@ -1464,6 +1483,7 @@ export class PiOAuthLogins {
     const session = this.pending.get(loginId) ?? (await this.resume(loginId, actor));
     if (!session || session.userId !== actor.userId || session.spaceId !== actor.spaceId)
       return undefined;
+    assertModelProviderAllowed(session.provider);
     return session.installation;
   }
 
@@ -1475,6 +1495,7 @@ export class PiOAuthLogins {
         error: "Sign-in session not found. Start sign-in again.",
       };
     }
+    assertModelProviderAllowed(session.provider);
     if (session.error) {
       this.removeSession(session);
       return { status: "error", error: session.error, provider: session.provider };
@@ -1510,6 +1531,7 @@ export class PiOAuthLogins {
         error: "Sign-in session not found. Start sign-in again.",
       };
     }
+    assertModelProviderAllowed(session.provider);
     if (session.state === "finalizing") return { status: "pending" };
     const result = this.complete(loginId, actor);
     if (result.status !== "connected") return result;

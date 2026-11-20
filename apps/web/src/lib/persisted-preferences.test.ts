@@ -28,14 +28,14 @@ const cases = [
   {
     name: "streaming",
     key: "orkbot.responseStreaming",
-    raw: " ON ",
-    value: "on",
-    fallback: "off",
+    raw: " OFF ",
+    value: "off",
+    fallback: "on",
     load: async (): Promise<Preference> => {
       const m = await import("./response-streaming");
       return {
         get: m.getResponseStreamingPreference,
-        set: () => m.setResponseStreamingPreference("off"),
+        set: () => m.setResponseStreamingPreference("on"),
         subscribe: m.subscribeResponseStreaming,
       };
     },

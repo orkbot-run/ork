@@ -13,6 +13,7 @@ import { backupChoiceKey, usableModelId } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { appliedModelRole } from "@orkbot/db";
 import { resolveAutoReviewChecker } from "./auto-review.js";
+import { isModelProviderAllowed } from "./model-provider-policy.js";
 import type { ModelChoice, ModelCredential } from "./model-selection.js";
 import { findConnectedModelCredential } from "./model-selection.js";
 
@@ -33,16 +34,27 @@ export function deploymentModelRole(
   if (role === "approval") {
     const checker = resolveAutoReviewChecker(defaults.env);
     return {
-      primary: checker ? { provider: checker.provider, modelId: checker.model } : null,
+      primary:
+        checker && isModelProviderAllowed(checker.provider)
+          ? { provider: checker.provider, modelId: checker.model }
+          : null,
       backups: [],
     };
   }
   // No computer model means the main model works the screen itself.
   if (role === "computer") return { primary: null, backups: [] };
-  const provider = defaults.settings?.defaultModelProvider ?? defaults.deployment?.provider;
+  const settings =
+    defaults.settings?.defaultModelProvider &&
+    !isModelProviderAllowed(defaults.settings.defaultModelProvider)
+      ? undefined
+      : defaults.settings;
+  const provider = settings?.defaultModelProvider ?? defaults.deployment?.provider;
   const modelId =
-    usableModelId(defaults.settings?.defaultModelId) ?? usableModelId(defaults.deployment?.model);
-  return { primary: provider && modelId ? { provider, modelId } : null, backups: [] };
+    usableModelId(settings?.defaultModelId) ?? usableModelId(defaults.deployment?.model);
+  return {
+    primary: provider && isModelProviderAllowed(provider) && modelId ? { provider, modelId } : null,
+    backups: [],
+  };
 }
 
 export type EffectiveModelRole = ModelRoleSettings & {
@@ -83,7 +95,7 @@ export async function resolveMemberMainModel(
   requested?: SettingsScope,
 ): Promise<MemberMainModel | null> {
   const { primary } = await appliedModelRole(deps.prisma, scope, "main", requested);
-  if (!primary) return null;
+  if (!primary || !isModelProviderAllowed(primary.provider)) return null;
   const credential = await findConnectedModelCredential(
     deps.prisma,
     deps.secretStore,
@@ -108,7 +120,11 @@ export function selectConfiguredModel(input: {
   const hasOverride = Boolean(bot?.modelProvider && usableModelId(bot.modelId));
   // A model runs on its own connection, or on the deployment's for its funded provider.
   const runnable = (provider: string | null | undefined, credential: ModelCredential) =>
-    Boolean(credential || (provider && provider === input.hostedProvider));
+    Boolean(
+      provider &&
+        isModelProviderAllowed(provider) &&
+        (credential || provider === input.hostedProvider),
+    );
   // The override provider, model and credential must win together.
   const useOverride = hasOverride && runnable(bot?.modelProvider, overrideCredential);
   const useMain = !useOverride && main !== null && runnable(main.provider, main.credential);

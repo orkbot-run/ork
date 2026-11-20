@@ -110,6 +110,12 @@ async function damagedComputer(damage: "resume_heals" | "persists" = "resume_hea
         async (work: (tx: PrismaClient) => Promise<unknown>): Promise<unknown> => work(deps.prisma),
       ),
       computer,
+      computerOrphanCleanup: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
       computerExecutionLease: { findFirst: vi.fn().mockResolvedValue(null) },
       computerRun: {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),

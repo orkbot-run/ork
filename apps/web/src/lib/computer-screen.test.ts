@@ -155,6 +155,25 @@ describe("embeddableScreenUrl", () => {
       "https://screen.example:6080/vnc.html",
     );
   });
+
+  it("accepts only the screen routes on the application origin", () => {
+    vi.stubGlobal("window", { location: { href: "https://app.example/chat" } });
+    expect(embeddableScreenUrl("/app")).toBeNull();
+    expect(embeddableScreenUrl("https://app.example:443/login")).toBeNull();
+    expect(embeddableScreenUrl("/computer-screen/screen.html")).toBe(
+      "https://app.example/computer-screen/screen.html",
+    );
+  });
+
+  it("accepts only known screen schemes and valid HTTP(S) locations", () => {
+    vi.stubGlobal("window", { location: { href: "https://app.example/chat" } });
+    expect(embeddableScreenUrl("wuying://desktop?desktop_id=example")).toBe(
+      "https://app.example/computer-screen/screen.html#desktop_id=example",
+    );
+    expect(embeddableScreenUrl("about:blank")).toBeNull();
+    expect(embeddableScreenUrl("example-viewer://desktop")).toBeNull();
+    expect(embeddableScreenUrl("https://")).toBeNull();
+  });
 });
 
 describe("screenIframeSandbox", () => {
@@ -162,12 +181,24 @@ describe("screenIframeSandbox", () => {
     vi.unstubAllGlobals();
   });
 
-  it("allows scripts and pointer lock only for /novnc/ paths", () => {
+  it("keeps screens on the application origin opaque", () => {
     vi.stubGlobal("window", { location: { href: "http://localhost:5173/" } });
-    expect(screenIframeSandbox("http://127.0.0.1:5173/novnc/vnc.html")).toBe(
+    expect(screenIframeSandbox("http://localhost:5173/novnc/vnc.html")).toBe(
       "allow-scripts allow-pointer-lock",
     );
-    expect(screenIframeSandbox("http://127.0.0.1:5173/vnc.html")).toBeUndefined();
+    expect(screenIframeSandbox("http://localhost:5173/vnc.html")).toBe("");
+    expect(screenIframeSandbox("/computer-screen/screen.html")).toBe(
+      "allow-scripts allow-pointer-lock",
+    );
+  });
+
+  it("isolates remote screens with only the provider-origin features they need", () => {
+    vi.stubGlobal("window", { location: { href: "https://app.example/" } });
+    expect(screenIframeSandbox("https://vendor.example/screen")).toBe(
+      "allow-scripts allow-same-origin allow-pointer-lock",
+    );
+    expect(screenIframeSandbox("about:blank")).toBe("");
+    expect(screenIframeSandbox(null)).toBe("");
   });
 });
 
@@ -285,7 +316,9 @@ describe("screen frame reports", () => {
 
   it("only treats the proxy's own pages as reporting frames", () => {
     vi.stubGlobal("window", { location: { href: "http://localhost:5173/" } });
-    expect(isProxiedScreenUrl("http://127.0.0.1:5173/novnc/session/view/1.t/vnc.html")).toBe(true);
+    const proxied = embeddableScreenUrl("http://127.0.0.1:5173/novnc/session/view/1.t/vnc.html");
+    expect(isProxiedScreenUrl(proxied)).toBe(true);
+    expect(isProxiedScreenUrl("https://screen.example/novnc/screen.html")).toBe(false);
     expect(isProxiedScreenUrl("https://screen.example/vnc.html")).toBe(false);
     expect(isProxiedScreenUrl(null)).toBe(false);
   });

@@ -1,3 +1,4 @@
+import type { UserDeviceSummary } from "@orkbot/contracts";
 import { z } from "zod";
 import type { HostComputerRequest } from "./host-computer-protocol.js";
 import { hostComputerRequest } from "./host-computer-protocol.js";
@@ -33,9 +34,10 @@ export interface UserDevice {
 
 /** How runs reach the requesting user's connected device, from any API or worker process. */
 export interface UserDeviceGateway {
-  connected(userId: string): Promise<UserDevice | null>;
-  /** When the oldest device still paired was paired, connected or not; null when none is. */
-  pairedSince(userId: string): Promise<Date | null>;
+  connected(userId: string, deviceId?: string): Promise<UserDevice | null>;
+  /** A specific pairing date, or the oldest remaining pairing when no device is specified. */
+  pairedSince(userId: string, deviceId?: string): Promise<Date | null>;
+  list(userId: string): Promise<UserDeviceSummary[]>;
   /**
    * Streams HostComputerFrame values for one request. Throws when the device is offline,
    * revoked, or disconnects mid-request; a command is never retried after a lost response.

@@ -122,7 +122,7 @@ export function mapRoutine(row: {
     watch: parseRoutineWatch(row.watch),
     watchState: parseRoutineWatchState(row.watchState),
     lastRunAt: row.lastRunAt?.toISOString() ?? null,
-    nextRunAt: row.nextRunAt?.toISOString() ?? null,
+    nextRunAt: row.active ? (row.nextRunAt?.toISOString() ?? null) : null,
     scheduleDelayed: routineScheduleDelayed({
       active: row.active,
       nextRunAt: row.nextRunAt?.getTime() ?? null,
@@ -133,7 +133,7 @@ export function mapRoutine(row: {
 
 export async function listRoutinesDto(deps: RouterDeps, actor: Actor, botId: string) {
   const rows = await deps.prisma.routine.findMany({
-    where: { botId, spaceId: actor.spaceId },
+    where: { botId, spaceId: actor.spaceId, completedOneShotAt: null },
   });
   return rows.map((row) => routineDto(row, actor));
 }
@@ -175,7 +175,12 @@ export async function routineTestTarget(
   routineId: string,
 ) {
   const routine = await prisma.routine.findFirst({
-    where: { id: routineId, spaceId: actor.spaceId, userId: actor.userId },
+    where: {
+      id: routineId,
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      completedOneShotAt: null,
+    },
   });
   if (!routine) throw new IsolationError();
   const bot = await repos.getBot(actor, routine.botId);
@@ -212,7 +217,7 @@ export async function createRoutineTestRun(
     },
   });
   const currentModel = await tx.routine.findUnique({
-    where: { id: routine.id },
+    where: { id: routine.id, completedOneShotAt: null },
     select: { modelProvider: true, modelId: true, thinkingLevel: true },
   });
   if (!currentModel) throw new IsolationError();

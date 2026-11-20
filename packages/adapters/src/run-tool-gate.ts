@@ -6,6 +6,7 @@ import type {
   AdapterContext,
   AgentToolExecutionObserver,
   AutoReviewRequest,
+  AutoReviewResult,
   ConnectorCall,
   ToolBatch,
 } from "@orkbot/adapter-kit";
@@ -29,7 +30,7 @@ import {
   repeatsDeniedAction,
   resolveActionApprovalForTools,
   SITE_SENDING_TOOLS,
-  scheduledCommandNeedsApproval,
+  scheduledWatchApprovalReason,
   toolRequiresApproval,
   toolRequiresExplicitApproval,
   unattendedTriggerToolRequiresApproval,
@@ -48,21 +49,20 @@ import {
   settleUncertainEffect,
   uncertainEffectResult,
 } from "./approval-effect.js";
-import type { AutoReviewChecker } from "./auto-review.js";
-import {
-  isAutoReviewCheckerConfigured,
-  redactToolArgsForReview,
-  resolveAutoReviewChecker,
-} from "./auto-review.js";
+import { redactToolArgsForReview } from "./auto-review.js";
 import { reviewWithBackups } from "./auto-review-backups.js";
+import type { AutoReviewFailureCode } from "./auto-review-failures.js";
+import { autoReviewFailure, logAutoReviewFailure } from "./auto-review-failures.js";
+import { newSiteUrlNeedsOwner } from "./auto-review-url.js";
 import { ORKBOT_DOCS_URLS } from "./builtin-skills.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { CATALOG_LOAD, CATALOG_SEARCH } from "./lazy-tool-catalog.js";
 import { findConnectedModelCredential } from "./model-selection.js";
 import { paidRequestEffect } from "./paid-request.js";
 import { PURCHASE_CHECKED_TOOLS, purchaseApprovalOf } from "./purchase-gate.js";
-import { autoReviewCheckerProvider } from "./run-auto-review.js";
-import type { RunContext, RunTrust } from "./run-context.js";
+import { validateRoutineWatchHttpUrl } from "./routine-watch.js";
+import { prepareAutoReviewCheckers, selectAutoReviewCandidates } from "./run-auto-review.js";
+import type { RunContext } from "./run-context.js";
 import {
   isRunTainted,
   nextMutatingEffectOccurrence,
@@ -76,6 +76,7 @@ import {
   completeEffect,
   recordEffect,
   uncertainEffectError,
+  underRunLease,
 } from "./run-effects.js";
 import { renewRunLease } from "./run-lifecycle.js";
 import { notifyRun } from "./run-notifications.js";
@@ -83,7 +84,11 @@ import { resolveCompletedSecretLeftover } from "./run-secret.js";
 import type { ToolRequest } from "./run-tool-request.js";
 import { BUILTIN_AGENT_TOOL_NAMES } from "./run-tool-selection.js";
 import { callMediaTool } from "./run-tools-files.js";
-import { USER_COMPUTER_TOOLS, userComputerGate } from "./run-tools-user-computer.js";
+import {
+  USER_COMPUTER_LIST_TOOL,
+  USER_COMPUTER_TOOLS,
+  userComputerGate,
+} from "./run-tools-user-computer.js";
 import { connectorTrustKeys } from "./run-trust.js";
 import { watchFromTool } from "./schedule-tools.js";
 
@@ -94,6 +99,7 @@ type ApprovalCard = {
   reviewReason: string | undefined;
   summary: FleetCardSummary | undefined;
   batch: ToolBatch | undefined;
+  userComputerName?: string;
 };
 
 /** A tool call that passed its approval gate, as tool handlers receive it. */
@@ -135,9 +141,13 @@ type ToolReview = {
   gated: boolean;
   applied: AppliedEffect | undefined;
   injectedReview: ExecutorDeps["autoReview"];
-  checker: AutoReviewChecker | null | undefined;
-  reviewSettings: Awaited<ReturnType<RunTrust["loadApprovalModel"]>> | null;
-  memberChecker: boolean;
+  candidates: ReturnType<typeof selectAutoReviewCandidates>;
+};
+
+const PRIVATE_URL_REVIEW: AutoReviewResult = {
+  decision: "ask",
+  model: "local-url-policy",
+  reason: "This address may disclose credentials or private data. Review it before sending.",
 };
 
 /**
@@ -193,13 +203,25 @@ export async function gateToolCall(
   // paid_request with only a purchase id sends the request its approval already named.
   const sendsToSite =
     SITE_SENDING_TOOLS.has(name) && (name === "web_fetch" || args.url !== undefined);
-  const fetchUrl = sendsToSite ? normalizedHttpUrl(String(args.url ?? "")) : undefined;
+  const watch = name === "schedule_create" ? watchFromTool(args.watch) : undefined;
+  const watchUrl = watch?.kind === "http" ? watch.url : undefined;
+  const fetchUrl = sendsToSite ? normalizedHttpUrl(String(args.url ?? "")) : watchUrl;
   const fetchSite = fetchUrl ? urlSite(fetchUrl) : undefined;
   if (sendsToSite && !fetchSite) return { result: { error: "url must be an http(s) URL" } };
   if (fetchUrl && fetchUrl.length > MAX_FETCH_URL_LENGTH)
     return { result: { error: `url must be at most ${MAX_FETCH_URL_LENGTH} characters` } };
   // The card, the stored effect and the request all use the URL the gate checked.
-  if (fetchUrl) {
+  if (watchUrl) {
+    try {
+      await validateRoutineWatchHttpUrl(watchUrl);
+    } catch (error) {
+      return {
+        result: { error: error instanceof Error ? error.message : "Invalid HTTPS address." },
+      };
+    }
+    args = { ...args, watch };
+    effectRequest = args;
+  } else if (fetchUrl) {
     args = { ...args, url: fetchUrl };
     effectRequest = name === "paid_request" ? paidRequestEffect(args) : args;
   }
@@ -223,7 +245,6 @@ export async function gateToolCall(
           rules: await ctx.trust.loadApprovalRules(),
         })
       : "allow";
-  const watch = name === "schedule_create" ? watchFromTool(args.watch) : undefined;
   // A tool watch repeats its read unattended, so it passes the read check that call would now.
   const watchedTool = watch?.kind === "tool" ? watch.tool : undefined;
   const readTrusts = watchedTool
@@ -249,9 +270,8 @@ export async function gateToolCall(
         .loadTrustedConnectors()
         .then((trusted) => readTrusts.every((trust) => trusted.has(trust))),
     });
-  // This schedules unattended shell execution; require a person to approve
-  // the command once, rather than letting an allow rule or reviewer schedule it.
-  const commandWatch = scheduledCommandNeedsApproval(name, args);
+  // A person approves each unattended shell or HTTP watch once.
+  const watchApprovalReason = scheduledWatchApprovalReason(name, args);
   // A routine's prompt counts as the owner's words when it runs, so the sites it names are
   // ones its runs may fetch. Once outside content entered this run, a routine naming a
   // site this run was not given needs a person: a reviewer would judge it on this run's
@@ -262,13 +282,24 @@ export async function gateToolCall(
       (name === "schedule_update" && Boolean(args.prompt))) &&
     (await isRunTainted(ctx)) &&
     (await ctx.trust.routineNamesNewSite(String(args.prompt ?? "")));
+  // External content must not install unattended event handlers without owner approval.
+  const scheduleEvents =
+    name === "create_child_routine"
+      ? (args.schedule as Record<string, unknown> | undefined)?.on
+      : args.on;
+  const scheduleChangesEvents =
+    (name === "schedule_create" || name === "schedule_update" || name === "create_child_routine") &&
+    scheduleEvents !== undefined &&
+    scheduleEvents !== null &&
+    (await isRunTainted(ctx));
+  const outsideContentSchedule = scheduleNamesNewSite || scheduleChangesEvents;
   const { purchase, cardUse } = request;
   // Typing a saved card is approved like a purchase: every time, by a person.
   const paying = Boolean(purchase) || Boolean(cardUse);
   const requiresApprovalByDefault =
     request.heldForApproval ||
     paying ||
-    commandWatch ||
+    Boolean(watchApprovalReason) ||
     requiresUnattendedApproval ||
     siteGate === "new" ||
     unidentifiedAction ||
@@ -281,17 +312,17 @@ export async function gateToolCall(
   const requiresMandatoryApproval =
     request.mandatoryApproval ||
     paying ||
-    commandWatch ||
-    scheduleNamesNewSite ||
+    Boolean(watchApprovalReason) ||
+    outsideContentSchedule ||
     requiresUnattendedApproval ||
     toolRequiresExplicitApproval(name);
-  const mandatoryReason: ApprovalReason | undefined = commandWatch
-    ? "scheduled_command"
-    : scheduleNamesNewSite
+  const mandatoryReason: ApprovalReason | undefined =
+    watchApprovalReason ??
+    (outsideContentSchedule
       ? "outside_content_schedule"
       : requiresUnattendedApproval
         ? "webhook_trigger"
-        : undefined;
+        : undefined);
   // Never ask runs everything else: only another owner's connection could have been steered into it.
   const guardedInNeverAsk = name === "respond_agent_connection";
   const resolvedRules = resolveActionApprovalForTools({
@@ -315,56 +346,49 @@ export async function gateToolCall(
   const mode = approvalModeFromPreference(await ctx.trust.loadAutoReviewPreference());
   const reviewable = mode === "auto" && !requiresMandatoryApproval;
   const injectedReview = reviewable ? deps.autoReview : undefined;
-  const reviewSettings = !reviewable || injectedReview ? null : await ctx.trust.loadApprovalModel();
-  const memberChecker = reviewSettings?.primarySource === "member";
-  const checker = !reviewable
-    ? undefined
-    : reviewSettings
-      ? reviewSettings.primary
-        ? {
-            provider: reviewSettings.primary.provider,
-            model: reviewSettings.primary.modelId,
-            thinkingLevel: reviewSettings.primary.thinkingLevel,
-            credentialId: reviewSettings.primary.credentialId,
-          }
-        : null
-      : resolveAutoReviewChecker();
+  const reviewSettings = reviewable && !injectedReview ? await ctx.trust.loadApprovalModel() : null;
+  const candidates =
+    reviewable && !context.signal.aborted
+      ? selectAutoReviewCandidates(reviewSettings, Boolean(injectedReview))
+      : [];
+  const primary = candidates[0];
   const checkerConfigured =
     reviewable &&
-    (Boolean(injectedReview) ||
-      memberChecker ||
-      Boolean(reviewSettings?.backups.length) ||
-      (checker
-        ? isAutoReviewCheckerConfigured({}) ||
-          Boolean(
-            await findConnectedModelCredential(
-              deps.prisma,
-              deps.secretStore,
-              { userId: run.userId, spaceId: run.spaceId },
-              checker.provider,
-            ),
-          )
-        : false));
+    (Boolean(injectedReview || run.centralWorkspaceId) ||
+      candidates.some((candidate) => candidate.role !== "default" || candidate.instance) ||
+      Boolean(
+        primary &&
+          (await findConnectedModelCredential(
+            deps.prisma,
+            deps.secretStore,
+            { userId: run.userId, spaceId: run.spaceId },
+            primary.provider,
+          )),
+      ));
   const plan = request.mandatoryApproval
     ? approvalResolved.decision === "deny"
       ? "deny"
       : "ask"
-    : USER_COMPUTER_TOOLS.has(name)
-      ? await userComputerGate(ctx, approvalResolved.decision === "deny", name, args)
-      : planActionGate({
-          resolved: approvalResolved,
-          mode,
-          mandatory: requiresMandatoryApproval,
-          steerable:
-            guardedInNeverAsk && mode === "never"
-              ? !ctx.source.ownerStartedRun || (await isRunTainted(ctx))
-              : undefined,
-          consequential: requiresApprovalByDefault,
-          reviewOnly: connectorReadGated,
-          checkerConfigured,
-          newDestination: siteGate === "new",
-          purchase: paying,
-        });
+    : name === USER_COMPUTER_LIST_TOOL
+      ? approvalResolved.decision === "deny"
+        ? "deny"
+        : "allow"
+      : USER_COMPUTER_TOOLS.has(name)
+        ? await userComputerGate(ctx, approvalResolved.decision === "deny", name, args)
+        : planActionGate({
+            resolved: approvalResolved,
+            mode,
+            mandatory: requiresMandatoryApproval,
+            steerable:
+              guardedInNeverAsk && mode === "never"
+                ? !ctx.source.ownerStartedRun || (await isRunTainted(ctx))
+                : undefined,
+            consequential: requiresApprovalByDefault,
+            reviewOnly: connectorReadGated,
+            checkerConfigured,
+            newDestination: siteGate === "new",
+            purchase: paying,
+          });
   // Nobody is there to approve a purchase a webhook run reaches.
   if (paying && run.trigger === "webhook" && plan !== "deny") {
     await auditToolCall(ctx, name, "denied", { reason: "purchase_unattended" });
@@ -433,7 +457,7 @@ export async function gateToolCall(
           executionId,
           ctx.state.effects.consumedIds,
           batch && (batch.complete ? batch.actions : []),
-          (name === "message_bot" || name === "handoff_to_bot") &&
+          (name === "message_bot" || name === "handoff_to_bot" || name === "post_to_group") &&
             Array.isArray(args.files) &&
             args.files.length > 0,
         );
@@ -490,20 +514,24 @@ export async function gateToolCall(
       gated,
       applied,
       injectedReview,
-      checker,
-      reviewSettings,
-      memberChecker,
+      candidates,
     });
     if (!judged) return;
     reviewReason = judged.reason;
     gateDecision = judged.decision;
   };
 
-  if (applied && plan === "judge" && (injectedReview || checker)) {
-    if (!applied.duplicate) {
+  if (applied && plan === "judge" && checkerConfigured) {
+    const priorDecision = applied.effect.reviewDecision;
+    if (
+      !applied.duplicate ||
+      (priorDecision === "pass" &&
+        siteGate === "new" &&
+        fetchUrl &&
+        newSiteUrlNeedsOwner(fetchUrl, ctx.secrets))
+    ) {
       await runAutoReview();
     } else {
-      const priorDecision = applied.effect.reviewDecision;
       if (priorDecision === "ask" || priorDecision === "error") {
         reviewReason =
           typeof applied.effect.reviewReason === "string" ? applied.effect.reviewReason : undefined;
@@ -578,6 +606,7 @@ export async function gateToolCall(
     summary: request.fleetSummary,
     batch: connectorTool?.batch,
     mandatoryReason,
+    userComputerName: request.userComputerName,
   };
 
   if (applied?.duplicate) {
@@ -782,7 +811,7 @@ async function showApprovalCard(ctx: RunContext, call: ToolCall, card: ApprovalC
         name,
         name === "update_bot" && "previousInstructions" in args ? { ...args, botId: bot.id } : args,
         ctx.secrets,
-        card,
+        { ...card, outgoingDraftRequest: applied!.effect.request },
       ),
     ],
   });
@@ -815,132 +844,127 @@ async function reviewToolCall(
   ctx: RunContext,
   review: ToolReview,
 ): Promise<{ reason: string | undefined; decision: "ask" | "allow" } | undefined> {
-  const { deps, run, runId, bot, thread, context } = ctx;
-  const { name, args, connectorKind, fetchUrl, gated, applied } = review;
-  const { injectedReview, checker, reviewSettings, memberChecker } = review;
-  if (!injectedReview && !checker && !reviewSettings?.backups.length) return;
+  const { deps, runId, context } = ctx;
+  const { name, fetchUrl, gated, applied, candidates } = review;
+  if (context.signal.aborted) return;
+  let judge: (AutoReviewResult & { failureCode?: AutoReviewFailureCode }) | undefined;
   try {
-    const botDescription = redactSecrets(`${bot.name}\n${bot.description}`, ctx.secrets);
-    // A new site is judged on the full URL and the owner's own words only: the task
-    // prompt of a webhook or bot-started run carries text someone else wrote.
-    const reviewRequest: AutoReviewRequest =
-      review.newSite && fetchUrl
-        ? {
-            toolName: name,
-            connectorKind,
-            args: { url: redactSecrets(fetchUrl, ctx.secrets) },
-            userTask: redactSecrets(await ctx.trust.loadOwnerWords(), ctx.secrets),
-            botDescription,
-            matchingRules: review.matchingRules,
-            newSite: true,
-          }
-        : {
-            toolName: name,
-            connectorKind,
-            args: redactToolArgsForReview(args, ctx.secrets),
-            userTask: redactSecrets(ctx.task.prompt, ctx.secrets),
-            botDescription,
-            matchingRules: review.matchingRules,
-          };
-    const reviewContext: AdapterContext = {
-      operationId: `auto-review:${runId}`,
-      traceId: `auto-review:${runId}`,
-      spaceId: run.spaceId,
-      userId: run.userId,
-      botId: bot.id,
-      runId,
-      signal: context.signal,
-    };
-    const checkerProvider = (checker: AutoReviewChecker) =>
-      autoReviewCheckerProvider(
-        deps,
-        {
-          runId,
-          spaceId: run.spaceId,
-          userId: run.userId,
-          botId: bot.id,
-          threadId: thread.id,
-        },
-        {
-          injectedReview,
-          memberChecker,
-          backups: reviewSettings?.backups,
-          registerSecrets: (values) => ctx.secrets.push(...values),
-        },
-        checker,
-      );
-    const judge = await reviewWithBackups(
-      [
-        ...(checker
-          ? [checker]
-          : injectedReview
-            ? [{ provider: "injected", model: "injected" }]
-            : []),
-        ...(reviewSettings?.backups.map((choice) => ({
-          provider: choice.provider,
-          model: choice.modelId,
-          thinkingLevel: choice.thinkingLevel,
-          credentialId: choice.credentialId,
-        })) ?? []),
-      ],
-      async (checker) => {
-        const provider = await checkerProvider(checker);
-        return provider.review(reviewRequest, reviewContext);
-      },
-      context.signal,
-    );
+    judge =
+      review.newSite && fetchUrl && newSiteUrlNeedsOwner(fetchUrl, ctx.secrets)
+        ? PRIVATE_URL_REVIEW
+        : await reviewWithRunCheckers(ctx, review);
+  } catch (error) {
     if (context.signal.aborted) return;
-    const verdict = {
-      reason: judge.reason,
-      decision: applyJudgeDecision({ decision: judge.decision, consequential: gated }),
+    const attempted = candidates[0] ?? {
+      provider: "unavailable",
+      model: "unavailable",
+      role: "default" as const,
     };
-    if (applied) {
-      await deps.prisma.externalEffect.update({
-        where: { id: applied.effect.id },
-        data: {
-          reviewDecision: judge.decision,
-          reviewReason: judge.reason,
-          reviewModel: judge.model,
-        },
-      });
-    }
-    await auditAutoReview(ctx, name, applied, judge.decision, judge.model);
-    return verdict;
-  } catch {
-    // Cancellation must not write a review the next attempt would reuse.
-    if (context.signal.aborted) return;
-    // Auth/refresh failures must fail closed like a checker error, not fail the run.
-    const reviewReason = "Checker could not authenticate.";
-    const verdict = {
-      reason: reviewReason,
-      decision: applyJudgeDecision({ decision: "error", consequential: gated }),
-    };
-    const reviewModel = checker
-      ? `${checker.provider}/${checker.model}`
-      : (injectedReview?.describe().id ?? "auto-review");
-    if (applied) {
-      await deps.prisma.externalEffect.update({
-        where: { id: applied.effect.id },
-        data: { reviewDecision: "error", reviewReason, reviewModel },
-      });
-    }
-    await auditAutoReview(ctx, name, applied, "error", reviewModel);
-    return verdict;
+    const failure = autoReviewFailure(error, `${attempted.provider}/${attempted.model}`);
+    logAutoReviewFailure(attempted, failure.failureCode);
+    judge = failure;
   }
+  if (!judge || context.signal.aborted) return;
+  if (applied) {
+    // A canceled worker must not leave a verdict for the next attempt to reuse.
+    const { decision, reason, model } = judge;
+    try {
+      await underRunLease(deps, runId, async (tx) => {
+        context.signal.throwIfAborted();
+        await tx.externalEffect.update({
+          where: { id: applied.effect.id },
+          data: { reviewDecision: decision, reviewReason: reason, reviewModel: model },
+        });
+        context.signal.throwIfAborted();
+      });
+    } catch (error) {
+      if (context.signal.aborted) return;
+      throw error;
+    }
+  }
+  if (context.signal.aborted) return;
+  await auditAutoReview(ctx, name, applied, judge);
+  return {
+    reason: judge.reason,
+    decision: applyJudgeDecision({ decision: judge.decision, consequential: gated }),
+  };
+}
+
+async function reviewWithRunCheckers(ctx: RunContext, review: ToolReview) {
+  const { deps, run, runId, bot, thread, context, secrets } = ctx;
+  const { name, args, connectorKind, fetchUrl, injectedReview, candidates } = review;
+  const newSite = review.newSite && fetchUrl !== undefined;
+  // A webhook or bot-started prompt may contain someone else's text. Only verified
+  // owner words can justify sending data to a new site.
+  const [task, priorOwnerMessages] = await Promise.all([
+    newSite ? ctx.trust.loadReviewOwnerWords() : ctx.task.prompt,
+    ctx.trust.loadPriorOwnerMessages(),
+  ]);
+  const reviewContext: AdapterContext = {
+    operationId: `auto-review:${runId}`,
+    traceId: `auto-review:${runId}`,
+    spaceId: run.spaceId,
+    userId: run.userId,
+    botId: bot.id,
+    runId,
+    signal: context.signal,
+  };
+  context.signal.throwIfAborted();
+  const prepared = await prepareAutoReviewCheckers(
+    deps,
+    { runId, spaceId: run.spaceId, userId: run.userId, botId: bot.id, threadId: thread.id },
+    { injectedReview, registerSecrets: (values) => secrets.push(...values) },
+    candidates,
+  );
+  return reviewWithBackups(
+    prepared.candidates,
+    async (checker) => {
+      const provider = await prepared.providerFor(checker);
+      context.signal.throwIfAborted();
+      // Resolving this reviewer can add its own credentials to the redaction set.
+      if (newSite && newSiteUrlNeedsOwner(fetchUrl, secrets)) return PRIVATE_URL_REVIEW;
+      const reviewRequest: AutoReviewRequest = {
+        toolName: name,
+        connectorKind,
+        args: newSite
+          ? { url: redactSecrets(fetchUrl, secrets) }
+          : redactToolArgsForReview(args, secrets),
+        userTask: redactSecrets(task, secrets),
+        ...(priorOwnerMessages.length > 0
+          ? {
+              priorOwnerMessages: priorOwnerMessages.map((message) =>
+                redactSecrets(message, secrets),
+              ),
+            }
+          : {}),
+        botDescription: redactSecrets(`${bot.name}\n${bot.description}`, secrets),
+        matchingRules: review.matchingRules,
+        ...(newSite ? { newSite: true } : {}),
+      };
+      return provider.review(reviewRequest, reviewContext);
+    },
+    context.signal,
+  );
 }
 
 function auditAutoReview(
   ctx: RunContext,
   tool: string,
   applied: AppliedEffect | undefined,
-  decision: string,
-  model: string | undefined,
+  judge: AutoReviewResult & { failureCode?: AutoReviewFailureCode },
 ): Promise<void> {
+  const { decision, model } = judge;
   return auditToolCall(
     ctx,
     tool,
     decision === "error" ? "failure" : "success",
-    { effectId: applied?.effect.id, decision },
+    {
+      effectId: applied?.effect.id,
+      decision,
+      ...(judge.failureCode
+        ? { reasonCategory: judge.failureCode, reviewFailure: judge.reason }
+        : {}),
+    },
     { action: "approval.auto_reviewed", actor: { type: "system", label: model } },
   );
 }

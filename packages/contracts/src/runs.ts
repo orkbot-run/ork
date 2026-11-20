@@ -18,6 +18,9 @@ export const COMPUTER_ALLOWANCE_USED_ERROR = "No computer hours left.";
 export const COMPUTER_ACCOUNT_REFUSED_ERROR =
   "The computer service cannot start computers for this account.";
 
+/** The computer failed to complete a command response. A retry can recover it. */
+export const COMPUTER_UNRESPONSIVE_ERROR = "The computer stopped responding. Try again.";
+
 export const RUN_TRIGGERS = [
   "user",
   "routine",

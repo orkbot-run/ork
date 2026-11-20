@@ -20,7 +20,7 @@ import type {
   WorkspaceDirectoryRequest,
   WorkspaceExportLimits,
 } from "@orkbot/adapter-kit";
-import { inspectComputerCapabilities } from "@orkbot/adapter-kit";
+import { inspectComputerCapabilities, SandboxUnavailableError } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { runAsSystem } from "@orkbot/db";
 import { cancelComputerRunWork, probeBackgroundWork, providerKeepsHome } from "./computer-idle.js";
@@ -48,6 +48,9 @@ export interface StoredComputerSettings {
 export interface ComputerProviderSelection {
   provider: string;
   settings: StoredComputerSettings | null;
+}
+function settingsIdentity(scope: "account" | "deployment", settings: StoredComputerSettings) {
+  return `${scope}:${credentialDigest(JSON.stringify(Object.entries(settings.values).sort()))}`;
 }
 export function parseStoredComputerSettings(plaintext: string): StoredComputerSettings | null {
   try {
@@ -201,6 +204,7 @@ export class ConfiguredSandbox implements SandboxProvider {
       loadOwnForUser?: (userId: string) => Promise<StoredComputerSettings | null>;
       onSecretChange?: SecretStore["onChange"];
       createProvider?: (settings: StoredComputerSettings) => Promise<SandboxProvider>;
+      primaryIdentity?: string;
     } = {},
   ) {
     options.onSecretChange?.((ref) => {
@@ -331,12 +335,18 @@ export class ConfiguredSandbox implements SandboxProvider {
     if (own) return this.providerFor(own, homeKey!);
     return this.defaultTarget();
   }
-  private async defaultTarget() {
+  private async deploymentTarget() {
     // An unreadable store must not stop every computer from starting: use the last settings read.
     await this.current().catch((error) => {
       if (!this.selectionLoadedAt) throw error;
     });
-    return this.selection.provider !== "default" && this.selected ? this.selected : this.primary;
+    if (this.selection.provider !== "default" && this.selected) {
+      return { target: this.selected, settings: this.selection.settings };
+    }
+    return { target: this.primary, settings: null };
+  }
+  private async defaultTarget() {
+    return (await this.deploymentTarget()).target;
   }
   describe() {
     return (
@@ -378,12 +388,30 @@ export class ConfiguredSandbox implements SandboxProvider {
     request: Parameters<SandboxProvider["provision"]>[0],
     context: AdapterContext,
   ): Promise<ComputerRef> {
-    const target = await this.target(request.botId);
+    const own = await this.ownSettings(request.botId);
+    const { target, settings } = own
+      ? { target: await this.providerFor(own, request.botId), settings: null }
+      : await this.deploymentTarget();
     const kind = target.describe().id;
     // A reference from the other provider means nothing to this one.
     const expectedKind = (await target.provisionKind?.(request.botId)) ?? kind;
+    if (request.expectedKind && request.expectedKind !== expectedKind) {
+      throw new SandboxUnavailableError({
+        cause: new Error("The selected computer provider changed during startup"),
+      });
+    }
     const providerRef = request.providerKind === expectedKind ? request.providerRef : undefined;
-    return target.provision({ ...request, providerRef }, context);
+    if (!request.recordCreated) return target.provision({ ...request, providerRef }, context);
+    const connection = own
+      ? settingsIdentity("account", own)
+      : settings
+        ? settingsIdentity("deployment", settings)
+        : (this.options.primaryIdentity ?? "primary");
+    const recordCreated = request.recordCreated;
+    return target.provision(
+      { ...request, providerRef, recordCreated: (machine) => recordCreated(machine, connection) },
+      context,
+    );
   }
 
   async isRunning(computer: ComputerRef, context: AdapterContext) {
@@ -592,5 +620,41 @@ export class ConfiguredSandbox implements SandboxProvider {
 
   async destroy(computer: ComputerRef, context: AdapterContext) {
     return (await this.route(computer)).destroy(computer, context);
+  }
+
+  async destroyUncommitted(
+    computer: ComputerRef,
+    connection: string,
+    context: AdapterContext,
+    providerInstanceId?: string,
+  ) {
+    let provider: SandboxProvider | undefined;
+    if (connection === (this.options.primaryIdentity ?? "primary")) {
+      provider = this.primary;
+    } else if (connection.startsWith("account:")) {
+      const own = this.options.loadOwnForUser
+        ? await this.options.loadOwnForUser(context.userId)
+        : await this.ownSettings(computer.botId, true);
+      if (own?.provider === computer.kind && settingsIdentity("account", own) === connection) {
+        provider = await this.providerFor(own, computer.botId);
+      }
+    } else if (connection.startsWith("deployment:")) {
+      const selection = await this.load();
+      const saved = computerSettingsForProvider(selection.settings, computer.kind);
+      if (saved && settingsIdentity("deployment", saved) === connection) {
+        provider = await this.providerFor(saved, "deployment");
+      }
+    }
+    if (
+      !provider ||
+      provider.describe().id !== computer.kind ||
+      provider.ownsReference?.(computer) === false
+    ) {
+      throw new Error("The connection that allocated the computer is unavailable");
+    }
+    if (provider.destroyUncommitted) {
+      return provider.destroyUncommitted(computer, connection, context, providerInstanceId);
+    }
+    return provider.destroy(computer, context);
   }
 }

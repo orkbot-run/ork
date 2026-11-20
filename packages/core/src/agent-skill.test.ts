@@ -60,6 +60,35 @@ literal: |+
 `;
 
 describe("parseSkillMd", () => {
+  it("keeps existing header and value boundaries with long whitespace runs", () => {
+    const spaces = " ".repeat(20_000);
+    expect(
+      parseSkillMd(`---\nname: Sample\ndescription:${spaces}A recipe\n---\nbody`),
+    ).toMatchObject({ description: "A recipe" });
+    for (const line of [
+      `notes: |${spaces}invalid`,
+      `notes:${spaces}x\u2028y`,
+      `notes:\n  child:${spaces}x\u2028y`,
+      `notes:\n  -${spaces}x\u2028y`,
+    ]) {
+      expect(
+        parseSkillMd(`---\nname: Sample\ndescription: A recipe\n${line}\n---\nbody`),
+      ).toMatchObject({ error: expect.any(String) });
+    }
+  });
+
+  it("round-trips long interior newline runs and trailing block scalar newlines", () => {
+    for (const ending of ["", "\n", "\n\n"]) {
+      const notes = `start${"\n".repeat(10_000)}end${ending}`;
+      const document = buildSkillMd({
+        name: "Sample",
+        description: "A recipe",
+        body: "body",
+        frontmatter: { notes },
+      });
+      expect(parseSkillMd(document)).toMatchObject({ frontmatter: { notes } });
+    }
+  });
   it("round-trips quoted commas, escapes and empty items in inline arrays", () => {
     const parsed = parseSkillMd(
       `---\nname: Sample\ndescription: Sample skill\ntags: ["alpha, beta", 'it''s, fine', "a\\"b, c", ""]\n---\nbody`,
@@ -309,6 +338,19 @@ Write the notes.
 });
 
 describe("skill prompt helpers", () => {
+  it("keeps forced-skill whitespace and line boundaries with long prefixes", () => {
+    const spaces = " ".repeat(20_000);
+    expect(extractForcedSkillName(`Use skill:${spaces}\nDaily standup\nplease`)).toEqual({
+      name: "Daily standup",
+      rest: "please",
+    });
+    expect(extractForcedSkillName(`Use skill:${spaces}x\u2028y`)).toBeNull();
+    expect(extractForcedSkillName(`/${spaces}\nDaily standup`)).toBeNull();
+    expect(extractForcedSkillName("///Daily standup\nplease")).toEqual({
+      name: "Daily standup",
+      rest: "please",
+    });
+  });
   it("extracts forced /Name and Use skill: Name", () => {
     expect(extractForcedSkillName("/Daily standup\nplease")).toEqual({
       name: "Daily standup",
@@ -537,4 +579,19 @@ describe("renameRoutineSkillMentions", () => {
       renameRoutineSkillMentions("Use @garden tools, then @Garden. Email@garden stays.", renames),
     ).toBe("Use @garden tools, then @garden-2. Email@garden stays.");
   });
+});
+
+it("keeps prompt skill metadata stable and bounded for a large catalog", () => {
+  const catalog = Array.from({ length: 1000 }, (_, i) => ({
+    name: `Recipe ${String(i).padStart(4, "0")}`,
+    description: "x".repeat(2000),
+    source: "user" as const,
+    readOnly: false,
+  }));
+  const text = formatSkillsCatalogInstruction(catalog)!;
+  expect(text).toBe(formatSkillsCatalogInstruction([...catalog].reverse()));
+  expect(text.length).toBeLessThan(11_000);
+  expect(text).toContain("task_catalog");
+  expect(text).toContain("Recipe 0000");
+  expect(text).not.toContain("Recipe 0999");
 });

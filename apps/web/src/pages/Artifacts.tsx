@@ -961,7 +961,7 @@ function ArtifactPreview({ artifact, bytes }: { artifact: Artifact; bytes: Uint8
     case "pdf":
       return <PdfViewer bytes={bytes} title={artifact.name} />;
     case "video":
-      return <VideoPreview bytes={bytes} name={artifact.name} />;
+      return <VideoPreview bytes={bytes} name={artifact.name} mimeType={artifact.mimeType} />;
     case "image":
       return <ImagePreview bytes={bytes} mimeType={artifact.mimeType} name={artifact.name} />;
     case "none":

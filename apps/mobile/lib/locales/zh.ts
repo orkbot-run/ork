@@ -3,6 +3,76 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "Add a schedule or an HTTPS address to run this routine.":
+    "添加时间表或 HTTPS 地址以运行此例行任务。",
+  "Ask an owner to resume your plan.": "请所有者恢复您的套餐。",
+  "Back to meetings": "返回会议列表",
+  "Blocked by the server administrator": "已被服务器管理员阻止",
+  "Check every 5 to 1,440 minutes and track up to five fields.":
+    "每 5 至 1,440 分钟检查一次，最多跟踪五个字段。",
+  "Check interval in minutes": "检查间隔（分钟）",
+  "Confirm deletion": "确认删除",
+  "Confirm that all participants have been informed before continuing.":
+    "继续前，请确认已告知所有参与者。",
+  "Could not submit this answer": "无法提交此答案",
+  "Daily limit: {dailyLimit}. Maximum meeting length: {maxMinutes} minutes.":
+    "每日上限：{dailyLimit}。单次会议最长：{maxMinutes} 分钟。",
+  "Delete meeting": "删除会议",
+  "Delete this meeting and its transcript? This cannot be undone.":
+    "删除此会议及其转录文本？此操作无法撤销。",
+  "Enter a future date and time in YYYY-MM-DDTHH:mm format.":
+    "请以 YYYY-MM-DDTHH:mm 格式输入未来的日期和时间。",
+  "Enter a message body": "请输入消息正文",
+  "Enter a public HTTPS address without credentials or a fragment":
+    "请输入不含凭据或片段标识符的公开 HTTPS 地址",
+  "Enter a recipient": "请输入收件人",
+  "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link.":
+    "请输入受支持的 Google Meet、Zoom 或 Microsoft Teams 会议链接。",
+  "Fields that mark a change": "用于判断变化的字段",
+  "Fields to compare, e.g. id, modifiedTime (optional)":
+    "要比较的字段，例如 id、modifiedTime（可选）",
+  "Google Meet, Zoom and Microsoft Teams links are supported.":
+    "支持 Google Meet、Zoom 和 Microsoft Teams 链接。",
+  "HTTPS address": "HTTPS 地址",
+  "I have informed all participants and have permission to record and transcribe this meeting.":
+    "我已告知所有参与者，并已获得录制和转录此会议的许可。",
+  "Invite your bot to a meeting": "邀请您的机器人参加会议",
+  "Keep meeting": "保留会议",
+  "Leave empty to join now. Scheduled time uses your device time zone.":
+    "留空即可立即加入。预定时间使用您设备的时区。",
+  "Manage billing to resume your plan.": "前往账单管理以恢复您的套餐。",
+  "Meeting link": "会议链接",
+  Meetings: "会议",
+  "Meetings are not available on this server.": "此服务器不支持会议。",
+  "Message body": "消息正文",
+  No: "否",
+  "No meetings yet.": "暂无会议。",
+  "No transcript yet. It will appear after processing.": "暂无转录文本，处理完成后将显示。",
+  "Payment failed. Ask an owner to update the payment method.": "付款失败。请所有者更新付款方式。",
+  "Payment failed. Update your payment method to resume your plan.":
+    "付款失败。请更新付款方式以恢复您的套餐。",
+  'Post "No changes" in chat': "在聊天中发布“无变化”",
+  "Recipient changed. Review the updated draft and press Send again.":
+    "收件人已更改。请检查更新后的草稿，再次点击发送。",
+  Refresh: "刷新",
+  Reject: "拒绝",
+  "Remove change trigger": "移除变化触发器",
+  "Route requests only to endpoints marked as eligible for zero data retention.":
+    "仅将请求路由到标记为符合零数据保留条件的端点。",
+  "Schedule (optional)": "时间安排（可选）",
+  Subject: "主题",
+  "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it.":
+    "机器人会以可见身份加入、录制音频并生成转录文本。邀请前请告知每位参与者。",
+  "Title (optional)": "标题（可选）",
+  To: "收件人",
+  "Unchanged checks appear in history. You can also post them in chat.":
+    "无变化的检查结果会显示在历史记录中。您也可以将其发布到聊天中。",
+  "Update payment method": "更新付款方式",
+  "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00":
+    "请使用包含时区的日期和时间，例如 2026-11-20T14:30:00+01:00",
+  "Watch an HTTPS address": "监测 HTTPS 地址",
+  Yes: "是",
+  "Zero data retention": "零数据保留",
   "Open Ork Accounts": "打开 Ork Accounts",
   "Could not open Ork Accounts. Try again.": "无法打开 Ork Accounts，请重试。",
   Checklist: "清单",
@@ -515,7 +585,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   Attach: "附件",
   "Attach file": "添加附件",
   "Authorization code": "授权码",
-  "Authorization timed out. Please try again.": "授权超时，请重试。",
+  "Waiting for authorization.": "正在等待授权。",
+  "Start over": "重新开始",
   "Bearer token": "Bearer 令牌",
   "Back to sign in": "返回登录",
   Back: "返回",
@@ -993,6 +1064,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Waiting…": "等待中…",
   "What this bot is for": "这个 Bot 的用途",
   Working: "工作中",
+  "Thinking…": "思考中…",
   "Working…": "处理中…",
   "Work stopped, but the thread could not refresh: {detail}":
     "工作已停止，但线程无法刷新：{detail}",

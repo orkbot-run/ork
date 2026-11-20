@@ -392,12 +392,14 @@ export async function loadGroupContext(
 export async function loadBotGroupDirectory(
   prisma: PrismaClient,
   actor: { botId: string; userId: string; spaceId: string },
+  options?: { currentGroupId: string | null; canPost: boolean },
 ): Promise<string | undefined> {
   const groups = await prisma.chatGroup.findMany({
     where: {
       userId: actor.userId,
       spaceId: actor.spaceId,
       archivedAt: null,
+      ...(options?.currentGroupId ? { id: { not: options.currentGroupId } } : {}),
       members: { some: { botId: actor.botId, bot: { archivedAt: null } } },
       thread: { isNot: null },
     },
@@ -419,5 +421,6 @@ export async function loadBotGroupDirectory(
       name: group.name,
       members: group.members.map((member) => member.bot),
     })),
+    options,
   );
 }

@@ -18,6 +18,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createRunExecutor } from "./executor.js";
 import { findPendingRoutineTick, routineTimerNonce } from "./routine-coalescing.js";
+import { scheduledRoutineNonce } from "./routine-conversation.js";
 
 const url = process.env.DATABASE_URL;
 const describePostgres =
@@ -134,7 +135,7 @@ describePostgres("routine timer coalescing (PostgreSQL)", () => {
     } as unknown as Parameters<typeof createRunExecutor>[0]);
     await executor.wakeRoutine(routine.id, scheduledAt.toISOString());
     const oneShot = await system.run.findFirstOrThrow({ where: { routineId: routine.id } });
-    expect(oneShot.clientNonce).toBeNull();
+    expect(oneShot.clientNonce).toBe(scheduledRoutineNonce(routine.id, scheduledAt.toISOString()));
     let duplicateId: string | null = null;
     for (let tick = 0; tick < 3; tick++) {
       const dueAt = new Date(scheduledAt.getTime() + tick);

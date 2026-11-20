@@ -38,6 +38,11 @@ and **Move down** set the order.
 Each model has a **Thinking** level, from **Minimal** to **Max**. Higher thinking is slower and
 costs more, and helps on hard, multi-step work.
 
+For one new chat turn, start your message with `/think quick`, `/think standard`, or
+`/think deep` and then write your request. The selected model uses its supported
+effort closest to low, medium, or high. Workspace-managed settings and already
+running turns keep their configured effort.
+
 ## Approval model
 
 **Approval model** is the model that checks bot actions when approvals are set to **Auto**. A fast,

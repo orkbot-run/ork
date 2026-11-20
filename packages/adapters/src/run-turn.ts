@@ -49,6 +49,7 @@ import {
 } from "./routine-backoff.js";
 import type { RunContext, RunState } from "./run-context.js";
 import { persistTurnCheckpoint } from "./run-context.js";
+import { retryRunDatabaseOperation } from "./run-database-recovery.js";
 import { renewRunLease, requeueComputerRun } from "./run-lifecycle.js";
 import { publishMessage, redactBlocks } from "./run-messages.js";
 import {
@@ -60,6 +61,7 @@ import {
   subagentMarksUnread,
 } from "./run-notifications.js";
 import {
+  appendProgress,
   canPublishDurableNarration,
   flushPendingTools,
   flushProgress,
@@ -98,6 +100,7 @@ import {
   loopGuardStopText,
   MAX_CONSECUTIVE_OVER_LIMIT_ACTION_CALLS,
   overLimitStopText,
+  sameToolResultStopText,
   toolResultFingerprint,
 } from "./tool-loop.js";
 import {
@@ -232,6 +235,9 @@ export async function consumeRunEvents(
             await deps.events.notify(updated.threadId, updated.eventSeq).catch(() => undefined);
         }
         if (await onToolCalled(ctx, event)) return true;
+      } else if (event.type === "tool_loop_stop") {
+        await stopStuckToolLoop(ctx, event.name, event);
+        return true;
       } else if (event.type === "subagent") {
         await publishSubagent(ctx, event);
       } else if (event.type === "usage" && !event.accounted) {
@@ -329,7 +335,7 @@ async function streamText(ctx: RunContext, event: RuntimeEvent<"text">) {
 }
 
 async function streamProgress(ctx: RunContext, event: RuntimeEvent<"progress">) {
-  const { deps, run, runId, bot, thread } = ctx;
+  const { run } = ctx;
   const { reply } = ctx.state;
   // Tool status lines are not the model writing.
   if (!event.activity) ctx.state.toolCallStreak = { key: undefined, count: 0 };
@@ -339,27 +345,13 @@ async function streamProgress(ctx: RunContext, event: RuntimeEvent<"progress">) 
   // Flush batched text deltas first so an activity line cannot land
   // ahead of text the model streamed before the tool call.
   if (run.replyMode !== "explicit" && reply.pendingProgress && !progressHeldForSilence(ctx)) {
-    await deps.events.append({
-      spaceId: run.spaceId,
-      threadId: thread.id,
-      botId: bot.id,
-      type: "thread.progress",
-      runId,
-      payload: { delta: reply.pendingProgress, streaming: true },
-    });
+    await appendProgress(ctx, { delta: reply.pendingProgress, streaming: true });
     reply.pendingProgress = "";
     reply.lastProgressAt = Date.now();
   }
-  await deps.events.append({
-    spaceId: run.spaceId,
-    threadId: thread.id,
-    botId: bot.id,
-    type: "thread.progress",
-    runId,
-    payload: {
-      text: redactSecrets(event.text, ctx.secrets),
-      ...(event.activity ? { activity: true } : {}),
-    },
+  await appendProgress(ctx, {
+    text: redactSecrets(event.text, ctx.secrets),
+    ...(event.activity ? { activity: true } : {}),
   });
 }
 
@@ -662,13 +654,41 @@ async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promi
 }
 
 /** The model keeps repeating the same call: finish the run with what it has and say why. */
-async function stopStuckToolLoop(ctx: RunContext, toolName: string) {
+async function stopStuckToolLoop(
+  ctx: RunContext,
+  toolName: string,
+  repeatedResult?: RuntimeEvent<"tool_loop_stop">,
+) {
   ctx.stopProduction();
   const { deps, run, runId, bot, thread, workerId, fence } = ctx;
   const { reply } = ctx.state;
   ctx.tools.approvedReplays.assertDrained();
   flushPendingTools(reply);
   if (!(await renewRunLease(deps, runId, workerId, fence))) return;
+  if (repeatedResult) {
+    const toolLoopStop = {
+      reason: "same_result",
+      name: redactSecrets(toolName, ctx.secrets),
+      executionId: redactSecrets(repeatedResult.executionId, ctx.secrets),
+      count: repeatedResult.count,
+    };
+    getLogger().info("agent.tool.loop_stopped", { "run.id": runId, ...toolLoopStop });
+    await deps.events
+      .append({
+        spaceId: run.spaceId,
+        threadId: thread.id,
+        botId: bot.id,
+        runId,
+        type: "thread.meta",
+        lease: { owner: workerId, fence },
+        payload: { toolLoopStop },
+      })
+      .catch((error) => {
+        if (!(error instanceof RunHistoryWriteError)) {
+          getLogger().warn("agent tool loop audit append failed", { error });
+        }
+      });
+  }
   if (reply.messageSegments.length > 0) {
     await publishMessage(deps, run, "bot", redactBlocks(reply.messageSegments, ctx.secrets));
   }
@@ -676,8 +696,9 @@ async function stopStuckToolLoop(ctx: RunContext, toolName: string) {
   ctx.state.terminalCheckpointComplete = true;
   const overLimit = ctx.state.overLimitActionCalls;
   const humanName = humanizeToolName(toolName);
-  const stuckText =
-    overLimit >= MAX_CONSECUTIVE_OVER_LIMIT_ACTION_CALLS
+  const stuckText = repeatedResult
+    ? sameToolResultStopText(humanName, repeatedResult.count)
+    : overLimit >= MAX_CONSECUTIVE_OVER_LIMIT_ACTION_CALLS
       ? overLimitStopText(humanName, overLimit)
       : loopGuardStopText(humanName, ctx.state.toolCallStreak);
   await ctx.settleRunningHelpers();
@@ -850,6 +871,9 @@ export async function completeRun(ctx: RunContext) {
   // Preserve the last held-back preview as a normal final reply when the
   // model supplies none, unless it chose silence or already delivered that text.
   // Persisting peer results here also lets outcome delivery retry after completion.
+  const unstreamedCallContinuation = Boolean(
+    reply.publicText && !reply.hasStreamedText && reply.assembled.trim(),
+  );
   recordExplicitNoResponse(reply, reply.lastDiscardedMidTurnNarration);
   // When nothing follows the last step, the notes since the last interim message are the reply.
   if (
@@ -937,6 +961,11 @@ export async function completeRun(ctx: RunContext) {
         redactBlocks(completionBlocks, ctx.secrets),
         reply.publishedMidTurnUserMessage || runAllowsSilentEmpty(run.trigger),
       );
+  if (unstreamedCallContinuation) {
+    const firstText = blocks.findIndex((block) => block.kind === "text");
+    const block = blocks[firstText];
+    if (block?.kind === "text") blocks[firstText] = { ...block, callSpeechContinues: true };
+  }
   const text = ctx.state.handedOff
     ? ""
     : redactSecrets(completionNotificationBody(silentReply.assembled, blocks), ctx.secrets);
@@ -953,27 +982,35 @@ export async function completeRun(ctx: RunContext) {
   ) {
     throw new Error(TOOL_STEPS_WITHOUT_RESPONSE);
   }
-  if (!(await renewRunLease(deps, runId, ctx.workerId, ctx.fence))) return;
+  if (
+    !(await retryRunDatabaseOperation(ctx, () =>
+      renewRunLease(deps, runId, ctx.workerId, ctx.fence),
+    ))
+  )
+    return;
   const botMessageOutcome =
     run.trigger === "bot_message"
       ? botMessageOutcomeFromMidTurn(text, reply.midTurnUserTexts)
       : null;
   await ctx.settleRunningHelpers();
-  const completed = await deps.events.finalizeRun({
-    spaceId: run.spaceId,
-    threadId: thread.id,
-    botId: bot.id,
-    runId,
-    taskId: run.taskId,
-    attemptId: ctx.attempt.id,
-    leaseOwner: ctx.workerId,
-    leaseFence: ctx.fence,
-    outcome: "completed",
-    blocks,
-    markUnread:
-      !groupSilentEnd &&
-      completionMarksUnread(run.trigger, text, ctx.source.peerMessage?.repliesToRequest === true),
-  });
+  const completed = await retryRunDatabaseOperation(ctx, () =>
+    deps.events.finalizeRun({
+      spaceId: run.spaceId,
+      threadId: thread.id,
+      botId: bot.id,
+      runId,
+      taskId: run.taskId,
+      attemptId: ctx.attempt.id,
+      leaseOwner: ctx.workerId,
+      leaseFence: ctx.fence,
+      outcome: "completed",
+      blocks,
+      ...(run.trigger === "routine" && run.routineId ? { retireOneShotRoutine: true } : {}),
+      markUnread:
+        !groupSilentEnd &&
+        completionMarksUnread(run.trigger, text, ctx.source.peerMessage?.repliesToRequest === true),
+    }),
+  );
   if (!completed) return;
   if (run.trigger === "background_helper") {
     await deliverBackgroundHelperOutcome(deps, { spaceId: run.spaceId, runId }).catch((error) =>

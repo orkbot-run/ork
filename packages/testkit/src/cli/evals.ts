@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited evaluation commands are preserved. Turn-memory evaluation follows LICENSE.md.
+
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -76,6 +80,7 @@ async function main() {
       strategy: { type: "string", multiple: true },
       pricing: { type: "string" },
       "cache-probe": { type: "boolean", default: false },
+      "cache-probe-mode": { type: "string" },
       "cache-capabilities": { type: "string" },
       "spend-cap-usd": { type: "string", default: "5" },
       live: { type: "boolean", default: false },
@@ -99,6 +104,13 @@ async function main() {
       output: { type: "string", default: "test-report/evals/report.json" },
     },
   });
+  const cacheProbeMode = values["cache-probe-mode"] ?? "prefix";
+  if (
+    (values["cache-probe-mode"] && !values["cache-probe"]) ||
+    (cacheProbeMode !== "prefix" && cacheProbeMode !== "turn-memory")
+  ) {
+    throw new Error("Use --cache-probe --cache-probe-mode=prefix or turn-memory");
+  }
   if (values["cases-file"] && values.suite !== "tool-choice")
     throw new Error("--cases-file adds tool-choice cases; use --suite tool-choice");
   if (values.suite === "approval")
@@ -485,20 +497,24 @@ async function main() {
       },
       pricing,
       decisions,
+      cacheProbeMode,
     );
     trials.length = 0;
     probeTotals = probe;
     Object.assign(report, {
-      kind: "cache-prefix-probe",
+      kind: cacheProbeMode === "turn-memory" ? "cache-turn-memory-probe" : "cache-prefix-probe",
       fixtureVersion: probe.fixtureVersion,
       caseFixtureVersions: {},
       modelLimits: probe.modelLimits,
       firstResponseDefinition:
         "First direct runtime text event after starting each probe call; no database or polling timestamps.",
-      fixtures: "Direct synthetic prefixes; no database, service emulators, or tools.",
+      fixtures:
+        cacheProbeMode === "turn-memory"
+          ? "Synthetic conversation and memory snapshots using Ork's instruction builder and Pi runtime."
+          : "Direct synthetic prefixes; no database, service emulators, or tools.",
       limitations: [
-        "Four direct synthetic model calls; does not evaluate product workflows, database persistence, or tools.",
-        "Immediate replay measures observed warm versus fresh changed-prefix reuse; provider routing and eviction are uncontrolled, live expiry is not tested, and four calls are not a reliability estimate.",
+        "Direct synthetic model calls; does not evaluate product workflows, database persistence, or tools.",
+        "Immediate replay measures observed reuse. Provider routing and eviction are uncontrolled, expiry is not tested, and a single comparison is not a reliability estimate.",
         "Cost uses provider-reported charges where available and explicit pricing estimates otherwise; spend reservations are a guard, not a billing guarantee.",
       ],
       cacheProbe: probe,
@@ -512,7 +528,11 @@ async function main() {
     ])
       Reflect.deleteProperty(report, key);
     save();
-    if (probe.phases.some((phase) => phase.failed)) process.exitCode = 1;
+    if (
+      probe.phases.some((phase) => phase.failed) ||
+      (cacheProbeMode === "turn-memory" && probe.memoryChange?.additionalCacheReadTokens === null)
+    )
+      process.exitCode = 1;
     return;
   }
   // This CLI owns a disposable database. Never migrate or evaluate against an inherited database.

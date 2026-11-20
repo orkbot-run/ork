@@ -3,6 +3,80 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  "Add a schedule or an HTTPS address to run this routine.":
+    "Füge einen Zeitplan oder eine HTTPS-Adresse hinzu, um diese Routine auszuführen.",
+  "Ask an owner to resume your plan.": "Bitte einen Inhaber, deinen Tarif wieder zu aktivieren.",
+  "Back to meetings": "Zurück zu den Besprechungen",
+  "Blocked by the server administrator": "Vom Serveradministrator gesperrt",
+  "Check every 5 to 1,440 minutes and track up to five fields.":
+    "Prüfe alle 5 bis 1.440 Minuten und überwache bis zu fünf Felder.",
+  "Check interval in minutes": "Prüfintervall in Minuten",
+  "Confirm deletion": "Löschen bestätigen",
+  "Confirm that all participants have been informed before continuing.":
+    "Bestätige vor dem Fortfahren, dass alle Teilnehmer informiert wurden.",
+  "Could not submit this answer": "Diese Antwort konnte nicht gesendet werden",
+  "Daily limit: {dailyLimit}. Maximum meeting length: {maxMinutes} minutes.":
+    "Tageslimit: {dailyLimit}. Maximale Besprechungsdauer: {maxMinutes} Minuten.",
+  "Delete meeting": "Besprechung löschen",
+  "Delete this meeting and its transcript? This cannot be undone.":
+    "Diese Besprechung und ihr Transkript löschen? Dies kann nicht rückgängig gemacht werden.",
+  "Enter a future date and time in YYYY-MM-DDTHH:mm format.":
+    "Gib ein zukünftiges Datum und eine Uhrzeit im Format YYYY-MM-DDTHH:mm ein.",
+  "Enter a message body": "Gib einen Nachrichtentext ein",
+  "Enter a public HTTPS address without credentials or a fragment":
+    "Gib eine öffentliche HTTPS-Adresse ohne Zugangsdaten oder Fragment ein",
+  "Enter a recipient": "Gib einen Empfänger ein",
+  "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link.":
+    "Gib einen unterstützten Besprechungslink für Google Meet, Zoom oder Microsoft Teams ein.",
+  "Fields that mark a change": "Felder zur Erkennung von Änderungen",
+  "Fields to compare, e.g. id, modifiedTime (optional)":
+    "Zu vergleichende Felder, z. B. id, modifiedTime (optional)",
+  "Google Meet, Zoom and Microsoft Teams links are supported.":
+    "Links zu Google Meet, Zoom und Microsoft Teams werden unterstützt.",
+  "HTTPS address": "HTTPS-Adresse",
+  "I have informed all participants and have permission to record and transcribe this meeting.":
+    "Ich habe alle Teilnehmer informiert und habe die Erlaubnis, diese Besprechung aufzuzeichnen und zu transkribieren.",
+  "Invite your bot to a meeting": "Lade deinen Bot zu einer Besprechung ein",
+  "Keep meeting": "Besprechung behalten",
+  "Leave empty to join now. Scheduled time uses your device time zone.":
+    "Lass das Feld leer, um jetzt beizutreten. Die geplante Uhrzeit verwendet die Zeitzone deines Geräts.",
+  "Manage billing to resume your plan.":
+    "Verwalte die Abrechnung, um deinen Tarif wieder zu aktivieren.",
+  "Meeting link": "Besprechungslink",
+  Meetings: "Besprechungen",
+  "Meetings are not available on this server.":
+    "Besprechungen sind auf diesem Server nicht verfügbar.",
+  "Message body": "Nachrichtentext",
+  No: "Nein",
+  "No meetings yet.": "Noch keine Besprechungen.",
+  "No transcript yet. It will appear after processing.":
+    "Noch kein Transkript. Es erscheint nach der Verarbeitung.",
+  "Payment failed. Ask an owner to update the payment method.":
+    "Zahlung fehlgeschlagen. Bitte einen Inhaber, die Zahlungsmethode zu aktualisieren.",
+  "Payment failed. Update your payment method to resume your plan.":
+    "Zahlung fehlgeschlagen. Aktualisiere deine Zahlungsmethode, um deinen Tarif wieder zu aktivieren.",
+  'Post "No changes" in chat': "„Keine Änderungen“ im Chat posten",
+  "Recipient changed. Review the updated draft and press Send again.":
+    "Der Empfänger wurde geändert. Prüfe den aktualisierten Entwurf und drücke erneut auf Senden.",
+  Refresh: "Aktualisieren",
+  Reject: "Ablehnen",
+  "Remove change trigger": "Änderungsauslöser entfernen",
+  "Route requests only to endpoints marked as eligible for zero data retention.":
+    "Leite Anfragen nur an Endpunkte weiter, die als geeignet für die Verarbeitung ohne Datenspeicherung gekennzeichnet sind.",
+  "Schedule (optional)": "Termin (optional)",
+  Subject: "Betreff",
+  "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it.":
+    "Der Bot tritt sichtbar bei, zeichnet Audio auf und erstellt ein Transkript. Informiere alle Teilnehmer, bevor du ihn einlädst.",
+  "Title (optional)": "Titel (optional)",
+  To: "An",
+  "Unchanged checks appear in history. You can also post them in chat.":
+    "Prüfungen ohne Änderungen erscheinen im Verlauf. Du kannst sie auch im Chat posten.",
+  "Update payment method": "Zahlungsmethode aktualisieren",
+  "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00":
+    "Verwende Datum und Uhrzeit mit Zeitzone, z. B. 2026-11-20T14:30:00+01:00",
+  "Watch an HTTPS address": "HTTPS-Adresse überwachen",
+  Yes: "Ja",
+  "Zero data retention": "Keine Datenspeicherung",
   "Open Ork Accounts": "Ork Accounts öffnen",
   "Could not open Ork Accounts. Try again.":
     "Ork Accounts konnte nicht geöffnet werden. Versuche es erneut.",
@@ -877,6 +951,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "Treg token": "Treg-Token",
   Uninstall: "Deinstallieren",
   "Verify and add": "Prüfen und hinzufügen",
+  "Thinking…": "Denkt nach…",
   "Working…": "Wird verarbeitet…",
   "https://example.com/graphql": "https://example.com/graphql",
   "https://example.com/mcp": "https://example.com/mcp",
@@ -981,8 +1056,8 @@ export const DE_MESSAGES: Record<string, string> = {
   "Could not submit answer": "Antwort konnte nicht gesendet werden",
   Deny: "Ablehnen",
   "Please try again.": "Versuche es erneut.",
-  "Authorization timed out. Please try again.":
-    "Zeitüberschreitung bei der Autorisierung. Versuche es erneut.",
+  "Waiting for authorization.": "Autorisierung steht noch aus.",
+  "Start over": "Neu starten",
   "Could not authorize this app": "App konnte nicht autorisiert werden",
   "{name} connection": "Verbindung mit {name}",
   "Notifications silenced": "Benachrichtigungen stumm",

@@ -56,8 +56,10 @@ import type { ScheduleToolDeps } from "./schedule-tools.js";
 import {
   compactScheduleInput,
   createScheduleFromTool,
+  describeRoutineEventTriggers,
   isScheduleValueProvided,
-  resolveScheduleTiming,
+  parseScheduleEvents,
+  resolveScheduleCreation,
   userTimeZone,
 } from "./schedule-tools.js";
 import type { UpdateBotPatch } from "./update-bot-patch.js";
@@ -361,16 +363,19 @@ async function prepareChildRoutine(
   if (!TimeZoneSchema.safeParse(timezone).success) {
     return refuse(`Unknown timezone "${timezone}". Use an IANA name like Europe/Paris.`);
   }
-  const resolved = resolveScheduleTiming(
-    compactScheduleInput({
-      cron: args.cron,
-      every: args.every,
-      unit: args.unit,
-      runAt: args.runAt,
-      delayMinutes: args.delayMinutes,
-      delaySeconds: args.delaySeconds,
-      startAt: args.startAt,
-    }),
+  const resolved = resolveScheduleCreation(
+    {
+      ...compactScheduleInput({
+        cron: args.cron,
+        every: args.every,
+        unit: args.unit,
+        runAt: args.runAt,
+        delayMinutes: args.delayMinutes,
+        delaySeconds: args.delaySeconds,
+        startAt: args.startAt,
+      }),
+      on: args.on,
+    },
     timezone,
   );
   if (!resolved.ok) return refuse(resolved.error);
@@ -379,7 +384,24 @@ async function prepareChildRoutine(
   if ("error" in child) return child;
   if (!child.thread) return refuse("That bot has no thread.");
 
-  const when = formatTime(resolved.nextRunAt, timezone);
+  const when = resolved.nextRunAt ? formatTime(resolved.nextRunAt, timezone) : undefined;
+  const on = {
+    ...(resolved.triggers.webhookEnabled !== undefined
+      ? { webhook: resolved.triggers.webhookEnabled }
+      : {}),
+    ...(resolved.triggers.githubEnabled !== undefined
+      ? { github: resolved.triggers.githubEnabled }
+      : {}),
+    ...(resolved.triggers.messageProvider !== undefined
+      ? { chat: resolved.triggers.messageProvider }
+      : {}),
+  };
+  const events = Object.keys(on).length ? { on } : {};
+  const eventLines = [
+    ...(on.webhook ? ["Trigger: webhook; configure URL and secret in routine settings"] : []),
+    ...(on.github ? ["Trigger: GitHub; configure webhook and secret in routine settings"] : []),
+    ...(on.chat ? [`Trigger: ${on.chat} messages; takes over normal replies in this app`] : []),
+  ];
   return {
     ok: true,
     canonical: {
@@ -395,21 +417,29 @@ async function prepareChildRoutine(
       ...(namedTimezone === undefined ? { timezoneFromAccount: true } : {}),
       // A one-shot keeps its absolute time so a delay is not measured again at approval,
       // and a delayed repeat keeps its first run.
-      schedule: resolved.oneShot
-        ? { runAt: resolved.nextRunAt.toISOString() }
-        : {
-            cron: resolved.cron,
-            ...(isScheduleValueProvided(args.startAt)
-              ? { startAt: resolved.nextRunAt.toISOString() }
-              : {}),
-          },
+      schedule: {
+        ...(resolved.oneShot
+          ? { runAt: resolved.nextRunAt!.toISOString() }
+          : resolved.crons.length
+            ? {
+                cron: resolved.crons[0],
+                ...(isScheduleValueProvided(args.startAt)
+                  ? { startAt: resolved.nextRunAt!.toISOString() }
+                  : {}),
+              }
+            : {}),
+        ...events,
+      },
     },
     summary: {
       title: `Schedule “${cardName(name)}” for ${cardName(child.name)}?`,
       lines: [
-        resolved.oneShot
-          ? `Runs at ${when}`
-          : `Repeats ${singleLine(resolved.cron)}, next at ${when}`,
+        ...(resolved.oneShot
+          ? [`Runs at ${when}`]
+          : resolved.crons.length
+            ? [`Repeats ${singleLine(resolved.crons[0]!)}, next at ${when}`]
+            : []),
+        ...eventLines,
         `Prompt: ${prompt}`,
       ],
     },
@@ -1144,7 +1174,16 @@ export async function createChildRoutine(
 
   const runAt = text(schedule.runAt);
   const cron = runAt ? ONCE_ROUTINE_CRON : text(schedule.cron);
-  if (!cron) return { error: "The approved routine is incomplete." };
+  const parsedEvents = parseScheduleEvents(schedule.on);
+  if (!parsedEvents.ok) return { error: parsedEvents.error };
+  const triggers = {
+    webhookEnabled: parsedEvents.patch.webhookEnabled ?? false,
+    githubEnabled: parsedEvents.patch.githubEnabled ?? false,
+    messageProvider: parsedEvents.patch.messageProvider ?? null,
+  };
+  if (!cron && !triggers.webhookEnabled && !triggers.githubEnabled && !triggers.messageProvider) {
+    return { error: "The approved routine is incomplete." };
+  }
   // A zone that came from the account is re-read under the account lock at creation,
   // not replayed from the approval. The identical-routine lookup filters on the
   // account's current zone for such routines — the move keeps them on it — instead of
@@ -1162,11 +1201,21 @@ export async function createChildRoutine(
       name,
       prompt,
       timezone: replayTimezone,
-      crons: { equals: [cron] },
+      crons: { equals: cron ? [cron] : [] },
+      ...triggers,
+
       active: true,
       ...(runAt ? { nextRunAt: new Date(runAt) } : {}),
     },
-    select: { id: true, name: true, crons: true, nextRunAt: true },
+    select: {
+      id: true,
+      name: true,
+      crons: true,
+      nextRunAt: true,
+      webhookEnabled: true,
+      githubEnabled: true,
+      messageProvider: true,
+    },
   });
   const target = { botId: child.id, botName: singleLine(child.name) };
   if (existing) {
@@ -1174,9 +1223,10 @@ export async function createChildRoutine(
       ok: true as const,
       routineId: existing.id,
       name: singleLine(existing.name),
-      cron: existing.crons[0],
+      cron: existing.crons[0] ?? null,
       nextRunAt: existing.nextRunAt?.toISOString() ?? null,
       oneShot: Boolean(runAt),
+      ...describeRoutineEventTriggers(existing),
       ...target,
     };
   }

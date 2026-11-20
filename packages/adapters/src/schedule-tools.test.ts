@@ -17,6 +17,7 @@ import {
   isOneShotRoutineCron,
   listSchedulesFromTool,
   MAX_ACTIVE_ROUTINES_PER_BOT,
+  resolveScheduleCreation,
   resolveScheduleTiming,
   SCHEDULE_TOOL_NAMES,
   scheduleCreateError,
@@ -40,6 +41,78 @@ function accountZonePrisma(prisma: Record<string, unknown>, timezone: string | n
   };
   return client;
 }
+
+describe("event schedules", () => {
+  it("accepts event-only routines without scheduling a wakeup", () => {
+    expect(
+      resolveScheduleCreation({ on: { webhook: true, github: true, chat: "telegram" } }, "UTC"),
+    ).toEqual({
+      ok: true,
+      crons: [],
+      nextRunAt: null,
+      oneShot: false,
+      triggers: { webhookEnabled: true, githubEnabled: true, messageProvider: "telegram" },
+    });
+    expect(resolveScheduleCreation({ on: { webhook: false, chat: null } }, "UTC")).toMatchObject({
+      ok: false,
+    });
+  });
+
+  it("refuses to disable a routine trigger owned by another space member", async () => {
+    const findFirst = vi.fn(async () => null);
+    const updateMany = vi.fn();
+    const deps = {
+      prisma: { routine: { findFirst, updateMany } },
+    } as unknown as Parameters<typeof updateScheduleFromTool>[0];
+    await expect(
+      updateScheduleFromTool(deps, {
+        spaceId: "ws-1",
+        botId: "bot-1",
+        userId: "peer",
+        threadId: "thread-1",
+        routineId: "owner-routine",
+        schedule: { on: { github: false } },
+      }),
+    ).resolves.toEqual({ error: "Schedule not found or owned by another member." });
+    expect(findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: "owner-routine", userId: "peer" }),
+    });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("lists event flags and routing without returning the bot key", async () => {
+    const deps = {
+      prisma: {
+        routine: {
+          findMany: async () => [
+            {
+              id: "routine-1",
+              crons: [],
+              active: true,
+              nextRunAt: null,
+              webhookEnabled: true,
+              githubEnabled: true,
+              messageProvider: "telegram",
+              webhookSecretId: "secret-1",
+            },
+          ],
+        },
+      },
+    } as unknown as Parameters<typeof listSchedulesFromTool>[0];
+    const result = await listSchedulesFromTool(deps, {
+      spaceId: "ws-1",
+      botId: "bot-1",
+      userId: "user-1",
+    });
+    expect(result.routines[0]).toMatchObject({
+      on: { webhook: true, github: true, chat: "telegram" },
+      nextRunAt: null,
+      setup: expect.stringContaining("settings"),
+      messageRouting: expect.stringContaining("usual replies"),
+    });
+    expect(JSON.stringify(result)).not.toContain("secret-1");
+  });
+});
 
 describe("resolveScheduleTiming", () => {
   beforeEach(() => vi.useFakeTimers({ now: new Date("2026-10-20T00:11:59.999Z") }));
@@ -792,6 +865,7 @@ describe("schedule tool persistence", () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          completedOneShotAt: null,
           spaceId: "ws-1",
           botId: "bot-1",
           userId: "user-1",
@@ -810,6 +884,7 @@ describe("schedule tool persistence", () => {
     expect(findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          completedOneShotAt: null,
           spaceId: "ws-1",
           botId: "bot-1",
           userId: "user-1",
@@ -823,7 +898,7 @@ describe("schedule tool persistence", () => {
     await listSchedulesFromTool(deps, { spaceId: "ws-1", botId: "bot-1", userId: "user-1" });
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { spaceId: "ws-1", botId: "bot-1", userId: "user-1" },
+        where: { spaceId: "ws-1", botId: "bot-1", userId: "user-1", completedOneShotAt: null },
       }),
     );
 
@@ -836,7 +911,13 @@ describe("schedule tool persistence", () => {
     });
     expect(findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { spaceId: "ws-1", botId: "bot-1", userId: "user-1", id: "routine-1" },
+        where: {
+          spaceId: "ws-1",
+          botId: "bot-1",
+          userId: "user-1",
+          completedOneShotAt: null,
+          id: "routine-1",
+        },
       }),
     );
   });
@@ -987,6 +1068,7 @@ describe("cancelScheduleFromTool", () => {
     });
     expect(deleteMany).toHaveBeenCalledWith({
       where: {
+        completedOneShotAt: null,
         spaceId: "ws-1",
         botId: "bot-1",
         userId: "user-1",
@@ -1145,6 +1227,7 @@ describe("updateScheduleFromTool", () => {
     });
     expect(updateMany).toHaveBeenCalledWith({
       where: {
+        completedOneShotAt: null,
         spaceId: "ws-1",
         botId: "bot-1",
         userId: "user-1",
@@ -1296,6 +1379,7 @@ describe("updateScheduleFromTool", () => {
     });
     expect(findFirst).toHaveBeenCalledWith({
       where: {
+        completedOneShotAt: null,
         spaceId: "ws-1",
         botId: "bot-1",
         userId: "user-1",
@@ -1730,7 +1814,10 @@ describe("group routine discovery and write scope", () => {
       typeof listSchedulesFromTool
     >[0];
     const group = await listSchedulesFromTool(deps, { ...scope, threadId: "group-current" });
-    expect(findMany).toHaveBeenCalledWith({ where: scope, orderBy: { createdAt: "desc" } });
+    expect(findMany).toHaveBeenCalledWith({
+      where: { ...scope, completedOneShotAt: null },
+      orderBy: { createdAt: "desc" },
+    });
     expect(group.routines).toEqual(
       rows.map((row, index) =>
         expect.objectContaining({ routineId: row.id, active: row.active, inThisChat: index === 1 }),
@@ -1754,6 +1841,7 @@ describe("group routine discovery and write scope", () => {
       expect(await write(kind, fixture.deps)).toEqual(outsideError);
       expect(fixture.findFirst).toHaveBeenNthCalledWith(1, {
         where: {
+          completedOneShotAt: null,
           ...scope,
           threadId: "group-current",
           id: "routine-1",
@@ -1762,6 +1850,7 @@ describe("group routine discovery and write scope", () => {
       });
       expect(fixture.findFirst).toHaveBeenNthCalledWith(2, {
         where: {
+          completedOneShotAt: null,
           ...scope,
           id: "routine-1",
           OR: [{ threadId: null }, { threadId: { not: "group-current" } }],
@@ -1801,7 +1890,7 @@ describe("group routine discovery and write scope", () => {
     ).toEqual({ ok: true, routineId: "local", name: "Daily" });
     expect(fixture.findFirst).toHaveBeenCalledOnce();
     expect(fixture.deleteMany).toHaveBeenCalledWith({
-      where: { ...scope, threadId: "group-current", id: "local" },
+      where: { ...scope, completedOneShotAt: null, threadId: "group-current", id: "local" },
     });
     expect(fixture.cancel).toHaveBeenCalledOnce();
   });
@@ -1818,6 +1907,7 @@ describe("group routine discovery and write scope", () => {
     ).toEqual(outsideError);
     expect(fixture.findFirst).toHaveBeenLastCalledWith({
       where: {
+        completedOneShotAt: null,
         ...scope,
         name: "Daily",
         OR: [{ threadId: null }, { threadId: { not: "group-current" } }],

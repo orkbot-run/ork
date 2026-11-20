@@ -24,9 +24,11 @@ import { withChatCompletionsCompatibility } from "./chat-completions-compat.js";
 import type { ContextBudget } from "./context-selection.js";
 import { googleQuotaResponse } from "./google-quota-response.js";
 import { withGoogleToolHistory } from "./google-tool-history.js";
+import { LocalModelTokenPacer } from "./local-model-token-pacer.js";
 import { estimateModelContextTokens } from "./model-context.js";
 import { openRouterInferenceFetch } from "./openrouter-usage.js";
 import { requestedPiCacheWriteRetention, resolvePiCacheRetention } from "./pi-cache-retention.js";
+import { LOCAL_PROVIDER_ID, localInputTokensPerMinute } from "./pi-local-provider-id.js";
 import { recordPiTelemetryContent, withPiTelemetrySpan } from "./pi-telemetry.js";
 import { fetchPairedWithDispatcher } from "./undici-fetch.js";
 
@@ -37,6 +39,19 @@ const rejectedRequests = new WeakSet<ReportedUsageFields>();
 const sseObserved = new WeakSet<ReportedUsageFields>();
 const reportedCosts = new WeakMap<ReportedUsageFields, number>();
 const reportedValues = new WeakMap<ReportedUsageFields, Map<keyof AgentUsage, number>>();
+
+// ORKBOT_LOCAL_MODELS all use one configured endpoint. Share its budget across runs.
+let localPacing: { endpoint: string; limit: number; pacer: LocalModelTokenPacer } | undefined;
+function localTokenPacer(model: Model<Api>): LocalModelTokenPacer | undefined {
+  if (model.provider !== LOCAL_PROVIDER_ID) return undefined;
+  const limit = localInputTokensPerMinute();
+  if (limit === undefined) return undefined;
+  if (!localPacing || localPacing.endpoint !== model.baseUrl || localPacing.limit !== limit) {
+    localPacing = { endpoint: model.baseUrl, limit, pacer: new LocalModelTokenPacer(limit) };
+  }
+  return localPacing.pacer;
+}
+
 export function normalizePiUsage(
   usage: Partial<Usage> | undefined,
   model: Pick<Model<Api>, "cost">,
@@ -340,6 +355,8 @@ export function observedPiStream(
     prepareContext?: (context: Context, model: Model<Api>) => Context;
     imageTokens?: ContextBudget["imageTokens"];
     onUsage?: (usage: AgentUsage) => void;
+    /** Time spent waiting for the local model's input-token budget, before starting HTTP. */
+    onPacingWait?: (waitedMs: number) => void;
     recordUsage?: (event: Extract<AgentRuntimeEvent, { type: "usage" }>) => void | Promise<void>;
     /** Provider failures only; excludes context, reservations and usage settlement. */
     onProviderError?: (message: AssistantMessage) => void;
@@ -378,6 +395,7 @@ export function observedPiStream(
     async (span) => {
       let normalized: AgentUsage | null = null;
       let reservation: string | undefined;
+      let localTokenReservation: Awaited<ReturnType<LocalModelTokenPacer["reserve"]>> | undefined;
       let started = false;
       let settled = false;
       let partialMessage: AssistantMessage | undefined;
@@ -391,9 +409,9 @@ export function observedPiStream(
         const cacheRetention = resolvePiCacheRetention(model, options?.cacheRetention);
         const preparedContext = hooks?.prepareContext?.(context, model) ?? context;
         recordPiTelemetryContent(span, "pi.ai.prompt", preparedContext);
-        const inputTokensEstimate = observer
-          ? estimateModelContextTokens(preparedContext, hooks?.imageTokens)
-          : 0;
+        const pacer = localTokenPacer(model);
+        const inputTokensEstimate =
+          observer || pacer ? estimateModelContextTokens(preparedContext, hooks?.imageTokens) : 0;
         const cacheWriteRetention = requestedPiCacheWriteRetention(model, cacheRetention);
         reservation = observer
           ? await observer.beforeCall(
@@ -425,6 +443,11 @@ export function observedPiStream(
               ? AbortSignal.any([options.signal, authorizationSignal])
               : authorizationSignal,
           };
+        if (pacer) {
+          localTokenReservation = await pacer.reserve(inputTokensEstimate, options?.signal);
+          hooks?.onPacingWait?.(localTokenReservation.waitedMs);
+          span?.setAttributes({ "pi.ai.local_pacing_wait_ms": localTokenReservation.waitedMs });
+        }
         options?.signal?.throwIfAborted();
         started = true;
         // Some Pi adapters reject custom fetch outright. Only audited SSE families opt in.
@@ -500,6 +523,17 @@ export function observedPiStream(
           if (event.type === "done" || event.type === "error") {
             const message = event.type === "done" ? event.message : event.error;
             normalized = normalizePiUsage(message.usage, model, reported);
+            if (localTokenReservation) {
+              if (event.type === "done") {
+                const promptTokens =
+                  normalized.inputTokens === null
+                    ? undefined
+                    : normalized.inputTokens +
+                      (normalized.cacheReadTokens ?? 0) +
+                      (normalized.cacheWriteTokens ?? 0);
+                localTokenReservation.complete(promptTokens);
+              } else localTokenReservation.release();
+            }
             span?.setAttributes({
               "pi.ai.response.stop_reason": message.stopReason,
               "pi.ai.usage.input_tokens": normalized.inputTokens ?? undefined,
@@ -589,6 +623,8 @@ export function observedPiStream(
         if (providerThrew && terminalError === providerError) hooks?.onProviderError?.(message);
         stream.push({ type: "error", reason: "error", error: message });
         stream.end(message);
+      } finally {
+        localTokenReservation?.release();
       }
     },
   );

@@ -13,13 +13,21 @@ const actor = {
   email: "user@example.test",
   isDeploymentOwner: false,
 } as Actor;
-function setup(providers: Array<{ id: string; catalog: ReturnType<typeof vi.fn> }>) {
+function setup(
+  providers: Array<{
+    id: string;
+    catalog: ReturnType<typeof vi.fn>;
+    listActiveConnectionRefs?: ReturnType<typeof vi.fn>;
+    listReconnectRefs?: ReturnType<typeof vi.fn>;
+  }>,
+  prisma?: unknown,
+) {
   const configuredProviders = vi.fn(async () => providers.map(({ id }) => ({ id })));
   const secrets = { put: vi.fn() };
   const handler = new RPCHandler(
     createRouter({
-      prisma: {},
       secrets,
+      prisma: prisma ?? {},
       connectors: {
         configuredProviders,
         managed: (id: string) => providers.find((provider) => provider.id === id),
@@ -108,4 +116,126 @@ describe("integration catalog outcomes", () => {
       expect(secrets.put).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("catalog authorization reconciliation", () => {
+  function fixture(failLookup = false) {
+    const rows = [
+      {
+        id: "old",
+        provider: "mail",
+        providerRef: "ca-old",
+        status: "pending",
+        displayName: "Mail",
+        createdAt: new Date(Date.now() - 1000),
+      },
+      {
+        id: "new",
+        provider: "mail",
+        providerRef: "ca-new",
+        status: "pending",
+        displayName: "Mail",
+        createdAt: new Date(),
+      },
+      {
+        id: "dead",
+        provider: "calendar",
+        providerRef: "ca-dead",
+        status: "connected",
+        displayName: "Calendar",
+        createdAt: new Date(),
+      },
+    ];
+    const connection = {
+      findMany: vi.fn(async () => rows.map((row) => ({ ...row }))),
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: {
+            id?: string | { in: string[] };
+            status: string | { in: string[] };
+            providerRef?: string | { in: string[] };
+          };
+          data: { status: string };
+        }) => {
+          let count = 0;
+          for (const row of rows) {
+            if (
+              where.id &&
+              (typeof where.id === "string" ? row.id !== where.id : !where.id.in.includes(row.id))
+            )
+              continue;
+            if (
+              typeof where.status === "string"
+                ? row.status !== where.status
+                : !where.status.in.includes(row.status)
+            )
+              continue;
+            if (
+              where.providerRef &&
+              (typeof where.providerRef === "string"
+                ? row.providerRef !== where.providerRef
+                : !where.providerRef.in.includes(row.providerRef))
+            )
+              continue;
+            row.status = data.status;
+            count++;
+          }
+          return { count };
+        },
+      ),
+    };
+    const prisma = {
+      connection,
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({ connection }),
+    };
+    const listActiveConnectionRefs = vi.fn(async () => {
+      if (failLookup) throw new Error("provider unavailable");
+      return ["ca-new"];
+    });
+    const item = {
+      connectorId: "fixture",
+      slug: "mail",
+      name: "Mail",
+      connected: true,
+      noAuth: false,
+      logo: null,
+    };
+    const client = setup(
+      [
+        {
+          id: "fixture",
+          catalog: vi.fn(async () => [item]),
+          listActiveConnectionRefs,
+          listReconnectRefs: vi.fn(async () => ["ca-dead"]),
+        },
+      ],
+      prisma,
+    );
+    return { ...client, rows, connection, listActiveConnectionRefs, item };
+  }
+
+  it("connects the authorized retry and retires the abandoned first attempt", async () => {
+    const h = fixture();
+    expect((await h.call("connections/catalogSnapshot")).status).toBe(200);
+    expect(h.rows.map((row) => row.status)).toEqual(["revoked", "connected", "error"]);
+    expect(h.listActiveConnectionRefs).toHaveBeenCalledOnce();
+  });
+
+  it("keeps pending attempts on provider failure while still reconciling dead accounts", async () => {
+    const h = fixture(true);
+    const result = await (await h.call("connections/catalogSnapshot")).json();
+    expect(result.json.items).toEqual([h.item]);
+    expect(result.json.providers).toEqual([{ id: "fixture", status: "ready" }]);
+    expect(h.rows.map((row) => row.status)).toEqual(["pending", "pending", "error"]);
+  });
+
+  it("does not revoke a recent login when the live catalog is still empty", async () => {
+    const h = fixture();
+    h.listActiveConnectionRefs.mockResolvedValue([]);
+    expect((await h.call("connections/catalogSnapshot")).status).toBe(200);
+    expect(h.rows.slice(0, 2).map((row) => row.status)).toEqual(["pending", "pending"]);
+  });
 });

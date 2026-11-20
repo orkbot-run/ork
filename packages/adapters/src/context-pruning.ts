@@ -1,9 +1,12 @@
 import type { Message } from "@earendil-works/pi-ai";
+import { isMcpImageResultDetails } from "./mcp-result-images.js";
 
 type ToolResultMessage = Extract<Message, { role: "toolResult" }>;
 
-const DEFAULT_COMPUTER_SCREENSHOTS_TO_KEEP = 2;
+const DEFAULT_TOOL_IMAGES_TO_KEEP = 2;
 const SCREENSHOT_REMOVED_NOTE = "[Older screenshot removed; observe again if needed]";
+const MCP_IMAGES_REMOVED_NOTE =
+  "[Earlier MCP images removed from context. Use the remaining images and text.]";
 
 export class ModelImageLimitError extends Error {}
 
@@ -69,21 +72,19 @@ function textLength(message: ToolResultMessage): number {
 }
 
 /**
- * Keep the latest screenshots within an optional model image budget. The runtime context policy
- * applies this only when it rebuilds a run's transcript; between rebuilds screenshots accumulate
- * up to the model's limit, so a rebuild keeps at most the default two to leave room for more.
- * An older frame keeps its result text and gains a one-line note.
+ * Keep the latest screenshots and MCP images within an optional model image budget.
+ * The runtime applies this on a rebuild, keeping at most two tool images to leave room
+ * for more. An older result keeps its text and gains a one-line note.
  */
 export function pruneComputerScreenshotContext(
   messages: Message[],
   maxImagesPerPrompt?: number,
 ): Message[] {
   const imageLimit = normalizedImageLimit(maxImagesPerPrompt);
-  let remaining = DEFAULT_COMPUTER_SCREENSHOTS_TO_KEEP;
+  let remaining = DEFAULT_TOOL_IMAGES_TO_KEEP;
   if (imageLimit !== undefined) {
     const nonScreenshotImages = messages.reduce(
-      (count, message) =>
-        isComputerScreenshotMessage(message) ? count : count + imagePartCount(message),
+      (count, message) => (toolImageKind(message) ? count : count + imagePartCount(message)),
       0,
     );
     if (nonScreenshotImages > imageLimit) {
@@ -96,25 +97,32 @@ export function pruneComputerScreenshotContext(
   let transformed: Message[] | undefined;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (!isComputerScreenshotMessage(message)) continue;
+    if (message?.role !== "toolResult") continue;
+    const kind = toolImageKind(message);
+    if (!kind) continue;
     const images = imagePartCount(message);
     if (remaining >= images) {
       remaining -= images;
       continue;
     }
     transformed ??= [...messages];
+    // MCP tools can return several images together. Keep the first images from the
+    // newest result that fits in part, so its numbered markers still match in order.
+    const keptImages = kind === "mcp" ? remaining : 0;
+    remaining -= keptImages;
+    let seenImages = 0;
     transformed[index] = {
       ...message,
       content: [
-        ...message.content.filter((part) => part.type !== "image"),
-        { type: "text", text: SCREENSHOT_REMOVED_NOTE },
+        ...message.content.filter((part) => part.type !== "image" || seenImages++ < keptImages),
+        { type: "text", text: kind === "mcp" ? MCP_IMAGES_REMOVED_NOTE : SCREENSHOT_REMOVED_NOTE },
       ],
     };
   }
   return transformed ?? messages;
 }
 
-/** What a rebuild drops: stale page state, and screenshots over the default or model limit. */
+/** Drop stale page state and tool images over the default or model limit on rebuild. */
 export function pruneForRebuild(messages: Message[], maxImagesPerPrompt?: number): Message[] {
   return pruneComputerScreenshotContext(pruneStalePageStateContext(messages), maxImagesPerPrompt);
 }
@@ -131,15 +139,12 @@ export function imagePartCount(message: Message): number {
     .length;
 }
 
-function isComputerScreenshotMessage(message: Message | undefined): message is ToolResultMessage {
+function toolImageKind(message: Message): "mcp" | "screenshot" | undefined {
   if (message?.role !== "toolResult" || !message.content.some((part) => part.type === "image")) {
-    return false;
+    return;
   }
   const details = message.details;
-  return Boolean(
-    details &&
-      typeof details === "object" &&
-      "frameId" in details &&
-      typeof (details as { frameId?: unknown }).frameId === "string",
-  );
+  if (!details || typeof details !== "object") return;
+  if (isMcpImageResultDetails(details)) return "mcp";
+  if ("frameId" in details && typeof details.frameId === "string") return "screenshot";
 }

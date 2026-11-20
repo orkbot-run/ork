@@ -117,6 +117,7 @@ async function assertWritableEntry(
   root: string,
   uid: number,
   gid: number,
+  checkPosixPermissions: boolean,
 ): Promise<void> {
   const isRoot = entry === "";
   let stat: Stats;
@@ -137,18 +138,28 @@ async function assertWritableEntry(
     throw new Error(`computer home ${root} must be a directory`);
   }
 
-  const usable = stat.isDirectory()
-    ? directoryIsUsable(stat, uid, gid, entry)
-    : regularFileIsUsable(stat, uid, gid);
-  if (!usable) {
-    throw writabilityError(entry, root, uid, gid, stat.uid);
+  // Windows uid/gid/mode do not describe the ACLs used by Docker Desktop bind mounts.
+  if (checkPosixPermissions) {
+    const usable = stat.isDirectory()
+      ? directoryIsUsable(stat, uid, gid, entry)
+      : regularFileIsUsable(stat, uid, gid);
+    if (!usable) {
+      throw writabilityError(entry, root, uid, gid, stat.uid);
+    }
   }
   if (!stat.isDirectory()) return;
 
   const directory = await opendir(target);
   for await (const child of directory) {
     const childEntry = path.posix.join(entry, child.name);
-    await assertWritableEntry(path.join(target, child.name), childEntry, root, uid, gid);
+    await assertWritableEntry(
+      path.join(target, child.name),
+      childEntry,
+      root,
+      uid,
+      gid,
+      checkPosixPermissions,
+    );
   }
 }
 
@@ -253,7 +264,7 @@ export async function assertComputerHomeWritable(
     await assertWritableLinux(root, uid, gid);
     return;
   }
-  await assertWritableEntry(root, "", root, uid, gid);
+  await assertWritableEntry(root, "", root, uid, gid, process.platform !== "win32");
 }
 
 /** Exported for regression coverage of the moved-directory escape check. */

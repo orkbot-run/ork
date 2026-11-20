@@ -581,8 +581,8 @@ export class UserDevices implements UserDeviceGateway {
     this.fetch = deps.fetch ?? fetch;
   }
 
-  async connected(userId: string): Promise<UserDevice | null> {
-    const route = await this.route(userId);
+  async connected(userId: string, deviceId?: string): Promise<UserDevice | null> {
+    const route = await this.route(userId, deviceId);
     return route && { deviceId: route.deviceId, name: route.name, platform: route.platform };
   }
 
@@ -600,6 +600,7 @@ export class UserDevices implements UserDeviceGateway {
 
   /** The user's paired devices, newest first, each with its own live connection. */
   async list(userId: string): Promise<UserDeviceSummary[]> {
+    const allowed = !this.deps.allowHostAccess || (await this.deps.allowHostAccess());
     const devices = await runAsSystem("list a user's devices", () =>
       this.deps.prisma.userDevice.findMany({
         where: { userId, revokedAt: null },
@@ -607,6 +608,8 @@ export class UserDevices implements UserDeviceGateway {
         select: {
           id: true,
           name: true,
+          platform: true,
+          createdAt: true,
           connections: {
             where: { heartbeatAt: { gt: new Date(Date.now() - STALE_AFTER_MS) } },
             select: { deviceId: true },
@@ -614,17 +617,29 @@ export class UserDevices implements UserDeviceGateway {
         },
       }),
     );
+    // Presentation remains newest first; the bot default follows pairing order, never reconnection order.
+    const first = allowed
+      ? devices
+          .filter((device) => device.connections.length > 0)
+          .sort(
+            (a, b) =>
+              a.createdAt.getTime() - b.createdAt.getTime() ||
+              (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+          )[0]
+      : undefined;
     return devices.map((device) => ({
       deviceId: device.id,
       name: device.name,
       connected: device.connections.length > 0,
+      platform: device.platform,
+      defaultForBots: device.id === first?.id,
     }));
   }
 
-  async pairedSince(userId: string): Promise<Date | null> {
+  async pairedSince(userId: string, deviceId?: string): Promise<Date | null> {
     const device = await runAsSystem("find a user's paired device", () =>
       this.deps.prisma.userDevice.findFirst({
-        where: { userId, revokedAt: null },
+        where: { userId, revokedAt: null, ...(deviceId !== undefined ? { id: deviceId } : {}) },
         orderBy: { createdAt: "asc" },
         select: { createdAt: true },
       }),
@@ -682,9 +697,9 @@ export class UserDevices implements UserDeviceGateway {
         where: {
           heartbeatAt: { gt: new Date(Date.now() - STALE_AFTER_MS) },
           device: { userId, revokedAt: null },
-          ...(deviceId ? { deviceId } : {}),
+          ...(deviceId !== undefined ? { deviceId } : {}),
         },
-        orderBy: { connectedAt: "desc" },
+        orderBy: [{ device: { createdAt: "asc" } }, { deviceId: "asc" }],
         include: { device: { select: { name: true, platform: true } } },
       }),
     );

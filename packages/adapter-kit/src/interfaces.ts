@@ -152,6 +152,13 @@ export interface SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      /** The provider selected for this startup's admission and machine tracking. */
+      expectedKind?: ComputerRef["kind"];
+      /** Persist a new machine's identity before starting or preparing it. */
+      recordCreated?: (
+        computer: Pick<ComputerRef, "kind" | "providerRef"> & { providerInstanceId?: string },
+        connection?: string,
+      ) => Promise<void>;
       /**
        * When the saved workspace a replacement would restore was read from the computer. A
        * provider that can only bring `providerRef` back from an older snapshot of its own
@@ -167,6 +174,13 @@ export interface SandboxProvider {
     },
     context: AdapterContext,
   ): Promise<ComputerRef>;
+  /** Delete an uncommitted machine through the connection that allocated it. */
+  destroyUncommitted?(
+    computer: ComputerRef,
+    connection: string,
+    context: AdapterContext,
+    providerInstanceId?: string,
+  ): Promise<void>;
   /**
    * The kind provision() would return now, without starting anything. Only providers that
    * choose between kinds at provision time implement it. `homeKey` names the computer when the
@@ -311,6 +325,8 @@ export interface ManagedConnectorProvider
   isConfigured?(): Promise<boolean>;
   catalog(context: AdapterContext, query?: string): Promise<ConnectorCatalogItem[]>;
   listConnectedExternalIds(context: AdapterContext): Promise<string[]>;
+  /** Active remote account refs; undefined means the underlying provider lacks this capability. */
+  listActiveConnectionRefs?(context: AdapterContext): Promise<string[] | undefined>;
   /** Connection refs the provider reports as dead until the user reconnects them. */
   listReconnectRefs?(context: AdapterContext): Promise<string[]>;
   connectionReady(context: AdapterContext, externalId: string): Promise<boolean>;
@@ -561,6 +577,8 @@ export interface BillingProvider {
   createPortal(input: { customerId: string; returnUrl: string }): Promise<{ url: string }>;
   /** Current subscription for the customer, preferring one that grants access. */
   getCustomerSubscription(customerId: string): Promise<BillingSubscriptionSnapshot | null>;
+  /** The first subscription invoice settled by a payment or from the customer's invoice balance. */
+  getFirstPaidSubscriptionInvoiceAt?(customerId: string): Promise<Date | null>;
   /** Sets seats on the customer's subscription; a no-op when none can still take updates. */
   updateSeats(customerId: string, seats: number): Promise<void>;
   cancelCustomerSubscriptions(customerId: string): Promise<void>;

@@ -12,6 +12,7 @@ import {
   endsSentence,
   humanizeToolName,
   isRunTerminalEvent,
+  liveActivity,
   liveActivityLine,
   normalizeResponseStreamingPreference,
   noteLastToolStep,
@@ -53,15 +54,16 @@ describe("isRunTerminalEvent", () => {
 });
 
 describe("response streaming preference", () => {
-  it("enables streaming only for an explicit on value", () => {
+  it("defaults to on while preserving off and rejecting malformed saved values", () => {
     expect(normalizeResponseStreamingPreference("on")).toBe("on");
     expect(normalizeResponseStreamingPreference(" ON ")).toBe("on");
     expect(normalizeResponseStreamingPreference("off")).toBe("off");
     expect(normalizeResponseStreamingPreference(" OFF ")).toBe("off");
     expect(normalizeResponseStreamingPreference("")).toBe("off");
-    expect(normalizeResponseStreamingPreference(null)).toBe("off");
+    expect(normalizeResponseStreamingPreference(null)).toBe("on");
+    expect(normalizeResponseStreamingPreference(undefined)).toBe("on");
     expect(normalizeResponseStreamingPreference("maybe")).toBe("off");
-    expect(responseStreamingEnabled()).toBe(false);
+    expect(responseStreamingEnabled()).toBe(true);
     expect(responseStreamingEnabled("off")).toBe(false);
     expect(responseStreamingEnabled("on")).toBe(true);
   });
@@ -266,7 +268,7 @@ describe("projectMessages", () => {
     ]);
     expect(messages).toHaveLength(2);
     expect(messages[0]?.blocks[0]).toEqual({ kind: "text", text: "hi" });
-    expect(messages[1]?.blocks[0]).toEqual({ kind: "progress", text: "Lisbon" });
+    expect(messages[1]?.blocks[0]).toEqual({ kind: "progress", text: "Lisbon", streaming: true });
   });
 
   it("drops streaming tokens once the completed message is durable", () => {
@@ -494,7 +496,7 @@ describe("projectMessages", () => {
     ]);
     expect(messages[0]?.blocks).toEqual([
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
-      { kind: "progress", text: "The check passed." },
+      { kind: "progress", text: "The check passed.", streaming: true },
     ]);
   });
 
@@ -535,6 +537,7 @@ describe("projectMessages", () => {
       {
         kind: "progress",
         text: "Let me check what I have locally and try the GitHub API",
+        streaming: true,
         pendingToolNames: ["shell"],
       },
     ]);
@@ -922,6 +925,35 @@ describe("redactSecrets", () => {
 });
 
 describe("createStreamingRedactor", () => {
+  it("streams safe text immediately even with a long configured secret", () => {
+    const redactor = createStreamingRedactor(["fake-private-token-".repeat(200)]);
+    expect(redactor.push("Hello there.")).toBe("Hello there.");
+    expect(redactor.finish()).toBe("");
+  });
+
+  it("holds only a possible secret suffix and releases it as soon as it diverges", () => {
+    const redactor = createStreamingRedactor(["fake-secret-123"]);
+    expect(redactor.push("Hello fake-se")).toBe("Hello ");
+    expect(redactor.push("parate text")).toBe("fake-separate text");
+    expect(redactor.push(" fake-sec")).toBe(" ");
+    expect(redactor.finish()).toBe("fake-sec");
+    expect(redactor.finish()).toBe("");
+  });
+
+  it("emits a complete secret immediately and keeps touching matches separate", () => {
+    const redactor = createStreamingRedactor(["abc"]);
+    expect(redactor.push("abc")).toBe("[redacted]");
+    expect(redactor.push("abc")).toBe("[redacted]");
+    expect(redactor.finish()).toBe("");
+  });
+
+  it("keeps a surrogate paired when a possible secret starts with its low half", () => {
+    const redactor = createStreamingRedactor(["\uDE00secret"]);
+    expect(redactor.push("hello \uD83D\uDE00")).toBe("hello ");
+    expect(redactor.push(" world")).toBe("😀 world");
+    expect(redactor.finish()).toBe("");
+  });
+
   it("hides a value split between skipped text and the next chunk", () => {
     const redactor = createStreamingRedactor(["hunter123xyz"]);
     const before = redactor.push("Checking hunter1");
@@ -1002,10 +1034,9 @@ describe("createStreamingRedactor", () => {
     const redactor = createStreamingRedactor(["abcdefghij"]); // length 10
     const high = "\uD83D";
     const low = "\uDE00";
-    // safeStartLimit lands between high and low; the pair must stay buffered together.
-    expect(redactor.push(`x${high}${low}abcdefgh`)).toBe("x");
-    expect(redactor.push("ij done")).toBe("😀[redacted]");
-    expect(redactor.finish()).toBe(" done");
+    expect(redactor.push(`x${high}${low}abcdefgh`)).toBe("x😀");
+    expect(redactor.push("ij done")).toBe("[redacted] done");
+    expect(redactor.finish()).toBe("");
   });
 
   it("replaces an orphaned high surrogate at end of stream", () => {
@@ -1081,6 +1112,94 @@ describe("stale helper projection", () => {
     expect(next.find((m) => m.id === "subagent:resumed")?.blocks[0]).toMatchObject({
       status: "running",
     });
+  });
+});
+
+describe("liveActivity", () => {
+  it("reads the requested run without leaking another bot's concurrent activity", () => {
+    const messages = [
+      {
+        id: "progress:own",
+        blocks: [
+          { kind: "progress" as const, text: "  Reading report  ", activity: true as const },
+        ],
+      },
+      {
+        id: "progress:other",
+        blocks: [{ kind: "progress" as const, text: "Drafting", streaming: true as const }],
+      },
+    ];
+    expect(liveActivity(messages, "own")).toEqual({ kind: "step", text: "Reading report" });
+    expect(liveActivityLine(messages, "own")).toBe("Reading report");
+    expect(liveActivity(messages)).toEqual({ kind: "writing" });
+    expect(liveActivity(messages, "missing")).toBeUndefined();
+  });
+
+  it("accepts synthetic narration and excludes tools waiting on it", () => {
+    const blocks = [{ kind: "progress" as const, text: "Drafting reply" }];
+    expect(liveActivity([{ id: "progress:r", blocks }])).toEqual({ kind: "writing" });
+    expect(
+      liveActivity([
+        { id: "progress:r", blocks: [{ ...blocks[0]!, pendingToolNames: ["shell"] }] },
+      ]),
+    ).toBeUndefined();
+    expect(liveActivity([{ id: "m1", blocks }])).toBeUndefined();
+  });
+
+  it.each(["run.completed", "run.cancelled", "run.failed"])(
+    "does not retain activity after %s",
+    (type) => {
+      const events = [
+        {
+          id: "e1",
+          seq: 1,
+          threadId: "t",
+          runId: "r",
+          createdAt: new Date(0),
+          type: "thread.progress",
+          payload: { text: "Reading report", activity: true },
+        },
+        { id: "e2", seq: 2, threadId: "t", runId: "r", createdAt: new Date(1), type, payload: {} },
+      ];
+      expect(liveActivity(projectMessages(events), "r")).toBeUndefined();
+    },
+  );
+
+  it("returns to thinking after a persisted tool clear and resumes writing on deltas", () => {
+    const events = [
+      {
+        id: "e1",
+        seq: 1,
+        threadId: "t",
+        runId: "r",
+        createdAt: new Date(0),
+        type: "thread.progress",
+        payload: { text: "Reading report", activity: true },
+      },
+      {
+        id: "e2",
+        seq: 2,
+        threadId: "t",
+        runId: "r",
+        createdAt: new Date(1),
+        type: "thread.progress",
+        payload: { text: "", activity: true },
+      },
+    ];
+    expect(liveActivity(projectMessages(events.slice(0, 1)), "r")).toEqual({
+      kind: "step",
+      text: "Reading report",
+    });
+    expect(liveActivity(projectMessages(events), "r")).toBeUndefined();
+    expect(
+      liveActivity(
+        projectMessages([
+          ...events,
+          { ...events[1]!, id: "e3", seq: 3, payload: { delta: "Reply", streaming: true } },
+        ]),
+        "r",
+      ),
+    ).toEqual({ kind: "writing" });
   });
 });
 

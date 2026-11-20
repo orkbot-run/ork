@@ -4,6 +4,7 @@
 
 import type { AppBootstrap } from "@orkbot/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { WorkspaceNavigationSpace } from "../../lib/bootstrap";
 import {
   discardPrimedBootstrap,
   preloadSpaceBootstrap,
@@ -12,18 +13,31 @@ import {
 import { initialBootstrapTarget } from "../../lib/bootstrap-target";
 import { getSnapshot as getCallSnapshot } from "../../lib/call-session";
 import { leaveOrganization } from "../../lib/organizations";
-import { queryClient, spaceSeedKey } from "../../lib/query";
+import { lastChatKey, lastChatOf, queryClient, spaceSeedKey } from "../../lib/query";
 import { selectedSpaceId, selectSpace } from "../../lib/rpc";
 import { remountShellForSpace, spaceSwitchDecision } from "../../lib/space-switch";
 import { speaker } from "../../lib/tts";
 import { readShellOverlay, searchString, withShellOverlay } from "../shell-overlay";
 import type { useShellNavigation } from "./use-shell-navigation";
+import { firstThreadRoute } from "./use-shell-navigation";
 
-const PRELOAD_MAX_AGE_MS = 15_000;
+const PRELOAD_MAX_AGE_MS = 60_000;
+const BACKGROUND_PRELOAD_DELAY_MS = 400;
+
+export function workspaceChatPath(userId: string | null, space: WorkspaceNavigationSpace): string {
+  const seed =
+    space.bots.length || space.groups.length
+      ? space
+      : queryClient.getQueryData(spaceSeedKey(userId, space.id));
+  const lastChat = lastChatOf(seed, queryClient.getQueryData(lastChatKey(userId, space.id)));
+  if (lastChat?.groupId) return `/app/g/${lastChat.groupId}`;
+  if (lastChat?.botId) return `/app/${lastChat.botId}`;
+  return firstThreadRoute(seed?.bots ?? [], seed?.groups ?? []);
+}
 
 /**
- * Opens a chat in any of the user's spaces, including another organization's; another space loads
- * first, then the shell remounts into it.
+ * Opens a chat in any of the user's spaces. A known destination can show its authorized
+ * navigation immediately while the model gate checks its scope.
  */
 export function useOpenSpaceChat({
   bootstrapSpaceId,
@@ -32,6 +46,8 @@ export function useOpenSpaceChat({
   navigationRevision,
   overlayRevision,
   closeMobileSidebar,
+  knownSpaces,
+  backgroundTarget,
 }: {
   bootstrapSpaceId: string | undefined;
   userId: string | undefined;
@@ -39,6 +55,8 @@ export function useOpenSpaceChat({
   navigationRevision: ReturnType<typeof useShellNavigation>["navigationRevision"];
   overlayRevision: ReturnType<typeof useShellNavigation>["overlayRevision"];
   closeMobileSidebar: () => void;
+  knownSpaces?: readonly WorkspaceNavigationSpace[];
+  backgroundTarget?: { spaceId: string; path: string };
 }) {
   const spaceSwitchRequest = useRef(0);
   const preloaded = useRef<{
@@ -81,7 +99,7 @@ export function useOpenSpaceChat({
     };
   }, []);
   const preloadSpaceChat = useCallback(
-    (spaceId: string, path: string) => {
+    (spaceId: string, path: string, priority?: RequestInit["priority"]) => {
       if (
         !userId ||
         spaceId === (selectedSpaceId() ?? bootstrapSpaceId) ||
@@ -101,7 +119,7 @@ export function useOpenSpaceChat({
         return;
       current?.controller.abort();
       const controller = new AbortController();
-      const promise = preloadSpaceBootstrap(spaceId, target.botId, controller.signal);
+      const promise = preloadSpaceBootstrap(spaceId, target.botId, controller.signal, priority);
       preloaded.current = {
         userId,
         spaceId,
@@ -116,6 +134,22 @@ export function useOpenSpaceChat({
     },
     [bootstrapSpaceId, userId],
   );
+  const { spaceId: backgroundSpaceId, path: backgroundPath } = backgroundTarget ?? {};
+  useEffect(() => {
+    if (!backgroundSpaceId || !backgroundPath || !userId) return;
+    const request = spaceSwitchRequest.current;
+    const timer = window.setTimeout(() => {
+      // Let the current chat load first. A hover or switch takes priority over this guess.
+      if (
+        document.visibilityState !== "hidden" &&
+        !preloaded.current &&
+        spaceSwitchRequest.current === request
+      )
+        preloadSpaceChat(backgroundSpaceId, backgroundPath, "low");
+    }, BACKGROUND_PRELOAD_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [backgroundPath, backgroundSpaceId, preloadSpaceChat, userId]);
+
   const openSpaceChat = useCallback(
     (spaceId: string, path: string) => {
       closeMobileSidebar();
@@ -140,9 +174,8 @@ export function useOpenSpaceChat({
         overlayRevision.current === startedOverlay
           ? path
           : `${path}${searchString(withShellOverlay(new URLSearchParams(), readShellOverlay(new URLSearchParams(window.location.search))))}`;
-      // Another space is an auth boundary: its bootstrap is loaded first, under that
-      // space's header, then the shell remounts so none of this space's state survives.
-      // A call in progress, or a page outside the shell, still reloads.
+      // Each space gets its own bootstrap and shell. A call in progress, or a page
+      // outside the shell, still reloads.
       const target = initialBootstrapTarget(path, false);
       if (!target || getCallSnapshot()) {
         reload();
@@ -176,11 +209,16 @@ export function useOpenSpaceChat({
         preload.botId === target.botId &&
         Date.now() - preload.startedAt < PRELOAD_MAX_AGE_MS;
       if (!matchingPreload) preload?.controller.abort();
+      const preview =
+        userId && knownSpaces?.some((space) => space.id === spaceId)
+          ? { userId, spaces: knownSpaces }
+          : undefined;
       const primed = primeSpaceBootstrap(
         spaceId,
         target.botId,
         cached,
         matchingPreload ? preload.promise : undefined,
+        preview,
       );
       const remount = () =>
         remountShellForSpace(() => {
@@ -201,7 +239,7 @@ export function useOpenSpaceChat({
           navigate(destination());
           return true;
         });
-      if (cached) {
+      if (cached || preview) {
         remount();
         return;
       }
@@ -229,7 +267,7 @@ export function useOpenSpaceChat({
         },
       );
     },
-    [bootstrapSpaceId, navigate, navigationRevision, overlayRevision, userId],
+    [bootstrapSpaceId, knownSpaces, navigate, navigationRevision, overlayRevision, userId],
   );
   return { openSpaceChat, preloadSpaceChat, pendingSpaceId: pendingSpace?.id ?? null };
 }

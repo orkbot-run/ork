@@ -29,6 +29,7 @@ import {
   finalizeComputerControlRelease,
   finalizeRun,
   followThreadEvents,
+  OutgoingDraftAnswerError,
   pauseRunForInput,
   pauseRunForTakeover,
   sendUserMessage,
@@ -242,50 +243,69 @@ describe("finalizeRun", () => {
     );
   });
 
-  it("saves no message for a failure without a partial reply", async () => {
-    const create = vi.fn();
-    const tx = {
-      externalEffect: { deleteMany: vi.fn(async () => ({ count: 0 })) },
-      $queryRaw: vi.fn(async () => []),
-      run: {
-        findUnique: vi.fn(async () => ({ status: "failed", startedAt: null })),
-        findUniqueOrThrow: vi.fn(async () => ({ sourceMessage: null })),
-        findFirst: vi.fn(async () => null),
-        updateMany: vi.fn(async () => ({ count: 1 })),
-      },
-      attempt: { updateMany: vi.fn(async () => ({ count: 1 })) },
-      task: { updateMany: vi.fn(async () => ({ count: 1 })) },
-      thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
-      secret: { deleteMany: vi.fn(async () => ({ count: 0 })) },
-      event: {
-        create: vi.fn(async () => ({ threadId: "thread-1", seq: 0 })),
-        deleteMany: vi.fn(async () => ({ count: 0 })),
-      },
-      steeringMessage: {
-        findMany: vi.fn(async () => []),
-        updateMany: vi.fn(async () => ({ count: 0 })),
-      },
-      message: { findFirst: vi.fn(async () => null), create },
-      bot: { update: vi.fn(async () => ({})) },
-    };
-    const prisma = {
-      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
-    } as unknown as PrismaClient;
+  it.each([false, true])(
+    "saves a failure notice only for a linked direct run (%s)",
+    async (linked) => {
+      const create = vi.fn();
+      const tx = {
+        externalEffect: { deleteMany: vi.fn(async () => ({ count: 0 })) },
+        $queryRaw: vi.fn(async () => []),
+        run: {
+          findUnique: vi.fn(async () => ({ status: "failed", startedAt: null })),
+          findUniqueOrThrow: vi.fn(async () => ({
+            sourceMessage: null,
+            trigger: linked ? "bot_message" : "messaging",
+            userId: "user-1",
+          })),
+          findFirst: vi.fn(async () => null),
+          updateMany: vi.fn(async () => ({ count: 1 })),
+        },
+        attempt: { updateMany: vi.fn(async () => ({ count: 1 })) },
+        task: { updateMany: vi.fn(async () => ({ count: 1 })) },
+        thread: { update: vi.fn(async () => ({ nextEventSeq: 1, nextMessageSeq: 1 })) },
+        secret: { deleteMany: vi.fn(async () => ({ count: 0 })) },
+        event: {
+          create: vi.fn(async () => ({ threadId: "thread-1", seq: 0 })),
+          deleteMany: vi.fn(async () => ({ count: 0 })),
+        },
+        steeringMessage: {
+          findMany: vi.fn(async () => []),
+          updateMany: vi.fn(async () => ({ count: 0 })),
+        },
+        message: {
+          findFirst: vi.fn(async () => null),
+          create: create.mockResolvedValue({ id: "notice", seq: 0 }),
+        },
+        messagingIdentity: { findFirst: vi.fn(async () => ({ id: "identity" })) },
+        bot: { update: vi.fn(async () => ({})) },
+      };
+      const prisma = {
+        $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+      } as unknown as PrismaClient;
 
-    await finalizeRun(prisma, {
-      spaceId: "space-1",
-      threadId: "thread-1",
-      botId: "bot-1",
-      runId: "run-1",
-      taskId: "task-1",
-      attemptId: "attempt-1",
-      leaseOwner: "worker-1",
-      leaseFence: 1,
-      outcome: "failed",
-      error: "terminated",
-    });
-    expect(create).not.toHaveBeenCalled();
-  });
+      await finalizeRun(prisma, {
+        spaceId: "space-1",
+        threadId: "thread-1",
+        botId: "bot-1",
+        runId: "run-1",
+        taskId: "task-1",
+        attemptId: "attempt-1",
+        leaseOwner: "worker-1",
+        leaseFence: 1,
+        outcome: "failed",
+        error: "terminated",
+      });
+      if (linked) {
+        expect(create).toHaveBeenCalledExactlyOnceWith({
+          data: expect.objectContaining({
+            role: "bot",
+            blocks: [{ kind: "text", text: "The bot run failed. Open the app for details." }],
+            clientNonce: partialReplyClientNonce("run-1"),
+          }),
+        });
+      } else expect(create).not.toHaveBeenCalled();
+    },
+  );
 
   it("resumes a held messaging inbound as a messaging run", async () => {
     const tx = {
@@ -1462,7 +1482,12 @@ describe("pauseRunForInput", () => {
             leaseOwner: "worker-1",
             leaseFence: 3,
           },
-          data: { status: "waiting_input", leaseOwner: null, leaseExpiresAt: null },
+          data: {
+            status: "waiting_input",
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            messagingMirroredAt: null,
+          },
         }),
       );
       expect(tx.event.create.mock.calls.map(([input]) => input.data.type)).toEqual([
@@ -1558,6 +1583,7 @@ describe("pauseRunForInput", () => {
           status: "waiting_input",
           leaseOwner: null,
           leaseExpiresAt: null,
+          messagingMirroredAt: null,
           checkpoint: JSON.stringify({
             kind: "choice_ask_v1",
             actions: [
@@ -1629,6 +1655,7 @@ describe("pauseRunForTakeover", () => {
           status: "waiting_takeover",
           leaseOwner: null,
           leaseExpiresAt: null,
+          messagingMirroredAt: null,
           checkpoint: null,
         },
       }),
@@ -5800,6 +5827,99 @@ describe("held instruction answers", () => {
     expect(f.tx.externalEffect.update).toHaveBeenCalledWith({
       where: { id: "effect-1" },
       data: { status: "denied" },
+    });
+  });
+});
+
+describe("held outgoing draft answers", () => {
+  const original = { to: "original@example.test", subject: "Original", body: "Draft" };
+  const block = {
+    kind: "ask",
+    approvalEffectId: "effect-1",
+    text: "Send email?",
+    status: "pending",
+    outgoingDraft: {
+      kind: "email",
+      recipient: original.to,
+      subject: original.subject,
+      body: original.body,
+    },
+    actions: [
+      { id: "allow", label: "Send" },
+      { id: "deny", label: "Reject" },
+    ],
+  };
+
+  function fixture() {
+    const effect = { id: "effect-1", kind: "GMAIL_SEND_EMAIL", request: original };
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      run: {
+        findFirst: vi.fn(async () => ({ botId: "bot-1", userId: "owner" })),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+        findUnique: vi.fn(async () => ({ status: "queued" })),
+      },
+      message: {
+        findFirst: vi.fn().mockResolvedValue({ id: "message-1", blocks: [block] }),
+        update: vi.fn(async () => ({ id: "message-1" })),
+      },
+      externalEffect: {
+        findFirst: vi.fn().mockResolvedValue(effect),
+        update: vi.fn(),
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 10 })) },
+      event: {
+        create: vi.fn(async ({ data }: { data: { seq: number; type: string } }) => ({
+          ...event(data.seq),
+          type: data.type,
+        })),
+      },
+    };
+    const prisma = { $transaction: async (action: (client: typeof tx) => unknown) => action(tx) };
+    const answer = (value: string, userId = "owner") =>
+      answerRunInput(
+        prisma as never,
+        {
+          spaceId: "workspace-1",
+          threadId: "thread-1",
+          runId: "run-1",
+          messageId: "message-1",
+          answeredByUserId: userId,
+          answer: value,
+        },
+        new TestFanout(),
+      );
+    return { tx, answer };
+  }
+
+  it("rejects plain approvals, blank drafts and attempts from another member", async () => {
+    const { tx, answer } = fixture();
+    for (const value of [
+      "allow",
+      "always",
+      JSON.stringify({ outgoingDraft: { recipient: original.to, body: " " } }),
+    ]) {
+      await expect(answer(value)).rejects.toBeInstanceOf(OutgoingDraftAnswerError);
+    }
+    const edit = JSON.stringify({ outgoingDraft: { recipient: original.to, body: "Updated" } });
+    await expect(answer(edit, "another-member")).resolves.toBe(false);
+    await expect(answer("deny", "another-member")).resolves.toBe(false);
+    expect(tx.externalEffect.update).not.toHaveBeenCalled();
+    expect(tx.run.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("approves a body edit under the original effect key when the recipient is unchanged", async () => {
+    const { tx, answer } = fixture();
+    await expect(
+      answer(
+        JSON.stringify({
+          outgoingDraft: { recipient: original.to, subject: "Edited", body: "Updated" },
+        }),
+      ),
+    ).resolves.toBe(true);
+    expect(tx.externalEffect.update).toHaveBeenCalledExactlyOnceWith({
+      where: { id: "effect-1" },
+      data: { status: "approved", request: { ...original, subject: "Edited", body: "Updated" } },
     });
   });
 });

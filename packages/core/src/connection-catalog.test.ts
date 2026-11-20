@@ -13,6 +13,7 @@ import {
   mergeConnectionCatalog,
   nextCatalogAccountLabel,
   waitForConnection,
+  watchConnectionAuthorization,
 } from "./connection-catalog.js";
 
 const item: ConnectionCatalogItem = {
@@ -248,4 +249,82 @@ describe("waitForConnection", () => {
     expect(await result).toEqual({ status: "connected", row: account("new", "connected") });
     expect(complete).toHaveBeenCalledTimes(4);
   });
+});
+
+describe("watchConnectionAuthorization", () => {
+  function observer() {
+    const controller = new AbortController();
+    let listener: (() => void) | undefined;
+    const unsubscribe = vi.fn();
+    return {
+      controller,
+      resume: () => listener?.(),
+      unsubscribe,
+      options: {
+        signal: controller.signal,
+        onWaiting: vi.fn(),
+        subscribeToResume: (onResume: () => void) => {
+          listener = onResume;
+          return unsubscribe;
+        },
+      },
+    };
+  }
+
+  it("waits without polling until the app returns and retries brief provider failures", async () => {
+    vi.useFakeTimers();
+    const watch = observer();
+    const complete = vi.fn().mockResolvedValue(account("slow", "pending"));
+    try {
+      const result = watchConnectionAuthorization("slow", complete, watch.options);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(watch.options.onWaiting).toHaveBeenCalledOnce();
+      const beforeResume = complete.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(complete).toHaveBeenCalledTimes(beforeResume);
+      complete
+        .mockRejectedValueOnce(new Error("Provider unavailable"))
+        .mockResolvedValueOnce(account("slow", "pending"))
+        .mockResolvedValueOnce(account("slow", "connected"));
+      watch.resume();
+      watch.resume();
+      await vi.advanceTimersByTimeAsync(4_000);
+      await expect(result).resolves.toEqual({
+        status: "connected",
+        row: account("slow", "connected"),
+      });
+      expect(complete).toHaveBeenCalledTimes(beforeResume + 3);
+      expect(complete).toHaveBeenLastCalledWith({ connectionId: "slow" });
+      expect(watch.unsubscribe).toHaveBeenCalledOnce();
+    } finally {
+      watch.controller.abort();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["replaced", "out of scope"])(
+    "removes the observer without requesting again when the attempt is %s",
+    async (reason) => {
+      vi.useFakeTimers();
+      const watch = observer();
+      const complete = vi.fn().mockResolvedValue(account("old", "pending"));
+      let current = true;
+      try {
+        const result = watchConnectionAuthorization("old", complete, {
+          ...watch.options,
+          isCurrent: () => current,
+        });
+        await vi.advanceTimersByTimeAsync(120_000);
+        const calls = complete.mock.calls.length;
+        if (reason === "replaced") watch.controller.abort();
+        else current = false;
+        watch.resume();
+        await expect(result).resolves.toEqual({ status: "aborted" });
+        expect(complete).toHaveBeenCalledTimes(calls);
+        expect(watch.unsubscribe).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 });

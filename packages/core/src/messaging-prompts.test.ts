@@ -4,7 +4,15 @@
 // Inherited Apache-2.0 tests are preserved; bounded attachment-label regressions are Ork additions.
 
 import { describe, expect, it } from "vitest";
-import { isMessagingChannelRun, unavailableAttachmentLabel } from "./messaging-prompts.js";
+import {
+  isMessagingChannelRun,
+  sanitizeMessagingLabel,
+  unavailableAttachmentLabel,
+} from "./messaging-prompts.js";
+
+it("strips directional formatting from messaging labels while preserving readable scripts", () => {
+  expect(sanitizeMessagingLabel("\u202eAlice שלום 👩‍💻\u2069")).toBe("Alice שלום 👩‍💻");
+});
 
 describe("isMessagingChannelRun", () => {
   const channelBlock = {

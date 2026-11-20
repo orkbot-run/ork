@@ -46,7 +46,7 @@ function routerDeps(prisma: PrismaClient) {
   return {
     prisma,
     sandbox: new FakeSandboxProvider(),
-    jobs: { enqueue: vi.fn() },
+    jobs: { enqueue: vi.fn().mockResolvedValue(undefined) },
     env: {
       defaultProvider: "fake",
       defaultModel: "fake-model",
@@ -96,6 +96,74 @@ beforeEach(() => {
 });
 
 describe("computer boot", () => {
+  function runningDedicated() {
+    return {
+      bot: {
+        findFirst: vi.fn().mockResolvedValue({
+          ...stoppedBot,
+          computer: {
+            ...stoppedBot.computer,
+            state: "running",
+            scope: "dedicated",
+            kind: "fake",
+            homeKey: "home-1",
+            providerRef: "active",
+          },
+        }),
+      },
+      computerExecutionLease: { findUnique: vi.fn().mockResolvedValue(null) },
+      computer: { updateMany: vi.fn() },
+    } as unknown as PrismaClient;
+  }
+
+  it.each([false, undefined])(
+    "reconnects a running dedicated computer without provider confirmation (%s)",
+    async (running) => {
+      const sandbox = new FakeSandboxProvider();
+      const probe = vi.spyOn(sandbox, "isRunning").mockResolvedValue(false);
+      if (running === undefined) Object.defineProperty(sandbox, "isRunning", { value: undefined });
+      lifecycle.provisionComputer.mockResolvedValue({});
+      const prisma = runningDedicated();
+
+      const response = await boot(prisma, { sandbox });
+
+      expect(response?.status, await response?.clone().text()).toBe(200);
+      if (running !== undefined) expect(probe).toHaveBeenCalledOnce();
+      expect(lifecycle.acquireComputerExecutionLease).toHaveBeenCalledOnce();
+      expect(lifecycle.provisionComputer).toHaveBeenCalledWith(
+        expect.anything(),
+        "computer-1",
+        expect.objectContaining({ botId: "bot-1" }),
+      );
+      expect(lifecycle.releaseComputerExecutionLease).toHaveBeenCalledOnce();
+      expect(prisma.computer.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the fast path for a confirmed running dedicated computer", async () => {
+    const sandbox = new FakeSandboxProvider();
+    vi.spyOn(sandbox, "isRunning").mockResolvedValue(true);
+
+    const response = await boot(runningDedicated(), { sandbox });
+
+    expect(response?.status, await response?.clone().text()).toBe(200);
+    expect(lifecycle.acquireComputerExecutionLease).not.toHaveBeenCalled();
+    expect(lifecycle.provisionComputer).not.toHaveBeenCalled();
+  });
+
+  it("preserves the reference when a dedicated computer status probe fails", async () => {
+    const sandbox = new FakeSandboxProvider();
+    vi.spyOn(sandbox, "isRunning").mockRejectedValue(new Error("Provider unavailable"));
+    const prisma = runningDedicated();
+
+    const response = await boot(prisma, { sandbox });
+
+    expect(response?.status).toBe(500);
+    expect(prisma.computer.updateMany).not.toHaveBeenCalled();
+    expect(lifecycle.acquireComputerExecutionLease).not.toHaveBeenCalled();
+    expect(lifecycle.provisionComputer).not.toHaveBeenCalled();
+  });
+
   it("refuses a disabled start before claiming a lease or provisioning", async () => {
     const prisma = { bot: { findFirst: vi.fn(async () => stoppedBot) } } as unknown as PrismaClient;
     const response = await boot(prisma, { sandbox: new NoneSandboxProvider() });

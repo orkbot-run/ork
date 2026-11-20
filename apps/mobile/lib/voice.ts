@@ -5,6 +5,7 @@
 import type { SettingsScope } from "@orkbot/contracts";
 import type { SpeakerClaim } from "@orkbot/core";
 import {
+  CallSpeechQueue,
   createSpeakerOwnership,
   ensureAiDataConsent,
   readVoiceAudio,
@@ -254,6 +255,88 @@ export async function speakText(text: string, opts: SpeechOptions = {}): Promise
   return speakPrepared(text, opts, beginSpeech(opts.owner));
 }
 
+/** One call owns one playback session across the clips it still has to receive. */
+export function startSpeechStream(opts: SpeechOptions, onClip: (text: string) => void) {
+  if (!canStartSpeech(opts.owner)) throw new Error(t("Could not speak that."));
+  const epoch = beginSpeech(opts.owner);
+  const session = new HostedSession(startHostedSpeechSession());
+  let deviceVoice: Promise<boolean> | undefined;
+  let context: Promise<ApiRequestContext> | undefined;
+  const stream = new CallSpeechQueue({
+    render: async (text, signal) => {
+      deviceVoice ??= loadDeviceVoiceEnabled().catch(() => true);
+      if (await deviceVoice) return { device: true as const, clips: [] };
+      if (signal.aborted) return { device: false as const, clips: [] };
+      context ??= opts.requestContext
+        ? Promise.resolve(opts.requestContext)
+        : captureApiRequestContext();
+      const requestContext = await context;
+      if (signal.aborted) return { device: false as const, clips: [] };
+      const prepared = await rpc(
+        "voice/prepare",
+        { text, voiceId: opts.voiceId, botId: opts.botId, scope: opts.scope },
+        { requestContext, signal },
+      );
+      if (!prepared.ready) throw new Error(t("Add a voice provider in Voice settings."));
+      const clips = await Promise.all(
+        prepared.utterances.map((utterance) =>
+          renderUtterance(utterance, opts, requestContext, signal),
+        ),
+      );
+      return { device: false as const, clips };
+    },
+    play: async (rendered, text, signal) => {
+      if (signal.aborted || !isCurrentSpeech(epoch)) return;
+      onClip(text);
+      if (signal.aborted || !isCurrentSpeech(epoch)) return;
+      if (rendered.device) {
+        const stop = () => {
+          if (isCurrentSpeech(epoch)) stopSpeaking(opts.owner);
+        };
+        signal.addEventListener("abort", stop, { once: true });
+        try {
+          await speakOnDevice(text, opts.botId, opts.messageId, epoch, opts.voiceId, () =>
+            stream.cancel(),
+          );
+        } finally {
+          signal.removeEventListener("abort", stop);
+          if (isCurrentSpeech(epoch) && !signal.aborted) setPlaying();
+        }
+        return;
+      }
+      const stop = () => session.stop();
+      signal.addEventListener("abort", stop, { once: true });
+      try {
+        for (const clip of rendered.clips) await playSpeechClip(clip, session);
+      } finally {
+        signal.removeEventListener("abort", stop);
+      }
+    },
+  });
+  const control: VoiceControl = {
+    pause: () => {
+      session.pause();
+      setPlaying("paused");
+    },
+    resume: () => {
+      session.resume();
+      setPlaying();
+    },
+    stop: () => {
+      stream.cancel();
+      session.stop();
+      setPlayback(IDLE_PLAYBACK, null);
+    },
+  };
+  function setPlaying(status: "playing" | "paused" = "playing") {
+    setPlayback({ status, botId: opts.botId, messageId: opts.messageId, canPause: true }, control);
+  }
+  setPlaying();
+  const release = () => releasePlayback(epoch, true, false);
+  void stream.settled.then(release, release);
+  return stream;
+}
+
 async function speakPrepared(text: string, opts: SpeechOptions, epoch: number): Promise<boolean> {
   if (!isCurrentSpeech(epoch)) return false;
   // Each queued item owns the epoch while it prepares and plays.
@@ -391,6 +474,7 @@ async function speakOnDevice(
   messageId?: string,
   epoch?: number,
   voiceId?: string,
+  onStop?: () => void,
 ): Promise<boolean> {
   if (epoch === undefined && !canStartSpeech()) return true;
   const utterances = toUtterances(text);
@@ -434,6 +518,7 @@ async function speakOnDevice(
       deviceSpeechSession += 1;
       void Speech.stop();
       setPlayback(IDLE_PLAYBACK, null);
+      onStop?.();
     },
   };
   setPlayback({ status: "playing", botId, messageId, canPause }, control);
@@ -503,8 +588,9 @@ async function renderUtterance(
   text: string,
   opts: SpeechOptions,
   requestContext: ApiRequestContext,
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
-  const deadline = requestDeadline(VOICE_RESPONSE_TIMEOUT_MS, "Voice request timed out.");
+  const deadline = requestDeadline(VOICE_RESPONSE_TIMEOUT_MS, "Voice request timed out.", signal);
   try {
     const res = await withAbort(
       fetchServer(
@@ -671,6 +757,7 @@ async function playWithNativeAudio(bytes: Uint8Array, session?: HostedSession): 
     interruptionMode: "mixWithOthers",
     shouldPlayInBackground: playsInBackground,
   });
+  if (session?.isStopped) return;
   const file = new File(
     Paths.cache,
     `orkbot-voice-${Date.now()}.${speechClipType(bytes).extension}`,

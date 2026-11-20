@@ -13,6 +13,10 @@ describe("parseModelJson", () => {
     expect(parseModelJson(text, Verdict)).toEqual({ pass: true, reason: "ok" });
   });
 
+  it("rejects a long reply of unmatched opening braces", () => {
+    expect(parseModelJson("{".repeat(100_000), Verdict)).toBeUndefined();
+  });
+
   it.each([
     "",
     "Chat reply asks about the lease. Verdict: pass",

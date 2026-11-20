@@ -84,7 +84,8 @@ describe("computer allowance", () => {
         )
       )?.limitMicros;
     expect(await limit("active", "pro")).toBe(20_000_000);
-    expect(await limit("past_due", "max")).toBe(40_000_000);
+    expect(await limit("active", "max")).toBe(40_000_000);
+    expect(await limit("past_due", "max")).toBe(0);
     // Rows synced before tiers existed are Standard.
     expect(await limit("active", null)).toBe(5_000_000);
     // A lapsed plan's tier no longer applies.
@@ -94,7 +95,12 @@ describe("computer allowance", () => {
   });
 
   it("gives a monthly credit plan a fifth of its amount", async () => {
-    const { deps } = allowanceDeps({ billing: true, mode: "credits", creditAmountCents: 5000 });
+    const { deps } = allowanceDeps({
+      billing: true,
+      mode: "credits",
+      creditAmountCents: 5000,
+      subscription: { status: "active" },
+    });
     expect((await sandboxAllowance(deps, "organization"))?.limitMicros).toBe(10_000_000);
   });
 

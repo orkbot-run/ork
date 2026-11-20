@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApprovedEffectReplayQueue, terminatingToolResult } from "./approval-effect.js";
 
 const audited = vi.hoisted(() => [] as { tool: string; outcome: string; metadata: unknown }[]);
+const postToGroup = vi.hoisted(() => vi.fn(async () => ({ ok: true, messageId: "published" })));
+vi.mock("./group-post.js", () => ({ postToGroup }));
 vi.mock("./run-tool-gate.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./run-tool-gate.js")>()),
   // The approval gate is covered by its own tests; here it always lets the call through,
@@ -82,6 +84,46 @@ function dispatchContext(tainted: boolean) {
 
 beforeEach(() => {
   audited.length = 0;
+  postToGroup.mockClear();
+});
+
+it("passes a routine's effect key and files to group publication without handing off its turn", async () => {
+  const base = dispatchContext(false);
+  const ctx = {
+    ...base,
+    run: {
+      ...base.run,
+      id: "run-1",
+      threadId: "routine-thread",
+      botId: "bot-1",
+      trigger: "routine",
+    },
+    computer: { stored: { id: "computer-1" }, mode: "team", get: vi.fn() },
+    secrets: ["fixture-secret"],
+  };
+  await expect(
+    applyTool(
+      ctx as never,
+      "post_to_group",
+      { group: "Reports", message: "Report fixture-secret", files: ["report.txt"] },
+      "call-1",
+    ),
+  ).resolves.toEqual({ ok: true, messageId: "published" });
+  expect(postToGroup).toHaveBeenCalledExactlyOnceWith(
+    ctx.deps,
+    ctx.run,
+    expect.objectContaining({
+      group: "Reports",
+      message: expect.not.stringContaining("fixture-secret"),
+      deliveryKey: "effect-post_to_group",
+      files: ["report.txt"],
+    }),
+    expect.objectContaining({
+      fileSource: expect.objectContaining({ computerId: "computer-1", mode: "team" }),
+    }),
+  );
+  expect(ctx.state.handedOff).toBe(false);
+  expect(ctx.computer.get).not.toHaveBeenCalled();
 });
 
 describe("dispatchTool audit outcomes", () => {

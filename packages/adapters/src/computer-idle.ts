@@ -20,7 +20,7 @@ import {
   WorkspaceTooLargeError,
 } from "@orkbot/adapter-kit";
 import { COMPUTER_ALLOWANCE_USED_ERROR } from "@orkbot/contracts";
-import { QUEUE_HOLDING_RUN_STATUSES, withAbort } from "@orkbot/core";
+import { withAbort } from "@orkbot/core";
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   appendEventInTransaction,
@@ -490,29 +490,47 @@ export async function sleepComputerIfIdle(
   const limitReached =
     allowanceUsed ||
     (activeLimitReached(deps.sandbox, ref, computer.runningSince) && !activeControl);
-  const activeStatuses = limitReached
-    ? EXECUTING_RUN_STATUSES
-    : activeControl
-      ? [...QUEUE_HOLDING_RUN_STATUSES]
-      : QUEUE_HOLDING_RUN_STATUSES.filter((status) => status !== "waiting_takeover");
   const runHolds = () =>
-    allowanceUsed
-      ? Promise.resolve(null)
-      : findActiveRun(deps.prisma, computerId, activeStatuses, limitReached);
-  const backgroundHolds = async () =>
-    !allowanceUsed &&
-    ((!limitReached && (await hasActiveBackgroundWork(deps.sandbox, ref, ctx, computerId))) ||
-      (await activeCodingAgent(deps.sandbox, ref, ctx, sandboxIdleMs())) !== undefined);
+    allowanceUsed ? Promise.resolve(null) : findActiveComputerRun(deps.prisma, computerId);
+  const backgroundHold = async (): Promise<string | null> => {
+    if (allowanceUsed) return null;
+    if (!limitReached) {
+      const state = await backgroundWorkState(deps.sandbox, ref, ctx, computerId);
+      if (state === "active") return "background_work";
+      if (state === "unknown") return "background_work_unknown";
+    }
+    return (await activeCodingAgent(deps.sandbox, ref, ctx, sandboxIdleMs())) !== undefined
+      ? "coding_agent"
+      : null;
+  };
+  const logHold = (reason: string, phase: "before_checkpoint" | "after_checkpoint") => {
+    const logger = getLogger();
+    const fields = { "computer.id": computerId, provider: ref.kind, reason, phase };
+    if (reason === "background_work_unknown") logger.warn("computer.sleep_held", fields);
+    else logger.info("computer.sleep_held", fields);
+  };
   const graceEndsAt = () =>
     allowanceUsed || activeControl || deps.sandbox.billsWhileRunning?.(ref) === true
       ? Promise.resolve(null)
       : takeoverGraceEndsAt(deps.prisma, computerId);
-  const runHeld = Boolean(await runHolds());
-  const takeoverHeldUntil = runHeld ? null : await graceEndsAt();
-  if (!runHeld && !takeoverHeldUntil && (await suspendStoppedComputer(deps, computer, ref, ctx))) {
+  const runHeld = !activeControl && Boolean(await runHolds());
+  const takeoverHeldUntil = activeControl || runHeld ? null : await graceEndsAt();
+  if (
+    !activeControl &&
+    !runHeld &&
+    !takeoverHeldUntil &&
+    (await suspendStoppedComputer(deps, computer, ref, ctx))
+  ) {
     return;
   }
-  if (runHeld || takeoverHeldUntil || (await backgroundHolds())) {
+  const heldReason =
+    activeControl || takeoverHeldUntil
+      ? "takeover"
+      : runHeld
+        ? "computer_run"
+        : await backgroundHold();
+  if (heldReason) {
+    logHold(heldReason, "before_checkpoint");
     // Recheck when the takeover grace ends so the computer sleeps on time.
     scheduleComputerSleep(deps.jobs, computerId, takeoverHeldUntil ?? undefined);
     try {
@@ -544,6 +562,7 @@ export async function sleepComputerIfIdle(
     data: { state: "suspending", updatedAt: checkpointedAt },
   });
   if (recorded.count !== 1) {
+    logHold("suspension_claim_changed", "before_checkpoint");
     scheduleComputerSleep(deps.jobs, computerId);
     return;
   }
@@ -581,6 +600,7 @@ export async function sleepComputerIfIdle(
             },
           });
     if (saved.count !== 1) {
+      logHold("suspension_claim_changed", "after_checkpoint");
       await deps.prisma.computer.updateMany({
         where: suspensionClaim,
         data: { ...(await disk), state: "running" },
@@ -652,9 +672,15 @@ export async function sleepComputerIfIdle(
       }),
       runHolds(),
       graceEndsAt(),
-      backgroundHolds(),
+      backgroundHold(),
     ]);
-  if (activeAfterCheckpoint || takeoverAfterCheckpoint || backgroundAfterCheckpoint) {
+  const heldAfterCheckpoint = activeAfterCheckpoint
+    ? "computer_run"
+    : takeoverAfterCheckpoint
+      ? "takeover"
+      : backgroundAfterCheckpoint;
+  if (heldAfterCheckpoint) {
+    logHold(heldAfterCheckpoint, "after_checkpoint");
     await deps.prisma.computer.updateMany({
       where: suspensionClaim,
       data: { ...(await disk), state: "running" },
@@ -672,6 +698,7 @@ export async function sleepComputerIfIdle(
     current.providerRef !== computer.providerRef ||
     current.updatedAt.getTime() !== checkpointedAt.getTime()
   ) {
+    logHold("suspension_claim_changed", "after_checkpoint");
     await deps.prisma.computer.updateMany({
       where: suspensionClaim,
       data: { ...(await disk), state: "running" },
@@ -1016,45 +1043,51 @@ function loadComputer(prisma: PrismaClient, computerId: string) {
   });
 }
 
-function findActiveRun(
-  prisma: PrismaClient,
-  computerId: string,
-  statuses: readonly string[],
-  liveLeaseOnly = false,
-) {
+function liveExecutionLeases(prisma: PrismaClient, computerId: string, now: Date) {
+  return prisma.computerExecutionLease.findMany({
+    where: { computerId, expiresAt: { gt: now } },
+    select: { runId: true, fence: true },
+  });
+}
+
+async function findActiveComputerRun(prisma: PrismaClient, computerId: string) {
+  const now = new Date();
+  const leases = await liveExecutionLeases(prisma, computerId, now);
+  if (leases.length === 0) return null;
   return prisma.run.findFirst({
     where: {
+      id: { in: leases.map((lease) => lease.runId) },
       bot: { computerId },
-      status: { in: statuses as (typeof QUEUE_HOLDING_RUN_STATUSES)[number][] },
-      ...(liveLeaseOnly ? { leaseExpiresAt: { gt: new Date(Date.now()) } } : {}),
+      status: { in: [...EXECUTING_RUN_STATUSES] },
+      leaseExpiresAt: { gt: now },
     },
     select: { id: true },
   });
 }
 
-/**
- * A live execution lease means a run is using the computer, except the one a run waiting for
- * takeover keeps for up to a day so no other bot takes its screen. Once the idle check has
- * found that the waiting run no longer holds the computer, that lease must not hold it either.
- * The fence lets a run that resumes in the meantime block the claim again.
- */
+/** Fence out a lease that starts or changes while sleep is being claimed. */
 async function noBlockingExecutionLease(prisma: PrismaClient, computerId: string, now: Date) {
-  const leases = await prisma.computerExecutionLease.findMany({
-    where: { computerId, expiresAt: { gt: now } },
-    select: { runId: true, fence: true },
-  });
-  const waiting =
+  const leases = await liveExecutionLeases(prisma, computerId, now);
+  const inactive =
     leases.length === 0
       ? []
       : await prisma.run.findMany({
-          where: { id: { in: leases.map((lease) => lease.runId) }, status: "waiting_takeover" },
+          where: {
+            id: { in: leases.map((lease) => lease.runId) },
+            OR: [
+              { status: { notIn: [...EXECUTING_RUN_STATUSES] } },
+              { leaseExpiresAt: null },
+              { leaseExpiresAt: { lte: now } },
+            ],
+          },
           select: { id: true },
         });
-  const heldForTakeover = leases.filter((lease) => waiting.some((run) => run.id === lease.runId));
+  const inactiveIds = new Set(inactive.map((run) => run.id));
+  const ignored = leases.filter((lease) => inactiveIds.has(lease.runId));
   return {
     none: {
       expiresAt: { gt: now },
-      ...(heldForTakeover.length > 0 ? { NOT: heldForTakeover } : {}),
+      ...(ignored.length > 0 ? { NOT: ignored } : {}),
     },
   };
 }
@@ -1078,24 +1111,18 @@ async function takeoverGraceEndsAt(prisma: PrismaClient, computerId: string): Pr
   return requested ? new Date(requested.createdAt.getTime() + TAKEOVER_IDLE_GRACE_MS) : null;
 }
 
-async function hasActiveBackgroundWork(
+async function backgroundWorkState(
   sandbox: SandboxProvider,
   computer: ReturnType<typeof toComputerRef>,
   context: AdapterContext,
   computerId: string,
-): Promise<boolean> {
-  if (sandbox.inspectBackgroundWork) {
-    try {
-      return (await sandbox.inspectBackgroundWork(computer, computerId, context)) !== "idle";
-    } catch (error) {
-      // A gone or damaged sandbox runs nothing; the checkpoint below then stops the computer.
-      return !isSandboxGoneError(error) && !isSandboxDamagedError(error);
-    }
-  }
+): Promise<"active" | "idle" | "unknown"> {
   try {
-    return (await probeBackgroundWork(sandbox, computer, computerId, context)) !== "idle";
+    return await (sandbox.inspectBackgroundWork
+      ? sandbox.inspectBackgroundWork(computer, computerId, context)
+      : probeBackgroundWork(sandbox, computer, computerId, context));
   } catch (error) {
-    return !isSandboxGoneError(error) && !isSandboxDamagedError(error);
+    return isSandboxGoneError(error) || isSandboxDamagedError(error) ? "idle" : "unknown";
   }
 }
 
@@ -1105,7 +1132,7 @@ export async function probeBackgroundWork(
   computer: ComputerRef,
   computerId: string,
   context: AdapterContext,
-): Promise<"active" | "idle"> {
+): Promise<"active" | "idle" | "unknown"> {
   let exitCode: number | undefined;
   let stdout = "";
   for await (const event of sandbox.execute(
@@ -1120,5 +1147,6 @@ export async function probeBackgroundWork(
     if (event.type === "exit") exitCode = event.code;
   }
   // Only the probe's explicit idle result permits suspension; unsupported or failed probes retry.
-  return exitCode === 1 && stdout.trim() === BACKGROUND_WORK_IDLE_SENTINEL ? "idle" : "active";
+  if (exitCode === 1 && stdout.trim() === BACKGROUND_WORK_IDLE_SENTINEL) return "idle";
+  return exitCode === 0 ? "active" : "unknown";
 }

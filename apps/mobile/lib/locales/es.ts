@@ -3,6 +3,79 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ES_MESSAGES: Record<string, string> = {
+  "Add a schedule or an HTTPS address to run this routine.":
+    "Añade una programación o una dirección HTTPS para ejecutar esta rutina.",
+  "Ask an owner to resume your plan.": "Pide a un propietario que reactive tu plan.",
+  "Back to meetings": "Volver a las reuniones",
+  "Blocked by the server administrator": "Bloqueado por el administrador del servidor",
+  "Check every 5 to 1,440 minutes and track up to five fields.":
+    "Comprueba cada 5 a 1440 minutos y supervisa hasta cinco campos.",
+  "Check interval in minutes": "Intervalo de comprobación en minutos",
+  "Confirm deletion": "Confirmar eliminación",
+  "Confirm that all participants have been informed before continuing.":
+    "Confirma que todos los participantes han sido informados antes de continuar.",
+  "Could not submit this answer": "No se pudo enviar esta respuesta",
+  "Daily limit: {dailyLimit}. Maximum meeting length: {maxMinutes} minutes.":
+    "Límite diario: {dailyLimit}. Duración máxima de la reunión: {maxMinutes} minutos.",
+  "Delete meeting": "Eliminar reunión",
+  "Delete this meeting and its transcript? This cannot be undone.":
+    "¿Eliminar esta reunión y su transcripción? Esta acción no se puede deshacer.",
+  "Enter a future date and time in YYYY-MM-DDTHH:mm format.":
+    "Introduce una fecha y hora futuras en el formato YYYY-MM-DDTHH:mm.",
+  "Enter a message body": "Introduce el cuerpo del mensaje",
+  "Enter a public HTTPS address without credentials or a fragment":
+    "Introduce una dirección HTTPS pública sin credenciales ni fragmento",
+  "Enter a recipient": "Introduce un destinatario",
+  "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link.":
+    "Introduce un enlace de reunión compatible de Google Meet, Zoom o Microsoft Teams.",
+  "Fields that mark a change": "Campos que indican un cambio",
+  "Fields to compare, e.g. id, modifiedTime (optional)":
+    "Campos que comparar, p. ej., id, modifiedTime (opcional)",
+  "Google Meet, Zoom and Microsoft Teams links are supported.":
+    "Se admiten enlaces de Google Meet, Zoom y Microsoft Teams.",
+  "HTTPS address": "Dirección HTTPS",
+  "I have informed all participants and have permission to record and transcribe this meeting.":
+    "He informado a todos los participantes y tengo permiso para grabar y transcribir esta reunión.",
+  "Invite your bot to a meeting": "Invita a tu bot a una reunión",
+  "Keep meeting": "Conservar reunión",
+  "Leave empty to join now. Scheduled time uses your device time zone.":
+    "Déjalo vacío para unirte ahora. La hora programada usa la zona horaria de tu dispositivo.",
+  "Manage billing to resume your plan.": "Gestiona la facturación para reactivar tu plan.",
+  "Meeting link": "Enlace de la reunión",
+  Meetings: "Reuniones",
+  "Meetings are not available on this server.":
+    "Las reuniones no están disponibles en este servidor.",
+  "Message body": "Cuerpo del mensaje",
+  No: "No",
+  "No meetings yet.": "Aún no hay reuniones.",
+  "No transcript yet. It will appear after processing.":
+    "Aún no hay transcripción. Aparecerá después del procesamiento.",
+  "Payment failed. Ask an owner to update the payment method.":
+    "El pago ha fallado. Pide a un propietario que actualice el método de pago.",
+  "Payment failed. Update your payment method to resume your plan.":
+    "El pago ha fallado. Actualiza tu método de pago para reactivar tu plan.",
+  'Post "No changes" in chat': "Publicar «Sin cambios» en el chat",
+  "Recipient changed. Review the updated draft and press Send again.":
+    "El destinatario ha cambiado. Revisa el borrador actualizado y pulsa Enviar de nuevo.",
+  Refresh: "Actualizar",
+  Reject: "Rechazar",
+  "Remove change trigger": "Eliminar activador de cambios",
+  "Route requests only to endpoints marked as eligible for zero data retention.":
+    "Envía solicitudes solo a los endpoints marcados como aptos para la retención cero de datos.",
+  "Schedule (optional)": "Fecha y hora (opcional)",
+  Subject: "Asunto",
+  "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it.":
+    "El bot se une de forma visible, graba audio y crea una transcripción. Informa a todos los participantes antes de invitarlo.",
+  "Title (optional)": "Título (opcional)",
+  To: "Para",
+  "Unchanged checks appear in history. You can also post them in chat.":
+    "Las comprobaciones sin cambios aparecen en el historial. También puedes publicarlas en el chat.",
+  "Update payment method": "Actualizar método de pago",
+  "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00":
+    "Usa una fecha y hora con zona horaria, p. ej., 2026-11-20T14:30:00+01:00",
+  "Watch an HTTPS address": "Supervisar una dirección HTTPS",
+  Yes: "Sí",
+  "Zero data retention": "Retención cero de datos",
   "Open Ork Accounts": "Abrir Ork Accounts",
   "Could not open Ork Accounts. Try again.": "No se pudo abrir Ork Accounts. Inténtalo de nuevo.",
   Checklist: "Lista de tareas",
@@ -846,6 +919,7 @@ export const ES_MESSAGES: Record<string, string> = {
   "Treg token": "Token de Treg",
   Uninstall: "Desinstalar",
   "Verify and add": "Verificar y agregar",
+  "Thinking…": "Pensando…",
   "Working…": "Trabajando…",
   "https://example.com/graphql": "https://example.com/graphql",
   "https://example.com/mcp": "https://example.com/mcp",
@@ -942,8 +1016,8 @@ export const ES_MESSAGES: Record<string, string> = {
   "Could not submit answer": "No se pudo enviar la respuesta",
   Deny: "Denegar",
   "Please try again.": "Inténtalo de nuevo.",
-  "Authorization timed out. Please try again.":
-    "Se agotó el tiempo de autorización. Inténtalo de nuevo.",
+  "Waiting for authorization.": "Esperando la autorización.",
+  "Start over": "Empezar de nuevo",
   "Could not authorize this app": "No se pudo autorizar esta app",
   "{name} connection": "Conexión de {name}",
   "Notifications silenced": "Notificaciones silenciadas",

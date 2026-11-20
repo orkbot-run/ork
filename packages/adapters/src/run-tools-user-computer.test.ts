@@ -25,6 +25,7 @@ function setup(execute: (signal: AbortSignal) => AsyncIterable<unknown>, secrets
   const gateway: UserDeviceGateway = {
     connected: async () => ({ deviceId: "device-1", name: "Laptop", platform: "darwin" }),
     pairedSince: async () => new Date(0),
+    list: async () => [],
     async *request<T>(
       _userId: string,
       request: HostComputerRequest,
@@ -52,7 +53,7 @@ function setup(execute: (signal: AbortSignal) => AsyncIterable<unknown>, secrets
   const call = (args: Record<string, unknown>) =>
     ({
       name: "user_computer_shell",
-      args,
+      args: { computerId: "device-1", ...args },
       observer: { onShellStillRunning },
       finish: async (result: unknown) => result,
     }) as unknown as ToolCall;
@@ -73,7 +74,7 @@ describe("userComputerGate", () => {
     const effects = [
       ...Array.from({ length: 450 }, (_, index) => ({ id: `e${450 - index}`, app: "TextEdit" })),
       { id: "e0", app: "Mail" },
-    ].map(({ id, app }) => ({ id, request: { app } }));
+    ].map(({ id, app }) => ({ id, request: { app, computerId: "device-1" } }));
     const findMany = vi.fn(async ({ take, cursor }: { take: number; cursor?: { id: string } }) => {
       const start = cursor ? effects.findIndex((effect) => effect.id === cursor.id) + 1 : 0;
       return effects.slice(start, start + take);
@@ -86,11 +87,17 @@ describe("userComputerGate", () => {
       run: { spaceId: "space-1", userId: "user-1" },
     } as unknown as RunContext;
     await expect(
-      userComputerGate(ctx, false, "user_computer_observe", { app: "mail" }),
+      userComputerGate(ctx, false, "user_computer_observe", {
+        app: "mail",
+        computerId: "device-1",
+      }),
     ).resolves.toBe("allow");
     expect(findMany).toHaveBeenCalledTimes(3);
     await expect(
-      userComputerGate(ctx, false, "user_computer_observe", { app: "Notes" }),
+      userComputerGate(ctx, false, "user_computer_observe", {
+        app: "Notes",
+        computerId: "device-1",
+      }),
     ).resolves.toBe("ask");
   });
 });

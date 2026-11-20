@@ -744,6 +744,22 @@ describe("ChatSdkMessagingSurface outbound", () => {
 
   it.each([
     ["a PDF", "report.pdf", "application/pdf", 3],
+    ["a Word document", "offer.doc", "application/msword", 3],
+    [
+      "an OOXML Word document",
+      "offer.docx",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      3,
+    ],
+    ["a PowerPoint presentation", "slides.ppt", "application/vnd.ms-powerpoint", 3],
+    [
+      "an OOXML PowerPoint presentation",
+      "slides.pptx",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      3,
+    ],
+    ["an HEIC photo", "photo.heic", "image/heic", 3],
+    ["a QuickTime video", "clip.mov", "video/quicktime", 3],
     ["an SVG", "logo.svg", "image/svg+xml", 3],
     ["an image over the photo limit", "scan.png", "image/png", 10_000_001],
   ])("uploads %s to Telegram as a document", async (_label, name, mimeType, size) => {

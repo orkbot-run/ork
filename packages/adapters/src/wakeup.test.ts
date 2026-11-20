@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
+
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { BackgroundJobHandlers } from "@orkbot/adapter-kit";
@@ -25,6 +30,7 @@ function handlers(): BackgroundJobHandlers {
     "messaging.deliver": vi.fn(async () => undefined),
     "messaging.credential-cleanup": vi.fn(async () => undefined),
     "cloud_agent.poll": vi.fn(async () => undefined),
+    "meeting.poll": async () => {},
     "purchase.poll": vi.fn(async () => undefined),
     "media.poll": vi.fn(async () => undefined),
     "push.receipt": vi.fn(async () => undefined),
@@ -372,6 +378,38 @@ describe("InMemoryJobQueue", () => {
     await expect(enqueue).rejects.toThrow("Background job publisher is stopped");
   });
 
+  it("optionally stops only active handlers and drops queued work", async () => {
+    vi.useFakeTimers();
+    const queue = new InMemoryJobQueue({ stopExistingOnly: true });
+    const target = handlers();
+    let release!: () => void;
+    target["computer.sleep"] = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    await queue.start(target);
+    await queue.enqueue({ name: "computer.sleep", payload: { computerId: "active" } });
+    await vi.advanceTimersByTimeAsync(0);
+    await queue.enqueue({ name: "computer.sleep", payload: { computerId: "queued" } });
+    let stopped = false;
+    const stopping = queue.stop().then(() => {
+      stopped = true;
+    });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(stopped).toBe(false);
+    expect(target["computer.sleep"]).toHaveBeenCalledOnce();
+    await expect(
+      queue.enqueue({ name: "computer.sleep", payload: { computerId: "late" } }),
+    ).rejects.toThrow("closing");
+    release();
+    await stopping;
+    await queue.close();
+    expect(target["computer.sleep"]).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
   it("drains an accepted immediate timer during close", async () => {
     const queue = new InMemoryJobQueue();
     const target = handlers();
@@ -444,6 +482,14 @@ describe("createDeadJobPruner", () => {
     installLogger(createLogger({ service: "test", level: "off", sinks: [] }));
   });
 
+  it("still prunes if abandoned-job reconciliation fails", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const connect = vi.fn().mockRejectedValue(new Error("abandoned scan unavailable"));
+    await createDeadJobPruner({ query, connect } as never)();
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0]?.[0]).toContain("with removed as");
+  });
+
   it("deletes old exhausted jobs in batches about once an hour and logs the count", async () => {
     const sink = createTestSink();
     installLogger(createLogger({ service: "test", sinks: [sink] }));
@@ -451,10 +497,12 @@ describe("createDeadJobPruner", () => {
     vi.spyOn(Date, "now").mockImplementation(() => now);
     const query = vi
       .fn()
-      .mockResolvedValueOnce({ rowCount: 1_000 })
-      .mockResolvedValueOnce({ rowCount: 3 })
-      .mockResolvedValue({ rowCount: 0 });
-    const prune = createDeadJobPruner({ query } as never);
+      .mockResolvedValueOnce({ rows: [{ type: "run.interactive", count: 1_000 }] })
+      .mockResolvedValueOnce({ rows: [{ type: "computer.sleep", count: 3 }] })
+      .mockResolvedValue({ rows: [] });
+    const client = { query: vi.fn(async () => ({ rows: [] })), release: vi.fn() };
+    const connect = vi.fn(async () => client);
+    const prune = createDeadJobPruner({ query, connect } as never);
 
     await prune();
     await prune();
@@ -466,8 +514,15 @@ describe("createDeadJobPruner", () => {
     expect(sql).toContain("dead.attempts >= dead.max_attempts and dead.locked_at is null");
     expect(sql).toContain("jobs.attempts >= jobs.max_attempts and jobs.locked_at is null");
     expect(sql).toContain("tasks.identifier <> 'routine.retry'");
+    expect(sql).toContain("dead.run_at < now()");
+    expect(sql).toContain("jobs.run_at < now()");
+    expect(connect).toHaveBeenCalledTimes(2);
     expect(sink.events).toContainEqual(
-      expect.objectContaining({ message: "jobs.dead_pruned", "jobs.removed": 1_003 }),
+      expect.objectContaining({
+        message: "jobs.dead_pruned",
+        "jobs.removed": 1_003,
+        "jobs.by_type": { "run.continue": 1_000, "computer.sleep": 3 },
+      }),
     );
 
     now += 60 * 60 * 1000;

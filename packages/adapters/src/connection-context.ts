@@ -56,10 +56,11 @@ export function connectedContext(
 export async function loadLivePluginSlugs(
   listConnectedPluginSlugs: ExecutorDeps["listConnectedPluginSlugs"],
   userId: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: true; slugs: string[] } | { ok: false }> {
   if (!listConnectedPluginSlugs) return { ok: false };
   try {
-    return { ok: true, slugs: await listConnectedPluginSlugs(userId) };
+    return { ok: true, slugs: await listConnectedPluginSlugs(userId, signal) };
   } catch {
     return { ok: false };
   }
@@ -70,32 +71,34 @@ export async function persistLivePluginConnections(
   owner: { userId: string; spaceId: string },
   rows: PluginConnectionRow[],
   liveSlugs: string[],
+  activeRefs?: string[] | null,
 ): Promise<void> {
-  const sync = planLiveConnectionSync(rows, liveSlugs);
-  if (sync.connectIds.length > 0) {
-    await prisma.connection.updateMany({
+  const sync = planLiveConnectionSync(rows, liveSlugs, activeRefs);
+  for (const [ids, status] of [
+    [sync.connectIds, "connected"],
+    [sync.revokeIds, "revoked"],
+  ] as const) {
+    if (ids.length === 0) continue;
+    const updated = await prisma.connection.updateManyAndReturn({
       where: {
-        id: { in: sync.connectIds },
+        id: { in: ids },
         userId: owner.userId,
         spaceId: owner.spaceId,
+        status: { in: ["pending", "error"] },
+        OR: rows
+          .filter((row) => ids.includes(row.id))
+          .map((row) => ({
+            id: row.id,
+            ...(row.providerRef !== undefined ? { providerRef: row.providerRef } : {}),
+            ...(row.updatedAt ? { updatedAt: row.updatedAt } : {}),
+          })),
       },
-      data: { status: "connected" },
+      data: { status },
+      select: { id: true },
     });
+    const updatedIds = new Set(updated.map((row) => row.id));
     for (const row of rows) {
-      if (sync.connectIds.includes(row.id)) row.status = "connected";
-    }
-  }
-  if (sync.revokeIds.length > 0) {
-    await prisma.connection.updateMany({
-      where: {
-        id: { in: sync.revokeIds },
-        userId: owner.userId,
-        spaceId: owner.spaceId,
-      },
-      data: { status: "revoked" },
-    });
-    for (const row of rows) {
-      if (sync.revokeIds.includes(row.id)) row.status = "revoked";
+      if (updatedIds.has(row.id)) row.status = status;
     }
   }
 }

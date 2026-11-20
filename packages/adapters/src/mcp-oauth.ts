@@ -13,7 +13,6 @@ import {
   discoverOAuthProtectedResourceMetadata,
   refreshAuthorization,
 } from "@modelcontextprotocol/sdk/client/auth.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { InvalidGrantError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import type {
@@ -36,6 +35,7 @@ import type { Prisma, PrismaClient } from "@orkbot/db";
 import { availableInSpace, itemSecretIn, runAsSystem } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { sanitizeConnectorError } from "./connector-safety.js";
+import { createMcpClient } from "./mcp-output-schema.js";
 import { MCP_DYNAMIC_REGISTRATION_UNSUPPORTED, needsMcpOAuthClient } from "./mcp-server-health.js";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
 import { oauthRefreshSignal, withOAuthRefreshLock } from "./oauth-refresh-lock.js";
@@ -46,6 +46,10 @@ import { deleteSecretBestEffort, holdSecretNotifications } from "./secret-store-
 type OAuthState = {
   tokens?: OAuthTokens;
   obtainedAt?: number;
+  /** An opaque identity assigned when the authorization server issues a grant. */
+  grantId?: string;
+  /** The grant last cleared by a token rejection. No credential values are retained. */
+  clearedGrant?: string;
   clientInformation?: OAuthClientInformationMixed;
   discoveryState?: OAuthDiscoveryState;
   redirectUri?: string;
@@ -71,14 +75,23 @@ export type OAuthMaterial = {
   oauthGeneration?: number;
 };
 
+function authorizationPayload(value: string): string | undefined {
+  const separator = value.search(/\s/);
+  if (separator < 0) return undefined;
+  const scheme = value.slice(0, separator).toLowerCase();
+  if (scheme !== "basic" && scheme !== "bearer" && scheme !== "token") return undefined;
+  const payload = value.slice(separator).trimStart();
+  return payload && !/[\r\n\u2028\u2029]/u.test(payload) ? payload : undefined;
+}
+
 /** Values that must never appear in model-visible tool results or errors. */
 export function oauthMaterialSecrets(material: OAuthMaterial): string[] {
   const values: string[] = [];
   const add = (value: string | undefined) => {
     if (!value) return;
     values.push(value);
-    const authorization = value.match(/^(?:Basic|Bearer|Token)\s+(.+)$/i);
-    if (authorization?.[1]) values.push(authorization[1]);
+    const payload = authorizationPayload(value);
+    if (payload) values.push(payload);
   };
   add(material.secret);
   add(material.oauth?.tokens?.access_token);
@@ -152,11 +165,10 @@ function collectLaunchSecrets(args: readonly string[], add: (value: string) => v
     );
   };
   const credentialValue = (value: string) => {
-    if (!value.trim() || /^(?:Basic|Bearer|Token)$/i.test(value.trim())) return;
+    const trimmed = value.trim();
+    if (!trimmed || /^(?:Basic|Bearer|Token)$/i.test(trimmed)) return;
     add(value);
-    if (value.trim() !== value) add(value.trim());
-    const scheme = value.trim().match(/^(?:Basic|Bearer|Token)\s+(.+)$/i);
-    if (scheme?.[1]) add(scheme[1]);
+    if (trimmed !== value) add(trimmed);
   };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
@@ -329,7 +341,7 @@ function boundClient(
 type ServerRef = { id: string; endpoint: string | null; secretId: string | null };
 type ActorRef = { spaceId: string; userId: string };
 
-class McpCredentialRefusedError extends Error {}
+export class McpCredentialRefusedError extends Error {}
 
 function isCredentialRefusal(error: unknown): boolean {
   return error instanceof McpCredentialRefusedError || error instanceof McpOAuthServerMismatchError;
@@ -363,18 +375,68 @@ export class McpReauthorizationRequiredError extends Error {
   }
 }
 
+/** A background authorization can retry with the grant another process already saved. */
+export class McpOAuthGrantUpdatedError extends McpReauthorizationRequiredError {
+  constructor(serverId: string) {
+    super(serverId);
+    this.name = "McpOAuthGrantUpdatedError";
+  }
+}
+
 /** The grant a provider holds: tokens and when they were issued. */
-type TokenGrant = Pick<OAuthState, "tokens" | "obtainedAt">;
+type TokenGrant = Pick<OAuthState, "tokens" | "obtainedAt" | "grantId" | "clearedGrant"> & {
+  /** Present when adopting authorization already stored by another process. */
+  storedOAuth?: OAuthState | null;
+};
+type ActiveGrant = { tokens: OAuthTokens; grantId?: string; obtainedAt?: number };
+type GrantKey = ActiveGrant | null;
+
+function grantKey(grant: TokenGrant | undefined): GrantKey {
+  if (!grant?.tokens) return null;
+  return { tokens: grant.tokens, grantId: grant.grantId, obtainedAt: grant.obtainedAt };
+}
+
+function sameTokens(left: OAuthTokens | undefined, right: OAuthTokens | undefined): boolean {
+  return (
+    left?.access_token === right?.access_token &&
+    (left?.refresh_token ?? null) === (right?.refresh_token ?? null)
+  );
+}
+
+function sameGrant(left: GrantKey, right: GrantKey): boolean {
+  if (!left || !right) return left === right;
+  if (left.grantId && right.grantId) return left.grantId === right.grantId;
+  // Older stored grants have no ID. Compare their token pairs only in memory.
+  return sameTokens(left.tokens, right.tokens);
+}
+
+function clearedGrantMarker(grant: GrantKey): string | undefined {
+  // Old stored grants already record when they were issued. Never persist their token values
+  // in the marker when the tokens themselves are cleared.
+  return (
+    grant?.grantId ?? (grant?.obtainedAt === undefined ? undefined : `legacy:${grant.obtainedAt}`)
+  );
+}
+
+function grantState(oauth: OAuthState | undefined): TokenGrant {
+  return {
+    tokens: oauth?.tokens,
+    obtainedAt: oauth?.obtainedAt,
+    grantId: oauth?.grantId,
+    clearedGrant: oauth?.clearedGrant,
+    storedOAuth: oauth ?? null,
+  };
+}
 
 /**
- * Writes the provider's material. `storedRefreshToken` is the refresh token
+ * Writes the provider's material. `storedGrant` identifies the token pair
  * this provider last saw in storage; when given, the write keeps the stored
  * grant if another process has since changed it, and returns that grant.
  * Writes carrying newly issued tokens omit it and always win.
  */
 type PersistMaterial = (
   material: OAuthMaterial,
-  storedRefreshToken?: string | null,
+  storedGrant?: GrantKey,
 ) => Promise<TokenGrant | undefined>;
 
 type ProviderOptions = {
@@ -383,7 +445,7 @@ type ProviderOptions = {
   onAuthorization?: (url: URL) => void;
   onPersisted?: (record: { id: string; ref: string; material: OAuthMaterial }) => void;
   /** Renews the grant under the server's credential lock and returns the grant now stored. */
-  refresh?: (heldRefreshToken: string) => Promise<TokenGrant>;
+  refresh?: (heldGrant: ActiveGrant) => Promise<TokenGrant>;
   /** The instance opt-in that lets OAuth URLs use plain HTTP on a private network. */
   allowPrivateEndpoint?: boolean;
 };
@@ -408,6 +470,11 @@ function accessTokenExpired(oauth: OAuthState | undefined): boolean {
     expiresAt !== undefined &&
     Date.now() >= expiresAt - TOKEN_REFRESH_SKEW_MS
   );
+}
+
+function accessTokenUsable(oauth: OAuthState | undefined): boolean {
+  const expiresAt = accessTokenExpiresAt(oauth);
+  return Boolean(oauth?.tokens && (expiresAt === undefined || expiresAt > Date.now()));
 }
 
 // RFC 8707 resource binding: only accept a self-declared canonical resource
@@ -455,6 +522,10 @@ function applyGrant(oauth: OAuthState, grant: TokenGrant): void {
   else delete oauth.tokens;
   if (grant.obtainedAt) oauth.obtainedAt = grant.obtainedAt;
   else delete oauth.obtainedAt;
+  if (grant.grantId) oauth.grantId = grant.grantId;
+  else delete oauth.grantId;
+  if (grant.clearedGrant) oauth.clearedGrant = grant.clearedGrant;
+  else delete oauth.clearedGrant;
 }
 
 /** One SDK OAuth provider backed by the same encrypted material used at runtime. */
@@ -465,8 +536,9 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
   private refreshing?: Promise<void>;
   /** The stored grant `wrapFetch` last handed the SDK in place of a token response. */
   private served?: OAuthTokens;
-  /** The refresh token storage held when this provider last read or wrote it. */
-  private storedRefreshToken: string | null;
+  /** The token pair storage held when this provider last read or wrote it. */
+  private storedGrant: GrantKey;
+  private rejectedGrant?: GrantKey;
 
   constructor(
     readonly serverId: string,
@@ -474,7 +546,7 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
     private readonly persistMaterial: PersistMaterial,
     private readonly options: ProviderOptions = {},
   ) {
-    this.storedRefreshToken = material.oauth?.tokens?.refresh_token ?? null;
+    this.storedGrant = grantKey(material.oauth);
     if (options.redirectUri) {
       this.material.oauth = { ...(this.material.oauth ?? {}), redirectUri: options.redirectUri };
     }
@@ -554,10 +626,33 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
   wrapFetch(fetch: typeof globalThis.fetch): typeof globalThis.fetch {
     return async (input, init) => {
       const body = init?.body instanceof URLSearchParams ? init.body : undefined;
-      if (!this.options.refresh || body?.get("grant_type") !== "refresh_token")
-        return fetch(input, init);
+      if (!this.options.refresh || body?.get("grant_type") !== "refresh_token") {
+        if (this.options.onAuthorization) return fetch(input, init);
+        const heldGrant = grantKey(this.material.oauth);
+        const tokens = heldGrant?.tokens;
+        const authorization = new Headers(
+          init?.headers ?? (input instanceof Request ? input.headers : undefined),
+        ).get("authorization");
+        const used =
+          tokens &&
+          authorization?.slice(0, 7).toLowerCase() === "bearer " &&
+          authorization.slice(7) === tokens.access_token
+            ? heldGrant
+            : !tokens && !authorization
+              ? null
+              : undefined;
+        const response = await fetch(input, init);
+        if (used !== undefined && (response.status === 401 || response.status === 403))
+          this.rejectedGrant = used;
+        else if (used && response.ok) this.rejectedGrant = undefined;
+        return response;
+      }
       // Skip it when a concurrent request already renewed the token the SDK read.
-      if (body.get("refresh_token") === this.material.oauth?.tokens?.refresh_token) {
+      const oauth = this.material.oauth;
+      if (
+        body.get("refresh_token") === oauth?.tokens?.refresh_token &&
+        (this.rejectedGrant === undefined || sameGrant(this.rejectedGrant, grantKey(oauth)))
+      ) {
         try {
           await this.renew();
         } catch {
@@ -578,12 +673,19 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
    * it so the server reads as needing a reconnect when no refresh can replace it.
    */
   async replaceRejectedToken(): Promise<void> {
-    const held = this.material.oauth?.tokens;
+    const held = grantKey(this.material.oauth);
     await this.renew();
-    const tokens = this.material.oauth?.tokens;
-    if (tokens && tokens !== held) return;
-    if (tokens) await this.invalidateCredentials("tokens");
+    if (this.hasNewGrant(held)) return;
+    if (this.material.oauth?.tokens) await this.invalidateCredentials("tokens");
+    if (this.hasNewGrant(held)) return;
     throw new McpReauthorizationRequiredError(this.serverId);
+  }
+
+  private hasNewGrant(previous: GrantKey): boolean {
+    return (
+      !sameTokens(this.material.oauth?.tokens, previous?.tokens) &&
+      accessTokenUsable(this.material.oauth)
+    );
   }
 
   /** Renews under the credential lock; concurrent callers share one refresh. */
@@ -598,62 +700,67 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
     const oauth = this.material.oauth;
     const held = oauth?.tokens;
     if (!oauth || !held?.refresh_token || !this.options.refresh) return;
+    const expected = grantKey(oauth)!;
     let grant: TokenGrant;
     try {
-      grant = await this.options.refresh(held.refresh_token);
+      grant = await this.options.refresh(expected);
     } catch (error) {
       if (isCredentialRefusal(error) && this.material.oauth === oauth && oauth.tokens === held)
-        applyGrant(oauth, {});
+        applyGrant(oauth, { clearedGrant: clearedGrantMarker(expected) });
       throw error;
     }
     // A write that landed while the refresh ran is newer than the grant it replaced.
     if (this.material.oauth !== oauth || oauth.tokens !== held) return;
-    applyGrant(oauth, grant);
-    this.storedRefreshToken = grant.tokens?.refresh_token ?? null;
+    if (grant.storedOAuth !== undefined && !this.options.state && !this.options.onAuthorization)
+      this.material.oauth = grant.storedOAuth ?? undefined;
+    else applyGrant(oauth, grant);
+    this.storedGrant = grantKey(grant);
   }
 
   async saveTokens(value: OAuthTokens): Promise<void> {
     const oauth = this.oauth();
     // The locked refresh behind `wrapFetch` already stored this grant.
-    if (this.served && oauth.tokens === this.served && isDeepStrictEqual(value, this.served))
+    if (this.served && sameTokens(value, this.served)) {
+      if (oauth.tokens === this.served && !isDeepStrictEqual(value, this.served)) {
+        // The SDK can stamp its issuer on a grant already written by the refresh. Such a
+        // metadata write must never replace a newer grant that was saved in the meantime.
+        oauth.tokens = value;
+        await this.persist();
+      }
       return;
+    }
     oauth.tokens = value;
     oauth.obtainedAt = Date.now();
+    oauth.grantId = randomUUID();
+    delete oauth.clearedGrant;
     await this.persist(true);
   }
   async redirectToAuthorization(url: URL): Promise<void> {
-    let authorizationUrl: URL;
+    if (!this.options.onAuthorization) {
+      const held =
+        this.rejectedGrant !== undefined ? this.rejectedGrant : grantKey(this.material.oauth);
+      if (this.hasNewGrant(held)) throw new McpOAuthGrantUpdatedError(this.serverId);
+      await this.invalidateCredentials("tokens");
+      if (this.hasNewGrant(held)) throw new McpOAuthGrantUpdatedError(this.serverId);
+      throw new McpReauthorizationRequiredError(this.serverId);
+    }
     const policy = {
       maxUrlLength: MCP_AUTHORIZATION_URL_MAX_LENGTH,
       allowHttpLocalhost: true,
       allowPrivateEndpoint: this.options.allowPrivateEndpoint,
     };
-    try {
-      authorizationUrl = validateUrl(url, policy);
-      if (authorizationUrl.href.endsWith("#"))
-        throw new Error("MCP URL must not contain credentials or a fragment");
-      const extra = this.material.oauthClient?.authorization_params;
-      if (extra) {
-        for (const [key, value] of Object.entries(parseMcpOAuthAuthorizationParams(extra)))
-          if (!authorizationUrl.searchParams.has(key))
-            authorizationUrl.searchParams.set(key, value);
-      }
-      requestOfflineAccess(authorizationUrl, this.material.oauth?.discoveryState);
-      authorizationUrl = validateUrl(authorizationUrl, policy);
-    } catch (error) {
-      if (!this.options.onAuthorization) {
-        await this.invalidateCredentials("tokens");
-      }
-      throw error;
+    let authorizationUrl = validateUrl(url, policy);
+    if (authorizationUrl.href.endsWith("#"))
+      throw new Error("MCP URL must not contain credentials or a fragment");
+    const extra = this.material.oauthClient?.authorization_params;
+    if (extra) {
+      for (const [key, value] of Object.entries(parseMcpOAuthAuthorizationParams(extra)))
+        if (!authorizationUrl.searchParams.has(key)) authorizationUrl.searchParams.set(key, value);
     }
+    requestOfflineAccess(authorizationUrl, this.material.oauth?.discoveryState);
+    authorizationUrl = validateUrl(authorizationUrl, policy);
     this.authorizationUrl = authorizationUrl;
-    if (this.options.onAuthorization) {
-      this.options.onAuthorization(authorizationUrl);
-      return;
-    }
-    // Runtime re-auth needs the user; drop the dead tokens so status reads "reconnect".
-    await this.invalidateCredentials("tokens");
-    throw new McpReauthorizationRequiredError(this.serverId);
+    this.options.onAuthorization(authorizationUrl);
   }
   async saveCodeVerifier(value: string): Promise<void> {
     this.oauth().codeVerifier = value;
@@ -683,8 +790,9 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
     } else if (this.material.oauth) {
       if (scope === "client") delete this.material.oauth.clientInformation;
       if (scope === "tokens") {
-        delete this.material.oauth.tokens;
-        delete this.material.oauth.obtainedAt;
+        const cleared =
+          clearedGrantMarker(grantKey(this.material.oauth)) ?? this.material.oauth.clearedGrant;
+        applyGrant(this.material.oauth, { clearedGrant: cleared });
       }
       if (scope === "verifier") delete this.material.oauth.codeVerifier;
       if (scope === "discovery") delete this.material.oauth.discoveryState;
@@ -700,13 +808,23 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
   /** `issued` marks a write carrying tokens the server just issued, which replace any stored grant. */
   private async persist(issued = false): Promise<void> {
     const snapshot = structuredClone(this.material);
-    const held = this.material.oauth?.tokens;
-    const storedRefreshToken = issued ? undefined : this.storedRefreshToken;
+    const held = this.material.oauth;
+    const heldTokens = held?.tokens;
+    const storedGrant = issued
+      ? undefined
+      : this.rejectedGrant !== undefined
+        ? this.rejectedGrant
+        : this.storedGrant;
     const next = this.persistQueue.then(async () => {
-      const kept = await this.persistMaterial(snapshot, storedRefreshToken);
-      const oauth = this.material.oauth;
-      if (kept && oauth && oauth.tokens === held) applyGrant(oauth, kept);
-      this.storedRefreshToken = (kept ?? snapshot.oauth)?.tokens?.refresh_token ?? null;
+      const kept = await this.persistMaterial(snapshot, storedGrant);
+      // A browser flow needs its own PKCE verifier and client until code exchange.
+      // Keep its pre-write expectation so subsequent SDK metadata cannot rewrite the winner.
+      if (kept && (this.options.state || this.options.onAuthorization)) return;
+      if (kept && this.material.oauth === held && held?.tokens === heldTokens) {
+        if (kept.storedOAuth !== undefined) this.material.oauth = kept.storedOAuth ?? undefined;
+        else if (held) applyGrant(held, kept);
+      }
+      this.storedGrant = grantKey(kept ?? snapshot.oauth);
     });
     this.persistQueue = next.catch(() => undefined);
     await next;
@@ -872,7 +990,11 @@ async function startRemoteAuthorization(
     authProvider: provider,
     fetch: provider.wrapFetch(network.fetch),
   });
-  const client = new Client({ name: "orkbot-oauth", version: "0.1.0" });
+  const client = createMcpClient(
+    { name: "orkbot-oauth", version: "0.1.0" },
+    undefined,
+    endpoint.hostname,
+  );
   const signal = AbortSignal.timeout(15_000);
   try {
     await client.connect(transport, { signal, timeout: 15_000 });
@@ -1422,18 +1544,18 @@ export class McpOAuthBroker {
     return new StoredMcpOAuthProvider(
       server.id,
       loaded.material,
-      (material, storedRefreshToken) =>
+      (material, storedGrant) =>
         this.replaceMaterial(server.id, material, context, {
           expectedEndpoint: endpoint,
           onPersisted: options.onPersisted,
-          storedRefreshToken,
+          storedGrant,
         }),
       {
         ...(target
           ? {
               // The refresh writes its secret inside the lock transaction, so the change
               // notification waits for that pooled connection to come back.
-              refresh: (held: string) =>
+              refresh: (held: ActiveGrant) =>
                 holdSecretNotifications(() =>
                   this.refreshGrant(
                     server.id,
@@ -1464,13 +1586,13 @@ export class McpOAuthBroker {
     endpoint: string | null,
     target: string,
     context: ActorRef,
-    held: string,
+    held: ActiveGrant,
     onPersisted?: ProviderOptions["onPersisted"],
   ): Promise<TokenGrant> {
     // Resolve the network before taking a connection for the lock.
     const network = oauthFetch(target, this.network, {}, this.allowPrivateEndpoint);
     let stored: { id: string; ciphertext: string } | undefined;
-    let rotated: { material: OAuthMaterial; grant: TokenGrant; spent: string } | undefined;
+    let rotated: { material: OAuthMaterial; grant: TokenGrant; spent: ActiveGrant } | undefined;
     try {
       const result = await persistPreparedSecret(
         this.prisma,
@@ -1479,13 +1601,27 @@ export class McpOAuthBroker {
         () =>
           withOAuthRefreshLock(this.prisma, "mcp-oauth-material", serverId, async (tx) => {
             const snapshot = await this.snapshot(tx, serverId, context, endpoint);
+            if (snapshot.server.secretId && !snapshot.secret)
+              throw new McpReauthorizationRequiredError(serverId);
             const material = snapshot.secret
               ? await this.read(snapshot.secret.ciphertext, snapshot.secret.id)
               : {};
             const oauth = material.oauth;
             const current = oauth?.tokens?.refresh_token;
-            if (!oauth || !current || (current !== held && !accessTokenExpired(oauth)))
-              return { grant: { tokens: oauth?.tokens, obtainedAt: oauth?.obtainedAt } };
+            const currentGrant = grantKey(oauth);
+            if (
+              !oauth ||
+              !current ||
+              !currentGrant ||
+              (!sameGrant(currentGrant, held) && accessTokenUsable(oauth))
+            ) {
+              return {
+                grant: grantState(oauth),
+                record: snapshot.secret
+                  ? { id: snapshot.secret.id, ref: snapshot.secret.ciphertext, material }
+                  : undefined,
+              };
+            }
             let grant: TokenGrant;
             try {
               grant = {
@@ -1497,14 +1633,15 @@ export class McpOAuthBroker {
                 ),
               };
               grant.obtainedAt = Date.now();
+              grant.grantId = randomUUID();
             } catch (error) {
               // Under the lock `current` is the stored token, so a rejection
               // means the grant is revoked, not rotated by another process.
               if (!(error instanceof InvalidGrantError)) throw error;
-              grant = {};
+              grant = { clearedGrant: clearedGrantMarker(currentGrant) };
             }
             applyGrant(oauth, grant);
-            if (grant.tokens) rotated = { material, grant, spent: current };
+            if (grant.tokens) rotated = { material, grant, spent: currentGrant };
             stored = await this.putMaterial(material, context);
             if (!(await this.commitMaterial(tx, serverId, context, snapshot, stored)))
               throw new Error("MCP credentials changed during refresh; retry");
@@ -1527,7 +1664,7 @@ export class McpOAuthBroker {
         const kept = await this.replaceMaterial(serverId, rotated.material, context, {
           expectedEndpoint: endpoint,
           onPersisted,
-          storedRefreshToken: rotated.spent,
+          storedGrant: rotated.spent,
           replaceCleared: true,
           onKept: (grant) => {
             observed = grant;
@@ -1551,7 +1688,7 @@ export class McpOAuthBroker {
       incrementRevision?: boolean;
       expectedEndpoint?: string | null;
       onPersisted?: ProviderOptions["onPersisted"];
-      storedRefreshToken?: string | null;
+      storedGrant?: GrantKey;
       replaceCleared?: boolean;
       /** Raise the stored authorization generation from the value each retry re-reads. */
       raiseGeneration?: boolean;
@@ -1561,14 +1698,34 @@ export class McpOAuthBroker {
     // Take a DB-only snapshot, then do provider I/O with no transaction open.
     // Recheck both the pointer and ciphertext under the existing advisory lock.
     for (let attempt = 0; attempt < 5; attempt++) {
-      const snapshot = await this.prisma.$transaction((tx) =>
+      let snapshot = await this.prisma.$transaction((tx) =>
         this.snapshot(tx, serverId, context, options.expectedEndpoint),
       );
+      if (snapshot.server.secretId && !snapshot.secret) {
+        // The pointer can change between the two reads at READ COMMITTED.
+        // Re-read once under the writer lock before interpreting it as disconnected.
+        snapshot = await this.prisma.$transaction(async (tx) => {
+          await lockMaterial(tx, serverId);
+          return this.snapshot(tx, serverId, context, options.expectedEndpoint);
+        });
+        if (snapshot.server.secretId && !snapshot.secret)
+          throw new McpReauthorizationRequiredError(serverId);
+      }
       const nextMaterial = snapshot.secret
         ? await this.read(snapshot.secret.ciphertext, snapshot.secret.id)
         : {};
       const storedOAuth = nextMaterial.oauth;
-      let kept: TokenGrant | undefined;
+      const superseded = (material.oauthGeneration ?? 0) !== (nextMaterial.oauthGeneration ?? 0);
+      const expectedMarker = clearedGrantMarker(options.storedGrant ?? null);
+      const staleGrant =
+        options.storedGrant !== undefined &&
+        !sameGrant(grantKey(storedOAuth), options.storedGrant) &&
+        !(
+          options.replaceCleared &&
+          !storedOAuth?.tokens &&
+          expectedMarker &&
+          storedOAuth?.clearedGrant === expectedMarker
+        );
       if (material.oauth) {
         // OAuth state belongs to the client that obtained it; a client changed in
         // settings meanwhile has already dropped the grant this write carries.
@@ -1582,39 +1739,32 @@ export class McpOAuthBroker {
           throw new McpOAuthServerMismatchError();
         // A disconnect discarded the stored state and raised its generation; a write from
         // that earlier flow, issued tokens included, must not bring the grant back.
-        const superseded = (material.oauthGeneration ?? 0) !== (nextMaterial.oauthGeneration ?? 0);
         const bound = material.oauthClient?.authorization_server;
         // A superseded write keeps the stored client exactly as stored: a first-use
         // binding belongs to an authorization the user ended.
         if (
           !superseded &&
+          !staleGrant &&
           nextMaterial.oauthClient &&
           bound &&
           !nextMaterial.oauthClient.authorization_server
         )
           nextMaterial.oauthClient = { ...nextMaterial.oauthClient, authorization_server: bound };
-        nextMaterial.oauth = structuredClone(material.oauth);
-        // A process that spent the rotated-away token meanwhile cleared the grant this write renews.
-        const staleClear = options.replaceCleared && storedOAuth && !storedOAuth.tokens;
-        if (
-          superseded ||
-          (options.storedRefreshToken !== undefined &&
-            (storedOAuth?.tokens?.refresh_token ?? null) !== options.storedRefreshToken &&
-            !staleClear)
-        ) {
-          // Another process rotated or replaced the grant; never overwrite it with an older one.
-          // A disconnect removed the state altogether, and this write must not bring it back.
-          kept = { tokens: storedOAuth?.tokens, obtainedAt: storedOAuth?.obtainedAt };
-          options.onKept?.(kept);
-          if (superseded && storedOAuth) {
-            // The stored state belongs to a newer authorization, so keep it whole: its client
-            // and discovery too, not just its grant, or a later refresh pairs one flow's
-            // tokens with another's client.
-            nextMaterial.oauth = structuredClone(storedOAuth);
-          } else if (storedOAuth) applyGrant(nextMaterial.oauth, kept);
-          else delete nextMaterial.oauth;
-        }
-      } else delete nextMaterial.oauth;
+      }
+      if ((material.oauth || options.storedGrant !== undefined) && (superseded || staleGrant)) {
+        // Keep the entire stored authorization, including the client and discovery it uses.
+        const kept = grantState(storedOAuth);
+        options.onKept?.(kept);
+        if (snapshot.secret)
+          options.onPersisted?.({
+            id: snapshot.secret.id,
+            ref: snapshot.secret.ciphertext,
+            material: nextMaterial,
+          });
+        return kept;
+      }
+      if (material.oauth) nextMaterial.oauth = structuredClone(material.oauth);
+      else delete nextMaterial.oauth;
       if (options.raiseGeneration) {
         // Raised from what this attempt re-read, so a disconnect that commits after another
         // one still ends flows that began after the earlier disconnect.
@@ -1651,7 +1801,7 @@ export class McpOAuthBroker {
             });
         },
       );
-      if (committed) return kept;
+      if (committed) return undefined;
     }
     throw new McpCredentialRefusedError("MCP credentials changed during authorization; retry");
   }

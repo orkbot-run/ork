@@ -126,6 +126,24 @@ it("shows every connected computer as connected", async () => {
   expect(host.textContent).toContain("Desk PCConnected");
 });
 
+it("labels only the computer selected by the server for bots", async () => {
+  vi.mocked(listUserDevices).mockResolvedValue([
+    { ...laptop, defaultForBots: true },
+    { ...desk, connected: true, defaultForBots: false },
+  ]);
+  await act(async () => root.render(<ComputerDeviceSettings />));
+  expect(host.textContent).toContain("LaptopLinked to bots");
+  expect(host.textContent).toContain("Desk PCConnected");
+  expect(host.textContent?.match(/Linked to bots/g)).toHaveLength(1);
+});
+
+it("preserves offline status if an older designation is stale", async () => {
+  vi.mocked(listUserDevices).mockResolvedValue([{ ...desk, defaultForBots: true }]);
+  await act(async () => root.render(<ComputerDeviceSettings />));
+  expect(host.textContent).toContain("Desk PCOffline");
+  expect(host.textContent).not.toContain("Linked to bots");
+});
+
 it("stays off and reports it when turning this computer on fails", async () => {
   vi.mocked(listUserDevices).mockResolvedValue([]);
   const device = {

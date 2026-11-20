@@ -93,6 +93,7 @@ async function fixture(provider: "fake" | "desktop" = "fake") {
         async (work: (tx: PrismaClient) => Promise<unknown>): Promise<unknown> => work(deps.prisma),
       ),
       computer,
+      computerOrphanCleanup: { findFirst: vi.fn().mockResolvedValue(null) },
       computerExecutionLease: { findFirst: vi.fn().mockResolvedValue(null) },
       run: { findFirst: vi.fn().mockResolvedValue(null) },
     } as unknown as PrismaClient,

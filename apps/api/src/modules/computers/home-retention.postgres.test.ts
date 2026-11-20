@@ -166,6 +166,7 @@ describePostgres("saved home retention (PostgreSQL)", () => {
         organizationId: id,
         customerId: `cus-${id}`,
         status: "active",
+        firstPaidInvoiceAt: new Date(now - 200 * DAY),
         paidAt: new Date(now - 200 * DAY),
       },
     });
@@ -216,6 +217,7 @@ describePostgres("saved home retention (PostgreSQL)", () => {
             organizationId: id,
             customerId: `cus-${id}`,
             status: "canceled",
+            firstPaidInvoiceAt: new Date(now - 200 * DAY),
             paidAt: new Date(now - 200 * DAY),
             endedAt: new Date(now - 100 * DAY),
           },

@@ -1,4 +1,5 @@
 import { ATTACHMENT_ALLOWED_MIME_TYPES } from "@orkbot/contracts";
+import { attachmentExtensionForMimeType } from "@orkbot/core";
 
 /**
  * Android's document picker can filter out CSV files when the accept attribute
@@ -7,5 +8,8 @@ import { ATTACHMENT_ALLOWED_MIME_TYPES } from "@orkbot/contracts";
  */
 export function attachmentPickerAccept(userAgent: string): string {
   if (/\bAndroid\b/i.test(userAgent)) return "*/*";
-  return [...ATTACHMENT_ALLOWED_MIME_TYPES, ".zip", ".csv", ".xls", ".xlsx"].join(",");
+  return [
+    ...ATTACHMENT_ALLOWED_MIME_TYPES,
+    ...ATTACHMENT_ALLOWED_MIME_TYPES.map(attachmentExtensionForMimeType),
+  ].join(",");
 }

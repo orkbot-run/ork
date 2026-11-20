@@ -97,14 +97,26 @@ describePostgres("user devices (PostgreSQL)", () => {
     await expect(gateway.connected(userId)).resolves.toMatchObject({ deviceId: device.id });
     await expect(gateway.pairedSince(userId)).resolves.toEqual(device.createdAt);
     await expect(gateway.list(userId)).resolves.toEqual([
-      { deviceId: device.id, name: "Laptop", connected: true },
+      {
+        deviceId: device.id,
+        name: "Laptop",
+        platform: "linux",
+        connected: true,
+        defaultForBots: true,
+      },
     ]);
     await prisma.userDeviceConnection.update({
       where: { deviceId: device.id },
       data: { heartbeatAt: new Date(Date.now() - 10 * 60_000) },
     });
     await expect(gateway.list(userId)).resolves.toEqual([
-      { deviceId: device.id, name: "Laptop", connected: false },
+      {
+        deviceId: device.id,
+        name: "Laptop",
+        platform: "linux",
+        connected: false,
+        defaultForBots: false,
+      },
     ]);
     await prisma.userDeviceConnection.update({
       where: { deviceId: device.id },
@@ -123,6 +135,89 @@ describePostgres("user devices (PostgreSQL)", () => {
     await expect(gateway.connected(userId)).resolves.toBeNull();
     await expect(gateway.pairedSince(userId)).resolves.toBeNull();
     await expect(hub.authenticate(`Bearer ${token}`)).resolves.toBeNull();
+  });
+
+  it("routes by pairing age and ID independently of reconnect order without fallback", async () => {
+    const owner = `${userId}-ordering`;
+    const foreign = `${owner}-foreign`;
+    await prisma.user.createMany({
+      data: [owner, foreign].map((id) => ({ id, name: id, email: `${id}@example.test` })),
+    });
+    try {
+      const pairing = new Date("2026-01-01T00:00:00Z");
+      const ids = ["b", "a", "new", "stale", "revoked", "foreign"].map((key) => `${owner}-${key}`);
+      // Reverse insertion, equal pairing timestamps, opposite connection order.
+      for (let i = 0; i < ids.length; i++) {
+        await prisma.userDevice.create({
+          data: {
+            id: ids[i]!,
+            userId: i === 5 ? foreign : owner,
+            name: String(i),
+            platform: "linux",
+            tokenHash: ids[i]!,
+            createdAt: new Date(pairing.getTime() + (i === 2 ? 1000 : i >= 3 ? -1000 : 0)),
+            revokedAt: i === 4 ? new Date() : null,
+          },
+        });
+        await prisma.userDeviceConnection.create({
+          data: {
+            deviceId: ids[i]!,
+            connectionId: ids[i]!,
+            address: "http://127.0.0.1:1",
+            connectedAt: new Date(Date.now() + i * 1000),
+            heartbeatAt: i === 3 ? new Date(0) : new Date(),
+          },
+        });
+      }
+      const gateway = new UserDevices({ prisma: raw, forwardSecret: "k" });
+      await expect(gateway.connected(owner)).resolves.toMatchObject({ deviceId: ids[1] });
+      const listed = await gateway.list(owner);
+      expect(listed.map((entry) => entry.deviceId)[0]).toBe(ids[2]);
+      expect(listed.filter((entry) => entry.defaultForBots).map((entry) => entry.deviceId)).toEqual(
+        [ids[1]],
+      );
+      await prisma.userDeviceConnection.update({
+        where: { deviceId: ids[0] },
+        data: { connectedAt: new Date(Date.now() + 60_000) },
+      });
+      await expect(gateway.connected(owner)).resolves.toMatchObject({ deviceId: ids[1] });
+      await expect(gateway.connected(owner, ids[2])).resolves.toMatchObject({ deviceId: ids[2] });
+      await expect(gateway.pairedSince(owner, ids[2])).resolves.toEqual(
+        new Date(pairing.getTime() + 1000),
+      );
+      for (const id of [ids[3], ids[4], ids[5], "missing", ""]) {
+        await expect(gateway.connected(owner, id)).resolves.toBeNull();
+        const values = async () => {
+          for await (const _ of gateway.request(
+            owner,
+            { method: "environment", botId: "bot" },
+            new AbortController().signal,
+            id,
+          )) {
+          }
+        };
+        await expect(values()).rejects.toThrow("Your computer is not connected");
+      }
+      await prisma.userDeviceConnection.update({
+        where: { deviceId: ids[1] },
+        data: { heartbeatAt: new Date(0) },
+      });
+      await expect(gateway.connected(owner)).resolves.toMatchObject({ deviceId: ids[0] });
+      expect(
+        (await gateway.list(owner))
+          .filter((entry) => entry.defaultForBots)
+          .map((entry) => entry.deviceId),
+      ).toEqual([ids[0]]);
+      const denied = new UserDevices({
+        prisma: raw,
+        forwardSecret: "k",
+        allowHostAccess: async () => false,
+      });
+      await expect(denied.connected(owner)).resolves.toBeNull();
+      expect((await denied.list(owner)).some((entry) => entry.defaultForBots)).toBe(false);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: { in: [owner, foreign] } } });
+    }
   });
 
   it("revokes a connected device once the sign-in that paired it is gone", async () => {

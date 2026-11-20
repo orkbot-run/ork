@@ -6,6 +6,7 @@ import type { MessageBlock } from "@orkbot/contracts";
 import {
   appendTextSegment,
   appendToolCallSegment,
+  callIdFromClientNonce,
   createStreamingRedactor,
   endsSentence,
   isBackgroundRunTrigger,
@@ -174,8 +175,66 @@ export function mayBeSilentEnding(ctx: Pick<RunContext, "groupReplyOptional">, t
   return ctx.groupReplyOptional && (couldBecomeNoResponse(text) || isPlaceholderText(text));
 }
 
-export async function flushProgress(ctx: RunContext) {
+/** Invalidate the sidebar when the displayed status changes, without signaling each reply delta. */
+export async function appendProgress(ctx: RunContext, payload: Record<string, unknown>) {
   const { deps, run, runId, bot, thread } = ctx;
+  const { reply } = ctx.state;
+  // Mark only assistant text that this run actually exposes in the owner's chat.
+  // Status lines and explicit/final-only narration must never enter the spoken stream.
+  let publicText: string | undefined;
+  const publicTextCallId = callIdFromClientNonce(ctx.source.callClientNonce);
+  if (
+    publicTextCallId &&
+    payload.streaming === true &&
+    payload.activity !== true &&
+    !reply.publicTextLimitReached &&
+    !ctx.scripted &&
+    ctx.source.ownerStartedRun &&
+    !ctx.source.messagingChannelRun &&
+    !ctx.source.callEndRun &&
+    runPromotesMidTurnNarration(run.trigger, run.replyMode)
+  ) {
+    const text = typeof payload.delta === "string" ? payload.delta : payload.text;
+    if (typeof text === "string" && text) {
+      const previous = reply.publicText ?? "";
+      const separator = previous && typeof payload.delta !== "string" ? "\n\n" : "";
+      const next = previous + separator + text;
+      // Bound repeated event payloads on very long runs. Clients finish any unspoken
+      // suffix from the durable final response when this optional marker stops growing.
+      if (next.length <= PUBLIC_PROGRESS_TEXT_MAX_LENGTH) {
+        publicText = next;
+        if (typeof payload.delta !== "string")
+          reply.publicTextSegmentStart = previous.length + separator.length;
+        payload = {
+          ...payload,
+          publicText,
+          publicTextCallId,
+          publicTextSegmentStart: reply.publicTextSegmentStart ?? 0,
+        };
+      } else reply.publicTextLimitReached = true;
+    }
+  }
+  const step =
+    payload.activity === true && typeof payload.text === "string" ? payload.text.trim() : "";
+  const rosterProgress = step ? `step:${step}` : payload.streaming === true ? "writing" : undefined;
+  const invalidateRoster = thread.botId === bot.id && rosterProgress !== reply.rosterProgress;
+  await deps.events.append({
+    spaceId: run.spaceId,
+    threadId: thread.id,
+    botId: bot.id,
+    type: "thread.progress",
+    runId,
+    payload,
+    ...(invalidateRoster ? { invalidateRoster: true } : {}),
+  });
+  if (publicText !== undefined) reply.publicText = publicText;
+  reply.rosterProgress = rosterProgress;
+}
+
+export const PUBLIC_PROGRESS_TEXT_MAX_LENGTH = 128 * 1024;
+
+export async function flushProgress(ctx: RunContext) {
+  const { run } = ctx;
   const { reply } = ctx.state;
   // Routines may finish silently. Do not leak narration or a partial silence
   // sentinel before the final outcome is known.
@@ -188,18 +247,14 @@ export async function flushProgress(ctx: RunContext) {
     progressHeldForSilence(ctx)
   )
     return;
-  await deps.events.append({
-    spaceId: run.spaceId,
-    threadId: thread.id,
-    botId: bot.id,
-    type: "thread.progress",
-    runId,
+  await appendProgress(
+    ctx,
     // The first flush replaces the "working…" placeholder outright — a delta here
     // would otherwise get appended straight onto it with no separator.
-    payload: reply.hasStreamedText
+    reply.hasStreamedText
       ? { delta: reply.pendingProgress, streaming: true }
       : { text: reply.pendingProgress, streaming: true },
-  });
+  );
   reply.hasStreamedText = true;
   reply.pendingProgress = "";
   reply.lastProgressAt = Date.now();
@@ -299,7 +354,7 @@ export async function publishNarrationBeforeAsk(ctx: RunContext) {
  * narration back (routines, peers, background work) keep their live view.
  */
 export async function showNarrationStatus(ctx: RunContext, note: string | undefined) {
-  const { deps, run, runId, bot, thread } = ctx;
+  const { run } = ctx;
   if (
     !note ||
     ctx.scripted ||
@@ -308,12 +363,5 @@ export async function showNarrationStatus(ctx: RunContext, note: string | undefi
   )
     return;
   ctx.state.reply.narrationStatusShowing = true;
-  await deps.events.append({
-    spaceId: run.spaceId,
-    threadId: thread.id,
-    botId: bot.id,
-    type: "thread.progress",
-    runId,
-    payload: { reset: true, text: narrationStatusLine(note), activity: true },
-  });
+  await appendProgress(ctx, { reset: true, text: narrationStatusLine(note), activity: true });
 }

@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
 
-import { AiConsentBlocked, callIdFromClientNonce, INTERIM_BARGE_IN_MS } from "@orkbot/core";
+import {
+  AiConsentBlocked,
+  CallSpeechQueue,
+  callIdFromClientNonce,
+  INTERIM_BARGE_IN_MS,
+} from "@orkbot/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CallClip, CallDeps, CallEnded, DictationHandlers } from "./call-session";
 import {
@@ -133,6 +138,8 @@ function fakes(opts: { onDevice?: boolean } = {}) {
   const unwatch = vi.fn();
   let reply: (messageId: string, text: string, runId?: string) => void = () => undefined;
   let ended: (ended: CallEnded) => void = () => undefined;
+  let progress: Parameters<CallDeps["watch"]>[3] = () => undefined;
+  let runEnded: Parameters<CallDeps["watch"]>[4] = () => undefined;
   const spoken: string[] = [];
   let handlers: DictationHandlers | null = null;
   const stopSpeaking = vi.fn(() => {
@@ -170,9 +177,11 @@ function fakes(opts: { onDevice?: boolean } = {}) {
       speeches.push(next);
       return next.promise;
     },
-    watch: (_botId, onReply, onCallEnded) => {
+    watch: (_botId, onReply, onCallEnded, onProgress, onRunEnded) => {
       reply = onReply;
       ended = onCallEnded;
+      progress = onProgress;
+      runEnded = onRunEnded;
       return unwatch;
     },
   };
@@ -193,6 +202,8 @@ function fakes(opts: { onDevice?: boolean } = {}) {
     say: (text: string) =>
       recordings[recordings.length - 1]?.resolve({ base64: text, mimeType: "audio/m4a" }),
     replyWith: (messageId: string, text: string, runId?: string) => reply(messageId, text, runId),
+    progress: (runId: string, text: string) => progress(runId, text),
+    runEnded: (runId: string) => runEnded(runId),
     endedCall: (callId: string | undefined, farewell?: string) => ended({ callId, farewell }),
   };
 }
@@ -200,6 +211,96 @@ function fakes(opts: { onDevice?: boolean } = {}) {
 afterEach(() => endCall());
 
 describe("mobile call session", () => {
+  it("interrupts a streamed turn and cancels the in-flight next synthesis", async () => {
+    const fake = fakes({ onDevice: true });
+    const active = deferred<void>();
+    const pending = deferred<string>();
+    const render = vi.fn((text: string, _signal: AbortSignal) =>
+      text.startsWith("First") ? Promise.resolve(text) : pending.promise,
+    );
+    const play = vi.fn(() => active.promise);
+    const stream = vi.fn(
+      (_botId: string, onClip: (text: string) => void) =>
+        new CallSpeechQueue({
+          render,
+          play: (text) => {
+            onClip(text);
+            return play();
+          },
+        }),
+    );
+    startCall({ botId: "call-bot", botName: "Ada" }, { ...fake.deps, stream });
+    await flush();
+    fake.hear("Start the task");
+    await flush();
+    fake.progress("run-1", "First sentence. Second sentence. Waiting");
+    await flush();
+    expect(play).toHaveBeenCalledOnce();
+    expect(getSnapshot()?.phase).toBe("speaking");
+    expect(render.mock.calls.map(([text]) => text)).toEqual([
+      "First sentence.",
+      "Second sentence.",
+    ]);
+    const signal = render.mock.calls[1]?.[1];
+    fake.hear("Please stop speaking now");
+    await flush();
+    expect(signal?.aborted).toBe(true);
+    fake.progress("run-1", "First sentence. Second sentence. Waiting no more.");
+    fake.replyWith("cut-off", "First sentence. Second sentence. Waiting no more.", "run-1");
+    fake.runEnded("run-1");
+    pending.resolve("Second sentence.");
+    active.resolve();
+    await flush();
+    expect(play).toHaveBeenCalledOnce();
+    expect(fake.spoken).toEqual([]);
+  });
+
+  it("holds Android recognition through all streamed clips and one echo guard", async () => {
+    const previousOs = device.os;
+    device.os = "android";
+    vi.useFakeTimers();
+    try {
+      const fake = fakes({ onDevice: true });
+      const first = deferred<void>();
+      const last = deferred<void>();
+      const play = vi.fn((text: string) =>
+        text.startsWith("First") ? first.promise : last.promise,
+      );
+      startCall(
+        { botId: "call-bot", botName: "Ada" },
+        {
+          ...fake.deps,
+          stream: () => new CallSpeechQueue({ render: async (text) => text, play }),
+        },
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      fake.hear("Start the task");
+      await vi.advanceTimersByTimeAsync(0);
+      fake.progress("run-1", "First sentence. The last");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fake.signals).toHaveLength(1);
+      expect(fake.signals[0]?.aborted).toBe(true);
+      fake.replyWith("final", "First sentence. The last sentence.", "run-1");
+      first.resolve();
+      await vi.advanceTimersByTimeAsync(600);
+      expect(play.mock.calls.map(([text]) => text)).toEqual([
+        "First sentence.",
+        "The last sentence.",
+      ]);
+      expect(fake.signals).toHaveLength(1);
+      last.resolve();
+      await vi.advanceTimersByTimeAsync(599);
+      expect(fake.signals).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fake.signals).toHaveLength(2);
+      expect(getSnapshot()?.phase).toBe("listening");
+    } finally {
+      endCall();
+      vi.useRealTimers();
+      device.os = previousOs;
+    }
+  });
+
   it("holds the speaker before the opening cue resolves and ignores stale old opening completion", async () => {
     const first = fakes();
     const cue = deferred<void>();

@@ -22,6 +22,7 @@ import type {
   FaviconResolver,
   McpConnector,
   McpOAuthBroker,
+  MeetingConnection,
   MemoryProviderResolver,
   MessagingInstallations,
   PiOAuthLogins,
@@ -51,6 +52,7 @@ import { contentRoutes } from "#modules/content/routes/content";
 import { pagesRoutes } from "#modules/content/routes/pages";
 import { connectionsRoutes } from "#modules/integrations/routes/connections";
 import { mcpRoutes } from "#modules/mcp/routes/mcp";
+import { meetingsRoutes } from "#modules/meetings/routes";
 import { memoryRoutes } from "#modules/memory/routes/memory";
 import { messagingRoutes } from "#modules/messaging/routes/messaging";
 import { modelsRoutes } from "#modules/models/routes/models";
@@ -80,6 +82,7 @@ export interface RouterDeps {
   notifications?: NotificationProvider;
   analytics?: ProductAnalytics;
   cloudAgent?: CloudAgentConnection | null;
+  meetings?: MeetingConnection | null;
   /** The deployment's wallet provider; absent hides purchases. */
   paymentWallet?: PaymentWalletProvider | null;
   prisma: PrismaClient;
@@ -178,6 +181,7 @@ export function createRouter(deps: RouterDeps) {
     ...serverUpdateRoutes(ctx),
     ...memoryRoutes(ctx),
     ...routinesRoutes(ctx),
+    ...meetingsRoutes(ctx),
     ...boardsRoutes(ctx),
     ...mcpRoutes(ctx),
     ...availabilityRoutes(ctx),

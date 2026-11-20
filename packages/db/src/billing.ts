@@ -6,17 +6,17 @@
 
 import { randomUUID } from "node:crypto";
 import type { BillingSubscriptionSnapshot } from "@orkbot/adapter-kit";
-import { BYOK_TIERS } from "@orkbot/contracts";
+import {
+  BYOK_TIERS,
+  billingSubscriptionGrantsAccess as hasBillingAccess,
+  billingSubscriptionNeedsRecovery as needsBillingPortal,
+} from "@orkbot/contracts";
 import type { BillingAccount, PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";
 import { isUniqueViolation } from "./database-errors.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
-const ACCESS_STATUSES = new Set(["trialing", "active", "past_due"]);
-
-export function hasBillingAccess(status: string | null): boolean {
-  return status !== null && ACCESS_STATUSES.has(status);
-}
+export { hasBillingAccess, needsBillingPortal };
 
 /**
  * Whether a model-credit organization can run bots. Any live subscription grants it, as does a
@@ -28,6 +28,7 @@ export function hasModelAccess(
   now = new Date(),
 ): boolean {
   if (hasBillingAccess(subscriptionStatus)) return true;
+  if (needsBillingPortal(subscriptionStatus)) return false;
   if (credits.mode === "byok")
     return BYOK_TIERS.standard.monthlyPriceCents === null || byokFreeUntil(credits, now) !== null;
   if (credits.balanceMicros > 0n) return true;
@@ -320,11 +321,6 @@ export async function releaseCheckoutLease(
   });
 }
 
-/** The subscription exists but has no access until the owner settles it in the billing portal. */
-export function needsBillingPortal(status: string | null): boolean {
-  return status === "unpaid" || status === "paused";
-}
-
 /**
  * Loads the customer's current subscription and overwrites the stored snapshot (`null` clears
  * it). The write only lands if no sync that started later has written first, so an older read
@@ -369,14 +365,23 @@ export async function syncBillingSnapshot(
     });
     await markOwnersTrialUsed(prisma, { billing: { is: { customerId } } });
   }
-  if (snapshot?.status === "active") {
-    await prisma.billingAccount.updateMany({
-      where: { customerId, paidAt: null },
-      data: { paidAt: startedAt },
-    });
-  }
   if (written.count > 0) return true;
   return (await prisma.billingAccount.count({ where: { customerId } })) > 0;
+}
+
+/** Payment evidence is monotonic and survives later failures, cancellations, and retries. */
+export async function recordFirstPaidSubscriptionInvoice(
+  prisma: PrismaClient,
+  customerId: string,
+  paidAt: Date,
+): Promise<void> {
+  await prisma.billingAccount.updateMany({
+    where: {
+      customerId,
+      OR: [{ firstPaidInvoiceAt: null }, { firstPaidInvoiceAt: { gt: paidAt } }],
+    },
+    data: { firstPaidInvoiceAt: paidAt },
+  });
 }
 
 /** Billable seats: every organization member, never fewer than one. */

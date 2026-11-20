@@ -1,5 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved; billing recovery changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { BillingStatus } from "@orkbot/contracts";
+import { billingSubscriptionHoldsCheckout } from "@orkbot/contracts";
 import { Button } from "@orkbot/ui-web";
 import { Check } from "lucide-react";
 import { useState } from "react";
@@ -18,7 +23,7 @@ export function PaywallPage({
   /** Opened from the app rather than required, so it closes instead of logging out. */
   dismissible?: boolean;
 }) {
-  return status.funding !== undefined ? (
+  return status.funding !== undefined || billingSubscriptionHoldsCheckout(status.state) ? (
     <CreditChoice status={status} dismissible={dismissible} />
   ) : (
     <LegacyPaywallPage status={status} />
@@ -31,7 +36,7 @@ function LegacyPaywallPage({ status }: { status: BillingStatus }) {
   const [error, setError] = useState<string | null>(null);
   const { signingOut, logOut } = useSignOut("/sign-in", setError);
   // An unpaid or paused subscription resumes from the portal; a new checkout would bill twice.
-  const resumable = status.state === "unpaid" || status.state === "paused";
+  const resumable = billingSubscriptionHoldsCheckout(status.state);
   const showCheckout = status.canManage && !resumable;
   const showPortal =
     status.canManage &&

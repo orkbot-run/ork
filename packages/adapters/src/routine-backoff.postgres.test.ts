@@ -1,10 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@orkbot/db";
-import { asSystem, createDb, provisionMessagingIdentity, runAsSystem } from "@orkbot/db";
+import {
+  asSystem,
+  createDb,
+  provisionMessagingIdentity,
+  runAsSystem,
+  runAsTenant,
+} from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   backOffRoutineAfterAccountError,
   clearRoutineBackoff,
+  releaseUserRoutineAccountBackoffs,
   routineAccountBackoffMs,
 } from "./routine-backoff.js";
 
@@ -88,5 +95,70 @@ describePostgres("backing off a routine on refused model accounts (PostgreSQL)",
     const row = await system.routine.findUniqueOrThrow({ where: { id: routine.id } });
     expect(row.accountFailures).toBe(0);
     expect(row.nextRunAt!.getTime()).toBeLessThanOrEqual(Date.now() + 60_000);
+  });
+
+  it("releases only the reconnecting user's holds and keeps paused routines paused", async () => {
+    const { routine, deps, enqueue } = await fixture();
+    const heldUntil = new Date(Date.now() + 24 * 60 * 60_000);
+    await system.routine.update({
+      where: { id: routine.id },
+      data: { accountFailures: 8, nextRunAt: heldUntil },
+    });
+    const paused = await system.routine.create({
+      data: {
+        ...identity,
+        name: "Paused",
+        prompt: "fixture",
+        crons: ["* * * * *"],
+        active: false,
+        accountFailures: 8,
+        nextRunAt: heldUntil,
+      },
+    });
+    const watch = await system.routine.create({
+      data: {
+        ...identity,
+        name: "Watch",
+        prompt: "fixture",
+        crons: [],
+        watch: { kind: "files" },
+        active: true,
+        accountFailures: 8,
+        nextRunAt: heldUntil,
+      },
+    });
+    const other = await system.routine.create({
+      data: {
+        ...identity,
+        userId: `other-${randomUUID()}`,
+        name: "Other owner",
+        prompt: "fixture",
+        crons: ["* * * * *"],
+        active: true,
+        accountFailures: 8,
+        nextRunAt: heldUntil,
+      },
+    });
+    const now = new Date();
+    await runAsTenant(identity, () =>
+      releaseUserRoutineAccountBackoffs({ ...deps, prisma: db.prisma }, identity.userId, now),
+    );
+    const [timerRow, pausedRow, watchRow, otherRow] = await Promise.all(
+      [routine, paused, watch, other].map(({ id }) =>
+        system.routine.findUniqueOrThrow({ where: { id } }),
+      ),
+    );
+    expect(timerRow!.accountFailures).toBe(0);
+    expect(timerRow!.nextRunAt!.getTime()).toBeGreaterThan(now.getTime());
+    expect(timerRow!.nextRunAt!.getTime()).toBeLessThanOrEqual(now.getTime() + 60_000);
+    expect(pausedRow).toMatchObject({ active: false, accountFailures: 0, nextRunAt: heldUntil });
+    expect(watchRow).toMatchObject({ accountFailures: 0, nextRunAt: now });
+    expect(otherRow).toMatchObject({ accountFailures: 8, nextRunAt: heldUntil });
+    expect(enqueue).not.toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.objectContaining({ routineId: paused.id }) }),
+    );
+    expect(enqueue).not.toHaveBeenCalledWith(
+      expect.objectContaining({ payload: expect.objectContaining({ routineId: other.id }) }),
+    );
   });
 });

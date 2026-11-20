@@ -7,7 +7,11 @@
 // Ork overlaps independent chat-send preflight reads.
 
 import { runContinueJob, runJobKey } from "@orkbot/adapter-kit";
-import { settleCallRequest } from "@orkbot/adapters";
+import {
+  listAgentSkillCatalog,
+  loadReferencedAgentSkills,
+  settleCallRequest,
+} from "@orkbot/adapters";
 import type { Actor, ProductEvent } from "@orkbot/contracts";
 import {
   AttachmentValidationError,
@@ -20,6 +24,7 @@ import {
 import type { Prisma } from "@orkbot/db";
 import {
   AnswerTooLongError,
+  answerMcpForm,
   appendEventInTransaction,
   cancelBackgroundHelper,
   createExternalConversationRepos,
@@ -28,6 +33,9 @@ import {
   isUniqueViolation,
   lockOwnedGroup,
   lockSpaceForWork,
+  McpFormAnswerError,
+  OutgoingDraftAnswerError,
+  parseMcpFormAnswer,
   returnBackgroundHelperOutcome,
   THREAD_LOCK_TRANSACTION_OPTIONS,
   touchGroupUpdatedAt,
@@ -107,7 +115,7 @@ export function takeoverReleaser(deps: RouterDeps, actor: Actor, target: ThreadT
 }
 
 export function threadsRoutes(ctx: RouterContext) {
-  const { deps, authed, callsEnabled, codexCatalog, repos, agentSkills } = ctx;
+  const { deps, authed, callsEnabled, codexCatalog, repos } = ctx;
   /** The bot a reaction can wake: the thread's bot, or in a group the bot that wrote the message. */
   const reactedBotId = async (target: ThreadTarget, messageId: string) =>
     target.kind === "bot"
@@ -137,7 +145,7 @@ export function threadsRoutes(ctx: RouterContext) {
     const noModel =
       setup.needsModel &&
       !(await botsRunOwnModels(deps, actor, sendTargetBotIds(target, input, replied)));
-    if (noModel && (target.kind !== "bot" || !isStopMessage(input))) {
+    if (noModel && !isStopMessage(input)) {
       throw new ORPCError("BAD_REQUEST", { message: MODEL_REQUIRED_SEND_ERROR });
     }
     if (target.kind === "bot") {
@@ -239,15 +247,20 @@ export function threadsRoutes(ctx: RouterContext) {
             routineTestTarget(deps.prisma, repos, actor, routineId),
           ),
         );
-        const skillRecords = await agentSkills.listWithContent(actor);
-        const routines = targets.map((target) => ({
-          target,
-          prompt: expandSkillReferencesInPrompt(target.routine.prompt, skillRecords),
-          nonce: routineTestRunNonce(
-            actor,
-            `routine-mention:${input.clientNonce}:${target.routine.id}`,
-          ),
-        }));
+        const catalog = await listAgentSkillCatalog(deps.prisma, actor);
+        const routines = await Promise.all(
+          targets.map(async (target) => ({
+            target,
+            prompt: expandSkillReferencesInPrompt(
+              target.routine.prompt,
+              await loadReferencedAgentSkills(deps.prisma, actor, target.routine.prompt, catalog),
+            ),
+            nonce: routineTestRunNonce(
+              actor,
+              `routine-mention:${input.clientNonce}:${target.routine.id}`,
+            ),
+          })),
+        );
         const nonces = routines.map((routine) => routine.nonce);
         const savedRuns = (db: Pick<Prisma.TransactionClient, "run">) =>
           db.run.findMany({
@@ -667,6 +680,38 @@ export function threadsRoutes(ctx: RouterContext) {
       }),
       answer: authed.threads.answer.handler(async ({ context, input }) => {
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);
+        try {
+          const form = parseMcpFormAnswer(input.answer);
+          if (form) {
+            if (
+              input.fields !== undefined ||
+              input.username !== undefined ||
+              input.remember !== undefined ||
+              input.dismiss
+            )
+              throw new McpFormAnswerError("The MCP form response is invalid.");
+            const seq = await answerMcpForm(deps.prisma, {
+              spaceId: context.actor.spaceId,
+              threadId: target.threadId,
+              runId: input.runId,
+              messageId: input.messageId,
+              userId: context.actor.userId,
+              answer: form,
+            });
+            if (seq === undefined)
+              throw new ORPCError("CONFLICT", {
+                message: "This form is no longer awaiting an answer",
+              });
+            await deps.events.notify(target.threadId, seq).catch((error) => {
+              getLogger().error("mcp form answer realtime notification", error);
+            });
+            return { ok: true as const };
+          }
+        } catch (error) {
+          if (error instanceof McpFormAnswerError)
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+          throw error;
+        }
         const answered = await deps.events
           .answerRunInput({
             spaceId: context.actor.spaceId,
@@ -682,7 +727,7 @@ export function threadsRoutes(ctx: RouterContext) {
             dismiss: input.dismiss,
           })
           .catch((error: unknown) => {
-            if (error instanceof AnswerTooLongError)
+            if (error instanceof AnswerTooLongError || error instanceof OutgoingDraftAnswerError)
               throw new ORPCError("BAD_REQUEST", { message: error.message });
             // A typed credential its destination cannot carry (e.g. a header with a line break).
             throw mapBotSecretInputError(error);
@@ -692,10 +737,12 @@ export function threadsRoutes(ctx: RouterContext) {
             message: "This prompt is no longer awaiting an answer",
           });
         }
-        await deps.jobs.enqueue(runContinueJob(input.runId)).catch((error) => {
-          // The answer and queued run are durable; the reconciler repairs a missed immediate wake.
-          getLogger().error("thread answer enqueue", error);
-        });
+        if (answered === true) {
+          await deps.jobs.enqueue(runContinueJob(input.runId)).catch((error) => {
+            // The answer and queued run are durable; the reconciler repairs a missed immediate wake.
+            getLogger().error("thread answer enqueue", error);
+          });
+        }
         return { ok: true as const };
       }),
       markRead: authed.threads.markRead.handler(async ({ context, input }) => {

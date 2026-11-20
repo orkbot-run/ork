@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { connect } from "node:net";
 import type { Duplex } from "node:stream";
-import { USER_DEVICE_CONNECT_PATH } from "@orkbot/contracts";
+import { USER_DEVICE_CONNECT_PATH, userDeviceListSchema } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -65,12 +65,38 @@ function fakePrisma() {
         for (const id of ids(where)) if (devices.has(id)) Object.assign(devices.get(id)!, data);
         return { count: 0 };
       },
-      findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
+      findMany: async ({
+        where,
+        select,
+      }: {
+        where: { id?: { in: string[] }; userId?: string; revokedAt?: null };
+        select?: { connections?: { where: { heartbeatAt: { gt: Date } } } };
+      }) =>
         ids(where)
-          .map((id) => devices.get(id))
-          .filter(Boolean),
-      findFirst: async ({ where }: { where: { userId: string; revokedAt: null } }) =>
-        [...devices.values()].find((row) => row.userId === where.userId && !row.revokedAt) ?? null,
+          .map((id) => devices.get(id)!)
+          .filter(
+            (row) =>
+              row &&
+              (!where.userId || row.userId === where.userId) &&
+              (where.revokedAt === undefined || !row.revokedAt),
+          )
+          .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0))
+          .map((row) => ({
+            ...row,
+            connections:
+              select?.connections &&
+              connections.get(row.id) &&
+              connections.get(row.id)!.heartbeatAt > select.connections.where.heartbeatAt.gt
+                ? [{ deviceId: row.id }]
+                : [],
+          })),
+      findFirst: async ({ where }: { where: { userId: string; revokedAt: null; id?: string } }) =>
+        [...devices.values()].find(
+          (row) =>
+            row.userId === where.userId &&
+            !row.revokedAt &&
+            (where.id === undefined || row.id === where.id),
+        ) ?? null,
     },
     userDeviceConnection: {
       upsert: async ({ where, create }: { where: { deviceId: string }; create: ConnectionRow }) =>
@@ -91,19 +117,25 @@ function fakePrisma() {
       findFirst: async ({
         where,
       }: {
-        where: { heartbeatAt: { gt: Date }; device: { userId: string } };
+        where: { heartbeatAt: { gt: Date }; device: { userId: string }; deviceId?: string };
       }) => {
         const row = [...connections.values()]
           .filter((connection) => {
             const device = devices.get(connection.deviceId);
             return (
               device &&
+              (where.deviceId === undefined || connection.deviceId === where.deviceId) &&
               device.userId === where.device.userId &&
               !device.revokedAt &&
               connection.heartbeatAt > where.heartbeatAt.gt
             );
           })
-          .sort((a, b) => b.connectedAt.getTime() - a.connectedAt.getTime())[0];
+          .sort(
+            (a, b) =>
+              (devices.get(a.deviceId)!.createdAt?.getTime() ?? 0) -
+                (devices.get(b.deviceId)!.createdAt?.getTime() ?? 0) ||
+              (a.deviceId < b.deviceId ? -1 : a.deviceId > b.deviceId ? 1 : 0),
+          )[0];
         if (!row) return null;
         const device = devices.get(row.deviceId)!;
         return { ...row, device: { name: device.name, platform: device.platform } };
@@ -284,6 +316,74 @@ describe("device tokens", () => {
     expect(userDeviceInternalAddress("::1", 3100)).toBe("http://[::1]:3100");
     expect(userDeviceInternalAddress("0.0.0.0", 3100)).toMatch(/^http:\/\/.+:3100$/);
   });
+});
+
+it("keeps old device-list responses compatible", () => {
+  expect(
+    userDeviceListSchema.parse({ devices: [{ deviceId: "old", name: "Old", connected: false }] }),
+  ).toEqual({ devices: [{ deviceId: "old", name: "Old", connected: false }] });
+});
+
+it("selects the earliest paired live device with stable ties and preserves explicit targets", async () => {
+  const f = setup();
+  const row = f.deviceRows.get(device.id)!;
+  // Insert reverse ID order and reconnect the newer pairing last.
+  f.deviceRows.set("device-0", { ...row, id: "device-0" });
+  f.deviceRows.set("newer", { ...row, id: "newer", createdAt: new Date(10) });
+  for (const id of ["device-1", "device-0", "newer"]) {
+    const paired = f.deviceRows.get(id)!;
+    await f.hub.attach(paired, new FakeSocket());
+  }
+  await expect(f.devices.connected(device.userId)).resolves.toMatchObject({ deviceId: "device-0" });
+  await expect(f.devices.connected(device.userId, "newer")).resolves.toMatchObject({
+    deviceId: "newer",
+  });
+  await expect(f.devices.pairedSince(device.userId, "newer")).resolves.toEqual(new Date(10));
+  await expect(f.devices.pairedSince(device.userId, "missing")).resolves.toBeNull();
+  const before = structuredClone([...f.deviceRows]);
+  const listed = await f.devices.list(device.userId);
+  expect(listed[0]?.deviceId).toBe("newer");
+  expect(listed.filter((entry) => entry.defaultForBots).map((entry) => entry.deviceId)).toEqual([
+    "device-0",
+  ]);
+  expect(listed.every((entry) => entry.platform === "darwin")).toBe(true);
+  expect([...f.deviceRows]).toEqual(before);
+  f.connections.get("device-0")!.heartbeatAt = new Date(0);
+  for (const id of ["device-0", "missing", ""]) {
+    await expect(f.devices.connected(device.userId, id)).resolves.toBeNull();
+    await expect(
+      collect(f.devices.request(device.userId, environment, new AbortController().signal, id)),
+    ).rejects.toThrow(USER_DEVICE_OFFLINE_MESSAGE);
+  }
+  await expect(f.devices.connected(device.userId)).resolves.toMatchObject({ deviceId: "device-1" });
+  row.revokedAt = new Date();
+  f.deviceRows.get("newer")!.userId = "foreign";
+  await expect(f.devices.connected(device.userId)).resolves.toBeNull();
+  await expect(f.devices.connected(device.userId, "device-1")).resolves.toBeNull();
+  await expect(f.devices.connected(device.userId, "newer")).resolves.toBeNull();
+  expect((await f.devices.list(device.userId)).some((entry) => entry.defaultForBots)).toBe(false);
+});
+
+it("does not advertise a bot default while host access is disabled", async () => {
+  const f = setup(async () => false);
+  // Seed a transport left over from a previous policy state.
+  f.connections.set(device.id, {
+    deviceId: device.id,
+    connectionId: "c",
+    address: "http://localhost",
+    connectedAt: new Date(),
+    heartbeatAt: new Date(),
+  });
+  await expect(f.devices.connected(device.userId, device.id)).resolves.toBeNull();
+  expect(await f.devices.list(device.userId)).toEqual([
+    {
+      deviceId: device.id,
+      name: "Laptop",
+      platform: "darwin",
+      connected: true,
+      defaultForBots: false,
+    },
+  ]);
 });
 
 describe("user device gateway in the holding process", () => {

@@ -11,6 +11,7 @@ import {
   shouldNotifyBrowser,
 } from "../../lib/browser-notifications";
 import { notificationIcon, prepareNotificationIcons } from "../../lib/notification-icon";
+import { queryClient, useSpaceQueries } from "../../lib/query";
 import type { RpcClient } from "../../lib/rpc";
 import { captureRpcContext } from "../../lib/rpc";
 
@@ -52,6 +53,7 @@ export function useBrowserNotifications(
     callsEnabled,
   }: ChatAlertOptions,
 ) {
+  const queries = useSpaceQueries();
   useEffect(() => prepareNotificationIcons(bots), [bots]);
   const openChatRef = useRef(openChat);
   openChatRef.current = openChat;
@@ -153,6 +155,13 @@ export function useBrowserNotifications(
     const rosterRefresh = createRefreshCoalescer(async () => {
       if (current()) await refreshRosterRef.current?.();
     });
+    const usageRefresh = createRefreshCoalescer(async () => {
+      if (current())
+        await queryClient.invalidateQueries({
+          queryKey: queries.usage.breakdown.key(),
+          refetchType: "active",
+        });
+    });
     let rosterReady = false;
     let connected = false;
     const subscribedAt = Date.now();
@@ -229,10 +238,12 @@ export function useBrowserNotifications(
                   Date.now() - (rosterFetchStartedAt?.current ?? subscribedAt) > 1_000
                 ) {
                   void rosterRefresh.invalidate().catch(() => undefined);
+                  void usageRefresh.invalidate().catch(() => undefined);
                 }
                 connected = true;
               } else {
                 void rosterRefresh.invalidate().catch(() => undefined);
+                void usageRefresh.invalidate().catch(() => undefined);
               }
             } else if (frame.alert) show(frame.alert);
           }
@@ -259,6 +270,7 @@ export function useBrowserNotifications(
     return () => {
       active = false;
       rosterRefresh.dispose();
+      usageRefresh.dispose();
       clearTimeout(poll);
       clearTimeout(focusTimer);
       window.removeEventListener("focus", onForeground);
@@ -267,6 +279,7 @@ export function useBrowserNotifications(
       cancelRetry?.();
     };
   }, [
+    queries,
     source,
     currentLifetime,
     showNotification,

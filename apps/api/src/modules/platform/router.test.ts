@@ -3304,6 +3304,69 @@ describe("connections.begin", () => {
 });
 
 describe("connections.complete", () => {
+  it.each(["own-active", "sibling-active", "lookup-failed"])(
+    "settles only this authorization's active account (%s)",
+    async (outcome) => {
+      const row = {
+        id: "retry",
+        connectorId: "fixture",
+        provider: "mail",
+        providerRef: "ca-retry",
+        displayName: "Mail",
+        status: "pending",
+        createdAt: new Date(),
+      };
+      const connection = {
+        findFirst: vi.fn(async ({ where }: { where: { id: string | { not: string } } }) =>
+          typeof where.id === "string" ? { ...row } : null,
+        ),
+        findMany: vi.fn(async () => [{ providerRef: "ca-abandoned", status: "pending" }]),
+        updateMany: vi.fn(async ({ data }: { data: { status: string } }) => {
+          row.status = data.status;
+          return { count: 1 };
+        }),
+      };
+      const tx = {
+        connection,
+        $executeRaw: vi.fn(),
+        $queryRaw: vi.fn(async () => [{ locked: true }]),
+      };
+      const provider = {
+        connectionReady: vi.fn(async () => true),
+        listActiveConnectionRefs: vi.fn(async () => {
+          if (outcome === "lookup-failed") throw new Error("provider unavailable");
+          return outcome === "own-active" ? ["ca-retry"] : ["ca-abandoned"];
+        }),
+        resolveConnectedAccountId: vi.fn(async () => undefined),
+      };
+      const client = createRouterClient(
+        createRouter({
+          prisma: {
+            connection,
+            $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
+          },
+          connectors: { managed: () => provider },
+          env: { webOrigin: "https://example.test" },
+        } as unknown as RouterDeps),
+        {
+          context: {
+            actor: {
+              spaceId: "workspace",
+              userId: "user",
+              email: "user@example.test",
+              isDeploymentOwner: true,
+            },
+          } as never,
+        },
+      );
+      const result = await client.connections.complete({ connectionId: row.id });
+      expect(result.status).toBe(outcome === "own-active" ? "connected" : "pending");
+      expect(provider.connectionReady).not.toHaveBeenCalled();
+      expect(provider.resolveConnectedAccountId).not.toHaveBeenCalled();
+      expect(connection.updateMany).toHaveBeenCalledTimes(outcome === "own-active" ? 1 : 0);
+    },
+  );
+
   it.each([
     ["complete", false],
     ["complete", true],
@@ -3958,8 +4021,8 @@ describe("connections.complete", () => {
     const row = { id: "conn-1", provider: "gmail", displayName: "Gmail", status: "pending" };
     const connection = {
       findMany: vi.fn(async () => [{ ...row }]),
-      updateMany: vi.fn(async ({ where }: { where: { id?: string; status: string } }) => {
-        if (where.id !== row.id || row.status !== where.status) return { count: 0 };
+      updateMany: vi.fn(async ({ where }: { where: { id?: string; status: { in: string[] } } }) => {
+        if (where.id !== row.id || !where.status.in.includes(row.status)) return { count: 0 };
         row.status = "connected";
         return { count: 1 };
       }),
@@ -4303,7 +4366,11 @@ describe("computer terminal and file transfer", () => {
     controlBotId: "bot-1",
   };
 
-  function setup(computer: Record<string, unknown> = {}, maxUploadSizeBytes?: number) {
+  function setup(
+    computer: Record<string, unknown> = {},
+    maxUploadSizeBytes?: number,
+    home?: LocalAgentHomeStore,
+  ) {
     const sandbox = {
       describe: vi.fn<SandboxProvider["describe"]>(() =>
         new adapters.FakeSandboxProvider().describe(),
@@ -4347,6 +4414,7 @@ describe("computer terminal and file transfer", () => {
     const deps = {
       prisma,
       sandbox,
+      home,
       jobs: { enqueue: vi.fn().mockResolvedValue(undefined) },
       env: {
         maxUploadSizeBytes,
@@ -4598,6 +4666,76 @@ describe("computer terminal and file transfer", () => {
     await expect(text.call("readFile", { path: "notes.txt" })).resolves.toEqual({
       status: 200,
       body: { json: { path: "notes.txt", content: "hello" } },
+    });
+  });
+
+  it("returns 404 when a listed file disappears from the stopped computer's saved home", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "orkbot-stopped-computer-file-"));
+    const home = new LocalAgentHomeStore(directory);
+    const savedFolder = path.join(home.pathFor("home-1"), "bots", "bot-1");
+    const savedFile = path.join(savedFolder, "notes.txt");
+    try {
+      await mkdir(savedFolder, { recursive: true });
+      await writeFile(savedFile, "saved text");
+      const { call, sandbox } = setup({ state: "stopped" }, undefined, home);
+      await expect(call("files", { path: "" })).resolves.toMatchObject({
+        status: 200,
+        body: { json: [{ path: "notes.txt", kind: "file" }] },
+      });
+      await expect(call("readFile", { path: "notes.txt" })).resolves.toEqual({
+        status: 200,
+        body: { json: { path: "notes.txt", content: "saved text" } },
+      });
+      await rm(savedFile);
+      await expect(call("readFile", { path: "notes.txt" })).resolves.toMatchObject({
+        status: 404,
+        body: { json: { code: "NOT_FOUND", message: "File no longer exists." } },
+      });
+      expect(sandbox.readFile).not.toHaveBeenCalled();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["provider code", Object.assign(new Error("Path was removed"), { code: "file_not_found" })],
+    [
+      "SDK type",
+      Object.assign(new Error("File was removed"), { name: "SandboxFileNotFoundError" }),
+    ],
+    ["remote stat", new Error("stat: cannot stat 'notes.txt': No such file or directory\n")],
+    [
+      "Docker supervisor",
+      new Error(
+        `sandbox file read failed: 404 ${JSON.stringify({
+          error: [
+            "Traceback (most recent call last):",
+            '  File "<string>", line 3, in <module>',
+            "FileNotFoundError: [Errno 2] No such file or directory: 'notes.txt'",
+          ].join("\n"),
+        })}`,
+      ),
+    ],
+  ])("reports the live %s missing file in previews and downloads", async (_kind, missing) => {
+    const { call, sandbox } = setup();
+    sandbox.readFile.mockRejectedValue(missing);
+    for (const procedure of ["readFile", "downloadFile"]) {
+      await expect(call(procedure, { path: "notes.txt" })).resolves.toMatchObject({
+        status: 404,
+        body: { json: { code: "NOT_FOUND", message: "File no longer exists." } },
+      });
+    }
+  });
+
+  it("leaves unrelated computer read failures visible as server errors", async () => {
+    const { call, sandbox } = setup();
+    sandbox.readFile.mockRejectedValue(
+      new Error('sandbox file read failed: 404 {"error":"computer not found"}'),
+    );
+    await expect(call("readFile", { path: "notes.txt" })).resolves.toMatchObject({ status: 500 });
+    sandbox.readFile.mockRejectedValue(new Error("cat: notes.txt: Permission denied"));
+    await expect(call("downloadFile", { path: "notes.txt" })).resolves.toMatchObject({
+      status: 500,
     });
   });
 
@@ -7390,8 +7528,11 @@ describe("bot restore computer quota", () => {
       : null;
     const botApi = {
       findFirst: vi.fn(async () => bot),
+      findFirstOrThrow: vi.fn(async () => bot),
       update: vi.fn(async () => ({})),
     };
+    const routine = { findMany: vi.fn(async () => [] as Array<{ id: string; nextRunAt: Date }>) };
+    const enqueue = vi.fn(async () => undefined);
     const computer = {
       count: vi.fn(async (args: { where: { id?: string } }) => (args.where.id ? 0 : inUse)),
     };
@@ -7401,11 +7542,15 @@ describe("bot restore computer quota", () => {
       computer,
       $queryRaw,
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
-        callback({ $queryRaw, computer, bot: botApi }),
+        callback({ $queryRaw, computer, bot: botApi, routine }),
       ),
     };
     const handler = new RPCHandler(
-      createRouter({ prisma, env: { sandboxProvider: "fake" } } as unknown as RouterDeps),
+      createRouter({
+        prisma,
+        jobs: { enqueue },
+        env: { sandboxProvider: "fake" },
+      } as unknown as RouterDeps),
     );
     const call = async () =>
       handle(
@@ -7427,7 +7572,7 @@ describe("bot restore computer quota", () => {
           },
         },
       );
-    return { prisma, call };
+    return { prisma, call, routine, enqueue };
   }
 
   it("archives, creates, then restores is refused when the restore would exceed the cap", async () => {
@@ -7455,6 +7600,17 @@ describe("bot restore computer quota", () => {
     expect(response.status).toBe(200);
     expect(prisma.bot.update).toHaveBeenCalledOnce();
   });
+
+  it("repairs wakeup publication after a restore already committed", async () => {
+    const { prisma, call, routine, enqueue } = fixture({ archivedAt: null });
+    const due = new Date(Date.now() + 60_000);
+    routine.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: "routine-1", nextRunAt: due }]);
+    expect((await call()).status).toBe(200);
+    expect(prisma.bot.update).not.toHaveBeenCalled();
+    expect(enqueue).toHaveBeenCalledExactlyOnceWith(routineWakeupJob("routine-1", due));
+  });
 });
 
 describe("group restore with archived bots", () => {
@@ -7464,6 +7620,7 @@ describe("group restore with archived bots", () => {
     const tx = {
       bot,
       chatGroup,
+      routine: { findMany: vi.fn(async () => []) },
       chatGroupMember: { findMany: vi.fn(async () => archivedBots.map((item) => ({ bot: item }))) },
       computer: {
         count: vi.fn(async (args: { where: { id?: string } }) => (args.where.id ? 0 : inUse)),
@@ -7811,8 +7968,14 @@ describe("routines.update", () => {
     expect(response.status).toBe(200);
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "routine-1", bot: { archivedAt: null }, nextRunAt: null, active: false },
-        data: expect.objectContaining({ active: true }),
+        where: expect.objectContaining({
+          id: "routine-1",
+          bot: { archivedAt: null },
+          nextRunAt: null,
+          active: false,
+          completedOneShotAt: null,
+        }),
+        data: expect.objectContaining({ active: true, resumeOnRestore: false }),
       }),
     );
     expect(enqueue).toHaveBeenCalledOnce();
@@ -7836,11 +7999,32 @@ describe("routines.update", () => {
     const { call, update } = fixture(false, false, ownModel);
     expect((await call({ name: "Renamed", active: undefined, runAt: undefined })).status).toBe(200);
     expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "routine-1", bot: { archivedAt: null } } }),
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: "routine-1",
+          bot: { archivedAt: null },
+          completedOneShotAt: null,
+        }),
+      }),
     );
     const data = update.mock.calls[0]![0].data;
     for (const column of ["modelProvider", "modelId", "thinkingLevel"])
       expect(data).not.toHaveProperty(column);
+  });
+
+  it("clears automatic restoration when an archived group's routine is manually paused", async () => {
+    const { call, update, enqueue } = fixture(false, false, {
+      active: false,
+      resumeOnRestore: true,
+      nextRunAt: new Date(Date.now() + 60_000),
+    });
+    expect((await call({ active: false, runAt: undefined })).status).toBe(200);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ active: false, resumeOnRestore: false, nextRunAt: null }),
+      }),
+    );
+    expect(enqueue).not.toHaveBeenCalled();
   });
 
   it.each(["modelProvider", "modelId", "thinkingLevel"])(
@@ -8005,7 +8189,13 @@ describe("routines.update", () => {
 
 describe("routines.remove", () => {
   function fixture() {
-    const routine = { id: "routine-1", botId: "bot-1", spaceId: "space-1", userId: "user-a" };
+    const routine = {
+      id: "routine-1",
+      botId: "bot-1",
+      spaceId: "space-1",
+      userId: "user-a",
+      completedOneShotAt: null,
+    };
     const remove = vi.fn(async () => routine);
     const cancel = vi.fn(async () => undefined);
     const router = createRouter({
@@ -9221,6 +9411,7 @@ describe("groups.archive", () => {
       },
       attempt: { updateMany: vi.fn() },
       task: { updateMany: vi.fn() },
+      routine: { updateMany: vi.fn(async () => ({ count: 0 })) },
       secret: { deleteMany: vi.fn() },
       computerExecutionLease: {
         findMany: vi

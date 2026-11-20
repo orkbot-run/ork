@@ -124,6 +124,7 @@ export default function ModelConnection() {
   const [enabledModelIds, setEnabledModelIds] = useState<string[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [routing, setRouting] = useState<Record<string, string>>({});
+  const [zeroDataRetention, setZeroDataRetention] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
   const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>("chat-completions");
   const [headerRows, setHeaderRows] = useState<ModelHeaderRow[] | null>(null);
@@ -262,6 +263,7 @@ export default function ModelConnection() {
       setSupportsImages(fields.supportsImages);
       setMaxImagesPerPrompt(fields.maxImagesPerPrompt);
       setRouting(fields.routing);
+      setZeroDataRetention(fields.zeroDataRetention ?? false);
       return nextMe;
     },
     [request, rpc, t, formState],
@@ -337,7 +339,11 @@ export default function ModelConnection() {
   const routingDirty = routingFields.some(
     (field) => (routing[field.key] ?? "").trim() !== (credential?.routing?.[field.key] ?? ""),
   );
-  const routingOnlySave = routingFields.length > 0 && Boolean(credential) && !apiKey.trim();
+  const zeroDataRetentionDirty =
+    Boolean(selected?.connection?.supportsZeroDataRetention) &&
+    zeroDataRetention !== (credential?.zeroDataRetention ?? false);
+  const routingOnlySave =
+    (routingFields.length > 0 || zeroDataRetentionDirty) && Boolean(credential) && !apiKey.trim();
   const protocolChoices: { key: ModelApiProtocol; label: string }[] = [
     { key: "chat-completions", label: t("Chat Completions") },
     { key: "responses", label: t("Responses") },
@@ -475,6 +481,7 @@ export default function ModelConnection() {
         supportsImages,
         maxImagesPerPrompt,
         routing,
+        zeroDataRetention,
       },
       selected,
       credential,
@@ -1123,7 +1130,7 @@ export default function ModelConnection() {
             />
           )
         ) : null}
-        {acceptsKey || routingFields.length > 0 ? (
+        {acceptsKey || routingFields.length > 0 || zeroDataRetentionDirty ? (
           <View style={styles.keySection}>
             {routingFields.map((field) => (
               <View key={field.key}>
@@ -1170,7 +1177,9 @@ export default function ModelConnection() {
               disabled={
                 busy ||
                 !routingReady ||
-                (routingOnlySave ? !routingDirty : apiKey.trim().length < 8)
+                (routingOnlySave
+                  ? !routingDirty && !zeroDataRetentionDirty
+                  : apiKey.trim().length < 8)
               }
               label={
                 pending === "connect" && feedbackAnchor === "connection"
@@ -1241,6 +1250,26 @@ export default function ModelConnection() {
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
       >
+        {selected?.connection?.supportsZeroDataRetention && !credential?.blockedByPolicy ? (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>{t("Zero data retention")}</Text>
+            <NativeSwitch
+              accessibilityLabel={t("Zero data retention")}
+              accessibilityHint={t(
+                "Route requests only to endpoints marked as eligible for zero data retention.",
+              )}
+              value={zeroDataRetention}
+              disabled={busy}
+              onValueChange={(value) => {
+                setZeroDataRetention(value);
+                clearFeedback();
+              }}
+            />
+            <Text style={styles.hint}>
+              {t("Route requests only to endpoints marked as eligible for zero data retention.")}
+            </Text>
+          </View>
+        ) : null}
         {selected ? (
           isOpenAiCompatible ? (
             <>

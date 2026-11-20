@@ -239,6 +239,58 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
   const settle = (claim: AIExecutionClaim, cost: number | null) =>
     claimOwners.get(claim)!.settle(claim, cost);
 
+  it("keeps blocked managed accounts visible while excluding their credentials from execution", async () => {
+    const account = await catalog.create(admin, input());
+    const load = vi.spyOn(secrets, "load");
+    vi.stubEnv("ORKBOT_MODEL_PROVIDER_ALLOWLIST", "anthropic");
+    try {
+      expect(await catalog.list(member)).toEqual([
+        expect.objectContaining({ id: account.id, blockedByPolicy: true }),
+      ]);
+      expect(await catalog.choices(member)).toEqual([]);
+      const models = new ServerAIModels({ prisma: prisma!, secrets, catalog });
+      await expect(
+        models.resolve(member, {
+          provider: "openai",
+          modelId: "model-a",
+          connectionId: account.id,
+        }),
+      ).rejects.toThrow("This model provider is blocked by the server administrator.");
+      await expect(
+        resolveServerAIAuth({ prisma: prisma!, secrets, catalog }, member, account.id, "model-a"),
+      ).rejects.toThrow("This model provider is blocked by the server administrator.");
+      expect(load).not.toHaveBeenCalled();
+    } finally {
+      load.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("stores a managed OpenRouter ZDR toggle across unrelated updates and key rotation", async () => {
+    const initial = { ...input(), provider: "openrouter" };
+    const account = await catalog.create(admin, initial);
+    const settings = {
+      label: "Renamed",
+      models: initial.models,
+      concurrencyLimit: 4,
+      monthlyBudgetMicros: null,
+    };
+    await catalog.update(admin, account.id, { ...settings, zeroDataRetention: true });
+    await catalog.update(admin, account.id, settings);
+    await catalog.reconnect(admin, account.id, "fixture-rotated-api-key");
+    expect(await catalog.accounts(admin)).toEqual([
+      expect.objectContaining({ zeroDataRetention: true }),
+    ]);
+    const models = new ServerAIModels({ prisma: prisma!, secrets, catalog });
+    const resolved = await models.resolve(member);
+    expect(resolved).toMatchObject({ model: { zeroDataRetention: true } });
+    await resolved?.dispose();
+    await catalog.update(admin, account.id, { ...settings, zeroDataRetention: false });
+    expect(await catalog.accounts(admin)).toEqual([
+      expect.objectContaining({ zeroDataRetention: false }),
+    ]);
+  });
+
   it("makes the first verified connection the server default without client assignment calls", async () => {
     await system(() =>
       prisma!.installationIdentity.update({

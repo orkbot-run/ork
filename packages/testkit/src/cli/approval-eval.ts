@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork reviewer context changes follow LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -7,6 +11,8 @@ import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import type { ApprovalCaseResult } from "../evals/approval.js";
 import {
   APPROVAL_CASES,
+  APPROVAL_CONTEXT_CASES,
+  APPROVAL_CONTEXT_FIXTURE_VERSION,
   APPROVAL_FIXTURE_VERSION,
   runApprovalCases,
   summarizeApproval,
@@ -43,15 +49,22 @@ export async function runApprovalSuite(
     readConnection: (file: string) => unknown;
   },
 ) {
+  const available = [...APPROVAL_CASES, ...APPROVAL_CONTEXT_CASES];
   if (values.list) {
-    for (const c of APPROVAL_CASES) console.log(`${c.id}: expected ${c.expected}`);
+    for (const c of available) console.log(`${c.id}: expected ${c.expected}`);
     return;
   }
   const selected = values.case?.length
-    ? APPROVAL_CASES.filter((c) => values.case!.includes(c.id))
+    ? available.filter((c) => values.case!.includes(c.id))
     : APPROVAL_CASES;
-  if (!selected.length || values.case?.some((id) => !APPROVAL_CASES.some((c) => c.id === id)))
+  if (!selected.length || values.case?.some((id) => !available.some((c) => c.id === id)))
     throw new Error("Unknown eval case; use --list");
+  const fixtureVersion = [
+    ...(selected.some((c) => APPROVAL_CASES.includes(c)) ? [APPROVAL_FIXTURE_VERSION] : []),
+    ...(selected.some((c) => APPROVAL_CONTEXT_CASES.includes(c))
+      ? [APPROVAL_CONTEXT_FIXTURE_VERSION]
+      : []),
+  ].join("+");
   const trials = Number(values.trials);
   const timeoutMs = Number(values["timeout-ms"]);
   if (!Number.isSafeInteger(trials) || trials < 1 || trials > 10)
@@ -64,7 +77,7 @@ export async function runApprovalSuite(
     version: 1,
     kind: "approval-calibration-eval",
     startedAt: new Date().toISOString(),
-    fixtureVersion: APPROVAL_FIXTURE_VERSION,
+    fixtureVersion,
     rubricVersion: null as string | null,
     reviewer: null as null | { protocol: "decisions" | "llm"; provider: string; model: string },
     codeRevision: meta.codeRevision,

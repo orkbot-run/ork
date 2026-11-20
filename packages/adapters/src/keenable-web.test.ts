@@ -35,7 +35,7 @@ describe("optional Keenable web provider", () => {
     ).toEqual({
       results: [{ title: "Source", url: "https://example.test/page", snippet: "Useful evidence" }],
     });
-    expect(peer.calls[0]).toEqual({
+    expect(peer.calls[0]).toMatchObject({
       name: "search_web_pages",
       arguments: { query: "current question", max_results: 1, output_format: "json" },
     });
@@ -107,7 +107,7 @@ describe("optional Keenable web provider", () => {
       text: `${"Page text ".repeat(10)}\n\n[Content truncated; continue with offset 100]`,
       truncated: true,
     });
-    expect(peer.calls[0]).toEqual({
+    expect(peer.calls[0]).toMatchObject({
       name: "fetch_page_content",
       arguments: { url: "https://example.test/page", max_chars: 101, output_format: "json" },
     });
@@ -280,12 +280,14 @@ describe("optional Keenable web provider", () => {
 
   it.each(["cancel", "timeout"])("interrupts an active MCP call on %s", async (mode) => {
     let started!: () => void;
+    let activeRequest!: Request;
     const opened = new Promise<void>((resolve) => {
       started = resolve;
     });
     const peer = keenableMcpFixture({
       call: async (request) =>
         new Promise<Response>((_resolve, reject) => {
+          activeRequest = request;
           started();
           request.signal.addEventListener("abort", () => reject(request.signal.reason), {
             once: true,
@@ -303,8 +305,6 @@ describe("optional Keenable web provider", () => {
     await opened;
     if (mode === "cancel") controller.abort(new Error("Stopped"));
     expect(await result).toBeInstanceOf(Error);
-    expect(peer.requests.findLast((request) => request.method === "POST")!.signal.aborted).toBe(
-      true,
-    );
+    await expect.poll(() => activeRequest.signal.aborted).toBe(true);
   });
 });

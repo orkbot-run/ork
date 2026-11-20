@@ -15,6 +15,7 @@ import {
 
 const APPROVAL_REASON_TEXT: Record<ApprovalReason, string> = {
   scheduled_command: "Scheduling a command requires approval.",
+  scheduled_http_watch: "Watching an HTTPS address requires approval.",
   outside_content_schedule: "Adding routine destinations from outside content requires approval.",
   webhook_trigger: "Webhook-triggered actions require approval.",
 };
@@ -24,21 +25,24 @@ export function approvalReasonText(reason: ApprovalReason): string {
   return APPROVAL_REASON_TEXT[reason];
 }
 
-export function scheduledCommandNeedsApproval(
+export function scheduledWatchApprovalReason(
   toolName: string,
   args: Record<string, unknown>,
-): boolean {
-  if (toolName !== "schedule_create") return false;
+): ApprovalReason | undefined {
+  if (toolName !== "schedule_create") return undefined;
   let watch = args.watch;
   if (typeof watch === "string") {
     try {
       watch = JSON.parse(watch);
     } catch {
-      return false;
+      return undefined;
     }
   }
   const parsed = RoutineWatchSchema.safeParse(watch);
-  return parsed.success && parsed.data.kind === "command";
+  if (!parsed.success) return undefined;
+  if (parsed.data.kind === "command") return "scheduled_command";
+  if (parsed.data.kind === "http") return "scheduled_http_watch";
+  return undefined;
 }
 
 /** Answer-time enforcement uses only the persisted card and structural request/run facts. */
@@ -51,7 +55,7 @@ export function approvalCanCreateRule(input: {
 }): boolean {
   if (input.allowRule === false || input.reason || toolRequiresExplicitApproval(input.toolName))
     return false;
-  if (scheduledCommandNeedsApproval(input.toolName, input.args)) return false;
+  if (scheduledWatchApprovalReason(input.toolName, input.args)) return false;
   // Legacy schedule cards did not retain whether outside content introduced the destination.
   if (
     input.allowRule === undefined &&

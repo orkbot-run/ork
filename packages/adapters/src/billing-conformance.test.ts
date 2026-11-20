@@ -179,7 +179,7 @@ for (const [name, create] of Object.entries(factories)) {
     });
 
     it("refuses another checkout while a subscription is held", async () => {
-      for (const status of ["trialing", "past_due", "unpaid", "paused"] as const) {
+      for (const status of ["trialing", "past_due", "unpaid", "paused", "incomplete"] as const) {
         const harness = create();
         const customerId = await subscribe(harness);
         harness.setStatus(customerId, status);
@@ -187,10 +187,6 @@ for (const [name, create] of Object.entries(factories)) {
           harness.provider.createCheckout({ customerId, seats: 5, ...urls }),
         ).rejects.toBeInstanceOf(BillingCheckoutCompletedError);
       }
-      const harness = create();
-      const customerId = await subscribe(harness);
-      harness.setStatus(customerId, "incomplete");
-      await harness.provider.createCheckout({ customerId, seats: 5, ...urls });
     });
 
     it("updates seats and cancels", async () => {

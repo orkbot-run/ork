@@ -253,7 +253,13 @@ describe("device pairing", () => {
     const response = await app.request("/api/devices", { headers: { "x-test-user": "user-1" } });
     const { devices } = await response.json();
     expect(devices).toEqual([
-      expect.objectContaining({ deviceId: "device-1", name: "Laptop", connected: false }),
+      expect.objectContaining({
+        deviceId: "device-1",
+        name: "Laptop",
+        platform: "darwin",
+        connected: false,
+        defaultForBots: false,
+      }),
     ]);
     expect(JSON.stringify(devices)).not.toContain("tokenHash");
   });
@@ -279,6 +285,17 @@ describe("device pairing", () => {
         ]),
       ),
     ).toEqual({ "device-1": true, "device-2": false, "device-3": false });
+    expect(
+      devices.map((device: { deviceId: string; platform: string; defaultForBots: boolean }) => ({
+        deviceId: device.deviceId,
+        platform: device.platform,
+        defaultForBots: device.defaultForBots,
+      })),
+    ).toEqual([
+      { deviceId: "device-1", platform: "darwin", defaultForBots: true },
+      { deviceId: "device-2", platform: "darwin", defaultForBots: false },
+      { deviceId: "device-3", platform: "darwin", defaultForBots: false },
+    ]);
   });
 });
 

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+// Ork records text paint separately from other agent output.
 
 import { i18n } from "@lingui/core";
 import { useLingui } from "@lingui/react/macro";
@@ -8,6 +9,7 @@ import type {
   BotAvatarSet,
   LoginFieldInput,
   MessageReaction,
+  Run,
   ThreadMessage,
 } from "@orkbot/contracts";
 import type { ChildBotBlock, FoldedTranscript } from "@orkbot/core";
@@ -51,18 +53,22 @@ import {
 import type { createSpaceRpc } from "../../lib/rpc";
 import { messageHasVisibleBlocks } from "../../lib/tool-activity-view";
 import { CHAT_USER_TEXT_SURFACE, TRANSCRIPT_CONTENT_PADDING } from "../../lib/transcript-layout";
-import { transcriptIsNearEnd, transcriptMovedDown } from "../../lib/transcript-scroll";
+import {
+  longReplyScrollTop,
+  transcriptIsNearEnd,
+  transcriptMovedDown,
+} from "../../lib/transcript-scroll";
 import { TimeSeparator, UnreadDivider } from "./chat-context";
 import type { ImportSetupTarget } from "./import-setup-card";
 import { MessageView } from "./message-view";
 import { QuoteSelectionButton } from "./quote-selection-button";
-import type { OutgoingMessage } from "./use-composer-actions";
+import type { OutgoingMessage, TranscriptSendReceipt } from "./use-composer-actions";
 
 /** Bubbles stop at a readable line length instead of stretching with wide windows. */
 export function bubbleFrameWidth(role: ThreadMessage["role"]) {
   return role === "user"
-    ? "max-w-[min(84%,calc(100%_-_8rem),39rem)] [@media(hover:none)]:max-w-[min(84%,39rem)]"
-    : "max-w-[min(88%,calc(100%_-_8rem),39rem)] [@media(hover:none)]:max-w-[min(88%,39rem)]";
+    ? "max-w-[min(84%,39rem)] @min-[30rem]/transcript:[@media(hover:hover)_and_(pointer:fine)]:max-w-[min(84%,calc(100%_-_8rem),39rem)]"
+    : "max-w-[min(88%,39rem)] @max-[30rem]/transcript:max-w-full @min-[30rem]/transcript:[@media(hover:hover)_and_(pointer:fine)]:max-w-[min(88%,calc(100%_-_8rem),39rem)]";
 }
 
 function TranscriptSkeleton() {
@@ -94,6 +100,8 @@ export const Transcript = memo(function Transcript({
   scrollRequest,
   onScrollRequestHandled,
   followRequest,
+  sendReceipt,
+  currentRuns,
   artifactTarget,
   transcript,
   loadingChat,
@@ -136,6 +144,8 @@ export const Transcript = memo(function Transcript({
   onScrollRequestHandled: () => void;
   /** Changes when you send: the view moves to the end and follows the reply. */
   followRequest: number;
+  sendReceipt?: TranscriptSendReceipt;
+  currentRuns?: readonly Pick<Run, "id" | "sourceMessageId">[];
   artifactTarget: ArtifactTarget;
   transcript: FoldedTranscript<ThreadMessage>;
   /** A target without a local or freshly loaded snapshot. */
@@ -194,6 +204,11 @@ export const Transcript = memo(function Transcript({
   const lastScrollTop = useRef<number | null>(null);
   const autoScrollTimer = useRef<number | undefined>(undefined);
   const jumpButtonRef = useRef<HTMLButtonElement>(null);
+  const replyFollow = useRef<{
+    existingLiveRows: Set<string>;
+    continuationIds: Set<string>;
+    held?: { id: string; runId?: string; top: number };
+  } | null>(null);
   const [expandedPeerMarkers, setExpandedPeerMarkers] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -209,23 +224,36 @@ export const Transcript = memo(function Transcript({
     () => expandPeerReplies(transcript, expandedPeerMarkers),
     [transcript, expandedPeerMarkers],
   );
-  const outputBaseline = useRef<{ request: number; visibleIds: Set<string> } | null>(null);
+  const outputBaseline = useRef<{
+    request: number;
+    visibleIds: Set<string>;
+    textIds: Set<string>;
+  } | null>(null);
   useEffect(() => {
     if (outgoingMessages.length) markAfterPaint("ork.chat.outgoing-painted");
     const botMessages = messages.filter(
       (message) =>
         message.role === "bot" && messageHasVisibleBlocks(message.blocks, showToolActivity),
     );
+    const hasText = (message: ThreadMessage) =>
+      message.blocks.some(
+        (block) =>
+          (block.kind === "text" ||
+            (block.kind === "progress" && block.streaming && !block.activity)) &&
+          block.text.trim(),
+      );
     if (!outputBaseline.current || outputBaseline.current.request !== followRequest) {
       outputBaseline.current = {
         request: followRequest,
         visibleIds: new Set(botMessages.map((message) => message.id)),
+        textIds: new Set(botMessages.filter(hasText).map((message) => message.id)),
       };
-    } else if (
-      followRequest > 0 &&
-      botMessages.some((message) => !outputBaseline.current?.visibleIds.has(message.id))
-    ) {
-      markAfterPaint("ork.chat.agent-output-painted");
+    } else if (followRequest > 0) {
+      const baseline = outputBaseline.current;
+      if (botMessages.some((message) => !baseline.visibleIds.has(message.id)))
+        markAfterPaint("ork.chat.agent-output-painted");
+      if (botMessages.some((message) => !baseline.textIds.has(message.id) && hasText(message)))
+        markAfterPaint("ork.chat.agent-text-painted");
     }
   }, [messages, outgoingMessages.length, followRequest, showToolActivity]);
   const messageById = useMemo(
@@ -289,7 +317,7 @@ export const Transcript = memo(function Transcript({
   const shownMessages = visibleReceipts.filter((message) => isFirstReceipt(message.id));
   const separatorIds = timeSeparatorIds(shownMessages);
   const unreadDividerId = unreadDividerMessageId(shownMessages, unreadAfterSeq, olderCursor);
-  const workingLabel = liveActivityLine(messages) ?? t`Working…`;
+  const workingLabel = liveActivityLine(messages) ?? t`Thinking…`;
   const [quoteDraft, setQuoteDraft] = useState<{
     message: ThreadMessage;
     text: string;
@@ -356,7 +384,12 @@ export const Transcript = memo(function Transcript({
   // latest message, so new messages keep following; scrolling away beyond it does not.
   const followIfNearEnd = useCallback(() => {
     const element = scrollRef.current;
-    if (element && !jumpScrolling.current && transcriptIsNearEnd(element)) {
+    if (
+      element &&
+      !replyFollow.current?.held &&
+      !jumpScrolling.current &&
+      transcriptIsNearEnd(element)
+    ) {
       following.current = true;
     }
   }, [scrollRef]);
@@ -412,6 +445,7 @@ export const Transcript = memo(function Transcript({
   const jumpToLatest = useCallback(() => {
     const element = scrollRef.current;
     if (!element) return;
+    replyFollow.current = null;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     following.current = true;
     autoScrolling.current = !reducedMotion;
@@ -451,6 +485,7 @@ export const Transcript = memo(function Transcript({
     );
     if (!element || !row) return;
     scrolledJump.current = scrollRequest.nonce;
+    replyFollow.current = null;
     following.current = false;
     autoScrolling.current = false;
     jumpScrolling.current = true;
@@ -477,15 +512,72 @@ export const Transcript = memo(function Transcript({
   useLayoutEffect(() => {
     if (followedRequest.current === followRequest) return;
     followedRequest.current = followRequest;
+    replyFollow.current = {
+      existingLiveRows: new Set(
+        messages.filter((message) => message.id.startsWith("progress:")).map(({ id }) => id),
+      ),
+      continuationIds: new Set(),
+    };
     snapToEnd();
-  }, [followRequest, snapToEnd]);
+  }, [followRequest, messages, snapToEnd]);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
+    const follow = replyFollow.current;
+    if (element && follow && sendReceipt && (following.current || follow.held)) {
+      const source = messages.find(
+        (message) => message.role === "user" && message.seq === sendReceipt.seq,
+      );
+      if (source) {
+        // A message queued behind ongoing work can start a separate run later.
+        for (const run of currentRuns ?? []) {
+          if (run.sourceMessageId === source.id) follow.continuationIds.add(run.id);
+        }
+      }
+      const held = follow.held;
+      const reply =
+        (held && messageById.get(held.id)) ??
+        messages.findLast(
+          (message) =>
+            message.role === "bot" &&
+            message.seq > sendReceipt.seq &&
+            !!message.runId &&
+            (sendReceipt.runIds.includes(message.runId) ||
+              follow.continuationIds.has(message.runId)) &&
+            !follow.existingLiveRows.has(message.id) &&
+            (!held || message.runId === held.runId) &&
+            message.blocks.some(
+              (block) =>
+                block.kind === "text" ||
+                (block.kind === "progress" && block.streaming && !block.activity),
+            ),
+        );
+      const row = reply && element.querySelector(`[data-message-id="${CSS.escape(reply.id)}"]`);
+      if (row) {
+        const top = longReplyScrollTop(
+          {
+            top: element.getBoundingClientRect().top,
+            height: element.clientHeight,
+            scrollTop: element.scrollTop,
+          },
+          row.getBoundingClientRect(),
+          Number.parseFloat(getComputedStyle(element).scrollPaddingTop) || 0,
+        );
+        if (top !== undefined) {
+          following.current = false;
+          autoScrolling.current = false;
+          if (Math.abs(element.scrollTop - top) > 1) element.scrollTo({ top, behavior: "auto" });
+          follow.held = { id: reply.id, runId: reply.runId, top: element.scrollTop };
+          setAtEnd(false);
+          return;
+        }
+      }
+      if (!running && (reply || held)) replyFollow.current = null;
+    }
     if (following.current) snapToEnd();
     // Content can grow below a reader who is not following without any scroll event.
     else if (element) setAtEnd(transcriptIsNearEnd(element));
-  }, [messages, running, scrollRef, snapToEnd]);
+  }, [currentRuns, messageById, messages, running, scrollRef, sendReceipt, snapToEnd]);
 
   useLayoutEffect(() => {
     const button = jumpButtonRef.current;
@@ -498,6 +590,7 @@ export const Transcript = memo(function Transcript({
     const wasFollowing = following.current;
     // Prepend must not race the messages-driven snap-to-end follow path.
     following.current = false;
+    replyFollow.current = null;
     autoScrolling.current = false;
     const pending = onLoadOlder();
     if (!pending) return;
@@ -541,7 +634,21 @@ export const Transcript = memo(function Transcript({
           following.current = false;
         }}
         onScrollEnd={followIfNearEnd}
+        onPointerUp={(event) => {
+          const held = replyFollow.current?.held;
+          const target = event.target;
+          if (
+            held &&
+            event.button === 0 &&
+            target instanceof Element &&
+            target.closest("[data-message-id]")?.getAttribute("data-message-id") === held.id &&
+            !target.closest("button, a, input, textarea, select") &&
+            !window.getSelection()?.toString()
+          )
+            jumpToLatest();
+        }}
         onWheel={(event) => {
+          if (event.deltaY && replyFollow.current?.held) replyFollow.current = null;
           if (event.deltaY < 0) {
             lastScrollTop.current = event.currentTarget.scrollTop;
             autoScrolling.current = false;
@@ -549,6 +656,12 @@ export const Transcript = memo(function Transcript({
           }
         }}
         onScroll={(event) => {
+          const held = replyFollow.current?.held;
+          if (held) {
+            // Ignore the scroll event from our own pin, including fractional pixel rounding.
+            if (Math.abs(event.currentTarget.scrollTop - held.top) <= 1) return;
+            replyFollow.current = null;
+          }
           const scrolledDown = transcriptMovedDown(
             lastScrollTop.current,
             event.currentTarget.scrollTop,
@@ -569,7 +682,7 @@ export const Transcript = memo(function Transcript({
             following.current = false;
           }
         }}
-        className={`rk-scroll isolate flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto scroll-pt-16 scroll-pb-7 pt-20 pb-12 md:pt-[84px] md:pb-13 ${TRANSCRIPT_CONTENT_PADDING}`}
+        className={`rk-scroll @container/transcript isolate flex min-h-0 flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto scroll-pt-16 scroll-pb-7 pt-20 pb-12 md:pt-[84px] md:pb-13 ${TRANSCRIPT_CONTENT_PADDING}`}
         style={
           userBubble
             ? ({

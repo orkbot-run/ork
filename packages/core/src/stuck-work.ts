@@ -1,15 +1,40 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited stuck-work behavior is preserved. Configurable thresholds follow LICENSE.md.
+
 import { displayName } from "./display-name.js";
-/** Remind once a queued run or a human wait has been sitting this long.
+/** Default age for a reminder, and the fixed age marker in the activity list.
  *  Long enough that a short queue or stepping away stays quiet; short enough
  *  that forgotten work is not silent until the next day. */
 export const STUCK_WORK_NOTIFY_AFTER_MS = 4 * 60 * 60 * 1000;
 
-/** Cancel once that same work has been sitting this long.
+/** Default cancellation age for that same work.
  *  Leaves the hours after the reminder for someone to answer before the thread is freed. */
 export const STUCK_WORK_EXPIRE_AFTER_MS = 24 * 60 * 60 * 1000;
 
+/** Resolve on use so shared core stays safe in renderers without a Node process. */
+export function stuckWorkThresholds(
+  env: Record<string, string | undefined> = typeof process === "undefined" ? {} : process.env,
+): { notifyAfterMs: number; expireAfterMs: number } {
+  const expireAfterMs = thresholdMs(env.STUCK_WORK_EXPIRE_AFTER_MS, STUCK_WORK_EXPIRE_AFTER_MS);
+  return {
+    notifyAfterMs: Math.min(
+      thresholdMs(env.STUCK_WORK_NOTIFY_AFTER_MS, STUCK_WORK_NOTIFY_AFTER_MS),
+      expireAfterMs,
+    ),
+    expireAfterMs,
+  };
+}
+
+function thresholdMs(raw: string | undefined, fallback: number): number {
+  const value = raw?.trim();
+  if (!value || !/^\d+$/.test(value)) return fallback;
+  const ms = Number(value);
+  return Number.isSafeInteger(ms) && ms >= 60_000 && ms <= 30 * 24 * 60 * 60 * 1000 ? ms : fallback;
+}
+
 /** A takeover request nobody acted on is cancelled much sooner: it holds the bot's computer,
- *  so later work for that bot waits behind it. Expires before the reminder would fire. */
+ *  so later work for that bot waits behind it. This expiration stays fixed. */
 export const TAKEOVER_WAIT_EXPIRE_AFTER_MS = 30 * 60 * 1000;
 
 /** Marker on a thread.meta event so a reminder is sent once per waiting episode. */
@@ -32,7 +57,8 @@ export function stuckWorkAgeMs(updatedAt: Date | string, now: Date): number {
 
 /** How long a run in this status may sit before the first reminder or cancellation. */
 export function stuckWorkDueAfterMs(status: StuckWorkStatus): number {
-  return Math.min(STUCK_WORK_NOTIFY_AFTER_MS, stuckWorkExpireAfterMs(status));
+  if (status === "waiting_takeover") return TAKEOVER_WAIT_EXPIRE_AFTER_MS;
+  return stuckWorkThresholds().notifyAfterMs;
 }
 
 /** `alreadyNotified` is for this episode (the run's current updatedAt), not an older one. */
@@ -41,8 +67,12 @@ export function stuckWorkAction(input: {
   ageMs: number;
   alreadyNotified: boolean;
 }): StuckWorkAction {
-  if (input.ageMs >= stuckWorkExpireAfterMs(input.status)) return "expire";
-  if (input.ageMs >= STUCK_WORK_NOTIFY_AFTER_MS && !input.alreadyNotified) return "notify";
+  if (input.status === "waiting_takeover") {
+    return input.ageMs >= TAKEOVER_WAIT_EXPIRE_AFTER_MS ? "expire" : "none";
+  }
+  const thresholds = stuckWorkThresholds();
+  if (input.ageMs >= thresholds.expireAfterMs) return "expire";
+  if (input.ageMs >= thresholds.notifyAfterMs && !input.alreadyNotified) return "notify";
   return "none";
 }
 
@@ -118,8 +148,4 @@ export function stuckWorkStoppedNotification(
 
 function botLabel(name: string): string {
   return displayName(name, "Bot");
-}
-
-function stuckWorkExpireAfterMs(status: StuckWorkStatus): number {
-  return status === "waiting_takeover" ? TAKEOVER_WAIT_EXPIRE_AFTER_MS : STUCK_WORK_EXPIRE_AFTER_MS;
 }

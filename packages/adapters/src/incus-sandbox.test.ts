@@ -300,6 +300,23 @@ async function collect(events: AsyncIterable<ProcessEvent>) {
 }
 
 describe("IncusSandboxProvider", () => {
+  it("records the chosen name before issuing the create and skips the create on record failure", async () => {
+    const fake = new FakeIncus();
+    const provider = providerFor(fake);
+    const failure = new Error("record unavailable");
+    const recordCreated = vi.fn(async () => {
+      expect(fake.requests.some((request) => request.method === "POST")).toBe(false);
+      throw failure;
+    });
+    await expect(
+      provider.provision({ botId: "bot-a", homePath: "/unused", recordCreated }, context),
+    ).rejects.toBe(failure);
+    expect(recordCreated).toHaveBeenCalledExactlyOnceWith({
+      kind: "incus",
+      providerRef: expect.stringMatching(/^orkbot-/),
+    });
+    expect(fake.instances.size).toBe(0);
+  });
   it("passes the shared offline sandbox workspace contract", async () => {
     const files = new Map<string, { content: Buffer; executable: boolean }>();
     let exportedNames: string[] = [];

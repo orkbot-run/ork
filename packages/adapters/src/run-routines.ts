@@ -18,16 +18,23 @@ import {
   isOneShotRoutineCrons,
   nextRoutineRunDateAcross,
 } from "@orkbot/core";
-import { isUniqueViolation, lockSpaceForWork, SpaceDeletionInProgressError } from "@orkbot/db";
+import {
+  isUniqueViolation,
+  lockSpaceForWork,
+  pauseRoutinesForArchive,
+  routineConversationOpen,
+  SpaceDeletionInProgressError,
+} from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { sanitizedError } from "@orkbot/logging/monitoring";
 import { protectedComputerLifecycleRefusal } from "./desktop-command-guard.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { routineRunModelPin } from "./model-selection.js";
 import { findPendingRoutineTick, routineTimerNonce } from "./routine-coalescing.js";
+import { scheduledRoutineNonce } from "./routine-conversation.js";
 import { tickRoutineWatch } from "./routine-watch.js";
 import { notifyRun } from "./run-notifications.js";
-import { listAgentSkillRecords } from "./skill-tools.js";
+import { listAgentSkillCatalog, loadReferencedAgentSkills } from "./skill-tools.js";
 
 /** A routine run stopped by a transient model error gets one more try this much later. */
 const ROUTINE_RETRY_DELAY_MS = 12 * 60_000;
@@ -123,7 +130,10 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
   if (!Number.isFinite(scheduledAt.getTime())) return;
   const routine = await deps.prisma.routine.findUnique({
     where: { id: routineId },
-    include: { space: { select: { deletingAt: true } } },
+    include: {
+      space: { select: { deletingAt: true } },
+      thread: { select: { group: { select: { archivedAt: true } } } },
+    },
   });
   // A Space being deleted runs nothing; its routines resume if the deletion is called off.
   if (
@@ -137,11 +147,14 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
     where: { id: routine.botId },
     include: { thread: true },
   });
-  if (bot?.archivedAt) {
-    // Archiving pauses a bot's routines; re-pause one that slipped back to active.
-    await deps.prisma.routine.updateMany({
-      where: { id: routine.id, active: true },
-      data: { active: false, nextRunAt: null },
+  if (bot?.archivedAt || routine.thread?.group?.archivedAt) {
+    // Recheck the owner in the update so a concurrent restore can keep the schedule live.
+    await pauseRoutinesForArchive(deps.prisma, {
+      id: routine.id,
+      OR: [
+        { bot: { archivedAt: { not: null } } },
+        { thread: { group: { archivedAt: { not: null } } } },
+      ],
     });
     return;
   }
@@ -193,7 +206,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
           new Date(Date.now()),
           routine.timezone,
         );
-  const skillRecords = await listAgentSkillRecords(deps.prisma, {
+  const skillCatalog = await listAgentSkillCatalog(deps.prisma, {
     spaceId: routine.spaceId,
     userId: routine.userId,
   });
@@ -205,6 +218,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         active: true,
         nextRunAt: scheduledAt,
         bot: { archivedAt: null },
+        ...routineConversationOpen,
       },
       data: {
         lastRunAt: new Date(),
@@ -217,18 +231,29 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
     // The claim locks the row, so the prompt and the model are the versions
     // committed when it fired; a prompt edit that lands while the tick gathers
     // its context must not pair with the newer model. Skill expansion runs on
-    // the already-loaded list.
+    // the metadata catalog; fetch only bodies selected by the claimed prompt.
     const current = await tx.routine.findUnique({
       where: { id: routine.id },
       select: { prompt: true, modelProvider: true, modelId: true, thinkingLevel: true },
     });
     if (!current) return null;
+    const skillRecords = await loadReferencedAgentSkills(
+      tx,
+      {
+        spaceId: routine.spaceId,
+        userId: routine.userId,
+      },
+      current.prompt,
+      skillCatalog,
+    );
     const routinePrompt =
       expandSkillReferencesInPrompt(current.prompt, skillRecords) +
       (watchTick?.run ? watchTick.note : "");
     const timerTick = routine.watch == null && !isOneShotRoutineCrons(routine.crons);
-    const timerNonce = timerTick ? routineTimerNonce(routine.id, scheduledFor) : undefined;
-    if (timerNonce) {
+    const nonce = timerTick
+      ? routineTimerNonce(routine.id, scheduledFor)
+      : scheduledRoutineNonce(routine.id, scheduledFor);
+    if (timerTick) {
       const pending = await findPendingRoutineTick(tx, {
         routineId: routine.id,
         spaceId: routine.spaceId,
@@ -239,13 +264,13 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         ...routineRunModelPin(current),
       });
       if (pending) return { ...pending, coalesced: true };
-      // An edit racing an earlier tick can rewind the schedule onto an occurrence that already ran.
-      const fired = await tx.run.findUnique({
-        where: { spaceId_clientNonce: { spaceId: routine.spaceId, clientNonce: timerNonce } },
-        select: { id: true },
-      });
-      if (fired) return "fired" as const;
     }
+    // An edit racing an earlier tick can rewind the schedule onto an occurrence that already ran.
+    const fired = await tx.run.findUnique({
+      where: { spaceId_clientNonce: { spaceId: routine.spaceId, clientNonce: nonce } },
+      select: { id: true },
+    });
+    if (fired) return "fired" as const;
     const task = await tx.task.create({
       data: {
         spaceId: routine.spaceId,
@@ -266,7 +291,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         status: "queued",
         trigger: "routine",
         routineId: routine.id,
-        clientNonce: timerNonce,
+        clientNonce: nonce,
         ...routineRunModelPin(current),
       },
     });
@@ -367,6 +392,7 @@ export async function retryRoutineRun(deps: ExecutorDeps, runId: string) {
       active: true,
       crons: true,
       nextRunAt: true,
+      completedOneShotAt: true,
       bot: { select: { archivedAt: true } },
     },
   });
@@ -383,6 +409,7 @@ export async function retryRoutineRun(deps: ExecutorDeps, runId: string) {
   // A one-time routine turns itself off when it fires, so only a recurring one counts as paused.
   if (
     !routine ||
+    routine.completedOneShotAt ||
     (!routine.active && !isOneShotRoutineCrons(routine.crons)) ||
     routine.bot.archivedAt
   ) {
@@ -407,6 +434,7 @@ export async function retryRoutineRun(deps: ExecutorDeps, runId: string) {
         where: {
           id: failed.routineId!,
           active: routine.active,
+          completedOneShotAt: null,
           ...(!routine.active ? { crons: { equals: routine.crons } } : {}),
           bot: { archivedAt: null },
         },

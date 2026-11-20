@@ -11,10 +11,10 @@ import {
 import type { Prisma } from "@orkbot/db";
 import {
   assertRunCanWriteHistory,
+  PAIRED_COMPUTER_READER_VERSION,
   RUN_READER_VERSION,
   RUN_TURN_CHECKPOINT_KIND,
   RunHistoryWriteError,
-  SUPPORTED_RUN_READER_VERSION,
 } from "@orkbot/db";
 import {
   boundDirectApprovalDetails,
@@ -32,6 +32,7 @@ import { USE_TOOL } from "./builtin-tool-bridge.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { uniquifyInstalledToolName } from "./lazy-tool-catalog.js";
 import { runLeaseFor } from "./run-messages.js";
+import { USER_COMPUTER_TOOLS } from "./user-computer-tools.js";
 
 /** Effects that got past the approval gate: approved, allowed by a rule or review, or run. */
 export const PASSED_EFFECT_STATUSES = ["approved", "executing", "uncertain", "completed"];
@@ -293,29 +294,35 @@ export async function recordEffect(
         ...(batchActions ? { batchActions } : {}),
       },
     });
-  const effect = requiresFileReader
-    ? await deps.prisma.$transaction(async (tx) => {
-        const lease = runLeaseFor(deps, run.id);
-        if (!lease || !run.userId) throw new RunHistoryWriteError();
-        // Take the write lock directly: SHARE->UPDATE upgrades deadlock with parallel tools.
-        const owned = await tx.run.updateMany({
-          where: {
-            id: run.id,
-            spaceId: run.spaceId,
-            userId: run.userId,
-            botId: run.botId,
-            threadId: run.threadId,
-            status: "running",
-            leaseOwner: lease.owner,
-            leaseFence: lease.fence,
-            requiredReaderVersion: { lte: SUPPORTED_RUN_READER_VERSION },
-          },
-          data: { requiredReaderVersion: RUN_READER_VERSION },
-        });
-        if (owned.count !== 1) throw new RunHistoryWriteError();
-        return write(tx);
-      })
-    : await underRunLease(deps, run.id, write);
+  const requiredReaderVersion = USER_COMPUTER_TOOLS.has(kind)
+    ? PAIRED_COMPUTER_READER_VERSION
+    : requiresFileReader
+      ? RUN_READER_VERSION
+      : undefined;
+  const effect =
+    requiredReaderVersion !== undefined
+      ? await deps.prisma.$transaction(async (tx) => {
+          const lease = runLeaseFor(deps, run.id);
+          if (!lease || !run.userId) throw new RunHistoryWriteError();
+          // Take the write lock directly: SHARE->UPDATE upgrades deadlock with parallel tools.
+          const owned = await tx.run.updateMany({
+            where: {
+              id: run.id,
+              spaceId: run.spaceId,
+              userId: run.userId,
+              botId: run.botId,
+              threadId: run.threadId,
+              status: "running",
+              leaseOwner: lease.owner,
+              leaseFence: lease.fence,
+              requiredReaderVersion: { lt: requiredReaderVersion },
+            },
+            data: { requiredReaderVersion },
+          });
+          if (owned.count !== 1) await assertRunCanWriteHistory(tx, run.id, { lease });
+          return write(tx);
+        })
+      : await underRunLease(deps, run.id, write);
   consumedIds?.add(effect.id);
   return { duplicate: false, effect };
 }
@@ -332,7 +339,7 @@ export function claimEffect(
 }
 
 /** Writes that let a tool's side effect go ahead check the attempt's lease in the same transaction. */
-function underRunLease<T>(
+export function underRunLease<T>(
   deps: ExecutorDeps,
   runId: string,
   write: (tx: Prisma.TransactionClient) => Promise<T>,

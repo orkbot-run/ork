@@ -67,7 +67,10 @@ beforeEach(() => {
   native.textLines.length = 0;
 });
 
-it("keeps every recipient visible, wrapping, and directly actionable in a large send bundle", () => {
+it.each([
+  ["sent", "Messaged"],
+  ["received", "Message from"],
+] as const)("keeps every agent visible and actionable in a large %s group", (direction, label) => {
   const onLongPress = vi.fn();
   const recipients = Array.from({ length: 28 }, (_, index) => ({
     peerBotId: `bot-${index}`,
@@ -76,7 +79,12 @@ it("keeps every recipient visible, wrapping, and directly actionable in a large 
     onPress: vi.fn(),
   }));
   const html = renderToStaticMarkup(
-    <PeerReceiptLine {...defaults} recipients={recipients} actionProps={{ onLongPress }} />,
+    <PeerReceiptLine
+      {...defaults}
+      direction={direction}
+      recipients={recipients}
+      actionProps={{ onLongPress }}
+    />,
   );
   expect(native.avatars).toEqual(recipients.map((recipient) => recipient.peerBotId));
   expect(native.buttons).toHaveLength(28);
@@ -84,9 +92,9 @@ it("keeps every recipient visible, wrapping, and directly actionable in a large 
     expect.arrayContaining([expect.objectContaining({ flexWrap: "wrap" })]),
   );
   expect(native.textLines.every((lines) => lines === undefined)).toBe(true);
-  expect(html).toContain("Messaged ");
+  expect(html).toContain(`${label} `);
   for (const [index, button] of native.buttons.entries()) {
-    expect(button.accessibilityLabel).toBe(`Messaged Recipient ${index}`);
+    expect(button.accessibilityLabel).toBe(`${label} Recipient ${index}`);
     expect(button.accessibilityRole).toBe("button");
     button.onPress?.();
     expect(recipients[index]!.onPress).toHaveBeenCalledOnce();

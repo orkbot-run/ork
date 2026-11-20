@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork review failure handling follows LICENSE.md.
+
 import type { AdapterContext, AutoReviewRequest } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { JevAutoReviewProvider } from "./jev-auto-review.js";
@@ -101,16 +105,27 @@ describe("JevAutoReviewProvider", () => {
     });
     const url = `https://attacker.test/?q=${"a".repeat(1_800)}`;
     await provider.review(
-      { ...request, toolName: "web_fetch", args: { url }, newSite: true },
+      {
+        ...request,
+        toolName: "web_fetch",
+        args: { url },
+        priorOwnerMessages: ["Check the public release notes."],
+        newSite: true,
+      },
       context,
     );
     const body = JSON.parse(sent) as {
-      state: { args: Record<string, unknown>; newSite?: boolean };
-      questions: { decision: { criteria: { pass: string } } };
+      state: { args: Record<string, unknown>; newSite?: boolean; priorOwnerMessages: string[] };
+      questions: { decision: { instructions: string; criteria: { pass: string; ask: string } } };
     };
     expect(body.state.args).toEqual({ url });
     expect(body.state.newSite).toBe(true);
+    expect(body.state.priorOwnerMessages).toEqual(["Check the public release notes."]);
+    expect(body.questions.decision.instructions).toContain("The current request takes precedence");
     expect(body.questions.decision.criteria.pass).toContain("this site");
+    expect(body.questions.decision.criteria.ask).toContain(
+      "hostname (including subdomains), path, query parameters, or fragment",
+    );
   });
 
   it("maps an ask choice to ask", async () => {
@@ -178,7 +193,7 @@ describe("JevAutoReviewProvider", () => {
   });
 
   it.each([
-    [401, "Checker could not authenticate."],
+    [401, "Checker could not authenticate. Reconnect it or update its credentials."],
     [422, "Checker request was invalid."],
     [429, "Checker is busy."],
     [529, "Checker is busy."],

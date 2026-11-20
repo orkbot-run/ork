@@ -4,12 +4,13 @@
 
 import { once } from "node:events";
 import { createServer } from "node:http";
-import type { Api, Context, Model } from "@earendil-works/pi-ai";
-import { PI_AI_VERSION } from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, Context, Model, Models } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, PI_AI_VERSION } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { AgentRuntimeEvent, AgentUsage } from "@orkbot/adapter-kit";
 import { Agent } from "undici";
 import { describe, expect, it, vi } from "vitest";
+import { estimateModelContextTokens } from "./model-context.js";
 import {
   createOpenAiCompatibleFetch,
   registerOpenAiCompatibleRuntime,
@@ -64,6 +65,69 @@ async function run(usage?: object) {
 }
 
 describe("Pi usage accounting", () => {
+  it("releases the local token window immediately on a provider error", async () => {
+    vi.useFakeTimers({ now: 0 });
+    const local = { ...model, provider: "local", baseUrl: "http://localhost:9001/v1" };
+    const context = {
+      messages: [{ role: "user" as const, content: "Fixture prompt", timestamp: 0 }],
+    };
+    vi.stubEnv("ORKBOT_LOCAL_TOKENS_PER_MINUTE", String(estimateModelContextTokens(context)));
+    const response = createAssistantMessageEventStream();
+    const followUp = createAssistantMessageEventStream();
+    const streamSimple = vi.fn().mockReturnValueOnce(response).mockReturnValueOnce(followUp);
+    const models = { streamSimple } as unknown as Models;
+    const onPacingWait = vi.fn();
+    const pending = observedPiStream(models, local, context, { timeoutMs: 3_000 }, vi.fn());
+    const next = observedPiStream(
+      models,
+      local,
+      context,
+      { timeoutMs: 3_000 },
+      vi.fn(),
+      undefined,
+      undefined,
+      { onPacingWait },
+    );
+    try {
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(streamSimple).toHaveBeenCalledOnce();
+      const error: AssistantMessage = {
+        role: "assistant",
+        provider: local.provider,
+        api: local.api,
+        model: local.id,
+        content: [],
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+        stopReason: "error",
+        errorMessage: "429: Too Many Requests",
+        timestamp: Date.now(),
+      };
+      response.push({ type: "error", reason: "error", error });
+      response.end(error);
+      await expect(pending.result()).resolves.toMatchObject({
+        errorMessage: "429: Too Many Requests",
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(streamSimple).toHaveBeenCalledTimes(2);
+      expect(streamSimple.mock.calls[1]?.[2]).toMatchObject({ timeoutMs: 3_000 });
+      expect(onPacingWait).toHaveBeenCalledExactlyOnceWith(1_000);
+      const done = { ...error, stopReason: "stop" as const, errorMessage: undefined };
+      followUp.push({ type: "done", reason: "stop", message: done });
+      followUp.end(done);
+      await expect(next.result()).resolves.toMatchObject({ stopReason: "stop" });
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it.each([0, 0.125])(
     "keeps Pi's reported billed total %s authoritative without inventing token counts",
     (total) => {

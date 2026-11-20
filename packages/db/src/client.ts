@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
+
 import type { KeyProvider } from "@orkbot/adapter-kit";
 import { resolveContentEncryption } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
@@ -12,6 +17,7 @@ import {
   masterKeysFromEnv,
   PgSpaceKeyStore,
 } from "./content-keys.js";
+import { databaseOperationFailed, databaseOperationSucceeded } from "./database-availability.js";
 import { PrismaClient } from "./generated/prisma/client.js";
 import { installDbContext, rlsBypassKey, withRowLevelSecurity } from "./row-security.js";
 import { withTextSanitization } from "./text-sanitization.js";
@@ -25,6 +31,8 @@ export interface DbClientOptions {
   keyProvider?: KeyProvider;
   /** Encrypt new content. Defaults to CONTENT_ENCRYPTION (see resolveContentEncryption). */
   encryptContent?: boolean;
+  /** Bound detection of a silent connection loss for worker queries. */
+  queryTimeoutMs?: number;
 }
 
 const DEFAULT_POOL_MAX = 4;
@@ -45,13 +53,19 @@ export function createPool(connectionString: string, options: DbClientOptions = 
     idleTimeoutMillis: 0,
     application_name: options.applicationName,
     keepAlive: true,
+    keepAliveInitialDelayMillis: 1_000,
+    query_timeout: options.queryTimeoutMs,
+    statement_timeout: options.queryTimeoutMs
+      ? Math.max(1, options.queryTimeoutMs - 1_000)
+      : undefined,
   });
   // graphile-worker (and Node itself) require an 'error' listener on a shared
   // pool: an idle-client disconnect is otherwise an unhandled error that kills
   // the process and orphans the TCP sessions until Postgres times them out.
-  pool.on("error", () => undefined);
+  pool.on("error", databaseOperationFailed);
   pool.on("connect", (client) => {
-    client.on("error", () => undefined);
+    client.on("error", databaseOperationFailed);
+    observeDatabaseQueries(client);
   });
   installConnectRetry(pool);
   installDbContext(pool);
@@ -84,8 +98,14 @@ export function createDb(
     idleTimeoutMillis: 30_000,
     application_name: options.applicationName && `${options.applicationName}-keys`,
     keepAlive: true,
+    keepAliveInitialDelayMillis: 1_000,
+    query_timeout: options.queryTimeoutMs,
+    statement_timeout: options.queryTimeoutMs
+      ? Math.max(1, options.queryTimeoutMs - 1_000)
+      : undefined,
   });
-  keyPool.on("error", () => undefined);
+  keyPool.on("error", databaseOperationFailed);
+  keyPool.on("connect", observeDatabaseQueries);
   installDbContext(keyPool);
   installSaturationReport(keyPool, keyPool.options.application_name);
   const end = pool.end.bind(pool) as () => Promise<void>;
@@ -105,13 +125,11 @@ export function createDb(
     adapter,
     transactionOptions: { maxWait: CHECKOUT_TIMEOUT_MS },
   });
-  // Row-level security wraps everything else, so its findUnique rewrite still runs
-  // through content encryption. Text is cleaned for Postgres before any of them see it.
-  const prisma = withTextSanitization(
-    withRowLevelSecurity(
-      withContentEncryption(client, contentKeys),
-      rlsBypassKey(connectionString),
-    ),
+  // Prisma runs hooks in registration order. Clean text before encryption and project
+  // names after decryption; RLS rewrites must retain both extensions on their client.
+  const prisma = withRowLevelSecurity(
+    withContentEncryption(withTextSanitization(client), contentKeys),
+    rlsBypassKey(connectionString),
   );
   return { prisma, pool, contentKeys };
 }
@@ -173,9 +191,14 @@ function installConnectRetry(pool: Pool): void {
   function connect(): Promise<PoolClient>;
   function connect(callback: ConnectCallback): void;
   function connect(callback?: ConnectCallback): Promise<PoolClient> | undefined {
-    if (!callback) return retryOnTooManyConnections(() => originalConnect());
+    if (!callback)
+      return retryOnTooManyConnections(() => originalConnect()).catch((error) => {
+        databaseOperationFailed(error);
+        throw error;
+      });
     const attempt = (n: number) => {
       originalConnect((err, client, done) => {
+        if (err) databaseOperationFailed(err);
         if (err && isTooManyDatabaseConnections(err) && n < CONNECT_RETRY_ATTEMPTS - 1) {
           setTimeout(() => attempt(n + 1), Math.min(5_000, 200 * 2 ** n));
           return;
@@ -187,6 +210,36 @@ function installConnectRetry(pool: Pool): void {
   }
 
   pool.connect = connect as Pool["connect"];
+}
+
+/** Observe pg's promise and callback APIs without replaying any SQL. */
+function observeDatabaseQueries(client: PoolClient): void {
+  const query = client.query.bind(client);
+  client.query = ((...args: unknown[]) => {
+    const callback = args.at(-1);
+    if (typeof callback === "function") {
+      args[args.length - 1] = (error: unknown, ...results: unknown[]) => {
+        if (error) databaseOperationFailed(error);
+        else databaseOperationSucceeded();
+        callback(error, ...results);
+      };
+      return Reflect.apply(query, client, args);
+    }
+    const result = Reflect.apply(query, client, args);
+    if (result && typeof result.then === "function") {
+      return result.then(
+        (value: unknown) => {
+          databaseOperationSucceeded();
+          return value;
+        },
+        (error: unknown) => {
+          databaseOperationFailed(error);
+          throw error;
+        },
+      );
+    }
+    return result;
+  }) as PoolClient["query"];
 }
 
 /**

@@ -5,6 +5,7 @@ import type { SecretStore } from "@orkbot/adapter-kit";
 import type { ModelRoleChoice } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { runAsSystem, workspaceAdmissionBinding } from "@orkbot/db";
+import { assertModelProviderAllowed, ModelProviderBlockedError } from "./model-provider-policy.js";
 import type { AIActor, ServerAICatalog } from "./server-ai-catalog.js";
 import { AIConnectionError } from "./server-ai-catalog.js";
 import { serverAIModel } from "./server-ai-model.js";
@@ -102,7 +103,12 @@ export class ServerAIModels {
     }
     if ((await this.deps.catalog.setupMode(actor)) === "pending") return false;
     if (!selection) return true;
-    return Boolean(await this.selectedAccount(actor, selection));
+    try {
+      return Boolean(await this.selectedAccount(actor, selection));
+    } catch (error) {
+      if (error instanceof ModelProviderBlockedError) return false;
+      throw error;
+    }
   }
 
   private async selectedAccount(
@@ -117,11 +123,19 @@ export class ServerAIModels {
         row.allowedModels.includes(selection.modelId) &&
         row.models.includes(selection.modelId),
     );
-    if (selection.connectionId) return allowed.find((row) => row.id === selection.connectionId);
+    assertModelProviderAllowed(selection.provider);
+    if (selection.connectionId) {
+      const account = allowed.find((row) => row.id === selection.connectionId);
+      if (account?.blockedByPolicy) throw new ModelProviderBlockedError();
+      return account;
+    }
+    const available = allowed.filter((row) => !row.blockedByPolicy);
+    if (!available.length && allowed.some((row) => row.blockedByPolicy))
+      throw new ModelProviderBlockedError();
     const primary = (await this.deps.catalog.choices(actor))[0];
     return (
-      allowed.find((row) => row.id === primary?.connectionId) ??
-      (allowed.length === 1 ? allowed[0] : undefined)
+      available.find((row) => row.id === primary?.connectionId) ??
+      (available.length === 1 ? available[0] : undefined)
     );
   }
 
@@ -147,6 +161,7 @@ export class ServerAIModels {
             secretId: choice.connectionId,
           };
         } catch (error) {
+          if (error instanceof ModelProviderBlockedError) continue;
           if (
             !(error instanceof AIConnectionError) ||
             !["unavailable", "busy"].includes(error.code)
@@ -175,6 +190,7 @@ export class ServerAIModels {
       .filter(
         (row) =>
           row.enabled &&
+          !row.blockedByPolicy &&
           row.fallback &&
           row.state === "active" &&
           row.defaultModelId &&

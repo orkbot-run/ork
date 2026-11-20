@@ -11,6 +11,7 @@ import {
   organizationForMember,
   organizationSeatCount,
   ownedBillingAccounts,
+  recordFirstPaidSubscriptionInvoice,
   reserveByokTrialCheckout,
   syncBillingSnapshot,
 } from "./billing.js";
@@ -110,13 +111,21 @@ describePostgres("billing accounts (PostgreSQL)", () => {
     const first = await billingAccountForOrganization(prisma, organizationId);
     expect(first).toMatchObject({ status: "trialing", seats: 2, subscriptionItemId: "si_1" });
     expect(first?.subscribedAt).toBeInstanceOf(Date);
-    expect(first?.paidAt).toBeNull();
+    expect(first?.firstPaidInvoiceAt).toBeNull();
 
     await syncBillingSnapshot(prisma, customerId, async () => ({ ...snapshot, status: "active" }));
     const second = await billingAccountForOrganization(prisma, organizationId);
     expect(second?.status).toBe("active");
     expect(second?.subscribedAt).toEqual(first?.subscribedAt);
-    expect(second?.paidAt).toBeInstanceOf(Date);
+    expect(second?.firstPaidInvoiceAt).toBeNull();
+    const observedActiveAt = new Date("2026-10-14T00:00:00.000Z");
+    const settledAt = new Date("2026-10-15T00:00:00.000Z");
+    await prisma.billingAccount.update({
+      where: { customerId },
+      data: { paidAt: observedActiveAt },
+    });
+    await recordFirstPaidSubscriptionInvoice(prisma, customerId, settledAt);
+    await recordFirstPaidSubscriptionInvoice(prisma, customerId, new Date("2026-11-15T00:00:00Z"));
 
     await syncBillingSnapshot(prisma, customerId, async () => null);
     const cleared = await billingAccountForOrganization(prisma, organizationId);
@@ -129,7 +138,8 @@ describePostgres("billing accounts (PostgreSQL)", () => {
       cancelAtPeriodEnd: false,
     });
     expect(cleared?.subscribedAt).toEqual(first?.subscribedAt);
-    expect(cleared?.paidAt).toEqual(second?.paidAt);
+    expect(cleared?.firstPaidInvoiceAt).toEqual(settledAt);
+    expect(cleared?.paidAt).toEqual(observedActiveAt);
   });
 
   it("applies concurrent syncs in order so an older read cannot win", async () => {

@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { ModelCatalogEntry } from "@orkbot/contracts";
+import type { ModelApiProtocol, ModelCatalogEntry } from "@orkbot/contracts";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
+import { modelConnectionOptions } from "@orkbot/core";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Text, View } from "react-native";
 import type { rpc } from "../lib/api";
@@ -10,7 +11,7 @@ import { useI18n } from "../lib/i18n";
 import { native } from "../lib/native";
 import { MenuPickerMenu } from "./menu-picker";
 import { NativeActionButton } from "./native-action-button";
-import { SettingsGroup, SettingsInputRow, SettingsRow } from "./settings-group";
+import { SettingsGroup, SettingsInputRow, SettingsRow, SettingsSwitch } from "./settings-group";
 
 /** The captured RPC context keeps edits bound to the originating server and workspace. */
 export function WorkspaceModelSettings({
@@ -20,7 +21,15 @@ export function WorkspaceModelSettings({
   isCurrent,
   onChanged,
 }: {
-  value: { canManage: boolean; policy: { provider: string; modelId: string } | null };
+  value: {
+    canManage: boolean;
+    policy: {
+      provider: string;
+      modelId: string;
+      blockedByPolicy?: boolean;
+      zeroDataRetention?: boolean;
+    } | null;
+  };
   catalog: ModelCatalogEntry[];
   send: typeof rpc;
   isCurrent: () => boolean;
@@ -29,10 +38,13 @@ export function WorkspaceModelSettings({
   const { t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [provider, setProvider] = useState("");
+  const [choice, setChoice] = useState("");
+  const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>("chat-completions");
   const [modelId, setModelId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [routing, setRouting] = useState<Record<string, string>>({});
+  const [zeroDataRetention, setZeroDataRetention] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const operation = useRef<AbortController | null>(null);
@@ -44,15 +56,26 @@ export function WorkspaceModelSettings({
         .map((entry) => [entry.provider, entry]),
     ).values(),
   ];
+  const options = modelConnectionOptions(
+    catalog.filter((entry) => entry.auth !== "oauth" && entry.protocol !== "decisions"),
+  );
+  const optionKey = (option: (typeof options)[number]) =>
+    option.baseUrl ? JSON.stringify([option.id, option.baseUrl]) : option.id;
+  const selected = providers.find((entry) => entry.provider === provider);
   const fields =
     providers.find((entry) => entry.provider === provider)?.connection?.routingFields ?? [];
   const compatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
   function open() {
-    setProvider(value.policy?.provider ?? providers[0]?.provider ?? "");
-    setModelId(value.policy?.modelId ?? "");
+    const policy = value.policy?.blockedByPolicy ? null : value.policy;
+    const option = options.find((option) => option.id === policy?.provider) ?? options[0];
+    setChoice(option ? optionKey(option) : "");
+    setProvider(option?.id ?? "");
+    setModelId(policy && policy.provider === option?.id ? policy.modelId : "");
     setApiKey("");
-    setBaseUrl("");
+    setBaseUrl(option?.baseUrl ?? "");
+    setApiProtocol(option?.apiProtocol ?? "chat-completions");
     setRouting({});
+    setZeroDataRetention(policy?.zeroDataRetention ?? false);
     setError(null);
     setEditing(true);
   }
@@ -73,8 +96,9 @@ export function WorkspaceModelSettings({
             modelId: modelId.trim(),
             apiKey: apiKey.trim(),
             credentialId: null,
-            ...(compatible ? { baseUrl: baseUrl.trim() } : {}),
+            ...(compatible ? { baseUrl: baseUrl.trim(), apiProtocol } : {}),
             ...(fields.length ? { routing } : {}),
+            ...(selected?.connection?.supportsZeroDataRetention ? { zeroDataRetention } : {}),
           },
           { signal: controller.signal },
         );
@@ -94,7 +118,14 @@ export function WorkspaceModelSettings({
     <View style={{ gap: 12 }}>
       <SettingsGroup label={t("Workspace model")}>
         {value.policy ? (
-          <SettingsRow title={value.policy.modelId} detail={value.policy.provider} />
+          <SettingsRow
+            title={value.policy.modelId}
+            detail={
+              value.policy.blockedByPolicy
+                ? t("Blocked by the server administrator")
+                : value.policy.provider
+            }
+          />
         ) : null}
         {value.canManage && !editing ? (
           <SettingsRow title={t("Set workspace model")} onPress={open} accessibilityRole="button" />
@@ -109,25 +140,26 @@ export function WorkspaceModelSettings({
         <SettingsGroup>
           <MenuPickerMenu
             label={t("Provider")}
-            choices={providers.map((entry) => ({
-              key: entry.provider,
-              label: entry.providerName ?? entry.provider,
-            }))}
-            value={provider}
+            choices={options.map((option) => ({ key: optionKey(option), label: option.name }))}
+            value={choice}
             disabled={busy}
             onChange={(next) => {
-              setProvider(next);
+              const option = options.find((option) => optionKey(option) === next);
+              if (!option) return;
+              setChoice(next);
+              setProvider(option.id);
+              setBaseUrl(option.baseUrl ?? "");
+              setApiProtocol(option.apiProtocol ?? "chat-completions");
               setModelId("");
               setApiKey("");
               setRouting({});
+              setZeroDataRetention(false);
             }}
           >
             <View>
               <SettingsRow
                 title={t("Provider")}
-                value={
-                  providers.find((entry) => entry.provider === provider)?.providerName ?? provider
-                }
+                value={options.find((option) => optionKey(option) === choice)?.name ?? provider}
                 chevron="down"
               />
             </View>
@@ -150,7 +182,18 @@ export function WorkspaceModelSettings({
               keyboardType="url"
               autoCapitalize="none"
               autoCorrect={false}
-              editable={!busy}
+              editable={!busy && selected?.connection?.customEndpointAllowed !== false}
+            />
+          ) : null}
+          {selected?.connection?.supportsZeroDataRetention ? (
+            <SettingsSwitch
+              label={t("Zero data retention")}
+              detail={t(
+                "Route requests only to endpoints marked as eligible for zero data retention.",
+              )}
+              value={zeroDataRetention}
+              disabled={busy}
+              onChange={setZeroDataRetention}
             />
           ) : null}
           {fields.map((field) => (

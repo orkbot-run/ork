@@ -184,7 +184,7 @@ export function useThreadSync({
     return snap;
   }
 
-  async function refreshThread(id: string, signal?: AbortSignal) {
+  async function refreshThread(id: string, signal?: AbortSignal, options?: { screen?: false }) {
     const scrollElement = messageScroll.current;
     const stickToEnd = !scrollElement || transcriptIsNearEnd(scrollElement);
     markOnce("rk:renderer:thread-request-start");
@@ -226,7 +226,7 @@ export function useThreadSync({
       fetchFresh(queryClient, queries.skills.list.queryOptions({ input: { botId: id } })).catch(
         () => null,
       ),
-      refreshComputerScreen(id).catch(() => null),
+      options?.screen !== false ? refreshComputerScreen(id).catch(() => null) : null,
     ]).then(([routines, skills]) => {
       if (
         activeBotId.current !== id ||
@@ -395,7 +395,13 @@ export function useThreadSync({
         } else if (isComputerStatusEvent(event)) {
           void refreshComputerScreen(active.id).catch(() => undefined);
         }
-        if (isRunTerminalEvent(event)) refreshRoutineHistory(event.runId);
+        if (isRunTerminalEvent(event)) {
+          refreshRoutineHistory(event.runId);
+          void queryClient.invalidateQueries({
+            queryKey: queries.usage.breakdown.key(),
+            refetchType: "active",
+          });
+        }
       },
     });
     return () => {
@@ -483,7 +489,13 @@ export function useThreadSync({
           // waiting_input: reconcile ask cards if a stale post-send refresh raced SSE.
           void snapshotRefresh.invalidate().catch(() => undefined);
         }
-        if (isRunTerminalEvent(event)) refreshRoutineHistory(event.runId);
+        if (isRunTerminalEvent(event)) {
+          refreshRoutineHistory(event.runId);
+          void queryClient.invalidateQueries({
+            queryKey: queries.usage.breakdown.key(),
+            refetchType: "active",
+          });
+        }
       },
     });
     return () => {

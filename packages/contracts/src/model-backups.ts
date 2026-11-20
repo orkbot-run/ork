@@ -92,6 +92,7 @@ export function connectedBackupOptions(
 ): ConnectedBackupOption[] {
   const connections = new Map<string, ModelCredential[]>();
   for (const credential of credentials) {
+    if (credential.blockedByPolicy) continue;
     const provider = canonicalPiProviderId(credential.provider);
     connections.set(provider, [...(connections.get(provider) ?? []), credential]);
   }
@@ -131,7 +132,8 @@ export function connectedBackupOptions(
       );
   }
   for (const credential of credentials) {
-    if (credential.provider !== OPENAI_COMPATIBLE_PROVIDER_ID) continue;
+    if (credential.blockedByPolicy || credential.provider !== OPENAI_COMPATIBLE_PROVIDER_ID)
+      continue;
     const seen = new Set<string>();
     for (const raw of credential.enabledModelIds ?? [credential.modelId ?? ""]) {
       const modelId = raw.trim();

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
+
 import { runContinueJob } from "@orkbot/adapter-kit";
 import { displayName } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
@@ -7,6 +12,7 @@ import { returnBotMessageOutcome } from "./bot-messages.js";
 import { sleepDeferReason } from "./computer-idle.js";
 import { withComputerScreenAvailability } from "./computer-screens.js";
 import type { ExecutorDeps } from "./executor-deps.js";
+import { dueScheduledRoutine } from "./routine-conversation.js";
 import { notifyRun } from "./run-notifications.js";
 import type { TakeoverResumeCheckpoint } from "./takeover-resume.js";
 import { TAKEOVER_RESUME_CHECKPOINTS } from "./takeover-resume.js";
@@ -132,6 +138,7 @@ export async function renewRunLease(
       status: "running",
       leaseOwner: workerId,
       leaseFence: fence,
+      leaseExpiresAt: { gt: new Date() },
     },
     data: { leaseExpiresAt: new Date(Date.now() + 5 * 60_000) },
   });
@@ -172,26 +179,33 @@ export function providerOutageRetryDelay(priorFailures: number): number {
   return Math.min(5 * 60_000, 15_000 * 2 ** Math.min(priorFailures, 5));
 }
 
-/**
- * A bot uses its computer for one run at a time, and runs that found it held wait without
- * a retry timer. The run releasing it starts the next one due. Runs backing off after a
- * failure keep their delay.
- */
+/** A run releasing the computer wakes the next due work, favoring scheduled work held
+ * behind the conversation. Runs backing off after a failure keep their delay. */
 export async function startNextWaitingRun(
-  deps: ExecutorDeps,
+  deps: Pick<ExecutorDeps, "prisma" | "jobs">,
   botId: string,
   releasedBy: string,
+  threadId: string,
 ): Promise<void> {
-  const next = await deps.prisma.run.findFirst({
-    where: {
-      botId,
-      status: "queued",
-      id: { not: releasedBy },
-      OR: [{ wakeAt: null }, { wakeAt: { lte: new Date() } }],
-    },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  const now = new Date();
+  const orderBy = [{ createdAt: "asc" }, { id: "asc" }] as const;
+  const filter = { botId, id: { not: releasedBy } };
+  const firstInConversation = await deps.prisma.run.findFirst({
+    where: { ...filter, threadId, ...dueScheduledRoutine(now) },
+    orderBy: [...orderBy],
     select: { id: true },
   });
+  const next =
+    firstInConversation ??
+    (await deps.prisma.run.findFirst({
+      where: {
+        ...filter,
+        status: "queued",
+        OR: [{ wakeAt: null }, { wakeAt: { lte: now } }],
+      },
+      orderBy: [...orderBy],
+      select: { id: true },
+    }));
   if (next) await deps.jobs.enqueue(runContinueJob(next.id));
 }
 

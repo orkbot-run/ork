@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+
 // @vitest-environment jsdom
 
 import type { LoginFieldInput } from "@orkbot/contracts";
@@ -159,7 +162,7 @@ afterEach(async () => {
 
 async function render(
   ask: Record<string, unknown>,
-  onAnswer: () => Promise<void> = async () => undefined,
+  onAnswer: (answer: string) => Promise<void> = async () => undefined,
   onDismiss: () => Promise<void> = async () => undefined,
 ) {
   await act(async () =>
@@ -614,3 +617,117 @@ it.each([
     expect(container.querySelectorAll("button").length).toBeGreaterThan(0);
   },
 );
+
+const outgoingDraft = {
+  kind: "email",
+  recipient: "client@example.test",
+  subject: "Hello",
+  body: "Draft body",
+};
+it("renders an outgoing draft with editable fields and refusal only sends deny", async () => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  await render({ outgoingDraft, detail: "Auto-review warning" }, onAnswer);
+  expect(container.querySelectorAll("input")).toHaveLength(3);
+  expect(container.textContent).toContain("Auto-review warning");
+  expect(buttons()).toEqual(["Send", "Reject"]);
+  await act(async () => button("Reject").click());
+  expect(onAnswer).toHaveBeenCalledWith("deny");
+  expect(container.textContent).toContain("Denied");
+});
+it("sends an outgoing draft with staged recipient review ID", async () => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  const reviewId = "11111111-1111-4111-8111-111111111111";
+  await render({ outgoingDraft: { ...outgoingDraft, reviewId, recipientChanged: true } }, onAnswer);
+  await act(async () => button("Send").click());
+  expect(JSON.parse(onAnswer.mock.calls[0]![0]!)).toEqual({
+    outgoingDraft: { recipient: outgoingDraft.recipient, subject: "Hello", body: "Draft body" },
+    reviewId,
+  });
+  expect(container.textContent).toContain("Approved to send");
+});
+it("rejects an empty outgoing body with visible feedback", async () => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  await render({ outgoingDraft: { ...outgoingDraft, body: "  " } }, onAnswer);
+  await act(async () => button("Send").click());
+  expect(onAnswer).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("Enter a message body");
+});
+
+it("keeps a changed native recipient pending until staged review is explicitly sent", async () => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  await render({ outgoingDraft }, onAnswer);
+  await act(async () => {
+    const input = container.querySelector<HTMLInputElement>('input[aria-label="To"]')!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "other@example.test",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => button("Send").click());
+  expect(JSON.parse(onAnswer.mock.calls[0]![0])).toMatchObject({
+    outgoingDraft: { recipient: "other@example.test" },
+  });
+  expect(container.textContent).not.toContain("Approved to send");
+  expect(button("Send").disabled).toBe(true);
+  const reviewId = "22222222-2222-4222-8222-222222222222";
+  await render(
+    {
+      outgoingDraft: {
+        ...outgoingDraft,
+        recipient: "other@example.test",
+        recipientChanged: true,
+        reviewId,
+      },
+    },
+    onAnswer,
+  );
+  expect(onAnswer).toHaveBeenCalledTimes(1);
+  await act(async () => button("Send").click());
+  expect(JSON.parse(onAnswer.mock.calls[1]![0])).toMatchObject({ reviewId });
+  expect(container.textContent).toContain("Approved to send");
+});
+
+const mcpForm = {
+  id: "680d939a-98de-4bb5-b649-91b1015dfb1c",
+  integrationName: "Example CRM",
+  status: "pending",
+  fields: [
+    { name: "notify", title: "Notify", required: true, type: "boolean", default: false },
+    { name: "quantity", title: "Quantity", required: true, type: "integer", default: 3 },
+    {
+      name: "kind",
+      title: "Kind",
+      required: false,
+      type: "enum",
+      options: [{ value: "a", label: "First kind" }],
+    },
+  ],
+};
+it("renders native MCP boolean choices and submits false and numbers with scalar types", async () => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  await render({ mcpForm }, onAnswer);
+  expect(container.textContent).toContain("Notify (Required)");
+  expect(container.textContent).toContain("First kind");
+  await act(async () => button("Submit").click());
+  expect(JSON.parse(onAnswer.mock.calls[0]![0]!)).toEqual({
+    mcpFormId: mcpForm.id,
+    action: "accept",
+    content: { notify: false, quantity: 3 },
+  });
+  expect(container.querySelector("input")).toBeNull();
+});
+it.each(["Decline", "Cancel"])("submits native MCP %s without content", async (label) => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  await render({ mcpForm }, onAnswer);
+  await act(async () => button(label).click());
+  expect(JSON.parse(onAnswer.mock.calls[0]![0]!)).toEqual({
+    mcpFormId: mcpForm.id,
+    action: label.toLowerCase(),
+  });
+});
+it("renders native expired MCP forms with no fields or actions", async () => {
+  await render({ mcpForm: { ...mcpForm, status: "expired" } });
+  expect(container.textContent).toContain("Expired");
+  expect(container.querySelector("input,button")).toBeNull();
+});

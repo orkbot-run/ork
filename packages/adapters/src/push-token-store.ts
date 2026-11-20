@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache material is preserved; notification session scopes are an Ork addition.
 
-import type { PrismaClient } from "@orkbot/db";
+import type { Prisma, PrismaClient } from "@orkbot/db";
 import { runAsSystem, withTransactionRetry } from "@orkbot/db";
 import { credentialDigest } from "./credential-digest.js";
 import { EncryptedSecretStore } from "./secrets.js";
@@ -30,7 +30,7 @@ export type CallPushDevice = CallPushRegistration & {
   revision: string;
 };
 
-/** Account-wide registrations, shared by API replicas and notification workers. */
+/** Device registrations shared by API replicas and notification workers. */
 export interface PushTokenStore {
   saveDevice?(userId: string, registration: CallPushRegistration, sessionId: string): Promise<void>;
   devices?(userId: string): Promise<CallPushDevice[]>;
@@ -40,6 +40,8 @@ export interface PushTokenStore {
     revision: string,
     transport?: "voip" | "expo",
   ): Promise<void>;
+  list(userId: string): Promise<PushRecord[]>;
+  /** Compatibility for legacy call push; message delivery uses all registrations. */
   load(userId: string): Promise<PushRecord | undefined>;
   save(
     userId: string,
@@ -206,18 +208,42 @@ export class PrismaPushTokenStore implements PushTokenStore {
     );
   }
 
-  async load(userId: string): Promise<PushRecord | undefined> {
-    return runAsSystem("load an account's notification registration", async () => {
-      const row = await this.prisma.pushToken.findUnique({ where: { userId } });
-      if (!row) return undefined;
-      return {
-        token: await this.encryption.load(row.ciphertext, `push-token:${userId}`),
-        sessionId: row.sessionId,
-        ...(row.presentation === "android_sender"
-          ? { presentation: "android_sender" as const }
-          : {}),
-      };
+  async list(userId: string): Promise<PushRecord[]> {
+    return runAsSystem("load an account's notification registrations", async () => {
+      const rows = await this.prisma.pushRegistration.findMany({
+        where: { userId },
+        orderBy: { updatedAt: "desc" },
+      });
+      return Promise.all(
+        rows.map(async (row) => ({
+          token: await this.encryption.load(row.ciphertext, `push-token:${userId}`),
+          sessionId: row.sessionId,
+          ...(row.presentation === "android_sender"
+            ? { presentation: "android_sender" as const }
+            : {}),
+        })),
+      );
     });
+  }
+
+  async load(userId: string): Promise<PushRecord | undefined> {
+    return (await this.list(userId))[0];
+  }
+
+  /** Keep the preceding release's single-device view valid during rolling deploys. */
+  private async mirrorLegacy(tx: Prisma.TransactionClient, userId: string): Promise<void> {
+    const latest = await tx.pushRegistration.findFirst({
+      where: { userId },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (!latest) {
+      await tx.pushToken.deleteMany({ where: { userId } });
+      return;
+    }
+    const { tokenDigest, sessionId, ciphertext, presentation, updatedAt } = latest;
+    const data = { tokenDigest, sessionId, ciphertext, presentation, updatedAt };
+    await tx.pushToken.deleteMany({ where: { tokenDigest, userId: { not: userId } } });
+    await tx.pushToken.upsert({ where: { userId }, create: { userId, ...data }, update: data });
   }
 
   async save(
@@ -265,7 +291,7 @@ export class PrismaPushTokenStore implements PushTokenStore {
           // Use the same locks as live registration so the check and insert are atomic.
           if (
             mode === "import" &&
-            (await tx.pushToken.findFirst({
+            (await tx.pushRegistration.findFirst({
               where: { OR: [{ userId }, { tokenDigest }] },
               select: { userId: true },
             }))
@@ -283,15 +309,18 @@ export class PrismaPushTokenStore implements PushTokenStore {
             sessionId,
             presentation: presentation ?? null,
           };
-          if (mode === "import") await tx.pushToken.create({ data: { userId, ...data } });
-          else {
-            await tx.pushToken.deleteMany({ where: { tokenDigest, userId: { not: userId } } });
-            await tx.pushToken.upsert({
-              where: { userId },
-              create: { userId, ...data },
-              update: data,
-            });
-          }
+          // Session is the stable device scope: token rotation removes only that
+          // installation's former token. Reusing a token transfers its ownership.
+          await tx.pushRegistration.deleteMany({
+            where: { userId, sessionId, tokenDigest: { not: tokenDigest } },
+          });
+          await tx.pushToken.deleteMany({ where: { tokenDigest, userId: { not: userId } } });
+          await tx.pushRegistration.upsert({
+            where: { tokenDigest },
+            create: { userId, ...data },
+            update: { userId, ...data },
+          });
+          await this.mirrorLegacy(tx, userId);
           return true;
         }),
       ),
@@ -303,9 +332,13 @@ export class PrismaPushTokenStore implements PushTokenStore {
       withTransactionRetry(() =>
         this.prisma.$transaction(async (tx) => {
           await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`push-user:${userId}`}, 0))::text`;
+          await tx.pushRegistration.deleteMany({
+            where: { userId, ...(tokenDigest ? { tokenDigest } : {}) },
+          });
           await tx.pushToken.deleteMany({
             where: { userId, ...(tokenDigest ? { tokenDigest } : {}) },
           });
+          await this.mirrorLegacy(tx, userId);
         }),
       ),
     );
@@ -326,12 +359,23 @@ export class PrismaPushTokenStore implements PushTokenStore {
             });
             if (!session) {
               await tx.callPushDevice.deleteMany({ where });
+              await tx.pushRegistration.deleteMany({ where });
               await tx.pushToken.deleteMany({ where });
+              await this.mirrorLegacy(tx, userId);
               return;
             }
             await tx.callPushDevice.updateMany({ where, data: { sessionId: nextSessionId } });
-            await tx.pushToken.updateMany({ where, data: { sessionId: nextSessionId } });
-          } else await tx.pushToken.deleteMany({ where });
+            const replacement = await tx.pushRegistration.findFirst({
+              where: { userId, sessionId: nextSessionId },
+              select: { tokenDigest: true },
+            });
+            // A token already registered by the new session is newer evidence.
+            if (replacement) await tx.pushRegistration.deleteMany({ where });
+            else
+              await tx.pushRegistration.updateMany({ where, data: { sessionId: nextSessionId } });
+          } else await tx.pushRegistration.deleteMany({ where });
+          await tx.pushToken.deleteMany({ where });
+          await this.mirrorLegacy(tx, userId);
         }),
       ),
     );

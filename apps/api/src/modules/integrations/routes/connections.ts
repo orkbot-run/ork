@@ -3,7 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
 
-import type { AdapterContext, ConnectorCatalogItem } from "@orkbot/adapter-kit";
+import type {
+  AdapterContext,
+  ConnectorCatalogItem,
+  ManagedConnectorProvider,
+} from "@orkbot/adapter-kit";
 import { ConnectorAuthUnavailableError } from "@orkbot/adapter-kit";
 import {
   legacyConnectorId,
@@ -32,31 +36,55 @@ async function reconcileConnections(
   connectorId: string,
   connectedProviders: string[],
   reconnectRefs: string[],
+  provider: ManagedConnectorProvider,
+  adapterContext: AdapterContext,
 ): Promise<void> {
-  const connectedProviderKeys = new Set(
-    connectedProviders.map((provider) => provider.trim().toLowerCase()),
-  );
-  const rows = (
-    await prisma.connection.findMany({
-      where: {
-        spaceId: owner.spaceId,
-        userId: owner.userId,
+  const rows = await prisma.connection.findMany({
+    where: {
+      spaceId: owner.spaceId,
+      userId: owner.userId,
+      connectorId,
+      status: { in: ["pending", "error", "connected"] },
+    },
+    select: {
+      id: true,
+      provider: true,
+      displayName: true,
+      status: true,
+      providerRef: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+  });
+  let activeRefs: string[] | null | undefined;
+  if (rows.some((row) => row.status === "pending" || row.status === "error")) {
+    try {
+      activeRefs = await provider.listActiveConnectionRefs?.(adapterContext);
+    } catch {
+      activeRefs = null;
+      getLogger().warn("Active connection lookup failed; pending authorizations retained", {
         connectorId,
-        status: { in: ["pending", "connected"] },
-      },
-      select: { id: true, provider: true, displayName: true, status: true },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    })
-  ).filter((row: { provider: string }) =>
-    connectedProviderKeys.has(row.provider.trim().toLowerCase()),
-  );
-  const sync = planLiveConnectionSync(rows, connectedProviders);
+      });
+    }
+  }
+  const sync = planLiveConnectionSync(rows, connectedProviders, activeRefs);
+  const snapshotGuard = (id: string) => {
+    const row = rows.find((candidate) => candidate.id === id)!;
+    return { providerRef: row.providerRef, updatedAt: row.updatedAt };
+  };
   // One update per row so the credential event goes only to rows this call actually connected.
   const connectedIds: string[] = [];
   const updates = [
     ...sync.connectIds.map((id) => async (tx: Prisma.TransactionClient) => {
       const updated = await tx.connection.updateMany({
-        where: { id, spaceId: owner.spaceId, userId: owner.userId, status: "pending" },
+        where: {
+          id,
+          spaceId: owner.spaceId,
+          userId: owner.userId,
+          status: { in: ["pending", "error"] },
+          ...snapshotGuard(id),
+        },
         data: { status: "connected" },
       });
       if (updated.count > 0) connectedIds.push(id);
@@ -69,7 +97,8 @@ async function reconcileConnections(
                 id: { in: sync.revokeIds },
                 spaceId: owner.spaceId,
                 userId: owner.userId,
-                status: "pending",
+                status: { in: ["pending", "error"] },
+                OR: sync.revokeIds.map((id) => ({ id, ...snapshotGuard(id) })),
               },
               data: { status: "revoked" },
             }),
@@ -249,12 +278,17 @@ export function connectionsRoutes(ctx: RouterContext) {
             provider.listReconnectRefs?.(adapterContext).catch(() => []) ?? [],
           ]);
           const nowConnected = items.filter((item) => item.connected).map((item) => item.slug);
-          if (nowConnected.length > 0 || reconnectRefs.length > 0) {
-            await reconcileConnections(deps.prisma, actor, id, nowConnected, reconnectRefs).catch(
-              (error) =>
-                getLogger().error("Connection reconciliation failed", error, { connectorId: id }),
-            );
-          }
+          await reconcileConnections(
+            deps.prisma,
+            actor,
+            id,
+            nowConnected,
+            reconnectRefs,
+            provider,
+            adapterContext,
+          ).catch((error) =>
+            getLogger().error("Connection reconciliation failed", error, { connectorId: id }),
+          );
           return { items, provider: { id, status: "ready" as const } };
         } catch {
           return {
@@ -503,7 +537,7 @@ export function connectionsRoutes(ctx: RouterContext) {
             message: `Connector ${existing.connectorId} is not configured`,
           });
         }
-        // Catalog reconciliation connects a row without its account id; the next poll stores it.
+        // Legacy reconciliation may leave a slug ref; the next poll resolves that account.
         const settling = (row: { status: string; provider: string; providerRef: string | null }) =>
           row.status !== "connected" || row.providerRef === row.provider;
         const prepared = settling(existing)
@@ -649,14 +683,26 @@ export function connectionsRoutes(ctx: RouterContext) {
                   throw new ORPCError("BAD_REQUEST", { message: sanitizeConnectorError(error) });
                 }
               }
-              const ready = await transactionConnector.connectionReady(
-                adapterContext,
-                current.provider,
-              );
+              let activeRefs: string[] | undefined;
+              try {
+                activeRefs = await transactionConnector.listActiveConnectionRefs?.(adapterContext);
+              } catch {
+                getLogger().warn(
+                  "Active connection lookup failed; pending authorization retained",
+                  {
+                    connectorId: existing.connectorId,
+                  },
+                );
+                return current;
+              }
+              const ready =
+                activeRefs !== undefined
+                  ? Boolean(current.providerRef && activeRefs.includes(current.providerRef))
+                  : await transactionConnector.connectionReady(adapterContext, current.provider);
               if (!ready) return current;
 
-              // Browser OAuth stores a connection-request id in providerRef from
-              // begin. Resolve it to the connected-account id so revoke deletes the
+              // Browser OAuth stores the provider account/request ref from begin.
+              // Resolve legacy refs to the connected-account id so revoke deletes the
               // right remote authorization. Prefer an account id not already used
               // by a sibling row for the same provider.
               const resolveAccountId = (ref: string | null | undefined, excludeIds: string[]) =>
@@ -670,7 +716,9 @@ export function connectionsRoutes(ctx: RouterContext) {
                   )
                   .catch(() => undefined);
               let resolvedAccountId: string | undefined;
-              if (transactionConnector.resolveConnectedAccountId) {
+              if (activeRefs !== undefined) {
+                resolvedAccountId = current.providerRef ?? undefined;
+              } else if (transactionConnector.resolveConnectedAccountId) {
                 const siblings = await tx.connection.findMany({
                   where: {
                     spaceId: context.actor.spaceId,

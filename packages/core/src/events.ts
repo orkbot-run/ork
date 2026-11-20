@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; bounded action display labels follow LICENSE.md.
 
-import type { MessageBlock, ThreadMessage } from "@orkbot/contracts";
+import type { BotLiveActivity, MessageBlock, ThreadMessage } from "@orkbot/contracts";
 import { cloudAgentBlockFromPayload } from "./cloud-agent.js";
 import { preserveIdentitySource } from "./identity-source.js";
 import { modelFallbackFailure, parseModelFallbackFailure } from "./run-error.js";
@@ -224,14 +224,14 @@ export function isRunTerminalEvent(event: { type: string }): boolean {
 export const RESPONSE_STREAMING_STORAGE_KEY = "orkbot.responseStreaming";
 export type ResponseStreamingPreference = "on" | "off";
 
-/** Missing and unknown values stay off; only an explicit "on" enables streaming. */
+/** Streaming starts on when no choice is saved; malformed saved values stay off. */
 export function normalizeResponseStreamingPreference(
   raw: string | null | undefined,
 ): ResponseStreamingPreference {
-  return raw?.trim().toLowerCase() === "on" ? "on" : "off";
+  return raw == null || raw.trim().toLowerCase() === "on" ? "on" : "off";
 }
 
-export function responseStreamingEnabled(preference: ResponseStreamingPreference = "off"): boolean {
+export function responseStreamingEnabled(preference: ResponseStreamingPreference = "on"): boolean {
   return preference === "on";
 }
 
@@ -337,6 +337,10 @@ export function reduceLiveMessageBlocks(
     update.type === "progress"
       ? update.payload?.activity === true
       : tail?.kind === "progress" && tail.activity === true;
+  const streaming =
+    update.type === "progress"
+      ? update.payload?.streaming === true
+      : tail?.kind === "progress" && tail.streaming === true;
 
   if (pendingToolNames.length > 0 && endsSentence(tailText)) {
     let next = activity ? [...segments] : appendTextSegment(segments, tailText);
@@ -349,6 +353,20 @@ export function reduceLiveMessageBlocks(
     {
       kind: "progress",
       text: tailText,
+      ...(streaming && !activity ? { streaming: true as const } : {}),
+      ...(update.type === "progress" &&
+      streaming &&
+      !activity &&
+      typeof update.payload?.publicText === "string" &&
+      typeof update.payload.publicTextCallId === "string"
+        ? {
+            publicText: update.payload.publicText,
+            publicTextCallId: update.payload.publicTextCallId,
+            ...(typeof update.payload.publicTextSegmentStart === "number"
+              ? { publicTextSegmentStart: update.payload.publicTextSegmentStart }
+              : {}),
+          }
+        : {}),
       ...(activity ? { activity: true as const } : {}),
       ...(pendingToolNames.length > 0 ? { pendingToolNames } : {}),
     },
@@ -376,13 +394,28 @@ export function liveMessageComposing(blocks: readonly MessageBlock[]): boolean {
   );
 }
 
+/** Current tool step or reply composition for a live run. */
+export function liveActivity(
+  messages: readonly { id: string; blocks: readonly MessageBlock[] }[],
+  runId?: string,
+): BotLiveActivity | undefined {
+  const live = messages.findLast((message) =>
+    runId === undefined ? message.id.startsWith("progress:") : message.id === `progress:${runId}`,
+  );
+  if (!live) return undefined;
+  if (liveMessageComposing(live.blocks)) return { kind: "writing" };
+  const tail = live.blocks.at(-1);
+  const text = tail?.kind === "progress" && tail.activity ? tail.text.trim() : "";
+  return text ? { kind: "step", text } : undefined;
+}
+
 /** The tool status line the newest live message is showing ("Searching the web: …"), if any. */
 export function liveActivityLine(
   messages: readonly { id: string; blocks: readonly MessageBlock[] }[],
+  runId?: string,
 ): string | undefined {
-  const live = messages.findLast((message) => message.id.startsWith("progress:"));
-  const tail = live?.blocks.at(-1);
-  return (tail?.kind === "progress" && tail.activity && tail.text.trim()) || undefined;
+  const activity = liveActivity(messages, runId);
+  return activity?.kind === "step" ? activity.text : undefined;
 }
 
 export type ToolStep = { label: string; count: number; note?: string };
@@ -697,7 +730,17 @@ export function sanitizeJsonValue<T>(value: T): T {
 
 export function createStreamingRedactor(secrets: string[]) {
   const values = protectedValues(secrets);
-  const maxLength = Math.max(0, ...values.map((value) => value.length));
+  // Prefix fallback tables let us find partial matches in linear time, even for long,
+  // repetitive secrets. Only a suffix that could become a secret needs to wait.
+  const patterns = values.map((value) => {
+    const fallback = new Uint32Array(value.length);
+    for (let at = 1, matched = 0; at < value.length; at += 1) {
+      while (matched > 0 && value[at] !== value[matched]) matched = fallback[matched - 1]!;
+      if (value[at] === value[matched]) matched += 1;
+      fallback[at] = matched;
+    }
+    return { value, fallback };
+  });
   let buffer = "";
   let covered = 0;
 
@@ -707,10 +750,25 @@ export function createStreamingRedactor(secrets: string[]) {
       output = buffer;
       buffer = "";
     } else {
-      // A match a later chunk completes starts in the last maxLength - 1 units, so text before
-      // that is final. A stretch reaching past it is shown now and its rest kept as `covered`: a
-      // later match starting inside it extends the same placeholder, so nothing is held for long.
-      const cut = final ? buffer.length : Math.max(0, buffer.length - maxLength + 1);
+      let held = 0;
+      if (!final) {
+        for (const { value, fallback } of patterns) {
+          let matched = 0;
+          for (
+            let at = Math.max(0, buffer.length - value.length + 1);
+            at < buffer.length;
+            at += 1
+          ) {
+            while (matched > 0 && buffer[at] !== value[matched]) matched = fallback[matched - 1]!;
+            if (buffer[at] === value[matched]) matched += 1;
+          }
+          held = Math.max(held, matched);
+        }
+      }
+      let cut = buffer.length - held;
+      if (!final && cut > 0 && isHighSurrogate(buffer.charCodeAt(cut - 1))) cut -= 1;
+      // Completed matches can be shown immediately. Keep their held-back overlap covered so
+      // a later match extending the same stretch does not show a second placeholder.
       let offset = covered;
       output = "";
       for (const [start, end] of redactedRanges(buffer, values)) {

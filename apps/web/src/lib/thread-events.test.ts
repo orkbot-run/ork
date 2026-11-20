@@ -303,7 +303,7 @@ describe("thread event reduction", () => {
     expect(afterDelta?.messages).toEqual([
       expect.objectContaining({
         id: "progress:run-1",
-        blocks: [{ kind: "progress", text: "Lisbon" }],
+        blocks: [{ kind: "progress", text: "Lisbon", streaming: true }],
       }),
     ]);
     expect(withLiveStreamingProgress(afterDelta, false)?.messages).toEqual([]);
@@ -370,7 +370,7 @@ describe("thread event reduction", () => {
     expect(withLiveStreamingProgress(afterResume, true)?.messages).toEqual([
       expect.objectContaining({
         id: "progress:run-1",
-        blocks: [{ kind: "progress", text: "Lisbon" }],
+        blocks: [{ kind: "progress", text: "Lisbon", streaming: true }],
       }),
     ]);
   });
@@ -542,7 +542,7 @@ describe("thread event reduction", () => {
         type: "run.started",
         seq: 4,
         runId: "run-1",
-        payload: { trigger: "user" },
+        payload: { trigger: "user", sourceMessageId: "source-message" },
       }),
     );
 
@@ -551,6 +551,7 @@ describe("thread event reduction", () => {
       botId: "bot-1",
       status: "running",
       trigger: "user",
+      sourceMessageId: "source-message",
     });
     expect(started?.activeRuns).toEqual([started?.run]);
 
@@ -1345,6 +1346,7 @@ describe("thread event reduction", () => {
           {
             kind: "progress",
             text: "Let me check Slack ",
+            streaming: true,
             pendingToolNames: ["SLACK_FIND_CHANNELS"],
           },
         ],
@@ -1463,6 +1465,7 @@ describe("thread event reduction", () => {
           {
             kind: "progress",
             text: "Let me check Slack Found it, now sanding",
+            streaming: true,
             pendingToolNames: ["SLACK_FIND_CHANNELS"],
           },
         ],

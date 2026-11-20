@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { accountVault, fakeDatabase } from "./bot-secrets.test-support.js";
 import { ComputerBusyError, provisionComputer } from "./computer-lifecycle.js";
 import { protectedComputerLifecycleRefusal } from "./desktop-command-guard.js";
+import { egressRefused } from "./network-address.js";
 import type { RoutineWatchTickDeps } from "./routine-watch.js";
 import {
   checkRoutineWatch,
@@ -15,6 +16,7 @@ import {
   FILES_SCRIPT,
   parseRoutineWatch,
   readItems,
+  resolveWatchDateArgs,
   resolveWatchPath,
   stableStringify,
   tickRoutineWatch,
@@ -31,6 +33,63 @@ vi.mock("./computer-idle.js", () => ({ scheduleComputerSleep: vi.fn() }));
 
 const NOW = new Date("2026-10-16T12:00:00.000Z");
 
+describe("relative watch dates", () => {
+  it("uses local calendar dates with offsets across DST, months and leap years", () => {
+    const args = {
+      today: "{{today}}",
+      next: "{{today+2d}}",
+      prior: "{{today-7d}}",
+    };
+    expect(resolveWatchDateArgs(args, new Date("2026-03-28T23:30:00Z"), "Europe/Warsaw")).toEqual({
+      today: "2026-03-29",
+      next: "2026-03-31",
+      prior: "2026-03-22",
+    });
+    expect(
+      resolveWatchDateArgs(args, new Date("2024-03-01T00:30:00Z"), "America/Los_Angeles"),
+    ).toEqual({ today: "2024-02-29", next: "2024-03-02", prior: "2024-02-22" });
+    expect(resolveWatchDateArgs({ day: "{{today+2d}}" }, new Date("2026-12-31T12:00:00Z"))).toEqual(
+      { day: "2027-01-02" },
+    );
+  });
+
+  it("resolves nested arrays and objects without mutating stored arguments", () => {
+    const args = {
+      nested: [{ date: "{{today}}", values: [null, false, 3, "{{today-7d}}"] }],
+    };
+    const saved = structuredClone(args);
+    expect(resolveWatchDateArgs(args, NOW)).toEqual({
+      nested: [{ date: "2026-10-16", values: [null, false, 3, "2026-10-09"] }],
+    });
+    expect(args).toEqual(saved);
+  });
+
+  it("preserves literal strings and unsupported or out-of-range placeholders", () => {
+    const values = [
+      "on {{today}}",
+      "{{today}} ",
+      "{{today}}\n",
+      "{{today+2h}}",
+      "{{Today}}",
+      "2020-01-01",
+      "{{today+99999999999999999999d}}",
+    ];
+    expect(resolveWatchDateArgs({ values }, NOW)).toEqual({ values });
+  });
+
+  it("bounds recursion even for cyclic non-JSON input", () => {
+    const args: Record<string, unknown> = { date: "{{today}}" };
+    args.child = args;
+    let resolved = resolveWatchDateArgs(args, NOW);
+    for (let depth = 0; depth < 20; depth++) {
+      expect(resolved.date).toBe("2026-10-16");
+      resolved = resolved.child as Record<string, unknown>;
+    }
+    expect(resolved).toBe(args);
+    expect(args.date).toBe("{{today}}");
+  });
+});
+
 describe("RoutineWatchSchema", () => {
   it("defaults to every 15 minutes, quiet", () => {
     const watch = RoutineWatchSchema.parse({ kind: "files", paths: ["inbox"] });
@@ -41,6 +100,35 @@ describe("RoutineWatchSchema", () => {
     expect(RoutineWatchSchema.safeParse({ kind: "files" }).success).toBe(false);
     expect(RoutineWatchSchema.safeParse({ kind: "command" }).success).toBe(false);
     expect(RoutineWatchSchema.safeParse({ kind: "tool" }).success).toBe(false);
+  });
+
+  it.each([
+    undefined,
+    "http://example.com/",
+    "https://user:password@example.com/",
+    "https://example.com/#status",
+    "https://localhost/",
+    "https://127.1/",
+    "https://192.168.1.1/",
+    "https://[::1]/",
+  ])("rejects an absent or non-public HTTPS address %s", (url) => {
+    expect(RoutineWatchSchema.safeParse({ kind: "http", url }).success).toBe(false);
+  });
+
+  it("normalizes a public address and accepts tracking fields", () => {
+    expect(
+      RoutineWatchSchema.parse({
+        kind: "http",
+        url: " HTTPS://EXAMPLE.COM:443/status ",
+        track: [" id "],
+      }),
+    ).toEqual({
+      kind: "http",
+      url: "https://example.com/status",
+      track: ["id"],
+      everyMinutes: 15,
+      loud: false,
+    });
   });
 
   it("keeps integration checks to at most every 5 minutes", () => {
@@ -184,6 +272,90 @@ describe("tickRoutineWatch", () => {
     };
     return { deps, routine, updateMany, messages };
   }
+
+  it("starts the routine only on tracked HTTP changes, without looking up a computer", async () => {
+    const { deps, routine, updateMany, messages } = setup(
+      {},
+      {
+        kind: "http",
+        url: "https://example.test/status",
+        track: ["id", "status"],
+      },
+    );
+    let output = { id: "issue-1", status: "ok", lastUpdated: 1 };
+    const fetch = vi.fn(async () => Response.json([output]));
+    deps.http = { fetch, resolveHostname: async () => [{ address: "1.1.1.1", family: 4 }] };
+    expect(await tickRoutineWatch(deps, routine, target, scheduledAt)).toEqual({ run: false });
+    routine.watchState = (
+      updateMany.mock.calls.at(-1) as unknown as [
+        { data: { watchState: typeof routine.watchState } },
+      ]
+    )[0].data.watchState;
+    output = { ...output, lastUpdated: 2 };
+    expect(await tickRoutineWatch(deps, routine, target, scheduledAt)).toEqual({ run: false });
+    expect(messages).toEqual([]);
+    output = { ...output, status: "down" };
+    expect(await tickRoutineWatch(deps, routine, target, scheduledAt)).toMatchObject({ run: true });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenLastCalledWith(
+      "https://example.test/status",
+      expect.objectContaining({
+        method: "GET",
+        redirect: "manual",
+        headers: expect.not.objectContaining({ authorization: expect.anything() }),
+      }),
+    );
+    expect(deps.prisma.bot.findUnique).not.toHaveBeenCalled();
+    expect(deps.connector?.execute).not.toHaveBeenCalled();
+    expect(provisionComputer).not.toHaveBeenCalled();
+  });
+
+  it("fails a check when DNS resolves to a private address without fetching it", async () => {
+    const { deps, routine } = setup({}, { kind: "http", url: "https://example.test/status" });
+    const fetch = vi.fn();
+    deps.http = { fetch, resolveHostname: async () => [{ address: "192.168.0.5", family: 4 }] };
+    await expect(checkRoutineWatch(deps, routine)).rejects.toThrow("must be public");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("records a wrapped egress refusal as a failed check", async () => {
+    const { deps, routine, updateMany } = setup(
+      {},
+      { kind: "http", url: "https://example.test/status" },
+    );
+    const denied = egressRefused("example.test", new Error("Private address"));
+    deps.http = {
+      fetch: async () => {
+        throw new TypeError("fetch failed", { cause: new AggregateError([denied]) });
+      },
+      resolveHostname: async () => [{ address: "1.1.1.1", family: 4 }],
+    };
+    expect(await tickRoutineWatch(deps, routine, target, scheduledAt)).toEqual({ run: false });
+    expect(updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          watchState: expect.objectContaining({
+            outcome: "failed",
+            detail: "The HTTPS address must be public.",
+          }),
+        }),
+      }),
+    );
+  });
+
+  it.each([
+    () => new Response(null, { status: 302, headers: { location: "https://elsewhere.test" } }),
+    () => new Response("x".repeat(512 * 1024 + 1)),
+    () => new Response("temporarily unavailable", { status: 503 }),
+  ])("does not treat redirects, oversized bodies or failures as changes", async (response) => {
+    const { deps, routine } = setup({}, { kind: "http", url: "https://example.test/status" });
+    const fetch = vi.fn(async () => response());
+    deps.http = { fetch, resolveHostname: async () => [{ address: "1.1.1.1", family: 4 }] };
+    await expect(checkRoutineWatch(deps, routine)).rejects.toThrow(
+      "Could not read the HTTPS address",
+    );
+    expect(fetch).toHaveBeenCalledOnce();
+  });
 
   it("records a quiet no-change check without a message and schedules the next", async () => {
     const { deps, routine, updateMany, messages } = setup({ data: { changes: [] } });
@@ -508,7 +680,9 @@ describe("tickRoutineWatch on a computer", () => {
     computer = { id: "computer-1", scope: "team", kind: "vm" },
     options?: {
       vault?: ReturnType<typeof fakeDatabase>;
-      secretStore?: { load(ciphertext: string, recordId: string): Promise<string> };
+      secretStore?: {
+        load(ciphertext: string, recordId: string): Promise<string>;
+      };
       shell?: { platform: string; shell: string; home: string };
     },
   ) {
@@ -1440,6 +1614,34 @@ describe("watch tool guard", () => {
     const { deps, routine, execute } = setupTool({ name: "send_email" }, {});
     await expect(checkRoutineWatch(deps, routine)).rejects.toThrow(/can change data/);
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("refreshes dates for every execution using the check time and routine timezone", async () => {
+    const { deps, routine, execute } = setupTool(
+      { name: "brain_search", readOnly: true },
+      { from: "{{today}}", nested: [{ to: "{{today+2d}}" }] },
+    );
+    const target = { ...routine, timezone: "America/Los_Angeles" };
+    await checkRoutineWatch(deps, target, new Date("2026-11-20T00:30:00Z"));
+    await checkRoutineWatch(deps, target, new Date("2026-11-21T00:30:00Z"));
+    expect(execute).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        args: { from: "2026-11-19", nested: [{ to: "2026-11-21" }] },
+      }),
+      expect.anything(),
+    );
+    expect(execute).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        args: { from: "2026-11-20", nested: [{ to: "2026-11-22" }] },
+      }),
+      expect.anything(),
+    );
+    expect(routine.watch.args).toEqual({
+      from: "{{today}}",
+      nested: [{ to: "{{today+2d}}" }],
+    });
   });
 
   it("refuses a write action on a tool that takes one", async () => {

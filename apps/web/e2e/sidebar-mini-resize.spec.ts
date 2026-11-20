@@ -2,7 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
-import { captureScreenshot, completeOnboarding, openBotPanelTab, rpc, signup } from "./helpers";
+import { createDb, createThreadMessageInTransaction } from "../../../packages/db/src/index";
+import {
+  activeBotId,
+  captureScreenshot,
+  completeOnboarding,
+  openBotPanelTab,
+  rpc,
+  signup,
+} from "./helpers";
 import { expect, test } from "./renderer-test";
 
 test("sidebar rail keeps chats interactive and remembers a dragged width", async ({
@@ -147,7 +155,7 @@ test("narrow desktop keeps the chat width when both panels are open", async ({
   await openBotPanelTab(page, "Computer");
   const panel = page.getByTestId("side-panel");
   await expect(panel).toHaveCSS("position", "absolute");
-  const chat = page.locator('[data-space-switch="main"]');
+  const chat = page.getByRole("main");
   await expect(chat).toHaveCSS("width", "320px");
   await expect(panel).toHaveCSS("width", "320px");
   await captureScreenshot(page, testInfo, "sidebar-narrow-panel-overlay");
@@ -156,6 +164,66 @@ test("narrow desktop keeps the chat width when both panels are open", async ({
   await expect(sidebar).toHaveCSS("width", "132px");
   await expect(panel).toHaveCSS("position", "relative");
   await expect.poll(async () => (await chat.boundingBox())!.width).toBeGreaterThanOrEqual(320);
+});
+
+test("a bot reply uses the available chat width alongside the computer panel", async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1100, height: 780 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await signup(page, `sidebar-reflow-${Date.now()}@orkbot.test`, "password12", "Panel Reflow");
+  await completeOnboarding(page);
+  const botId = activeBotId(page);
+  await rpc(page, "onboarding/dismissFocus", { botId });
+  const { prisma, pool } = createDb(process.env.DATABASE_URL!);
+  try {
+    const thread = await prisma.thread.findUniqueOrThrow({ where: { botId } });
+    await prisma.$transaction((tx) =>
+      createThreadMessageInTransaction(tx, {
+        threadId: thread.id,
+        botId,
+        role: "bot",
+        blocks: [
+          {
+            kind: "text",
+            text: "Here is the project summary. The release checklist is ready for review. Confirm the deliverables, check the onboarding flow, and assign owners to the two remaining accessibility items.",
+          },
+        ],
+      }),
+    );
+  } finally {
+    await prisma.$disconnect();
+    await pool.end();
+  }
+  await page.reload();
+  await openBotPanelTab(page, "Computer");
+  await expect(page.getByTestId("side-panel")).toHaveCSS("position", "relative");
+  const row = page.getByTestId("transcript").locator("[data-message-id]").filter({
+    hasText: "Here is the project summary.",
+  });
+  const bubble = row.getByTestId("message-bot-bubble");
+  const rail = row.getByTestId("message-hover-rail");
+  await expect(bubble).toBeVisible();
+  await rail.getByRole("button", { name: "More" }).focus();
+  await expect(rail).toHaveCSS("opacity", "1");
+  await expect
+    .poll(async () => {
+      const [rowBox, bubbleBox, railBox] = await Promise.all([
+        row.boundingBox(),
+        bubble.boundingBox(),
+        rail.boundingBox(),
+      ]);
+      return (
+        rowBox !== null &&
+        bubbleBox !== null &&
+        railBox !== null &&
+        bubbleBox.width >= rowBox.width * 0.95 &&
+        railBox.y >= bubbleBox.y + bubbleBox.height &&
+        railBox.x + railBox.width <= rowBox.x + rowBox.width + 1
+      );
+    })
+    .toBe(true);
+  await captureScreenshot(page, testInfo, "chat-width-computer-panel");
 });
 
 test("sidebar snaps its layout during a held drag in both directions", async ({

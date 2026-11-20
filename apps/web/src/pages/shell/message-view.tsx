@@ -380,7 +380,7 @@ export const MessageView = memo(function MessageView({
                   key={i}
                   recipients={peerExchange.recipients}
                   locale={i18n.locale}
-                  label={(peer) => t`Messaged ${peer}`}
+                  label={(peer) => (sent ? t`Messaged ${peer}` : t`Message from ${peer}`)}
                   peerBot={peerBot}
                   onOpen={onOpenPeerMessages}
                 />
@@ -571,7 +571,7 @@ export const MessageView = memo(function MessageView({
             return (
               <div
                 key={i}
-                className="relative flex w-fit max-w-full justify-end [@media(hover:none)]:w-full [@media(hover:none)]:flex-wrap"
+                className="relative flex w-fit max-w-full justify-end @max-[30rem]/transcript:flex-wrap [@media(hover:none)]:w-full [@media(hover:none)]:flex-wrap"
               >
                 <div
                   data-testid="message-user-bubble"
@@ -589,7 +589,7 @@ export const MessageView = memo(function MessageView({
             return (
               <div
                 key={i}
-                className="relative flex w-fit max-w-full justify-start [@media(hover:none)]:w-full [@media(hover:none)]:flex-wrap"
+                className="relative flex w-fit max-w-full justify-start @max-[30rem]/transcript:flex-wrap [@media(hover:none)]:w-full [@media(hover:none)]:flex-wrap"
               >
                 <div data-testid="message-bot-bubble" className={CHAT_BOT_TEXT_SURFACE} dir="auto">
                   <div data-quote-message-id={quoteMessageId}>

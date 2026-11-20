@@ -23,6 +23,7 @@ import type {
 } from "@orkbot/adapter-kit";
 import type { PrismaClient, RunLease, ThreadEvents } from "@orkbot/db";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
+import type { MeetingConnection } from "./meeting-service.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import type { CodexLiveCatalog } from "./pi-codex-catalog.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
@@ -76,10 +77,15 @@ export interface ExecutorDeps {
     hasIdentity(botId: string): Promise<boolean>;
     publishProgress?(runId: string): Promise<void>;
   };
-  listConnectedPluginSlugs?: (userId: string) => Promise<string[]>;
+  listConnectedPluginSlugs?: (userId: string, signal?: AbortSignal) => Promise<string[]>;
+  listActivePluginConnectionRefs?: (
+    userId: string,
+    signal?: AbortSignal,
+  ) => Promise<string[] | undefined>;
   /** Builtin web_search / web_fetch. Defaults to keyless HTTP when omitted. */
   web?: WebProvider;
   mediaGeneration?: MediaGenerationProvider;
+  meetings?: MeetingConnection | null;
   /** Page browser (DOM refs) on the bot computer. Defaults to the sandbox live browser when supported. */
   browser?: BrowserProvider;
   secretHttp?: RemoteTransportDependencies;
@@ -100,6 +106,8 @@ export interface ExecutorDeps {
   userDevices?: UserDeviceGateway;
   /** Aborted when createApp stop() begins so in-flight continueRun boot waits exit promptly. */
   shutdownSignal?: AbortSignal;
+  /** Stops new claims while a worker still allows owned turns to finish. */
+  runAdmissionSignal?: AbortSignal;
   /** Set by withRunLease for one attempt; that run's history writes carry its lease. */
   runLease?: RunLease & { runId: string };
 }

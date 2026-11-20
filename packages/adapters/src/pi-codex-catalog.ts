@@ -9,6 +9,7 @@ import type { ThinkingLevel } from "@orkbot/contracts";
 import { ThinkingLevelSchema } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import type { ModelCatalogReads } from "./model-catalog-reads.js";
+import { assertModelProviderAllowed, isModelProviderAllowed } from "./model-provider-policy.js";
 import { listAvailablePiCatalog } from "./pi-catalog-availability.js";
 import { LiveCatalogCache, liveModelCatalogEnabled } from "./pi-live-cache.js";
 import type { CatalogSpaceAuth } from "./pi-live-catalog.js";
@@ -94,6 +95,7 @@ export async function fetchCodexCatalog(
   accountId: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<CodexCatalogResult> {
+  assertModelProviderAllowed(CHATGPT_OAUTH_PROVIDER);
   const url = `${CODEX_MODELS_ENDPOINT}?client_version=${CODEX_CLIENT_VERSION}`;
   let response: Response;
   try {
@@ -325,6 +327,7 @@ export async function codexLiveModel(
   modelId: string,
   opts?: CodexLiveReadOptions,
 ): Promise<CodexCatalogModel | undefined> {
+  if (!isModelProviderAllowed(CHATGPT_OAUTH_PROVIDER)) return undefined;
   if (!catalog || secret.kind !== "oauth" || secret.reconnectRequired) return undefined;
   const account = codexAccountHandle(secret.credential, opts?.onExpiredToken);
   if (!account) return undefined;
@@ -365,6 +368,7 @@ export async function resolveCodexOAuthDefaultModel(
   opts?: CodexLiveReadOptions,
 ): Promise<string | undefined> {
   const requested = requestedModelId?.trim() || undefined;
+  if (!isModelProviderAllowed(CHATGPT_OAUTH_PROVIDER)) return requested;
   if (!catalog || secret.kind !== "oauth" || secret.reconnectRequired) return requested;
   const account = codexAccountHandle(secret.credential, opts?.onExpiredToken);
   if (!account) return requested;
@@ -402,6 +406,7 @@ export async function codexLiveCatalogsForSpace(
   opts?: { onExpiredToken?: (secretId: string) => void; reads?: ModelCatalogReads },
 ): Promise<Map<string, CodexCatalogModel[]>> {
   const live = new Map<string, CodexCatalogModel[]>();
+  if (!isModelProviderAllowed(CHATGPT_OAUTH_PROVIDER)) return live;
   const secretIds = oauthCodexSecretIds(auth);
   if (secretIds.length === 0) return live;
   const secrets = opts?.reads

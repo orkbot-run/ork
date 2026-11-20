@@ -36,6 +36,28 @@ the API and worker, for models that have no stored credential.
 
 `ORKBOT_LIVE_MODEL_CATALOG=off` disables provider and Codex live catalog probing; the default is on.
 
+## Restrict model providers
+
+Set `ORKBOT_MODEL_PROVIDER_ALLOWLIST` to a comma-separated list of provider IDs from
+the model catalog, such as `anthropic,openrouter`. A blank value allows all providers.
+Use the same value for the API and worker and recreate both services after editing
+the installation environment.
+
+`openai-compatible` allows custom endpoints. Add `ollama-cloud` separately to allow
+the preset at `ollama.com`. Existing blocked connections appear in model settings
+with an explanation and cannot be used for runs. The compatible endpoint network
+settings also apply to custom URLs.
+
+## Zero Data Retention
+
+OpenRouter connections can require Zero Data Retention in model settings. Ork
+requests routing only to endpoints that OpenRouter marks as eligible and reports
+an unavailable model when none can serve the request. The connection's API key
+can be verified independently of the model's endpoint availability.
+
+The setting applies to provider routing. Ork's chat and workspace storage follow
+the installation's data settings. See [OpenRouter's routing documentation](https://openrouter.ai/docs/guides/routing/provider-selection).
+
 ## Approvals
 
 Approvals have three modes in **Settings → Approvals**: Never ask runs every action, Auto lets an
@@ -71,6 +93,10 @@ ORKBOT_LOCAL_MODELS=qwen3:4b,llama3.1:8b,qwen3-vl
 ORKBOT_LOCAL_MODELS_URL=http://127.0.0.1:11434/v1
 ORKBOT_LOCAL_CONTEXT_WINDOW=32768
 ORKBOT_LOCAL_MAX_TOKENS=4096
+# Optional: trim stale context sooner when this server has no prompt cache.
+# ORKBOT_LOCAL_PROMPT_CACHE=off
+# Optional: pace requests to the local endpoint by input tokens per minute.
+# ORKBOT_LOCAL_TOKENS_PER_MINUTE=60000
 # Optional: model ids on this endpoint that accept images (screenshot computer tools).
 ORKBOT_LOCAL_VISION_MODELS=qwen3-vl
 # Optional: model ids on this endpoint that accept OpenAI-style reasoning_effort.
@@ -85,6 +111,17 @@ receive the field.
 connection sets its own max-tokens value. It never exceeds a quarter of
 `ORKBOT_LOCAL_CONTEXT_WINDOW`, so the prompt keeps the rest; a higher limit leaves less room for the
 prompt, so long chats are compacted sooner.
+
+Set `ORKBOT_LOCAL_PROMPT_CACHE=off` if the local server does not reuse cached prefixes. Ork then
+rebuilds the transcript when it can drop at least 3,000 estimated tokens of stale content, such as
+earlier browser state and screenshots. Leave the variable unset for servers that reuse prefixes.
+
+Set `ORKBOT_LOCAL_TOKENS_PER_MINUTE` to a positive integer to pace local model requests within a
+rolling 60-second window. All local models use the configured endpoint and share the window within
+each Ork process. Requests wait before sending, so that wait does not use their HTTP timeout. Ork
+uses the server's reported input usage to adjust later estimates and releases reservations for failed
+calls. Leave the variable unset to send requests without this pacing. For an endpoint shared across
+multiple worker processes, set each process's budget to its share of the endpoint's limit.
 
 The loopback default is suitable when running Ork from a source checkout. From containers,
 prefer a stable LAN RFC1918 address (not Compose service DNS alone). On Docker Desktop,

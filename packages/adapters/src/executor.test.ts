@@ -2409,8 +2409,15 @@ describe("createRunExecutor", () => {
     await executor.wakeRoutine("routine-1", scheduledAt.toISOString());
 
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: "routine-1", active: true },
-      data: { active: false, nextRunAt: null },
+      where: {
+        id: "routine-1",
+        active: true,
+        OR: [
+          { bot: { archivedAt: { not: null } } },
+          { thread: { group: { archivedAt: { not: null } } } },
+        ],
+      },
+      data: { active: false, resumeOnRestore: true },
     });
     expect($transaction).not.toHaveBeenCalled();
     expect(enqueue).not.toHaveBeenCalled();
@@ -2587,6 +2594,13 @@ description: Prepare standup notes
 
 1. Summarize wins.
 `;
+    const skill = {
+      id: "skill-1",
+      name: "Daily standup",
+      description: "Prepare standup notes",
+      source: "user",
+    };
+    const readSelectedSkills = vi.fn(async () => [{ ...skill, content: skillContent }]);
     const prisma = {
       routine: {
         findUnique: vi.fn(async () => ({
@@ -2608,19 +2622,12 @@ description: Prepare standup notes
         })),
       },
       agentSkill: {
-        findMany: vi.fn(async () => [
-          {
-            id: "skill-1",
-            name: "Daily standup",
-            description: "Prepare standup notes",
-            content: skillContent,
-            source: "user",
-          },
-        ]),
+        findMany: vi.fn(async () => [skill]),
       },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
           $queryRaw: vi.fn(async () => []),
+          agentSkill: { findMany: readSelectedSkills },
           routine: {
             updateMany: vi.fn(async () => ({ count: 1 })),
             findUnique: vi.fn(async () => ({
@@ -2631,7 +2638,10 @@ description: Prepare standup notes
             })),
           },
           task: { create: taskCreate },
-          run: { create: vi.fn(async () => ({ id: "run-1" })) },
+          run: {
+            findUnique: vi.fn(async () => null),
+            create: vi.fn(async () => ({ id: "run-1" })),
+          },
         }),
       ),
     } as unknown as PrismaClient;
@@ -2646,6 +2656,9 @@ description: Prepare standup notes
     expect(createdPrompt).toContain("Use skill: Daily standup");
     expect(createdPrompt).toContain("Summarize wins");
     expect(createdPrompt).not.toMatch(/@Daily standup/);
+    expect(readSelectedSkills).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: { in: ["skill-1"] } }) }),
+    );
   });
 
   it("still continues the run when routine.fired append fails", async () => {
@@ -2693,7 +2706,10 @@ description: Prepare standup notes
             })),
           },
           task: { create: vi.fn(async () => ({ id: "task-1" })) },
-          run: { create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })) },
+          run: {
+            findUnique: vi.fn(async () => null),
+            create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })),
+          },
         }),
       ),
     } as unknown as PrismaClient;
@@ -2760,7 +2776,10 @@ description: Prepare standup notes
               })),
             },
             task: { create: vi.fn(async () => ({ id: "task-1" })) },
-            run: { create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })) },
+            run: {
+              findUnique: vi.fn(async () => null),
+              create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })),
+            },
           });
         }
         return callback({

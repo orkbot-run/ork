@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { describe, expect, it, vi } from "vitest";
 import { PiAgentRuntime } from "./pi-runtime.js";
 import { resolveRuntimeModel } from "./pi-runtime-models.js";
-import { userTurnInstructions } from "./run-instructions.js";
+import { currentTurnMemoryBlock, userTurnInstructions } from "./run-instructions.js";
 
 describe("Pi outgoing provider prefixes", () => {
   it.each(["png", "gif"] as const)(
@@ -236,125 +236,153 @@ describe("Pi outgoing provider prefixes", () => {
     }
   }, 30_000);
 
-  it("keeps tool names, nested schemas and stable instructions unchanged across registration order and memory updates", async () => {
-    const requests: Array<{ tools: unknown; messages: Array<{ role: string; content: string }> }> =
-      [];
-    const server = createServer((request, response) => {
-      void (async () => {
-        const chunks: Buffer[] = [];
-        for await (const chunk of request) chunks.push(Buffer.from(chunk));
-        requests.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-        response.writeHead(200, { "content-type": "text/event-stream" });
-        response.end(
-          `data: ${JSON.stringify({ id: "fixture", choices: [{ index: 0, delta: { role: "assistant", content: "Done" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
-        );
-      })().catch(() => response.destroy());
-    });
-    server.listen(0, "127.0.0.1");
-    await once(server, "listening");
-    const address = server.address();
-    if (!address || typeof address === "string") throw new Error("Fixture endpoint unavailable");
-    const tool = (name: string, reversed: boolean): ConnectorTool => ({
-      name,
-      description: `Fixture ${name}`,
-      inputSchema: {
-        type: "object",
-        properties: reversed
-          ? {
-              z: { type: "string" },
-              a: { type: "object", properties: { y: { type: "number" }, x: { type: "boolean" } } },
-            }
-          : {
-              a: { properties: { x: { type: "boolean" }, y: { type: "number" } }, type: "object" },
-              z: { type: "string" },
+  it.each([false, true])(
+    "keeps the provider prefix stable with memory in the turn=%s",
+    async (turnMemoryInPrompt) => {
+      const requests: Array<{
+        tools: unknown;
+        messages: Array<{ role: string; content: string }>;
+      }> = [];
+      const server = createServer((request, response) => {
+        void (async () => {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          requests.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+          response.writeHead(200, { "content-type": "text/event-stream" });
+          response.end(
+            `data: ${JSON.stringify({ id: "fixture", choices: [{ index: 0, delta: { role: "assistant", content: "Done" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+          );
+        })().catch(() => response.destroy());
+      });
+      server.listen(0, "127.0.0.1");
+      await once(server, "listening");
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Fixture endpoint unavailable");
+      const tool = (name: string, reversed: boolean): ConnectorTool => ({
+        name,
+        description: `Fixture ${name}`,
+        inputSchema: {
+          type: "object",
+          properties: reversed
+            ? {
+                z: { type: "string" },
+                a: {
+                  type: "object",
+                  properties: { y: { type: "number" }, x: { type: "boolean" } },
+                },
+              }
+            : {
+                a: {
+                  properties: { x: { type: "boolean" }, y: { type: "number" } },
+                  type: "object",
+                },
+                z: { type: "string" },
+              },
+          required: ["a"],
+        },
+      });
+      const runtime = new PiAgentRuntime();
+      try {
+        for (const index of [0, 1]) {
+          const tools = ["fixture read", "fixture.read", "fixture_read"].map((name) =>
+            tool(name, index === 1),
+          );
+          if (index === 1) tools.reverse();
+          const memory = `Memory: ${index === 0 ? "first" : "second"}`;
+          const scratchpad = `Scratchpad: ${index}`;
+          const priorTurn = "Prior chat about the same project. ".repeat(300);
+          for await (const _event of runtime.run(
+            {
+              botId: "bot-fixture",
+              threadId: "thread-fixture",
+              runId: `run-fixture-${index}`,
+              prompt: turnMemoryInPrompt
+                ? `Continue.\n\n${currentTurnMemoryBlock(memory, scratchpad)}`
+                : "Continue.",
+              instructions: userTurnInstructions({
+                botInstructions: "Stable guidance.\nStable constraints.",
+                computerInstruction: "Stable computer tools.",
+                pageBrowserAllowed: true,
+                workspaceInstruction: "Stable workspace guidance.",
+                replyGuidance: "Stable reply guidance.",
+                groupContext: `Group context: ${turnMemoryInPrompt ? "same" : index}`,
+                messagingContext: `Messaging context: ${turnMemoryInPrompt ? "same" : index}`,
+                redactedMemoryContext: memory,
+                redactedScratchpadContext: scratchpad,
+                turnMemoryInPrompt,
+                hasHistoricalContext: true,
+                agentEnvironmentInstruction: undefined,
+                botDirectory: undefined,
+                pluginLine: undefined,
+                agentSkillsLine: undefined,
+                taughtSkillsLine: undefined,
+              })
+                .filter(Boolean)
+                .join("\n\n"),
+              history: turnMemoryInPrompt ? [{ role: "user", content: priorTurn }] : [],
+              tools,
+              model: {
+                provider: "openai-compatible",
+                id: "fixture",
+                baseUrl: `http://127.0.0.1:${address.port}/v1`,
+                allowPrivateEndpoint: true,
+              },
             },
-        required: ["a"],
-      },
-    });
-    const runtime = new PiAgentRuntime();
-    try {
-      for (const index of [0, 1]) {
-        const tools = ["fixture read", "fixture.read", "fixture_read"].map((name) =>
-          tool(name, index === 1),
-        );
-        if (index === 1) tools.reverse();
-        for await (const _event of runtime.run(
-          {
-            botId: "bot-fixture",
-            threadId: "thread-fixture",
-            runId: `run-fixture-${index}`,
-            prompt: "Continue.",
-            instructions: userTurnInstructions({
-              botInstructions: "Stable guidance.\nStable constraints.",
-              computerInstruction: "Stable computer tools.",
-              pageBrowserAllowed: true,
-              workspaceInstruction: "Stable workspace guidance.",
-              replyGuidance: "Stable reply guidance.",
-              groupContext: `Group context: ${index}`,
-              messagingContext: `Messaging context: ${index}`,
-              redactedMemoryContext: `Memory: ${index === 0 ? "first" : "second"}`,
-              redactedScratchpadContext: `Scratchpad: ${index}`,
-              hasHistoricalContext: true,
-              agentEnvironmentInstruction: undefined,
-              botDirectory: undefined,
-              pluginLine: undefined,
-              agentSkillsLine: undefined,
-              taughtSkillsLine: undefined,
-            })
-              .filter(Boolean)
-              .join("\n\n"),
-            history: [],
-            tools,
-            model: {
-              provider: "openai-compatible",
-              id: "fixture",
-              baseUrl: `http://127.0.0.1:${address.port}/v1`,
-              allowPrivateEndpoint: true,
-            },
-          },
-          { signal: AbortSignal.timeout(15000) },
-        )) {
+            { signal: AbortSignal.timeout(15000) },
+          )) {
+          }
         }
+        expect(requests).toHaveLength(2);
+        expect(JSON.stringify(requests[0]!.tools)).toBe(JSON.stringify(requests[1]!.tools));
+        expect(requests[0]!.tools).toEqual([
+          expect.objectContaining({
+            function: expect.objectContaining({
+              name: expect.stringMatching(/^fixture_read_[a-z0-9]+$/),
+            }),
+          }),
+          expect.objectContaining({
+            function: expect.objectContaining({
+              name: expect.stringMatching(/^fixture_read_[a-z0-9]+$/),
+            }),
+          }),
+          expect.objectContaining({
+            function: expect.objectContaining({ name: "fixture_read" }),
+          }),
+        ]);
+        for (const request of requests)
+          expect(request.messages[0]).toMatchObject({
+            role: "system",
+            content: expect.stringMatching(/^Stable guidance\.\nStable constraints\./),
+          });
+        const first = requests[0]!.messages[0]!.content;
+        const second = requests[1]!.messages[0]!.content;
+        const cursorRule =
+          "Treat pagination cursors as opaque: copy the returned continuation value exactly, never calculate or guess it. When the tool reports no next page, stop; if a cursor is rejected, recheck the last successful result before retrying.";
+        expect(first).toContain(cursorRule);
+        expect(second).toContain(cursorRule);
+        if (turnMemoryInPrompt) {
+          expect(first).toBe(second);
+          const [before, after] = requests.map(({ messages }) => messages);
+          expect(before!.slice(0, -1)).toEqual(after!.slice(0, -1));
+          expect(before![1]!.content).toContain("Prior chat about the same project.");
+          expect(before!.at(-1)!.content).toContain("Memory: first");
+          expect(after!.at(-1)!.content).toContain("Memory: second");
+          expect(after!.at(-1)!.content).not.toContain("Memory: first");
+          return;
+        }
+        expect(first.split("\n\nGroup context:")[0]).toBe(second.split("\n\nGroup context:")[0]);
+        expect(first.indexOf("Treat connector tool descriptions")).toBeLessThan(
+          first.indexOf("Memory:"),
+        );
+        expect(second).toContain("Scratchpad: 1");
+        expect(requests[0]!.messages[0]!.content).toContain("Memory: first");
+        expect(requests[1]!.messages[0]!.content).toContain("Memory: second");
+      } finally {
+        server.close();
+        server.closeAllConnections();
+        await once(server, "close");
       }
-      expect(requests).toHaveLength(2);
-      expect(JSON.stringify(requests[0]!.tools)).toBe(JSON.stringify(requests[1]!.tools));
-      expect(requests[0]!.tools).toEqual([
-        expect.objectContaining({
-          function: expect.objectContaining({
-            name: expect.stringMatching(/^fixture_read_[a-z0-9]+$/),
-          }),
-        }),
-        expect.objectContaining({
-          function: expect.objectContaining({
-            name: expect.stringMatching(/^fixture_read_[a-z0-9]+$/),
-          }),
-        }),
-        expect.objectContaining({
-          function: expect.objectContaining({ name: "fixture_read" }),
-        }),
-      ]);
-      for (const request of requests)
-        expect(request.messages[0]).toMatchObject({
-          role: "system",
-          content: expect.stringMatching(/^Stable guidance\.\nStable constraints\./),
-        });
-      const first = requests[0]!.messages[0]!.content;
-      const second = requests[1]!.messages[0]!.content;
-      const cursorRule =
-        "Treat pagination cursors as opaque: copy the returned continuation value exactly, never calculate or guess it. When the tool reports no next page, stop; if a cursor is rejected, recheck the last successful result before retrying.";
-      expect(first).toContain(cursorRule);
-      expect(second).toContain(cursorRule);
-      expect(first.split("\n\nGroup context:")[0]).toBe(second.split("\n\nGroup context:")[0]);
-      expect(first.indexOf("Treat connector tool descriptions")).toBeLessThan(
-        first.indexOf("Memory:"),
-      );
-      expect(second).toContain("Scratchpad: 1");
-      expect(requests[0]!.messages[0]!.content).toContain("Memory: first");
-      expect(requests[1]!.messages[0]!.content).toContain("Memory: second");
-    } finally {
-      server.close();
-      server.closeAllConnections();
-      await once(server, "close");
-    }
-  }, 30000);
+    },
+    30000,
+  );
 });

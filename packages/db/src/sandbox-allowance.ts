@@ -1,14 +1,18 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved; billing recovery changes follow LICENSE.md.
+
 import type { ByokTier, ComputerSize } from "@orkbot/contracts";
 import {
   BYOK_TIERS,
   ByokTierSchema,
+  billingSubscriptionGrantsAccess,
   CREDITS_SANDBOX_ALLOWANCE_PERCENT,
   TRIAL_SANDBOX_ALLOWANCE_CENTS,
 } from "@orkbot/contracts";
+import { needsBillingPortal } from "./billing.js";
 import type { PrismaClient } from "./client.js";
 import { runAsSystem } from "./row-security.js";
-
-const LIVE_SUBSCRIPTION_STATUSES = new Set(["trialing", "active", "past_due"]);
 
 /**
  * The own-key tier an organization's computers get: its live subscription's tier, else Standard.
@@ -19,7 +23,7 @@ function byokTierOf(
   billing: { status: string | null; byokTier: string | null } | null | undefined,
 ): ByokTier | null {
   if (mode !== "byok") return null;
-  const live = Boolean(billing?.status && LIVE_SUBSCRIPTION_STATUSES.has(billing.status));
+  const live = billingSubscriptionGrantsAccess(billing?.status);
   return (live && ByokTierSchema.safeParse(billing?.byokTier).data) || "standard";
 }
 
@@ -58,7 +62,7 @@ export async function sandboxAllowancePlan(
   ]);
   if (!settings?.modelCreditsEnabled) return null;
   const billing = organization?.billing;
-  const live = Boolean(billing?.status && LIVE_SUBSCRIPTION_STATUSES.has(billing.status));
+  const live = billingSubscriptionGrantsAccess(billing?.status);
   const periodStart = live ? billing?.currentPeriodStartsAt : null;
   const since =
     periodStart && periodStart <= now
@@ -68,14 +72,18 @@ export async function sandboxAllowancePlan(
         : periodStart
       : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const tier = byokTierOf(organization?.modelCredits?.mode, billing);
-  const limitCents =
-    billing?.status === "trialing"
+  const limitCents = needsBillingPortal(billing?.status ?? null)
+    ? 0
+    : billing?.status === "trialing"
       ? billing.cancelAtPeriodEnd
         ? 0
         : TRIAL_SANDBOX_ALLOWANCE_CENTS
       : tier
         ? BYOK_TIERS[tier].computerAllowanceCents
-        : Math.floor(((billing?.creditAmountCents ?? 0) * CREDITS_SANDBOX_ALLOWANCE_PERCENT) / 100);
+        : Math.floor(
+            ((live ? (billing?.creditAmountCents ?? 0) : 0) * CREDITS_SANDBOX_ALLOWANCE_PERCENT) /
+              100,
+          );
   return { limitCents, since };
 }
 

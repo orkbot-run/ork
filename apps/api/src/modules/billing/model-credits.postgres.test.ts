@@ -6,9 +6,17 @@ import { BillingEmulator } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import { BYOK_TIERS } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
-import { asSystem, billingAccountForOrganization, createDb } from "@orkbot/db";
+import {
+  asSystem,
+  billingAccountForOrganization,
+  createDb,
+  sandboxAllowancePlan,
+  spaceHasModelAccess,
+} from "@orkbot/db";
+import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createBillingService, TRIAL_DAYS } from "./billing.js";
+import { BILLING_WEBHOOK_PATH, mountBillingRoutes } from "./billing-webhook.js";
 
 const dbTests =
   process.env.VERIFY_DATABASE && process.env.DATABASE_URL ? describe.sequential : describe.skip;
@@ -101,6 +109,61 @@ dbTests("model credit billing service", () => {
       state: "active",
       trialAvailable: false,
     });
+  });
+  it("revokes model access and computer allowance on a failed renewal, then restores both", async () => {
+    const initial = (await billingAccountForOrganization(prisma, organizationId))!;
+    const { customerId } = initial;
+    expect(initial.firstPaidInvoiceAt).toBeInstanceOf(Date);
+    await prisma.deploymentSettings.upsert({
+      where: { id: "default" },
+      create: { id: "default", modelCreditsEnabled: true },
+      update: { modelCreditsEnabled: true },
+    });
+    const app = new Hono();
+    mountBillingRoutes(app, {
+      billing: service,
+      provider,
+      webOrigin: "https://example.test",
+      authenticate: async () => actor,
+    });
+    async function signal(type: string) {
+      const signed = provider.signWebhook({ type, data: { object: { customer: customerId } } });
+      expect((await app.request(BILLING_WEBHOOK_PATH, { method: "POST", ...signed })).status).toBe(
+        200,
+      );
+    }
+
+    const allowance = await sandboxAllowancePlan(prisma, organizationId);
+    expect(allowance?.limitCents).toBeGreaterThan(0);
+    const invoice = provider.failSubscriptionPayment(customerId);
+    await signal("invoice.payment_failed");
+    await expect(service.status(actor)).resolves.toMatchObject({
+      state: "past_due",
+      access: false,
+      balanceUsd: 10,
+    });
+    await expect(spaceHasModelAccess(prisma, spaceId)).resolves.toBe(false);
+    await expect(sandboxAllowancePlan(prisma, organizationId)).resolves.toMatchObject({
+      limitCents: 0,
+    });
+    await expect(service.checkout(actor)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(
+      service.purchaseCredits(actor, { amountCents: 1000, monthly: true }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(service.portal(actor, "mobile")).resolves.toMatchObject({
+      url: expect.stringContaining("portal"),
+    });
+
+    provider.settleSubscriptionInvoice(customerId, invoice);
+    await signal("invoice.paid");
+    await expect(service.status(actor)).resolves.toMatchObject({ state: "active", access: true });
+    await expect(spaceHasModelAccess(prisma, spaceId)).resolves.toBe(true);
+    await expect(sandboxAllowancePlan(prisma, organizationId)).resolves.toMatchObject({
+      limitCents: allowance!.limitCents,
+    });
+    expect(
+      (await billingAccountForOrganization(prisma, organizationId))?.firstPaidInvoiceAt,
+    ).toEqual(initial.firstPaidInvoiceAt);
   });
   it("adds one-time topups without adding a second subscription", async () => {
     await service.purchaseCredits(actor, { amountCents: 2000, monthly: false });

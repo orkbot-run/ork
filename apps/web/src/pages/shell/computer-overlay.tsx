@@ -41,6 +41,7 @@ type ComputerOverlayProps = {
   /** Changes to load the screen again in a new frame. */
   screenFrameKey?: string;
   screenFrameRef: (frame: HTMLIFrameElement | null) => void;
+  onFrameError?: (message: string) => void;
   computerScreenError: ReactNode;
   computerBooting: ReactNode;
   onStopTeaching: () => void | Promise<void>;
@@ -68,6 +69,7 @@ export function ComputerOverlay({
   embeddedScreenUrl,
   screenFrameKey,
   screenFrameRef,
+  onFrameError,
   computerScreenError,
   computerBooting,
   onStopTeaching,
@@ -79,6 +81,7 @@ export function ComputerOverlay({
   onRefreshComputer,
   onClose,
 }: ComputerOverlayProps) {
+  const screenSandbox = screenIframeSandbox(embeddedScreenUrl);
   return (
     <div className="fixed inset-0 z-30 bg-background">
       <div
@@ -204,23 +207,26 @@ export function ComputerOverlay({
           ) : computerCapabilitiesFor(computer).screen &&
             computer?.state === "running" &&
             embeddedScreenUrl &&
+            (embeddedScreenUrl === COMPUTER_FRAME_SOURCE || screenSandbox) &&
+            !computerBooting &&
             !computerScreenError ? (
             <>
               {embeddedScreenUrl === COMPUTER_FRAME_SOURCE ? (
                 <NativeComputerScreen
                   key={screenFrameKey}
                   botId={bot.id}
+                  onFrameError={onFrameError}
                   interactive={
                     hasControl && !recordingSkill && computerCapabilitiesFor(computer).control
                   }
                 />
               ) : (
                 <iframe
-                  key={screenFrameKey}
+                  key={`${screenFrameKey}:${screenSandbox}`}
                   title={t`Bot screen`}
                   ref={screenFrameRef}
                   src={embeddedScreenUrl}
-                  sandbox={screenIframeSandbox(embeddedScreenUrl)}
+                  sandbox={screenSandbox}
                   className="h-full w-full border-0 bg-black"
                   allow="clipboard-read; clipboard-write; fullscreen"
                   style={{

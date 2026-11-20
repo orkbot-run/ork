@@ -154,6 +154,7 @@ it("hides the old image and discards a late response when the workspace or sessi
 });
 
 it("cancels capture in the background and fences already queued input after a scope change", async () => {
+  state.rpc.mockImplementationOnce(() => new Promise<ComputerFrame>(() => {}));
   await render();
   const signal = (state.rpc.mock.calls[0]![2] as { signal: AbortSignal }).signal;
   let release!: () => void;
@@ -179,7 +180,7 @@ it("cancels capture in the background and fences already queued input after a sc
 
 it("clears the image and stops reads when the server refuses authority", async () => {
   await render();
-  state.rpc.mockRejectedValue(new Error("Forbidden"));
+  state.rpc.mockRejectedValue(Object.assign(new Error("Forbidden"), { status: 403 }));
   await act(async () => vi.advanceTimersByTimeAsync(500));
   expect(host.querySelector("img")).toBeNull();
   expect(host.textContent).toContain("Forbidden");

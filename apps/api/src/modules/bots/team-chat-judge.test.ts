@@ -235,7 +235,10 @@ describe("team chat engagement judge", () => {
       vi.stubEnv("PI_DEFAULT_CREDENTIALS", "host");
       vi.stubEnv("OPENROUTER_API_KEY", "fixture-deployment-key");
       try {
-        const load = vi.fn();
+        const hasHostedPrivacy = provider === "openrouter" && personal;
+        const load = vi.fn(async () =>
+          JSON.stringify({ kind: "api_key", key: "fixture-personal-key", zeroDataRetention: true }),
+        );
         const run = vi.fn(async function* (_request: unknown) {
           yield { type: "done", text: '{"act":false}' };
         });
@@ -250,6 +253,9 @@ describe("team chat engagement judge", () => {
                       modelId: "fixture-model",
                     }
                   : null,
+            },
+            secret: {
+              findFirst: async () => ({ ciphertext: "fixture-encrypted", id: "personal-secret" }),
             },
             space: {
               findFirst: async () => ({ organization: { modelCredits: { mode: "credits" } } }),
@@ -284,7 +290,13 @@ describe("team chat engagement judge", () => {
         });
         if (key) expect(run.mock.calls[0]?.[0]).toHaveProperty("model.apiKey", key);
         else expect(run.mock.calls[0]?.[0]).not.toHaveProperty("model.apiKey");
-        expect(load).not.toHaveBeenCalled();
+        if (hasHostedPrivacy) {
+          expect(load).toHaveBeenCalledExactlyOnceWith("fixture-encrypted", "personal-secret");
+          expect(run.mock.calls[0]?.[0]).toHaveProperty("model.zeroDataRetention", true);
+        } else {
+          expect(load).not.toHaveBeenCalled();
+          expect(run.mock.calls[0]?.[0]).not.toHaveProperty("model.zeroDataRetention");
+        }
       } finally {
         vi.unstubAllEnvs();
       }

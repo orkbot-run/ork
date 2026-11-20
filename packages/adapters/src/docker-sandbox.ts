@@ -20,12 +20,19 @@ import type {
   ScreenSession,
   TerminalRequest,
 } from "@orkbot/adapter-kit";
-import { INVALID_BROWSER_REQUEST, SandboxRequestRejectedError } from "@orkbot/adapter-kit";
+import {
+  INVALID_BROWSER_REQUEST,
+  SandboxDamagedError,
+  SandboxRequestRejectedError,
+  SandboxUnresponsiveError,
+} from "@orkbot/adapter-kit";
+import { COMPUTER_UNRESPONSIVE_ERROR } from "@orkbot/contracts";
 import {
   boundedSandboxCommandTimeoutMs,
   cancelResponseBody,
   requestDeadline,
   resolveSupervisorToken,
+  withAbort,
 } from "@orkbot/core";
 import { outgoingCorrelationHeaders } from "@orkbot/logging";
 import {
@@ -36,7 +43,7 @@ import {
   resolveWorkspaceCwd,
 } from "./computer-support.js";
 import { sandboxCommandArgv } from "./sandbox-command-environment.js";
-import { readBodyCapped, withAbort } from "./web-ssrf.js";
+import { readBodyCapped } from "./web-ssrf.js";
 import { shouldSkipPortableWorkspaceFile } from "./workspace-save-policy.js";
 
 export const MAX_SANDBOX_ERROR_RESPONSE_BYTES = 8 * 1024;
@@ -44,6 +51,20 @@ export const MAX_SANDBOX_SUCCESS_RESPONSE_BYTES = 16 * 1024 * 1024;
 export const SCREEN_RELEASE_TIMEOUT_MS = 8_000;
 const SANDBOX_ERROR_RESPONSE_TIMEOUT_MS = 1_000;
 const SANDBOX_SUCCESS_RESPONSE_TIMEOUT_MS = 30_000;
+const COMMAND_RESPONSE_GRACE_MS = 15_000;
+const COMPUTER_PROBE_TIMEOUT_MS = 10_000;
+const FORCED_STOP_TIMEOUT_MS = 15_000;
+const HOME_WRITE_DENIED = "orkbot:home-write-denied";
+const HOME_WRITE_DENIED_EXIT = 77;
+const CHECK_HOME_WRITE = [
+  "probe=$(LC_ALL=C /usr/bin/mktemp -d -- /home/orkbot/.ork-write-check.XXXXXXXX 2>&1) || {",
+  '  case "$probe" in',
+  `    *"Permission denied"*|*"Read-only file system"*) printf '%s\\n' '${HOME_WRITE_DENIED}'; exit ${HOME_WRITE_DENIED_EXIT} ;;`,
+  "  esac",
+  "  exit 0",
+  "}",
+  '/usr/bin/rmdir -- "$probe"',
+].join("\n");
 
 async function safeBody(res: Response, signal?: AbortSignal): Promise<string> {
   const declared = Number(res.headers.get("content-length") ?? 0);
@@ -105,6 +126,10 @@ function sandboxGoneError(computer: ComputerRef): Error {
 
 export class DockerSandboxProvider implements SandboxProvider {
   private readonly supervisorToken: string;
+  private readonly computerHealth = new Map<
+    string,
+    { unresponsive?: symbol; probe?: Promise<SandboxDamagedError | undefined> }
+  >();
 
   constructor(
     private readonly supervisorUrl: string,
@@ -221,29 +246,115 @@ export class DockerSandboxProvider implements SandboxProvider {
     return (await this.containerRunning(computer, context)) === true;
   }
 
-  async prepare(_computer: ComputerRef, _context: AdapterContext): Promise<void> {}
+  async prepare(computer: ComputerRef, context: AdapterContext): Promise<void> {
+    context.signal.throwIfAborted();
+    const health = this.computerHealth.get(computer.id) ?? {};
+    this.computerHealth.set(computer.id, health);
+    const { unresponsive } = health;
+    // A caller can stop waiting without cancelling the probe for other callers. Keep any
+    // failure recorded after the probe started even if that probe succeeds.
+    health.probe ??= this.probeComputer(computer, context, unresponsive !== undefined)
+      .then((failure) => {
+        if (!failure && health.unresponsive === unresponsive) health.unresponsive = undefined;
+        return failure;
+      })
+      .finally(() => {
+        health.probe = undefined;
+        if (!health.unresponsive && this.computerHealth.get(computer.id) === health) {
+          this.computerHealth.delete(computer.id);
+        }
+      });
+    const failure = await withAbort(health.probe, context.signal);
+    if (failure) throw failure;
+  }
+
+  private async probeComputer(
+    computer: ComputerRef,
+    context: AdapterContext,
+    unresponsive: boolean,
+  ): Promise<SandboxDamagedError | undefined> {
+    const deadline = requestDeadline(COMPUTER_PROBE_TIMEOUT_MS, "computer health check timed out");
+    let stdout = "";
+    try {
+      for await (const event of this.executeCommand(
+        computer,
+        { argv: ["/bin/sh", "-c", CHECK_HOME_WRITE], timeoutMs: COMPUTER_PROBE_TIMEOUT_MS },
+        { ...context, signal: deadline.signal },
+        // Docker must start the shell even when it cannot enter the mounted home.
+        { cwd: "/", healthProbe: true },
+      )) {
+        if (event.type === "stdout") stdout += event.data;
+        if (event.type !== "exit") continue;
+        if (event.code === HOME_WRITE_DENIED_EXIT && stdout.trim() === HOME_WRITE_DENIED) {
+          return new SandboxDamagedError({
+            cause: new Error("Docker computer home is not writable"),
+          });
+        }
+        if (event.code === 0) return undefined;
+        throw new Error(`computer health check exited with code ${event.code}`);
+      }
+      throw new Error("computer health check ended without an exit status");
+    } catch (cause) {
+      // An unavailable probe alone cannot establish that a previously responsive computer is damaged.
+      return unresponsive ? new SandboxDamagedError({ cause }) : undefined;
+    } finally {
+      deadline.dispose();
+    }
+  }
+
+  private reportUnresponsive(computer: ComputerRef, signal: AbortSignal, cause: unknown): never {
+    signal.throwIfAborted();
+    const health = this.computerHealth.get(computer.id) ?? {};
+    health.unresponsive = Symbol();
+    this.computerHealth.set(computer.id, health);
+    throw new SandboxUnresponsiveError(COMPUTER_UNRESPONSIVE_ERROR, { cause });
+  }
 
   async *execute(
     computer: ComputerRef,
     request: CommandRequest,
     context: AdapterContext,
   ): AsyncIterable<ProcessEvent> {
+    yield* this.executeCommand(computer, request, context, { cwd: dockerCwd(request.cwd) });
+  }
+
+  private async *executeCommand(
+    computer: ComputerRef,
+    request: CommandRequest,
+    context: AdapterContext,
+    options: { cwd: string; healthProbe?: true },
+  ): AsyncIterable<ProcessEvent> {
     const timeoutMs = boundedSandboxCommandTimeoutMs(request.timeoutMs);
-    const res = await fetch(this.url(`/computers/${computer.id}/exec`), {
-      method: "POST",
-      headers: { ...this.headers(context, computer.botId), "content-type": "application/json" },
-      body: JSON.stringify({
-        ...request,
-        argv: sandboxCommandArgv(request),
-        cwd: dockerCwd(request.cwd),
-        timeoutMs,
-      }),
-      signal: context.signal,
+    const body = JSON.stringify({
+      ...request,
+      argv: sandboxCommandArgv(request),
+      cwd: options.cwd,
+      timeoutMs,
     });
+    context.signal.throwIfAborted();
+    // Include the wait for headers. A healthy command may be silent until the supervisor's
+    // first heartbeat, and the server reports genuine command timeouts as an exit status.
+    const signal = AbortSignal.any([
+      context.signal,
+      AbortSignal.timeout(timeoutMs + COMMAND_RESPONSE_GRACE_MS),
+    ]);
+    const transportFailed = (cause: unknown): never => {
+      if (options.healthProbe) throw cause;
+      return this.reportUnresponsive(computer, context.signal, cause);
+    };
+    const res = await withAbort(
+      fetch(this.url(`/computers/${computer.id}/exec`), {
+        method: "POST",
+        headers: { ...this.headers(context, computer.botId), "content-type": "application/json" },
+        body,
+        signal,
+      }),
+      signal,
+    ).catch(transportFailed);
     if (!res.ok) {
       cancelResponseBody(res);
       // A stopped container cannot run anything; report it gone so the computer is booted again.
-      if ((await this.containerRunning(computer, context)) === false) {
+      if ((await this.containerRunning(computer, { ...context, signal })) === false) {
         throw sandboxGoneError(computer);
       }
       yield { type: "stderr", data: `exec failed: ${res.status}` };
@@ -252,26 +363,24 @@ export class DockerSandboxProvider implements SandboxProvider {
     }
     const contentType = res.headers.get("content-type") ?? "";
     if (contentType.includes("ndjson")) {
-      // The command may keep running after the first bytes (device-code logins).
-      // Don't apply the short JSON body timeout; the server enforces timeoutMs.
-      const streamSignal = AbortSignal.any([
-        context.signal,
-        AbortSignal.timeout(timeoutMs + 15_000),
-      ]);
-      yield* readNdjsonProcessEvents(res, streamSignal);
+      try {
+        yield* readNdjsonProcessEvents(res, signal);
+      } catch (cause) {
+        transportFailed(cause);
+      }
       return;
     }
-    const body = await readSandboxJson<{ stdout: string; stderr: string; code: number }>(
+    const result = await readSandboxJson<{ stdout: string; stderr: string; code: number }>(
       res,
-      context.signal,
+      signal,
     );
     // The supervisor answers a missing container with Docker's 404 as the command's stderr.
-    if (body.code !== 0 && /no such container/i.test(body.stderr)) {
+    if (result.code !== 0 && /no such container/i.test(result.stderr)) {
       throw sandboxGoneError(computer);
     }
-    if (body.stdout) yield { type: "stdout", data: body.stdout };
-    if (body.stderr) yield { type: "stderr", data: body.stderr };
-    yield { type: "exit", code: body.code };
+    if (result.stdout) yield { type: "stdout", data: result.stdout };
+    if (result.stderr) yield { type: "stderr", data: result.stderr };
+    yield { type: "exit", code: result.code };
   }
 
   async pageBrowser(
@@ -603,17 +712,35 @@ export class DockerSandboxProvider implements SandboxProvider {
     }
   }
 
-  async stop(computer: ComputerRef, context: AdapterContext): Promise<void> {
-    const res = await fetch(this.url(`/computers/${computer.id}/stop`), {
-      method: "POST",
-      headers: this.headers(context, computer.botId),
-      signal: context.signal,
-    });
-    // 404 means the supervisor no longer has the container, which is the state we want.
-    if (!res.ok && res.status !== 404) {
-      throw new Error(
-        `sandbox stop failed: ${res.status} ${await safeBody(res, context.signal)}`.trim(),
+  async stop(
+    computer: ComputerRef,
+    context: AdapterContext,
+    options?: { discardUnsaved?: boolean },
+  ): Promise<void> {
+    const deadline = options?.discardUnsaved
+      ? requestDeadline(FORCED_STOP_TIMEOUT_MS, "sandbox recovery stop timed out", context.signal)
+      : undefined;
+    const signal = deadline?.signal ?? context.signal;
+    try {
+      const res = await withAbort(
+        fetch(this.url(`/computers/${computer.id}/stop`), {
+          method: "POST",
+          headers: {
+            ...this.headers(context, computer.botId),
+            ...(options?.discardUnsaved ? { "x-ork-sandbox-discard-unsaved": "true" } : {}),
+          },
+          signal,
+        }),
+        signal,
       );
+      // 404 means the supervisor no longer has the container, which is the state we want.
+      if (!res.ok && res.status !== 404) {
+        throw new Error(`sandbox stop failed: ${res.status} ${await safeBody(res, signal)}`.trim());
+      }
+      cancelResponseBody(res);
+      this.computerHealth.delete(computer.id);
+    } finally {
+      deadline?.dispose();
     }
   }
 
@@ -623,11 +750,15 @@ export class DockerSandboxProvider implements SandboxProvider {
       headers: this.headers(context, computer.botId),
       signal: context.signal,
     });
-    if (res.ok) return;
-    const body = await safeBody(res, context.signal);
-    // Only the supervisor's missing-computer answer means already deleted.
-    if (res.status === 404 && body.includes("computer not found")) return;
-    throw new Error(`sandbox destroy failed: ${res.status} ${body}`.trim());
+    if (res.ok) cancelResponseBody(res);
+    else {
+      const body = await safeBody(res, context.signal);
+      // Only the supervisor's missing-computer answer means already deleted.
+      if (res.status !== 404 || !body.includes("computer not found")) {
+        throw new Error(`sandbox destroy failed: ${res.status} ${body}`.trim());
+      }
+    }
+    this.computerHealth.delete(computer.id);
   }
 
   private async *walkWorkspace(
@@ -667,11 +798,7 @@ async function* readNdjsonProcessEvents(
   signal: AbortSignal,
 ): AsyncIterable<ProcessEvent> {
   const reader = res.body?.getReader();
-  if (!reader) {
-    yield { type: "stderr", data: "exec failed: empty response\n" };
-    yield { type: "exit", code: 1 };
-    return;
-  }
+  if (!reader) throw new Error("empty exec response");
   const decoder = new TextDecoder();
   let buffer = "";
   let bytes = 0;
@@ -703,7 +830,7 @@ async function* readNdjsonProcessEvents(
         yield event;
       }
     }
-    if (!sawExit) yield { type: "exit", code: 1 };
+    if (!sawExit) throw new Error("exec response ended without an exit status");
   } finally {
     void reader.cancel().catch(() => undefined);
     reader.releaseLock();

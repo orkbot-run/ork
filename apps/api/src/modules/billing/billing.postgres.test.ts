@@ -126,6 +126,39 @@ describePostgres("billing service (PostgreSQL)", () => {
     });
   });
 
+  it("records the first payment after a declined trial invoice is settled from balance", async () => {
+    const { customerId } = (await billingAccountForOrganization(prisma, organizationId))!;
+    expect(
+      (await billingAccountForOrganization(prisma, organizationId))?.firstPaidInvoiceAt,
+    ).toBeNull();
+    emulator.setStatus(customerId, "active");
+    await billing.sync(customerId);
+    expect(
+      (await billingAccountForOrganization(prisma, organizationId))?.firstPaidInvoiceAt,
+    ).toBeNull();
+
+    const invoice = emulator.failSubscriptionPayment(customerId);
+    await billing.sync(customerId);
+    await expect(billing.status(owner)).resolves.toMatchObject({
+      access: false,
+      state: "past_due",
+    });
+    expect(
+      (await billingAccountForOrganization(prisma, organizationId))?.firstPaidInvoiceAt,
+    ).toBeNull();
+    await expect(billing.checkout(owner)).rejects.toMatchObject({ code: "CONFLICT" });
+
+    await emulator.grantBalanceCredit(customerId, emulator.price.amount, "test-balance-credit");
+    emulator.settleSubscriptionInvoice(customerId, invoice, "balance");
+    const paidAt = await emulator.getFirstPaidSubscriptionInvoiceAt(customerId);
+    expect(paidAt).toBeInstanceOf(Date);
+    await billing.sync(customerId);
+    await expect(billing.status(owner)).resolves.toMatchObject({ access: true, state: "active" });
+    expect(
+      (await billingAccountForOrganization(prisma, organizationId))?.firstPaidInvoiceAt,
+    ).toEqual(paidAt);
+  });
+
   it("only lets owners manage billing", async () => {
     await prisma.member.create({
       data: {

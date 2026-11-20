@@ -22,7 +22,9 @@ import type { RpcClient } from "../lib/rpc";
 import { rpc as selectedSpaceRpc } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
 import { BuiCard } from "./ai/primitives";
+import { McpFormCard } from "./McpFormCard";
 import { OptionRow, optionLetter } from "./OptionRow";
+import { OutgoingDraftCard } from "./OutgoingDraftCard";
 import { SecretAskCard } from "./SecretAskCard";
 
 export type AskBlock = Extract<ThreadMessage["blocks"][number], { kind: "ask" }>;
@@ -81,7 +83,14 @@ export type AskCardProps = {
 
 /** A question, approval or protected-input request from the bot. */
 export function AskCard(props: AskCardProps) {
-  return isSecretAskBlock(props.block) ? (
+  return props.block.mcpForm ? (
+    <McpFormCard key={props.block.mcpForm.id} {...props} />
+  ) : props.block.outgoingDraft ? (
+    <OutgoingDraftCard
+      key={`${props.block.outgoingDraft.recipient}:${props.block.outgoingDraft.reviewId ?? "initial"}`}
+      {...props}
+    />
+  ) : isSecretAskBlock(props.block) ? (
     <SecretAskCard {...props} />
   ) : (
     <PromptAskCard {...props} />

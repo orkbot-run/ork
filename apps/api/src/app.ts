@@ -34,6 +34,7 @@ import {
 import type {
   ComposioProvider,
   ConnectorRegistry,
+  MeetingConnection,
   PluginRepoFetcher,
   PluginTextReader,
   RemoteConnectorDependencies,
@@ -52,6 +53,7 @@ import {
   createConnectorStack,
   createIdleComputerSweeper,
   createJobReconciler,
+  createMeetingConnection,
   createMessagingContextLoader,
   createMessagingTeamChatHistory,
   createMessagingTeamChatSender,
@@ -90,8 +92,10 @@ import {
   RunJobPublisher,
   RunStarter,
   reconcileCloudAgents,
+  reconcileComputerOrphans,
   reconcileComputerUpdates,
   reconcileMediaVideos,
+  reconcileMeetings,
   reconcilePurchases,
   removePiUserSessions,
   resolveDeploymentModel,
@@ -139,10 +143,12 @@ import {
   createRosterChanges,
   createSecurityEventPruner,
   createThreadEvents,
+  databaseOperationFailed,
   describeRowSecurity,
   IsolationError,
   installAuditEventStore,
   installSecurityEventStore,
+  isDatabaseUnavailable,
   ProviderTransactionBusyError,
   parsePositiveInteger,
   provisionMessagingIdentity,
@@ -201,6 +207,7 @@ import { mountSharedPages } from "#modules/content/shared-pages";
 import { endUserDeviceSession, mountUserDeviceRoutes } from "#modules/devices/user-devices";
 import { pluginSubmissionRoutes } from "#modules/integrations/plugin-submissions";
 import { moveMcpArgsIntoSecrets } from "#modules/mcp/mcp-args-migration";
+import { mountMeetingWebhook } from "#modules/meetings/routes";
 import { configuredEmailProvider } from "#modules/messaging/email";
 import {
   createMessagingInboundHandler,
@@ -222,6 +229,10 @@ import {
   withClientIp,
 } from "#modules/platform/client-ip";
 import { clientProtocolMiddleware } from "#modules/platform/client-protocol";
+import {
+  databaseErrorHandler,
+  retryUnavailableRequests,
+} from "#modules/platform/database-unavailable";
 import type { AppEnv } from "#modules/platform/env";
 import { loadEnv } from "#modules/platform/env";
 import { healthRoutes } from "#modules/platform/health";
@@ -305,6 +316,7 @@ type CreateAppOverrides = Partial<AppEnv> & {
   email?: TransactionalEmailProvider;
   notifications?: NotificationProvider;
   billing?: BillingProvider;
+  meetings?: MeetingConnection | null;
   remoteConnectors?: RemoteConnectorDependencies;
   pluginRepoFetcher?: PluginRepoFetcher;
   pluginMarketplaceRead?: PluginTextReader;
@@ -331,6 +343,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     email: emailOverride,
     notifications: notificationsOverride,
     billing: billingOverride,
+    meetings: meetingsOverride,
     remoteConnectors,
     modelConnectionFetch,
     pluginRepoFetcher,
@@ -705,11 +718,16 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     email,
     logger: {
       level: "error",
-      log: (_level, _message, ...args) =>
-        getLogger().error(
-          "auth.request.failed",
-          args.find((arg) => arg instanceof Error),
-        ),
+      log: (_level, _message, ...args) => {
+        const error = args.find((arg) => arg instanceof Error);
+        if (isDatabaseUnavailable(error)) {
+          databaseOperationFailed(error);
+          markExpectedFailure();
+          enrichLogContext({ "db.unavailable": true });
+          return;
+        }
+        getLogger().error("auth.request.failed", error);
+      },
     },
     onEmailError,
     afterSignIn:
@@ -784,6 +802,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     CURSOR_API_KEY: env.cursorApiKey,
     CLOUD_AGENT_SPACE_ID: env.cloudAgentSpaceId,
   });
+  const meetings = meetingsOverride === undefined ? createMeetingConnection() : meetingsOverride;
   const paymentWallet = await createPaymentWalletProvider({
     PAYMENT_WALLET_PROVIDER: env.paymentWalletProvider,
     PAYMENT_WALLET_CLIENT_ID: env.paymentWalletClientId,
@@ -805,7 +824,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     artifacts,
     connector: stack.connector,
     connectors: stack.connector,
-    listConnectedPluginSlugs: async (userId) => {
+    listConnectedPluginSlugs: async (userId, signal) => {
       const provider = await integrationSettings.resolve("composio");
       if (!provider) return [];
       return provider.listConnectedExternalIds({
@@ -813,7 +832,22 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
         spaceId: "",
         operationId: "connections.sync",
         traceId: "connections.sync",
-        signal: AbortSignal.timeout(15_000),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+          : AbortSignal.timeout(15_000),
+      });
+    },
+    listActivePluginConnectionRefs: async (userId, signal) => {
+      const provider = await integrationSettings.resolve("composio");
+      if (!provider) return undefined;
+      return provider.listActiveConnectionRefs?.({
+        userId,
+        spaceId: "",
+        operationId: "connections.sync",
+        traceId: "connections.sync",
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+          : AbortSignal.timeout(15_000),
       });
     },
     secrets: [
@@ -839,6 +873,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     messaging: messaging ? createMessagingContextLoader(prisma, { messaging, jobs }) : undefined,
     web: createWebProvider(),
     cloudAgent,
+    meetings,
     userDevices: userDevicesOverride ?? userDevices,
     paymentWallet,
     shutdownSignal: shutdown.signal,
@@ -863,6 +898,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     deploymentModelConfigured: env.deploymentModelConfigured,
     messaging,
     cloudAgent,
+    meetings,
     paymentWallet,
     mediaGeneration,
     maxUploadSizeBytes: env.maxUploadSizeBytes,
@@ -882,9 +918,11 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
           lookup: deploymentModelUsageLookup(),
         }),
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
+        reconcileMeetings: () => reconcileMeetings({ prisma, jobs, meetings }),
         reconcilePurchases: () => reconcilePurchases({ prisma, jobs, paymentWallet }),
         reconcileMediaVideos: () => reconcileMediaVideos({ prisma, jobs, mediaGeneration }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
+        reconcileComputerOrphans: () => reconcileComputerOrphans({ prisma, sandbox }),
         reconcileStrategicInitiatives: createStrategicInitiativeReconciler({
           prisma,
           jobs,
@@ -983,6 +1021,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     pluginRepoFetcher,
     pluginMarketplaceRead,
     cloudAgent,
+    meetings,
     paymentWallet,
     codexCatalog,
     prisma,
@@ -1064,9 +1103,11 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ],
   });
   const app = new Hono();
+  app.onError(databaseErrorHandler);
   const inFlight = trackInFlightRequests();
   app.use("*", inFlight.middleware);
-  app.use("*", requestLogging(logger));
+  app.use("*", requestLogging(logger, { isExpectedError: isDatabaseUnavailable }));
+  app.use("*", retryUnavailableRequests);
   app.use("*", clientIpMiddleware(clientIp, env.clientIpHeader));
   app.use(
     "*",
@@ -1370,6 +1411,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     },
     sessionActor,
   );
+  mountMeetingWebhook(app, { prisma, jobs, meetings });
   mountWebhookHttpRoutes(app, { prisma, secrets, events, jobs });
   if (billing && billingProvider) {
     mountBillingRoutes(app, {
@@ -1989,6 +2031,14 @@ export function handleRpcError(
   path: readonly string[],
   signal?: AbortSignal,
 ): void {
+  if (isDatabaseUnavailable(error)) {
+    databaseOperationFailed(error);
+    markExpectedFailure();
+    throw new ORPCError("SERVICE_UNAVAILABLE", {
+      message: "Database temporarily unavailable",
+      cause: error,
+    });
+  }
   // A missing or foreign resource is the caller's mistake (a stale client, a deleted bot),
   // not a server failure, so it is a warning rather than an error report.
   if (error instanceof IsolationError) {

@@ -20,7 +20,7 @@ import type {
 import { ConnectorAuthUnavailableError } from "@orkbot/adapter-kit";
 import type { ConfiguredIntegration } from "@orkbot/contracts";
 import { IntegrationProviderIdSchema } from "@orkbot/contracts";
-import { humanizeToolName } from "@orkbot/core";
+import { humanizeToolName, outgoingDraftBindingForTool } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
 import { COMPOSIO_MULTI_EXECUTE_TOOL, composioToolBatch } from "./composio-batch.js";
 import type { ToolkitDirectoryEntry } from "./composio-catalog-cache.js";
@@ -78,6 +78,7 @@ function mapOneTool(item: unknown): ConnectorTool | undefined {
       description: String(fn.description ?? name),
       inputSchema: asObject(fn.parameters) ?? { type: "object", properties: {} },
       batch: composioToolBatch(name),
+      outgoingDraft: outgoingDraftBindingForTool(name),
       ...composioToolLabel(name),
       route: { connectorId: "composio", toolName: name },
     };
@@ -91,6 +92,7 @@ function mapOneTool(item: unknown): ConnectorTool | undefined {
       asObject(raw.inputSchema) ??
       asObject(raw.parameters) ?? { type: "object", properties: {} },
     batch: composioToolBatch(name),
+    outgoingDraft: outgoingDraftBindingForTool(name),
     ...composioToolLabel(name),
     route: { connectorId: "composio", toolName: name },
   };
@@ -292,6 +294,9 @@ export type PluginConnectionRow = {
   provider: string;
   status: string;
   displayName: string;
+  providerRef?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
 };
 
 export function needsLivePluginSync(rows: { status: string }[]): boolean {
@@ -333,44 +338,65 @@ export function pickReusableConnection<T extends { id: string; status: string }>
   return rows.find((row) => row.status === "revoked" || row.status === "error");
 }
 
+/** Pending authorizations may need time for SSO or 2FA before becoming active. */
+const AUTHORIZATION_WINDOW_MS = 30 * 60_000;
+
 export function planLiveConnectionSync(
   rows: PluginConnectionRow[],
   liveSlugs: string[],
+  activeRefs?: string[] | null,
+  now = Date.now(),
 ): { connectIds: string[]; revokeIds: string[] } {
   const live = new Set(liveSlugs.map(composioSlugKey).filter(Boolean));
+  const candidates = rows.filter((row) => row.status === "pending" || row.status === "error");
+  const connected = rows.filter((row) => row.status === "connected");
+  const previouslyConnected = new Set(connected.map((row) => composioSlugKey(row.provider)));
+  const timestamp = (row: PluginConnectionRow) =>
+    row.updatedAt?.getTime() ?? row.createdAt?.getTime() ?? 0;
   const connectIds: string[] = [];
-  const connectedProviders = new Set(
-    rows.filter((row) => row.status === "connected").map((row) => composioSlugKey(row.provider)),
-  );
-  for (const slug of live) {
-    if (connectedProviders.has(slug)) continue;
-    const matches = rows.filter((row) => composioSlugKey(row.provider) === slug);
-    // Recover in-flight pending/error rows only. A revoked sibling stays
-    // revoked even when another row (or the upstream listing) is live for
-    // the same slug — reviving it would reattach a dead providerRef.
-    const reusable = matches.find((row) => row.status === "pending" || row.status === "error");
-    if (!reusable) continue;
-    connectIds.push(reusable.id);
-    connectedProviders.add(slug);
+  if (Array.isArray(activeRefs)) {
+    const active = new Set(activeRefs);
+    const usedRefs = new Set(connected.map((row) => row.providerRef));
+    for (const row of [...candidates].sort(
+      (a, b) => timestamp(b) - timestamp(a) || b.id.localeCompare(a.id),
+    )) {
+      if (!row.providerRef || !active.has(row.providerRef) || usedRefs.has(row.providerRef))
+        continue;
+      connectIds.push(row.id);
+      usedRefs.add(row.providerRef);
+    }
+  } else if (activeRefs === undefined) {
+    // Legacy connectors cannot identify accounts. Recover only the latest first
+    // connect, never guess which additional account was authorized.
+    for (const slug of live) {
+      if (previouslyConnected.has(slug)) continue;
+      const latest = candidates
+        .filter((row) => composioSlugKey(row.provider) === slug && row.providerRef !== null)
+        .sort((a, b) => timestamp(b) - timestamp(a) || b.id.localeCompare(a.id))[0];
+      if (latest) connectIds.push(latest.id);
+    }
   }
   const connectIdSet = new Set(connectIds);
-  // Providers that already have a connected row before this sync. Extra pending
-  // rows for those providers are additional-account attempts, not abandoned
-  // first connects — keep them. Concurrent pendings with no connected row yet
-  // still collapse to one connect + revoke the rest.
-  const previouslyConnected = new Set(
-    rows.filter((row) => row.status === "connected").map((row) => composioSlugKey(row.provider)),
-  );
-  const revokeIds = rows
+  // A catalog refresh may follow a successful complete call. The first connected
+  // attempt still retires older retries. Newer attempts can be additional accounts.
+  const beganAt = (row: PluginConnectionRow) => row.createdAt?.getTime() ?? timestamp(row);
+  const firstConnectedAttempt = new Map<string, number>();
+  for (const row of [...connected, ...candidates.filter((row) => connectIdSet.has(row.id))]) {
+    const slug = composioSlugKey(row.provider);
+    const began = beganAt(row);
+    firstConnectedAttempt.set(slug, Math.min(firstConnectedAttempt.get(slug) ?? began, began));
+  }
+  const revokeIds = candidates
     .filter((row) => {
-      if (row.status !== "pending" && row.status !== "error") return false;
       if (connectIdSet.has(row.id)) return false;
-      // Keep only in-flight additional-account pendings; clear abandoned errors
-      // so live sync does not keep re-listing forever after a failed attempt.
-      if (row.status === "pending" && previouslyConnected.has(composioSlugKey(row.provider))) {
-        return false;
-      }
-      return true;
+      // An account-list outage must never end an authorization still in progress.
+      if (row.status === "pending" && activeRefs === null) return false;
+      if (row.status === "error") return true;
+      const slug = composioSlugKey(row.provider);
+      if (row.providerRef && (firstConnectedAttempt.get(slug) ?? 0) > beganAt(row)) return true;
+      return (
+        Boolean(row.updatedAt || row.createdAt) && now - timestamp(row) > AUTHORIZATION_WINDOW_MS
+      );
     })
     .map((row) => row.id);
   return { connectIds, revokeIds };
@@ -554,6 +580,10 @@ export class ComposioConnector implements ComposioProvider {
     return this.listConnectedSlugs(context.userId);
   }
 
+  async listActiveConnectionRefs(context: AdapterContext): Promise<string[]> {
+    return this.accountIds(context.userId, [], ["ACTIVE"], { signal: context.signal });
+  }
+
   async listReconnectRefs(context: AdapterContext): Promise<string[]> {
     return this.accountIds(context.userId, [], RECONNECT_STATUSES, { signal: context.signal });
   }
@@ -656,6 +686,8 @@ export class ComposioConnector implements ComposioProvider {
           state: account?.id || connectionRequest.id || request.provider,
         };
       }
+      // The SDK creates this request from connected_account_id: the same ref
+      // transitions from INITIATED to ACTIVE when this authorization completes.
       return {
         authorizationUrl: connectionRequest.redirectUrl,
         state: connectionRequest.id || request.provider,

@@ -256,7 +256,8 @@ const MessageBubbleContent = memo(function MessageBubbleContent({
   if (undoBlock?.kind === "ask") return <ChangeUndo block={undoBlock} />;
   const ask = message.blocks.find(
     (block): block is Extract<MessageBlock, { kind: "ask" }> =>
-      block.kind === "ask" && !isApprovalAskBlock(block) && !block.actions?.length,
+      block.kind === "ask" &&
+      (Boolean(block.outgoingDraft) || (!isApprovalAskBlock(block) && !block.actions?.length)),
   );
   if (ask) {
     return (

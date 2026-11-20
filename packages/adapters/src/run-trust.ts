@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork reviewer context changes follow LICENSE.md.
+
 import type { MessageBlock } from "@orkbot/contracts";
 import type { ActionApprovalRule } from "@orkbot/core";
 import {
@@ -13,6 +17,7 @@ import { boundDirectApprovalDetails, catalogApprovalDetails } from "./approval-e
 import type { ExecutorDeps } from "./executor-deps.js";
 import type { EffectiveModelRole } from "./model-roles.js";
 import { effectiveModelRole } from "./model-roles.js";
+import { createReviewOwnerHistoryLoader } from "./review-owner-history.js";
 import { routineTaskInstructions } from "./routine-watch.js";
 import { CATALOG_APPROVAL_TOOL, PASSED_EFFECT_STATUSES } from "./run-effects.js";
 import { BUILTIN_AGENT_TOOL_NAMES } from "./run-tool-selection.js";
@@ -77,6 +82,7 @@ export function createRunTrustLoaders(
     sourceMessage,
     connectedPlugins,
   } = input;
+  const reviewHistory = createReviewOwnerHistoryLoader(deps, input);
   let approvalRulesPromise: Promise<ActionApprovalRule[]> | undefined;
   const loadApprovalRules = () => {
     approvalRulesPromise ??= listApprovalRules(deps.prisma, {
@@ -108,7 +114,7 @@ export function createRunTrustLoaders(
   };
   // The owner's own words for this run: the message they sent, or the instructions of the
   // routine that started it. Never a bot, channel or webhook message, or a tool result.
-  // These name the sites a run is given, and are all Auto Review sees of a new site's run.
+  // Only this current request contributes trusted sites. Review history is a separate input.
   let ownerWordsPromise: Promise<string> | undefined;
   const loadOwnerWords = () => {
     ownerWordsPromise ??= (async () => {
@@ -250,6 +256,9 @@ export function createRunTrustLoaders(
       }),
     );
   return {
+    loadPriorOwnerMessages: reviewHistory.loadPriorOwnerMessages,
+    loadReviewOwnerWords: async () =>
+      (await reviewHistory.loadCurrentOwnerMessage()) ?? (await loadOwnerWords()),
     loadApprovalRules,
     loadApprovalModel,
     loadAutoReviewPreference,

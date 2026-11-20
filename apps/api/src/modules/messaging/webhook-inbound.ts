@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited webhook delivery remains Apache-2.0; Space work admission responses are Ork additions.
+// Byte-preserving replay-key changes are Ork additions under PolyForm-Noncommercial-1.0.0.
 
 import { createHash } from "node:crypto";
 import type { JobPublisher, SecretStore } from "@orkbot/adapter-kit";
@@ -260,7 +261,7 @@ export function messagingWakeIdempotencyKey(provider: string, handle: string): s
 export function inboundDeliveryClientNonce(
   source: "webhook" | "github" | "messaging",
   botId: string,
-  idempotencyKey: string,
+  idempotencyKey: string | Uint8Array,
 ): string {
   return `${source}:${botId}:${createHash("sha256").update(idempotencyKey).digest("base64url")}`;
 }
@@ -279,7 +280,7 @@ export async function deliverWebhookEvent(
       thinkingLevel: string | null;
     }>;
     source: "webhook" | "github" | "messaging";
-    idempotencyKey?: string;
+    idempotencyKey?: string | Uint8Array;
     /** Messaging wakes share the live chat thread; keep a separate webhook run. */
     allowParallelRun?: boolean;
   },

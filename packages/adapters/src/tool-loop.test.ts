@@ -7,16 +7,31 @@ import { observationToolResult } from "./computer-tools.js";
 import {
   advanceOverLimitActionCalls,
   advanceToolCallLoopGuard,
+  advanceToolResultStreak,
   isLoopGuardStopText,
   loopGuardStopText,
   MAX_CONSECUTIVE_OVER_LIMIT_ACTION_CALLS,
   overLimitStopText,
+  sameToolResultStopText,
   toolCallStreakLength,
   toolResultFingerprint,
 } from "./tool-loop.js";
 
 const answer = (text: string) => toolResultFingerprint({ content: [{ type: "text", text }] });
 const failure = (text = "missing script") => toolResultFingerprint(undefined, new Error(text));
+
+it("counts a repeated model-visible result only for the same tool", () => {
+  const result = { content: [{ type: "text", text: "unchanged" }] };
+  const first = advanceToolResultStreak(undefined, { name: "read_file", result });
+  const repeat = advanceToolResultStreak(first, { name: "read_file", result: { ...result } });
+  expect(repeat.count).toBe(2);
+  expect(advanceToolResultStreak(repeat, { name: "web_fetch", result }).count).toBe(1);
+  expect(
+    advanceToolResultStreak(repeat, { name: "read_file", result: { ...result, isError: true } })
+      .count,
+  ).toBe(1);
+  expect(isLoopGuardStopText(sameToolResultStopText("Read file", 25))).toBe(true);
+});
 
 /** The call that stops one command repeated with `seen(call)` as each call's answer, if any. */
 function identicalStopsAt(seen: (call: number) => string | undefined) {

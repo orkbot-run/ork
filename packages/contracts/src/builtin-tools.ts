@@ -7,6 +7,7 @@ import * as z from "zod";
 /** Tools whose ordinary execution does not create an approval effect. */
 export const READ_ONLY_AGENT_TOOLS: ReadonlySet<string> = new Set([
   "computer_observe",
+  "user_computer_list",
   "list_files",
   "list_fleet",
   "read_file",
@@ -50,6 +51,9 @@ export const FEEDBACK_DESCRIPTION_MAX_LENGTH = 2_000;
 
 /** Built-in tool names a bot may disable. Kept aligned with the adapter tool list. */
 export const BUILTIN_TOOL_NAMES = [
+  "meeting_list",
+  "meeting_read",
+  "meeting_schedule",
   "computer_observe",
   "computer_act",
   "browser_navigate",
@@ -60,6 +64,7 @@ export const BUILTIN_TOOL_NAMES = [
   "write_file",
   "attach_file",
   "shell",
+  "user_computer_list",
   "user_computer_shell",
   "user_computer_observe",
   "user_computer_act",
@@ -124,6 +129,7 @@ export const BUILTIN_TOOL_NAMES = [
   "archive_bot",
   "message_bot",
   "handoff_to_bot",
+  "post_to_group",
   "update_preferences",
   "feedback",
   "connect_agent",

@@ -3,11 +3,106 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const PL_MESSAGES: Record<string, string> = {
+  No: "Nie",
+  Refresh: "Odśwież",
+  Yes: "Tak",
   "Open Ork Accounts": "Otwórz Ork Accounts",
   "Could not open Ork Accounts. Try again.":
     "Nie udało się otworzyć Ork Accounts. Spróbuj ponownie.",
   "This workspace was closed or your access was removed.":
     "Ta przestrzeń została zamknięta lub odebrano Ci do niej dostęp.",
+  "Back to meetings": "Wróć do spotkań",
+  "Cancel meeting": "Anuluj spotkanie",
+  "Confirm deletion": "Potwierdź usunięcie",
+  "Daily limit: {0}. Maximum meeting length: {1} minutes.":
+    "Limit dzienny: {0}. Maksymalna długość spotkania: {1} min.",
+  "Delete meeting": "Usuń spotkanie",
+  "Delete this meeting and its transcript? This cannot be undone.":
+    "Usunąć spotkanie i jego transkrypcję? Tej operacji nie można cofnąć.",
+  "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link.":
+    "Wpisz obsługiwany link do spotkania w Google Meet, Zoom lub Microsoft Teams.",
+  "Google Meet, Zoom and Microsoft Teams links are supported.":
+    "Obsługiwane są linki Google Meet, Zoom i Microsoft Teams.",
+  "I have informed all participants and have permission to record and transcribe this meeting.":
+    "Wszyscy uczestnicy zostali poinformowani i mam zgodę na nagrywanie oraz transkrypcję tego spotkania.",
+  "Invite your bot to a meeting": "Zaproś bota na spotkanie",
+  "Invite your bot to this meeting?": "Zaprosić bota na to spotkanie?",
+  "Join meeting": "Dołącz do spotkania",
+  "Keep meeting": "Zachowaj spotkanie",
+  "Leave empty to join now. Scheduled time uses your device time zone.":
+    "Pozostaw puste, aby dołączyć teraz. Termin jest podany w strefie czasowej urządzenia.",
+  "Meeting link": "Link do spotkania",
+  Meetings: "Spotkania",
+  "Meetings are not available on this server.": "Spotkania nie są dostępne na tym serwerze.",
+  "No meetings yet.": "Nie ma jeszcze spotkań.",
+  "No transcript yet. It will appear after processing.":
+    "Nie ma jeszcze transkrypcji. Pojawi się po przetworzeniu.",
+  "Review meeting invitation": "Sprawdź zaproszenie na spotkanie",
+  "Review the link and participant consent before inviting your bot.":
+    "Przed zaproszeniem bota sprawdź link i zgodę uczestników.",
+  "Schedule (optional)": "Termin (opcjonalnie)",
+  "Schedule meeting": "Zaplanuj spotkanie",
+  "Stop and leave": "Zatrzymaj i opuść",
+  "Title (optional)": "Tytuł (opcjonalnie)",
+  "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it.":
+    "Bot dołącza jako widoczny uczestnik, nagrywa dźwięk i tworzy transkrypcję. Poinformuj wszystkich uczestników przed jego zaproszeniem.",
+  Joining: "Dołączanie",
+  Recording: "Nagrywanie",
+  Processing: "Przetwarzanie",
+  Canceled: "Anulowane",
+  Scheduled: "Zaplanowane",
+  "Confirm that all participants have been informed before continuing.":
+    "Przed kontynuowaniem potwierdź poinformowanie wszystkich uczestników.",
+  "Enter a future date and time in YYYY-MM-DDTHH:mm format.":
+    "Wpisz przyszłą datę i godzinę w formacie RRRR-MM-DDTGG:mm.",
+  "Daily limit: {dailyLimit}. Maximum meeting length: {maxMinutes} minutes.":
+    "Limit dzienny: {dailyLimit}. Maksymalna długość spotkania: {maxMinutes} min.",
+  "Payment failed. Update your payment method to resume your plan.":
+    "Płatność nie powiodła się. Zaktualizuj metodę płatności, aby wznowić plan.",
+  "Payment failed. Ask an owner to update the payment method.":
+    "Płatność nie powiodła się. Poproś właściciela o zaktualizowanie metody płatności.",
+  "Manage billing to resume your plan.": "Przejdź do rozliczeń, aby wznowić plan.",
+  "Ask an owner to resume your plan.": "Poproś właściciela o wznowienie planu.",
+  "Update payment method": "Zaktualizuj metodę płatności",
+
+  "Check the required fields and value formats.": "Sprawdź wymagane pola i formaty wartości.",
+  "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00":
+    "Podaj datę i czas ze strefą czasową, np. 2026-11-20T14:30:00+01:00",
+  Required: "Wymagane",
+  Declined: "Odrzucono",
+  Expired: "Wygasło",
+
+  "Could not submit this answer": "Nie udało się przesłać odpowiedzi",
+  Reject: "Odrzuć",
+  "Recipient changed. Review the updated draft and press Send again.":
+    "Adresat został zmieniony. Sprawdź zaktualizowany szkic i ponownie naciśnij Wyślij.",
+  "Enter a message body": "Wpisz treść wiadomości",
+  "Enter a recipient": "Wpisz adresata",
+  "Message body": "Treść wiadomości",
+  Subject: "Temat",
+  To: "Do",
+  "Outgoing draft": "Szkic wiadomości",
+  "Zero data retention": "Zero retencji danych",
+  "Route requests only to endpoints marked as eligible for zero data retention.":
+    "Wysyłaj żądania tylko do endpointów oznaczonych jako nieprzechowujące danych.",
+  "Blocked by the server administrator": "Zablokowane przez administratora serwera",
+  "HTTPS address": "Adres HTTPS",
+  "Enter a public HTTPS address without credentials or a fragment":
+    "Wpisz publiczny adres HTTPS bez danych logowania i fragmentu",
+  "Unchanged checks appear in history. You can also post them in chat.":
+    "Sprawdzenia bez zmian pojawiają się w historii. Możesz też publikować je na czacie.",
+  "Watching an HTTPS address requires approval.": "Obserwowanie adresu HTTPS wymaga zatwierdzenia.",
+  "Watch an HTTPS address": "Obserwuj adres HTTPS",
+  "Check interval in minutes": "Co ile minut sprawdzać",
+  "Check every 5 to 1,440 minutes and track up to five fields.":
+    "Sprawdzaj co 5–1440 minut i śledź najwyżej pięć pól.",
+  "Add a schedule or an HTTPS address to run this routine.":
+    "Dodaj harmonogram lub adres HTTPS, aby uruchamiać tę rutynę.",
+  "Fields that mark a change": "Pola wykrywające zmianę",
+  "Fields to compare, e.g. id, modifiedTime (optional)":
+    "Pola do porównania, np. id, modifiedTime (opcjonalnie)",
+  'Post "No changes" in chat': "Publikuj „Bez zmian” na czacie",
+  "Remove change trigger": "Usuń wyzwalacz zmiany",
   "Organization settings": "Ustawienia organizacji",
   "Personal models": "Modele osobiste",
   "Model keys are managed by this server, not Ork Accounts. The server operator is responsible for them.":
@@ -127,6 +222,7 @@ export const PL_MESSAGES: Record<string, string> = {
   "Screen unavailable": "Ekran niedostępny",
   "The computer service cannot start computers for this account.":
     "Usługa komputerów nie może uruchomić komputerów dla tego konta.",
+  "The computer stopped responding. Try again.": "Komputer przestał odpowiadać. Spróbuj ponownie.",
   Rule: "Reguła",
   Inactive: "Nieaktywna",
   "Other tool": "Inne narzędzie",
@@ -594,6 +690,7 @@ export const PL_MESSAGES: Record<string, string> = {
   Running: "Działa",
   Saved: "Zapisano",
   Sent: "Wysłano",
+  "Approved to send": "Zatwierdzono do wysłania",
   Send: "Wyślij",
   "Send answer": "Wyślij odpowiedź",
   "Sending…": "Wysyłanie…",
@@ -873,6 +970,7 @@ export const PL_MESSAGES: Record<string, string> = {
   "Treg token": "Token Treg",
   Uninstall: "Odinstaluj",
   "Verify and add": "Zweryfikuj i dodaj",
+  "Thinking…": "Myśli…",
   "Working…": "Praca w toku…",
   "https://example.com/graphql": "https://example.com/graphql",
   "https://example.com/mcp": "https://example.com/mcp",
@@ -978,7 +1076,8 @@ export const PL_MESSAGES: Record<string, string> = {
   "Could not submit answer": "Nie udało się przesłać odpowiedzi",
   Deny: "Odmów",
   "Please try again.": "Spróbuj ponownie.",
-  "Authorization timed out. Please try again.": "Upłynął czas autoryzacji. Spróbuj ponownie.",
+  "Waiting for authorization.": "Czekamy na autoryzację.",
+  "Start over": "Zacznij od nowa",
   "Could not authorize this app": "Nie udało się autoryzować tej aplikacji",
   "{name} connection": "Połączenie {name}",
   "Notifications silenced": "Powiadomienia wyciszone",

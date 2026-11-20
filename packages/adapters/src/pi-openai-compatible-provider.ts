@@ -34,7 +34,9 @@ import {
   parseModelHeaders,
   ThinkingLevelSchema,
 } from "@orkbot/contracts";
+import type { Dispatcher } from "undici";
 import { Agent } from "undici";
+import { createCheckedProxyDispatcher } from "./checked-proxy-dispatcher.js";
 import { declaredVisionModelIds, inputModalities } from "./model-modalities.js";
 import type { ResolveHostname } from "./network-address.js";
 import { createAddressCheckedLookup } from "./network-address.js";
@@ -48,7 +50,11 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   PRIVATE_MODEL_ENDPOINT_MESSAGE,
 } from "./openai-compatible-url.js";
-import { MODEL_CONNECT_TIMEOUT_MS, modelConnectTimeoutMs } from "./pi-runtime-limits.js";
+import {
+  MODEL_CONNECT_TIMEOUT_MS,
+  MODEL_STREAM_DISPATCHER_OPTIONS,
+  modelConnectTimeoutMs,
+} from "./pi-runtime-limits.js";
 import { guardToolCallNames } from "./pi-tool-call-guard.js";
 import { dispatcherFetch, fetchPairedWithDispatcher } from "./undici-fetch.js";
 
@@ -254,16 +260,17 @@ function openAiCompatibleProvider(
         : openAICompletionsApi();
   // Guard the fetch the caller supplied (the runtime's seam for tests) or the
   // dispatcher-matched default; never the bare global.
+  const streamPolicy = { ...policy, modelStream: true };
   const safeApi: ProviderStreams = {
     stream: (model, context, options) =>
       api(model.api).stream(model, context, {
         ...options,
-        fetch: createOpenAiCompatibleFetch(options?.fetch, undefined, policy),
+        fetch: createOpenAiCompatibleFetch(options?.fetch, undefined, streamPolicy),
       }),
     streamSimple: (model, context, options) =>
       api(model.api).streamSimple(model, context, {
         ...options,
-        fetch: createOpenAiCompatibleFetch(options?.fetch, undefined, policy),
+        fetch: createOpenAiCompatibleFetch(options?.fetch, undefined, streamPolicy),
       }),
   };
   return createProvider({
@@ -338,7 +345,7 @@ function requestCarriesAuthorization(input: RequestInfo | URL, init?: RequestIni
 export function createOpenAiCompatibleFetch(
   baseFetch: typeof globalThis.fetch = dispatcherFetch,
   resolve: ResolveHostname = resolveHostname,
-  opts?: OpenAiCompatibleUrlPolicy & { headers?: Record<string, string> },
+  opts?: OpenAiCompatibleUrlPolicy & { headers?: Record<string, string>; modelStream?: boolean },
 ): typeof globalThis.fetch {
   return async (input, init) => {
     const rawUrl = input instanceof Request ? input.url : String(input);
@@ -352,14 +359,20 @@ export function createOpenAiCompatibleFetch(
       );
     }
     const hostname = url.hostname.replace(/^\[|\]$/g, "");
-    const dispatcher = new Agent({
-      connect: {
-        timeout: modelConnectTimeoutMs(),
-        ...(ipVersion(hostname) === 0
-          ? { lookup: createOpenAiCompatibleLookup(url, resolve, opts) }
-          : {}),
-      },
-    });
+    const checkedLookup =
+      ipVersion(hostname) === 0 ? createOpenAiCompatibleLookup(url, resolve, opts) : undefined;
+    const connectTimeout = modelConnectTimeoutMs();
+    const streamOptions = opts?.modelStream ? MODEL_STREAM_DISPATCHER_OPTIONS : {};
+    const { env } = process;
+    const hasProxy = (env.http_proxy ?? env.HTTP_PROXY) || (env.https_proxy ?? env.HTTPS_PROXY);
+    const dispatcher =
+      opts?.modelStream && hasProxy
+        ? createCheckedProxyDispatcher(
+            checkedLookup,
+            () => compatibleProxyAuthority(url, hostname, checkedLookup),
+            { ...streamOptions, connectTimeout },
+          )
+        : new Agent({ ...streamOptions, connectTimeout, connect: { lookup: checkedLookup } });
     // Node's fetch rejects this package Agent. Use its matching fetch;
     // a caller-supplied fetch stays in charge.
     const transport = fetchPairedWithDispatcher(baseFetch);
@@ -376,13 +389,28 @@ export function createOpenAiCompatibleFetch(
         headers,
         redirect: "error",
         dispatcher,
-      } as RequestInit & { dispatcher: Agent });
+      } as RequestInit & { dispatcher: Dispatcher });
       return await closeDispatcherWithResponse(response, dispatcher);
     } catch (error) {
       await dispatcher.destroy().catch(() => undefined);
       throw error;
     }
   };
+}
+
+/** Tunnel to the same checked address a direct request could dial, keeping hostname TLS/SNI. */
+async function compatibleProxyAuthority(url: URL, hostname: string, lookup?: LookupFunction) {
+  const address = lookup
+    ? await new Promise<string>((resolve, reject) => {
+        lookup(hostname, {}, (error, address) => {
+          if (error) reject(error);
+          else if (typeof address === "string") resolve(address);
+          else reject(new Error("Model server did not resolve to an address"));
+        });
+      })
+    : hostname;
+  const host = ipVersion(address) === 6 ? `[${address}]` : address;
+  return `${host}:${url.port || (url.protocol === "https:" ? "443" : "80")}`;
 }
 
 /** The base fetch comes from the undici package, which recognizes only its own
@@ -404,7 +432,7 @@ async function requestInitFor(input: RequestInfo | URL, init?: RequestInit): Pro
 
 async function closeDispatcherWithResponse(
   response: Response,
-  dispatcher: Agent,
+  dispatcher: Dispatcher,
 ): Promise<Response> {
   if (!response.body) {
     await dispatcher.close();

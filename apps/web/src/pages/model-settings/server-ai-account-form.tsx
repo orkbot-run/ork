@@ -17,6 +17,7 @@ import {
   NativeSelect,
   NativeSelectOption,
   Spinner,
+  Switch,
   Textarea,
 } from "@orkbot/ui-web";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -59,15 +60,29 @@ export function ServerAIAccountForm({
       providersById.set(row.provider, row);
   }
   const providers = [...providersById.values()];
-  const presets = modelConnectionOptions(catalog).filter(
-    (option) => option.baseUrl && providersById.has(option.id),
+  const connectionOptions = modelConnectionOptions(catalog).filter((option) =>
+    providersById.has(option.id),
   );
-  const [setupChoice, setSetupChoice] = useState("");
-  const initialProvider = account?.provider ?? (setup ? "" : (providers[0]?.provider ?? ""));
+  const presets = connectionOptions.filter((option) => option.baseUrl);
+  const genericProviders = providers.filter((row) =>
+    connectionOptions.some((option) => option.id === row.provider && !option.baseUrl),
+  );
+  const initialOption =
+    account || setup
+      ? undefined
+      : (connectionOptions.find(
+          (option) => option.id === providers[0]?.provider && !option.baseUrl,
+        ) ??
+        connectionOptions.find((option) => option.id === providers[0]?.provider) ??
+        connectionOptions[0]);
+  const [setupChoice, setSetupChoice] = useState(
+    initialOption?.baseUrl
+      ? JSON.stringify([initialOption.id, initialOption.baseUrl])
+      : (initialOption?.id ?? ""),
+  );
+  const initialProvider = account?.provider ?? initialOption?.id ?? "";
   const [provider, setProvider] = useState(initialProvider);
-  const [label, setLabel] = useState(
-    account?.label ?? providers[0]?.providerName ?? initialProvider,
-  );
+  const [label, setLabel] = useState(account?.label ?? initialOption?.name ?? initialProvider);
   const [models, setModels] = useState(
     () => account?.models.join("\n") ?? defaultModel(catalog, initialProvider),
   );
@@ -76,11 +91,14 @@ export function ServerAIAccountForm({
     return auth === "oauth" || auth === "both" ? "sign-in" : "key";
   });
   const [key, setKey] = useState("");
-  const [url, setUrl] = useState("");
-  const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>("chat-completions");
+  const [url, setUrl] = useState(initialOption?.baseUrl ?? "");
+  const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>(
+    initialOption?.apiProtocol ?? "chat-completions",
+  );
   const [budget, setBudget] = useState(formatAIBudget(account?.monthlyBudgetMicros ?? null));
   const [concurrency, setConcurrency] = useState(String(account?.concurrencyLimit ?? 8));
   const [routing, setRouting] = useState<Record<string, string>>({});
+  const [zeroDataRetention, setZeroDataRetention] = useState(account?.zeroDataRetention ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef<AbortController | null>(null);
@@ -195,6 +213,11 @@ export function ServerAIAccountForm({
         throw new Error("Invalid concurrency limit");
       const settings = {
         label: label.trim(),
+        ...(selected?.connection?.supportsZeroDataRetention &&
+        account &&
+        zeroDataRetention !== (account.zeroDataRetention ?? false)
+          ? { zeroDataRetention }
+          : {}),
         models: allowed,
         concurrencyLimit: limit,
         monthlyBudgetMicros: hideBudget
@@ -210,6 +233,7 @@ export function ServerAIAccountForm({
           ? { baseUrl: url.trim(), enabledModelIds: allowed, apiProtocol }
           : {}),
         ...(fields.length ? { routing } : {}),
+        ...(selected?.connection?.supportsZeroDataRetention ? { zeroDataRetention } : {}),
       };
       let connectionId: string;
       if (account) {
@@ -268,7 +292,7 @@ export function ServerAIAccountForm({
         </Label>
         <NativeSelect
           id={`${id}-provider`}
-          value={setup ? setupChoice : provider}
+          value={account ? provider : setupChoice}
           disabled={locked || !!account}
           onChange={(event) => {
             const preset = presets.find(
@@ -279,7 +303,7 @@ export function ServerAIAccountForm({
               : setup
                 ? event.target.value.split(":")
                 : [event.target.value];
-            if (setup) setSetupChoice(event.target.value);
+            setSetupChoice(event.target.value);
             setUrl(preset?.baseUrl ?? "");
             setApiProtocol(preset?.apiProtocol ?? "chat-completions");
             const next = providers.find((row) => row.provider === nextProvider);
@@ -293,10 +317,20 @@ export function ServerAIAccountForm({
             setProvider(nextProvider!);
             setModels(model);
             setAuthentication(auth);
-            if (!label.trim() || label === (selected?.providerName ?? provider))
-              setLabel(next?.providerName ?? event.target.value);
+            if (
+              !label.trim() ||
+              label === (selected?.providerName ?? provider) ||
+              label ===
+                connectionOptions.find(
+                  (option) =>
+                    (option.baseUrl ? JSON.stringify([option.id, option.baseUrl]) : option.id) ===
+                    setupChoice,
+                )?.name
+            )
+              setLabel(preset?.name ?? next?.providerName ?? event.target.value);
             setKey("");
             setRouting({});
+            setZeroDataRetention(false);
             if (setup && next) {
               setLabel(preset?.name ?? next.providerName ?? next.provider);
               if (auth === "sign-in")
@@ -310,7 +344,7 @@ export function ServerAIAccountForm({
         >
           {setup ? <NativeSelectOption value="">{t`Choose a provider`}</NativeSelectOption> : null}
           {setup
-            ? providers.flatMap((row) => [
+            ? genericProviders.flatMap((row) => [
                 ...(row.auth === "oauth" || row.auth === "both"
                   ? [
                       <NativeSelectOption
@@ -330,21 +364,24 @@ export function ServerAIAccountForm({
                     ]
                   : []),
               ])
-            : providers.map((row) => (
+            : genericProviders.map((row) => (
                 <NativeSelectOption key={row.provider} value={row.provider}>
                   {row.providerName ?? row.provider}
                 </NativeSelectOption>
               ))}
-          {setup
-            ? presets.map((option) => (
-                <NativeSelectOption
-                  key={JSON.stringify([option.id, option.baseUrl])}
-                  value={JSON.stringify([option.id, option.baseUrl])}
-                >
-                  {option.name}
-                </NativeSelectOption>
-              ))
-            : null}
+          {presets.map((option) => (
+            <NativeSelectOption
+              key={JSON.stringify([option.id, option.baseUrl])}
+              value={JSON.stringify([option.id, option.baseUrl])}
+            >
+              {option.name}
+            </NativeSelectOption>
+          ))}
+          {account && !genericProviders.some((row) => row.provider === provider) ? (
+            <NativeSelectOption value={provider}>
+              {selected?.providerName ?? provider}
+            </NativeSelectOption>
+          ) : null}
         </NativeSelect>
         {!setup && selected?.authHint ? (
           <p className="text-sm text-muted-foreground">{selected.authHint}</p>
@@ -435,9 +472,36 @@ export function ServerAIAccountForm({
                 type="url"
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
+                readOnly={!account && selected?.connection?.customEndpointAllowed === false}
                 disabled={locked}
               />
             </div>
+          ) : null}
+          {selected?.connection?.supportsZeroDataRetention ? (
+            <>
+              <label
+                htmlFor={`${id}-zero-data-retention`}
+                className="flex items-center justify-between gap-3 text-sm"
+              >
+                <Trans>Zero data retention</Trans>
+                <Switch
+                  id={`${id}-zero-data-retention`}
+                  aria-label={t`Zero data retention`}
+                  aria-describedby={`${id}-zero-data-retention-description`}
+                  checked={zeroDataRetention}
+                  disabled={locked}
+                  onCheckedChange={setZeroDataRetention}
+                />
+              </label>
+              <p
+                id={`${id}-zero-data-retention-description`}
+                className="text-sm text-muted-foreground"
+              >
+                <Trans>
+                  Route requests only to endpoints marked as eligible for zero data retention.
+                </Trans>
+              </p>
+            </>
           ) : null}
           {(acceptsKey ? fields : []).map((field) => (
             <div className="grid gap-2" key={field.key}>

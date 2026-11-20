@@ -17,6 +17,11 @@ import { chooseModelCredential, findModelCredential, findModelCredentialById } f
 import { resolveDeploymentModel } from "./deployment-model.js";
 import type { ModelCatalogReads } from "./model-catalog-reads.js";
 import { modelCredentialDto } from "./model-connect.js";
+import {
+  isModelEndpointAllowed,
+  isModelProviderAllowed,
+  MODEL_PROVIDER_BLOCKED_MESSAGE,
+} from "./model-provider-policy.js";
 import { compatibleModelSeesImages, modelAcceptsImageInput } from "./model-vision.js";
 import type { ModelCredentialAuthKind } from "./pi-catalog-availability.js";
 import {
@@ -87,6 +92,7 @@ export async function connectionServesModel(
   provider: string,
   modelId: string,
 ): Promise<boolean> {
+  if (!isModelProviderAllowed(provider)) return false;
   if (isCatalogModelChoice(provider, modelId)) {
     if (!modelAuthIsRestricted(provider, modelId)) return true;
     return !(await validateStoredModelAuth(
@@ -119,6 +125,7 @@ export function defaultCatalogModelId(
   provider: string,
   credentialPlaintext?: string,
 ): string | null {
+  if (!isModelProviderAllowed(provider)) return null;
   const authKind = credentialPlaintext
     ? modelCredentialAuthKindFromPlaintext(credentialPlaintext)
     : "disconnected";
@@ -169,7 +176,10 @@ export async function modelCredentialAuthKindsForSpace(
   hostedProvider?: string,
   reads?: ModelCatalogReads,
 ): Promise<SpaceCatalogAuth> {
-  const hosted = hostedProvider && (await hasHostedModelCredits(prisma, scope, hostedProvider));
+  const hosted =
+    hostedProvider &&
+    isModelProviderAllowed(hostedProvider) &&
+    (await hasHostedModelCredits(prisma, scope, hostedProvider));
   const [credentials, preferences] = await Promise.all([
     prisma.userModelCredential.findMany({
       where: { userId: scope.userId },
@@ -223,7 +233,11 @@ export async function modelCredentialAuthKindsForSpace(
     ),
   ];
   for (const entry of slots) {
-    if (!connectedProviders.has(entry.provider) || (hosted && entry.provider === hostedProvider))
+    if (
+      !isModelProviderAllowed(entry.provider) ||
+      !connectedProviders.has(entry.provider) ||
+      (hosted && entry.provider === hostedProvider)
+    )
       continue;
     const choice = chooseModelCredential({
       provider: entry.provider,
@@ -271,9 +285,18 @@ export async function modelCredentialAuthKindsForSpace(
     const ciphertext = ciphertextById.get(secretId);
     if (!ciphertext) return undefined;
     try {
-      return modelCredentialAuthKindFromPlaintext(
-        await (reads?.secretStore ?? secretStore).load(ciphertext, secretId),
-      );
+      const plaintext = await (reads?.secretStore ?? secretStore).load(ciphertext, secretId);
+      const parsed = parseModelSecret(plaintext);
+      const provider = selections.find((selection) => selection.secretId === secretId)?.provider;
+      if (
+        !provider ||
+        !isModelEndpointAllowed(
+          provider,
+          parsed.kind === "openai_compatible" ? parsed.baseUrl : undefined,
+        )
+      )
+        return undefined;
+      return modelCredentialAuthKindFromPlaintext(plaintext);
     } catch (error) {
       if (error instanceof SecretStoreUnavailableError) throw error;
       return undefined;
@@ -372,6 +395,7 @@ export async function connectedModelSeesImages(
   credential: ModelCredential,
   catalogImages?: boolean,
 ): Promise<boolean> {
+  if (!isModelProviderAllowed(provider)) return false;
   if (canonicalPiProviderId(provider) !== OPENAI_COMPATIBLE_PROVIDER_ID)
     return modelAcceptsImageInput(provider, modelId, catalogImages);
   if (!credential) return false;
@@ -385,7 +409,9 @@ export async function connectedModelSeesImages(
   try {
     const secret = parseModelSecret(stored.plaintext);
     return (
-      secret.kind === "openai_compatible" && compatibleModelSeesImages(credential, secret, modelId)
+      secret.kind === "openai_compatible" &&
+      isModelEndpointAllowed(provider, secret.baseUrl) &&
+      compatibleModelSeesImages(credential, secret, modelId)
     );
   } catch {
     return false;
@@ -431,6 +457,8 @@ export async function prepareStoredModelAuth(
   liveOpts?: CodexLiveReadOptions,
   reads?: ModelCatalogReads,
 ): Promise<{ ref: string | null; auth: StoredModelAuthRead }> {
+  if (!isModelProviderAllowed(provider))
+    return { ref: null, auth: { status: "rejected", message: MODEL_PROVIDER_BLOCKED_MESSAGE } };
   const secret = await loadStoredModelSecret(prisma, secretStore, userId, secretId, reads);
   if (secret.status === "missing") return { ref: null, auth: { status: "unreadable" } };
   if (secret.status === "unreadable") {
@@ -439,6 +467,17 @@ export async function prepareStoredModelAuth(
   const { plaintext } = secret;
   let message: string | undefined;
   try {
+    const stored = parseModelSecret(plaintext);
+    if (
+      !isModelEndpointAllowed(
+        provider,
+        stored.kind === "openai_compatible" ? stored.baseUrl : undefined,
+      )
+    )
+      return {
+        ref: secret.ciphertext,
+        auth: { status: "rejected", message: MODEL_PROVIDER_BLOCKED_MESSAGE },
+      };
     message = validateModelAuthAvailability(provider, modelId, plaintext);
   } catch {
     // A secret that decrypts but does not parse is as unreadable as a corrupt one.
@@ -538,6 +577,7 @@ export async function findConnectedModelCredential(
   modelId?: string | null,
   resolution: ConnectedModelResolution = {},
 ): Promise<ModelCredential> {
+  if (!isModelProviderAllowed(provider)) return null;
   if (resolution.credentialId)
     return findModelCredentialById(prisma, actor, resolution.credentialId, provider);
   let selected = await findModelCredential(prisma, actor, provider, modelId);
@@ -618,6 +658,8 @@ export async function validateBotModelChange(
 ): Promise<BotModelChangeResult> {
   const scope = { userId: input.userId, spaceId: input.spaceId };
   const { provider, model } = input;
+  if (provider && !isModelProviderAllowed(provider))
+    return { ok: false, error: MODEL_PROVIDER_BLOCKED_MESSAGE };
   const managed = await deps.serverAIModels?.validateSelection(
     scope,
     provider && model
@@ -843,6 +885,7 @@ export async function validateConnectedModelChoice(
   modelId: string,
   resolution: ConnectedModelResolution = {},
 ) {
+  if (!isModelProviderAllowed(provider)) return MODEL_PROVIDER_BLOCKED_MESSAGE;
   if (
     resolution.hostedProvider === provider &&
     (await hasHostedModelCredits(prisma, actor, provider))
@@ -884,9 +927,15 @@ export async function validateConnectedModelChoice(
     },
     select: { credentialId: true },
   });
-  if (savedChoice) return undefined;
   const secret = await loadModelSecret(prisma, secretStore, actor.userId, credential.secretId);
-  if (secret?.kind === "openai_compatible" && secret.enabledModelIds === undefined)
+  if (
+    !isModelEndpointAllowed(
+      provider,
+      secret?.kind === "openai_compatible" ? secret.baseUrl : undefined,
+    )
+  )
+    return MODEL_PROVIDER_BLOCKED_MESSAGE;
+  if (savedChoice || (secret?.kind === "openai_compatible" && secret.enabledModelIds === undefined))
     return undefined;
   const enabled = secret && enabledOpenAiCompatibleModelIds(secret, credential.defaultModel);
   return enabled?.includes(modelId.trim()) ? undefined : "Unknown model for that provider";
@@ -964,6 +1013,7 @@ export function pinnedModelCredentialError(
   credential: { defaultModel: string | null } | null,
 ): string | undefined {
   if (!choice.modelProvider || !usableModelId(choice.modelId)) return undefined;
+  if (!isModelProviderAllowed(choice.modelProvider)) return MODEL_PROVIDER_BLOCKED_MESSAGE;
   if (!credential) return PINNED_PROVIDER_NOT_CONNECTED;
   // The enabled list lives in the secret, so the run path checks openai-compatible ids.
   if (choice.modelProvider === OPENAI_COMPATIBLE_PROVIDER_ID) return undefined;
@@ -988,6 +1038,7 @@ export async function hasHostedModelCredits(
   scope: { userId: string; spaceId: string },
   provider: string,
 ): Promise<boolean> {
+  if (!isModelProviderAllowed(provider)) return false;
   const deployment = resolveDeploymentModel();
   if (!deployment.configured || deployment.provider !== provider) return false;
   const space = await prisma.space.findFirst({

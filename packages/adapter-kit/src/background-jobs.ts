@@ -29,6 +29,7 @@ const payloadSchemas = {
     ref: z.string().min(1),
   }),
   "cloud_agent.poll": z.object({ agentId: z.string().min(1) }),
+  "meeting.poll": z.object({ meetingId: z.string().min(1) }),
   "purchase.poll": z.object({ purchaseId: z.string().min(1) }),
   "media.poll": z.object({ jobId: z.string().min(1) }),
   "push.receipt": z.object({
@@ -218,5 +219,21 @@ export function mediaPollJob(jobId: string, availableAt?: Date): BackgroundJob {
     payload: { jobId },
     replaceKey: `media.poll:${jobId}`,
     ...(availableAt ? { availableAt } : {}),
+  };
+}
+
+export function meetingPollJob(
+  meetingId: string,
+  availableAt: Date,
+  keepExisting = false,
+): BackgroundJob {
+  return {
+    name: "meeting.poll",
+    payload: { meetingId },
+    availableAt,
+    replaceKey: `meeting:${meetingId}`,
+    ...(keepExisting
+      ? { keepExisting, replaceLockedBefore: new Date(Date.now() - 2 * 60_000) }
+      : {}),
   };
 }

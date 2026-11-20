@@ -4,14 +4,20 @@
 // Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { routineJobKey, routineWakeupJob, runContinueJob } from "@orkbot/adapter-kit";
-import { parseRoutineWatch, stableStringify, validateRoutineWatch } from "@orkbot/adapters";
-import { canonicalPiProviderId } from "@orkbot/contracts";
+import {
+  listAgentSkillCatalog,
+  loadReferencedAgentSkills,
+  parseRoutineWatch,
+  stableStringify,
+  validateRoutineWatch,
+} from "@orkbot/adapters";
+import { canonicalPiProviderId, routineTriggerIssue } from "@orkbot/contracts";
 import {
   expandSkillReferencesInPrompt,
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
 } from "@orkbot/core";
-import { IsolationError, isRecordNotFound, Prisma } from "@orkbot/db";
+import { IsolationError, isRecordNotFound, Prisma, routineConversationOpen } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { assertRoutineModel } from "#modules/models/model-pins";
@@ -32,7 +38,7 @@ import {
 } from "../routines.js";
 
 export function routinesRoutes(ctx: RouterContext) {
-  const { deps, repos, announceRoutine, codexCatalog, agentSkills, authed } = ctx;
+  const { deps, repos, announceRoutine, codexCatalog, authed } = ctx;
   return {
     routines: {
       listForMentions: authed.routines.listForMentions.handler(async ({ context, input }) => {
@@ -48,7 +54,11 @@ export function routinesRoutes(ctx: RouterContext) {
           select: { id: true },
         });
         const rows = await deps.prisma.routine.findMany({
-          where: { botId: { in: bots.map((bot) => bot.id) }, spaceId: actor.spaceId },
+          where: {
+            botId: { in: bots.map((bot) => bot.id) },
+            spaceId: actor.spaceId,
+            completedOneShotAt: null,
+          },
         });
         return bots.map((bot) => ({
           botId: bot.id,
@@ -94,6 +104,7 @@ export function routinesRoutes(ctx: RouterContext) {
             spaceId: context.actor.spaceId,
             userId: context.actor.userId,
             bot: { archivedAt: null },
+            completedOneShotAt: null,
           },
         });
         if (!existing) throw new ORPCError("NOT_FOUND");
@@ -153,16 +164,14 @@ export function routinesRoutes(ctx: RouterContext) {
         const watchChanged =
           input.watch !== undefined &&
           stableStringify(input.watch) !== stableStringify(parseRoutineWatch(existing.watch));
-        if (crons.length === 0 && !webhookEnabled && !githubEnabled && !messageProvider && !watch) {
-          throw new ORPCError("BAD_REQUEST", {
-            message: "Add a schedule, webhook, GitHub, message, or change trigger",
-          });
-        }
-        if (watch && crons.length > 0) {
-          throw new ORPCError("BAD_REQUEST", {
-            message: "A change trigger checks on its own interval; remove the schedule",
-          });
-        }
+        const triggerIssue = routineTriggerIssue({
+          crons,
+          webhookEnabled,
+          githubEnabled,
+          messageProvider,
+          watch,
+        });
+        if (triggerIssue) throw new ORPCError("BAD_REQUEST", { message: triggerIssue.message });
         if (hasMixedOneShotSchedule(crons)) {
           throw new ORPCError("BAD_REQUEST", {
             message: "A one-time schedule can't be combined with other schedules.",
@@ -211,7 +220,9 @@ export function routinesRoutes(ctx: RouterContext) {
           });
         }
         const nextRunAt = !active
-          ? null
+          ? existing.resumeOnRestore && input.active === undefined
+            ? existing.nextRunAt
+            : null
           : watch
             ? // Turning a watch on, or changing it, checks right away; otherwise keep its rhythm.
               !existing.active || watchChanged || !existing.nextRunAt
@@ -234,6 +245,8 @@ export function routinesRoutes(ctx: RouterContext) {
             where: {
               id: existing.id,
               bot: { archivedAt: null },
+              completedOneShotAt: null,
+              ...(input.active === true ? routineConversationOpen : {}),
               // Optimistic fence: every write must match the snapshot it was
               // computed from, so concurrent edits never silently overwrite
               // each other's prompt/name/notify/any other field.
@@ -254,6 +267,7 @@ export function routinesRoutes(ctx: RouterContext) {
               crons: input.crons,
               timezone: input.timezone,
               active: input.active,
+              ...(input.active !== undefined ? { resumeOnRestore: false } : {}),
               notify: input.notify,
               webhookEnabled: input.webhookEnabled,
               githubEnabled: input.githubEnabled,
@@ -278,6 +292,7 @@ export function routinesRoutes(ctx: RouterContext) {
                     spaceId: context.actor.spaceId,
                     userId: context.actor.userId,
                     bot: { archivedAt: null },
+                    completedOneShotAt: null,
                   },
                   select: { id: true },
                 })
@@ -318,6 +333,7 @@ export function routinesRoutes(ctx: RouterContext) {
             id: input.routineId,
             spaceId: context.actor.spaceId,
             userId: context.actor.userId,
+            completedOneShotAt: null,
           },
         });
         if (!existing) throw new IsolationError();
@@ -345,7 +361,13 @@ export function routinesRoutes(ctx: RouterContext) {
             : null;
         const existing = await findExisting();
         if (existing) return { runId: existing.id };
-        const skillRecords = await agentSkills.listWithContent(context.actor);
+        const catalog = await listAgentSkillCatalog(deps.prisma, context.actor);
+        const skillRecords = await loadReferencedAgentSkills(
+          deps.prisma,
+          context.actor,
+          target.routine.prompt,
+          catalog,
+        );
         const prompt = expandSkillReferencesInPrompt(target.routine.prompt, skillRecords);
         let run: { id: string };
         try {

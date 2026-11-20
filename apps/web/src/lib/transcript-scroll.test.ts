@@ -1,9 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
+  longReplyScrollTop,
   transcriptCanSnapAfterFrame,
   transcriptIsNearEnd,
   transcriptMovedDown,
 } from "./transcript-scroll.js";
+
+describe("longReplyScrollTop", () => {
+  const viewport = { top: 20, height: 500, scrollTop: 400 };
+
+  it("positions the first line below the header even after the reply grows below it", () => {
+    expect(longReplyScrollTop(viewport, { top: -25, height: 700 }, 64)).toBe(291);
+    expect(longReplyScrollTop(viewport, { top: -25, height: 1_200 }, 64)).toBe(291);
+  });
+
+  it("keeps the normal tail-follow behavior for replies that fit", () => {
+    expect(longReplyScrollTop(viewport, { top: 40, height: 436 }, 64)).toBeUndefined();
+    expect(
+      longReplyScrollTop({ ...viewport, height: 0 }, { top: 40, height: 700 }, 64),
+    ).toBeUndefined();
+  });
+});
 
 describe("transcriptIsNearEnd", () => {
   it("follows only while the viewport is within 80px of the latest message", () => {

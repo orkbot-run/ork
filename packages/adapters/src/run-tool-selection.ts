@@ -13,6 +13,7 @@ import { builtinAgentTools } from "./builtin-tools.js";
 import { selectCloudAgentTools } from "./cloud-agent-tools-select.js";
 import { selectMemoryTools } from "./memory-tools.js";
 import { filterImageReturningComputerTools } from "./model-vision.js";
+import { MEETING_TOOL_NAMES } from "./run-tools-meetings.js";
 import { USER_COMPUTER_SCREEN_TOOLS } from "./run-tools-user-computer.js";
 import {
   filterBuiltinToolsForRun,
@@ -20,6 +21,7 @@ import {
   SCHEDULE_TOOL_NAMES,
 } from "./schedule-tools.js";
 import { SKILL_TOOL_NAMES } from "./skill-tools.js";
+import { USER_COMPUTER_LIST_TOOL } from "./user-computer-tools.js";
 
 /** Offered only to a user who connected a wallet. */
 const PURCHASE_TOOL_NAMES = new Set(["request_purchase", "purchase_status", "paid_request"]);
@@ -57,11 +59,13 @@ export function selectBuiltinToolsForRun(options: {
   /** Page browser tools need a graphical computer (Chrome), not model vision. */
   pageBrowserAllowed?: boolean;
   groupId: string | null;
+  hasOtherGroups?: boolean;
   trigger: string;
   semanticMemoryEnabled: boolean;
   /** The configured provider can forget individual facts. */
   semanticMemoryForgets?: boolean;
   cloudAgentEnabled?: boolean;
+  meetingsEnabled?: boolean;
   /** The run's user connected a payment wallet. */
   paymentWalletEnabled?: boolean;
   mediaImagesEnabled?: boolean;
@@ -76,6 +80,7 @@ export function selectBuiltinToolsForRun(options: {
   followUpFromUser?: boolean;
   /** The person who started this run has their desktop connected (see userComputerOwner). */
   userComputer?: boolean;
+  userComputerList?: boolean;
   /** That desktop can look at and drive its apps. */
   userComputerScreen?: boolean;
 }) {
@@ -100,11 +105,17 @@ export function selectBuiltinToolsForRun(options: {
   ).filter(
     (tool) =>
       !disabled.has(tool.name) &&
+      (!MEETING_TOOL_NAMES.has(tool.name) ||
+        (options.meetingsEnabled &&
+          ownerStartedRun &&
+          !options.groupId &&
+          !options.messagingChannelRun)) &&
       backgroundHelperToolAllowed(options.trigger, tool.name) &&
       (options.trigger !== "created" || CREATED_RUN_TOOL_NAMES.has(tool.name)) &&
       (!FLEET_TOOL_NAMES_SET.has(tool.name) ||
         (Boolean(options.fleetManagement) && ownerStartedRun)) &&
       (ownerStartedRun || (tool.name !== "update_preferences" && tool.name !== "feedback")) &&
+      (tool.name !== "post_to_group" || (options.hasOtherGroups && !options.messagingChannelRun)) &&
       (options.paymentWalletEnabled || !PURCHASE_TOOL_NAMES.has(tool.name)) &&
       (options.mediaImagesEnabled || tool.name !== "generate_image") &&
       (options.mediaVideoEnabled || tool.name !== "generate_video") &&
@@ -115,11 +126,13 @@ export function selectBuiltinToolsForRun(options: {
           "message_user",
           "message_bot",
           "handoff_to_bot",
+          "post_to_group",
           "message_agent",
           "generate_image",
           "generate_video",
         ].includes(tool.name)) &&
       (options.voiceCall || tool.name !== "end_call") &&
+      (options.userComputerList || tool.name !== USER_COMPUTER_LIST_TOOL) &&
       (options.userComputer || tool.name !== "user_computer_shell") &&
       ((options.userComputer && options.userComputerScreen) ||
         !USER_COMPUTER_SCREEN_TOOLS.has(tool.name)) &&

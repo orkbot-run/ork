@@ -338,6 +338,89 @@ describe("mounted Kubernetes homes", () => {
     expect(importWorkspace).toHaveBeenCalledOnce();
     expect(exportWorkspace).toHaveBeenCalledOnce();
   });
+
+  it.each([true, false])(
+    "handles a Team run checkpoint with peers while home mounted is %s",
+    async (mounted) => {
+      const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-mounted-home-"));
+      roots.push(root);
+      const home = new LocalAgentHomeStore(root);
+      await home.writeFile("team-1", "live.txt", "already on the volume", context);
+      const { sandbox, exportWorkspace } = kubernetesSandbox(true, mounted);
+      const revise = vi.spyOn(home, "revise");
+      const record = { id: "team-1", homeKey: "team-1", scope: "team", spaceId: "workspace" };
+      const updateMany = vi.fn(async ({ data }: { data: { state?: string } }) => ({
+        count: data.state === "suspending" ? 0 : 1,
+      }));
+      const prisma = {
+        computer: {
+          updateMany,
+          findFirst: async () => ({ state: "running", restorePending: false, screenGeneration: 0 }),
+        },
+      } as unknown as PrismaClient;
+
+      const revision = await checkpointRunComputerWorkspace(
+        { sandbox, home, prisma },
+        record,
+        computer,
+        { ...context, screenLeaseId: "run-1:1" },
+      );
+
+      expect(sandbox.hasMountedHome).toHaveBeenCalledOnce();
+      expect(exportWorkspace).not.toHaveBeenCalled();
+      expect(await home.readFile("team-1", "live.txt", context)).toBe("already on the volume");
+      if (mounted) {
+        expect(revision).toMatch(/^rev-/);
+        expect(revise).toHaveBeenCalledOnce();
+        expect(updateMany).toHaveBeenCalledExactlyOnceWith({
+          where: { id: "team-1" },
+          data: { homeRevision: revision, homeRevisionAt: expect.any(Date) },
+        });
+      } else {
+        expect(revision).toBeUndefined();
+        expect(revise).not.toHaveBeenCalled();
+        expect(updateMany).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ state: "suspending" }),
+          }),
+        );
+      }
+    },
+  );
+
+  it("rechecks the mount before copying after taking an exclusive checkpoint claim", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-mounted-home-"));
+    roots.push(root);
+    const home = new LocalAgentHomeStore(root);
+    const { sandbox, exportWorkspace } = kubernetesSandbox(true);
+    vi.mocked(sandbox.hasMountedHome!).mockResolvedValueOnce(false);
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      computer: {
+        updateMany,
+        findFirst: async () => ({
+          state: "suspending",
+          restorePending: false,
+          screenGeneration: 0,
+        }),
+      },
+    } as unknown as PrismaClient;
+
+    await expect(
+      checkpointRunComputerWorkspace(
+        { sandbox, home, prisma },
+        { id: "team-1", homeKey: "team-1", scope: "team", spaceId: "workspace" },
+        computer,
+        context,
+      ),
+    ).resolves.toMatch(/^rev-/);
+    expect(sandbox.hasMountedHome).toHaveBeenCalledTimes(2);
+    expect(exportWorkspace).not.toHaveBeenCalled();
+    expect(updateMany).toHaveBeenLastCalledWith({
+      where: { id: "team-1", state: "suspending", providerRef: "pod" },
+      data: { state: "running" },
+    });
+  });
 });
 
 describe("Team run checkpoints", () => {

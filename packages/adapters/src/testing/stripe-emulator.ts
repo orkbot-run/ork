@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved; billing recovery changes follow LICENSE.md.
+
 /** In-process Stripe REST substitute covering exactly the endpoints the billing adapter uses. */
 export class StripeEmulator {
   readonly secretKey = "sk_test_fake";
@@ -13,6 +17,7 @@ export class StripeEmulator {
   readonly subscriptions: StripeSubscriptionRecord[] = [];
   /** Customer balance in cents; negative is credit owed to the customer, as in Stripe. */
   readonly balances = new Map<string, number>();
+  readonly invoices: StripeInvoiceRecord[] = [];
   readonly balanceTransactions: Array<{
     id: string;
     customer: string;
@@ -112,7 +117,79 @@ export class StripeEmulator {
         ],
       },
     });
+    const subscription = this.subscriptions.at(-1)!;
+    if (subscription.status === "trialing")
+      this.invoiceSubscription(customerId, { amountCents: 0 });
+    else if (subscription.status === "active") this.invoiceSubscription(customerId);
+    else if (!isTerminal(subscription.status)) {
+      const previous = subscription.status;
+      this.failSubscriptionPayment(customerId);
+      subscription.status = previous;
+    }
     return `sub_fake_${n}`;
+  }
+
+  invoiceSubscription(
+    customerId: string,
+    options: {
+      amountCents?: number;
+      payment?: "card" | "balance" | "declined";
+    } = {},
+  ): string {
+    const subscription = this.forCustomer(customerId)[0];
+    if (!subscription) throw new Error("No subscription");
+    const total = options.amountCents ?? 1000 * subscription.items.data[0]!.quantity;
+    const id = `in_fake_${++this.sequence}`;
+    this.invoices.push({
+      id,
+      customer: customerId,
+      status: "open",
+      total,
+      amount_paid: 0,
+      amount_due: total,
+      amount_remaining: total,
+      starting_balance: 0,
+      ending_balance: 0,
+      parent: { subscription_details: { subscription: subscription.id } },
+      status_transitions: { paid_at: null },
+    });
+    if (options.payment === "declined") subscription.status = "past_due";
+    else this.settleSubscriptionInvoice(customerId, id, options.payment);
+    return id;
+  }
+
+  failSubscriptionPayment(customerId: string, amountCents?: number) {
+    return this.invoiceSubscription(customerId, { amountCents, payment: "declined" });
+  }
+
+  settleSubscriptionInvoice(
+    customerId: string,
+    invoiceId?: string,
+    payment: "card" | "balance" = "card",
+  ) {
+    const invoice = this.invoices.findLast(
+      (entry) =>
+        entry.customer === customerId &&
+        (invoiceId ? entry.id === invoiceId : entry.status === "open"),
+    );
+    if (!invoice) throw new Error("No subscription invoice");
+    if (invoice.status === "paid") return invoice.id;
+    if (payment === "balance") {
+      const balance = this.balances.get(customerId) ?? 0;
+      if (-balance < invoice.total) throw new Error("Insufficient invoice balance");
+      invoice.starting_balance = balance;
+      invoice.ending_balance = balance + invoice.total;
+      this.balances.set(customerId, invoice.ending_balance);
+      invoice.amount_due = 0;
+    } else invoice.amount_paid = invoice.total;
+    invoice.amount_remaining = 0;
+    invoice.status = "paid";
+    invoice.status_transitions.paid_at = Math.floor(this.now() / 1000);
+    const subscription = this.subscriptions.find(
+      (entry) => entry.id === invoice.parent?.subscription_details.subscription,
+    );
+    if (subscription && invoice.total > 0) subscription.status = "active";
+    return invoice.id;
   }
 
   /** Deleting cancels the customer's subscriptions and refuses later requests that name it. */
@@ -152,7 +229,8 @@ export class StripeEmulator {
     const namesCustomer =
       path === "/v1/checkout/sessions" ||
       path === "/v1/billing_portal/sessions" ||
-      path === "/v1/subscriptions";
+      path === "/v1/subscriptions" ||
+      path === "/v1/invoices";
     if (namesCustomer && this.customers.get(customer)?.deleted !== false) {
       return stripeError({
         status: 400,
@@ -234,6 +312,23 @@ export class StripeEmulator {
         );
       return Response.json({ object: "list", has_more: start + limit < matching.length, data });
     }
+    if (method === "GET" && path === "/v1/invoices") {
+      const matching = this.invoices
+        .filter(
+          (invoice) =>
+            invoice.customer === customer && (!form.status || invoice.status === form.status),
+        )
+        .toReversed();
+      const start = form.starting_after
+        ? matching.findIndex((entry) => entry.id === form.starting_after) + 1
+        : 0;
+      const limit = Math.min(Number(form.limit ?? 10), this.pageSize);
+      return Response.json({
+        object: "list",
+        has_more: start + limit < matching.length,
+        data: matching.slice(start, start + limit),
+      });
+    }
     const balance = /^\/v1\/customers\/([^/]+)\/balance_transactions$/.exec(path);
     if (method === "GET" && balance) {
       const id = decodeURIComponent(balance[1]!);
@@ -289,6 +384,7 @@ export class StripeEmulator {
       if (!found) return stripeError({ status: 404, message: "No such subscription" });
       if (isTerminal(found.status)) return canceledSubscriptionError();
       const nowSeconds = Math.floor(this.now() / 1000);
+      this.invoiceSubscription(found.customer);
       found.status = "active";
       found.trial_end = nowSeconds;
       for (const entry of found.items.data) {
@@ -313,6 +409,21 @@ export class StripeEmulator {
       .filter((s) => s.customer === customerId)
       .sort((a, b) => b.created - a.created);
   }
+}
+
+export interface StripeInvoiceRecord {
+  id: string;
+  customer: string;
+  status: "open" | "paid";
+  total: number;
+  amount_paid: number;
+  amount_due: number;
+  amount_remaining: number;
+  starting_balance: number;
+  ending_balance: number | null;
+  parent: { subscription_details: { subscription: string } } | null;
+  subscription?: string | null;
+  status_transitions: { paid_at: number | null };
 }
 
 export interface StripeCheckoutSession {

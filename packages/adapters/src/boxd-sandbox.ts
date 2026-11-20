@@ -176,6 +176,7 @@ export class BoxdSandboxProvider implements SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      recordCreated?: (computer: Pick<ComputerRef, "kind" | "providerRef">) => Promise<void>;
     },
     context: AdapterContext,
   ): Promise<ComputerRef> {
@@ -211,6 +212,12 @@ export class BoxdSandboxProvider implements SandboxProvider {
       // A lost reply can hide a machine created under this name.
       await this.client.machines.delete(name).catch(() => undefined);
       throw boxdStartupError(providerError(error));
+    }
+    try {
+      await request.recordCreated?.({ kind: "boxd", providerRef: machine.id });
+    } catch (error) {
+      await this.destroy(this.ref(machine.id, request.botId, true), context).catch(() => undefined);
+      throw error;
     }
     if (context.signal.aborted) {
       await this.destroy(this.ref(machine.id, request.botId, true), context);

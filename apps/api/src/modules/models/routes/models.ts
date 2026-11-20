@@ -6,11 +6,15 @@
 import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import {
   findWorkspaceModelPolicy,
+  isModelEndpointAllowed,
+  isModelProviderAllowed,
   listPiCatalog,
   ModelSignInError,
   modelConnectionMetadata,
   modelCredentialDto,
+  modelSupportsZeroDataRetention,
   oauthCredentialEmail,
+  parseModelSecret,
   prepareStoredModelAuth,
   probeCatalogProviderModels,
   probeOpenAiCompatibleModels,
@@ -56,6 +60,8 @@ import { withSerializableRetry } from "#modules/platform/serializable-retry";
 import { installationCredentials } from "../installation-catalog.js";
 import { firstModelConnectAnalytics } from "../model-connect-analytics.js";
 import {
+  assertAllowedModelEndpoint,
+  assertAllowedModelProvider,
   modelConnectionTarget,
   persistModelCredential,
   prepareAllowedThinkingLevels,
@@ -117,7 +123,9 @@ export function modelsRoutes(ctx: RouterContext) {
           const primary = choices[0];
           const connection =
             primary &&
-            (await deps.serverAI.list(managed)).find((row) => row.id === primary.connectionId);
+            (await deps.serverAI.list(managed)).find(
+              (row) => row.id === primary.connectionId && !row.blockedByPolicy,
+            );
           return {
             managed: true,
             personalModelsAllowed,
@@ -132,11 +140,40 @@ export function modelsRoutes(ctx: RouterContext) {
         const { organizationId, owner } = await workspace(context.actor);
         const policy = await deps.prisma.workspaceModelPolicy.findUnique({
           where: { organizationId },
-          select: { provider: true, modelId: true },
+          select: { provider: true, modelId: true, secretRef: true, secretId: true },
         });
-        return { canManage: owner, policy };
+        if (!policy) return { canManage: owner, policy: null };
+        const { provider, modelId } = policy;
+        let blocked = !isModelProviderAllowed(provider);
+        const checkEndpoint = !isModelEndpointAllowed(provider);
+        let zeroDataRetention: boolean | undefined;
+        if (!blocked && (checkEndpoint || modelSupportsZeroDataRetention(provider))) {
+          try {
+            const secret = parseModelSecret(
+              await deps.secrets.load(policy.secretRef, policy.secretId),
+            );
+            blocked = !isModelEndpointAllowed(
+              provider,
+              secret.kind === "openai_compatible" ? secret.baseUrl : undefined,
+            );
+            if (secret.kind === "api_key") zeroDataRetention = secret.zeroDataRetention;
+          } catch {
+            blocked = checkEndpoint;
+          }
+        }
+        return {
+          canManage: owner,
+          policy: {
+            provider,
+            modelId,
+            ...(blocked ? { blockedByPolicy: true } : {}),
+            ...(zeroDataRetention !== undefined ? { zeroDataRetention } : {}),
+          },
+        };
       }),
       setWorkspacePolicy: authed.models.setWorkspacePolicy.handler(async ({ context, input }) => {
+        assertAllowedModelProvider(input.provider);
+        if (input.baseUrl !== undefined) assertAllowedModelEndpoint(input.provider, input.baseUrl);
         if (await deps.serverAIModels?.actor(context.actor))
           throw new ORPCError("FORBIDDEN", { message: "Manage AI connections on this server." });
         const { organizationId, owner } = await workspace(context.actor);
@@ -145,15 +182,38 @@ export function modelsRoutes(ctx: RouterContext) {
           throw new ORPCError("BAD_REQUEST", {
             message: "A model and a new API key are required.",
           });
-        // Always create a new connection: never read or reuse a member's personal key.
+        // A workspace policy owns its credential independently of the member's personal key.
+        const preservePrivacy =
+          modelSupportsZeroDataRetention(input.provider) && input.zeroDataRetention === undefined;
+        const priorPolicy = preservePrivacy
+          ? await deps.prisma.workspaceModelPolicy.findUnique({
+              where: { organizationId },
+              select: { provider: true, secretId: true, secretRef: true },
+            })
+          : null;
+        let zeroDataRetention = input.zeroDataRetention;
+        if (priorPolicy?.provider === input.provider) {
+          try {
+            const prior = parseModelSecret(
+              await deps.secrets.load(priorPolicy.secretRef, priorPolicy.secretId),
+            );
+            if (prior.kind !== "api_key") throw new Error("Invalid workspace key");
+            zeroDataRetention = prior.zeroDataRetention;
+          } catch {
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Choose whether to require Zero Data Retention before replacing this key.",
+            });
+          }
+        }
         let plaintext: string;
         try {
           ({ plaintext } = await ctx.verifyModelConnection(
             context.actor,
-            { ...input, credentialId: null },
+            { ...input, zeroDataRetention, credentialId: null },
             context.signal,
           ));
-        } catch {
+        } catch (error) {
+          if (error instanceof ORPCError && error.code === "FORBIDDEN") throw error;
           // Provider responses can echo request headers or keys; never forward them.
           throw new ORPCError("BAD_REQUEST", {
             message: "Could not verify the model connection. Check its settings and API key.",
@@ -181,6 +241,14 @@ export function modelsRoutes(ctx: RouterContext) {
                   where: { organizationId },
                   select: { secretId: true, secretRef: true },
                 });
+                if (
+                  preservePrivacy &&
+                  (old?.secretId !== priorPolicy?.secretId ||
+                    old?.secretRef !== priorPolicy?.secretRef)
+                )
+                  throw new ORPCError("CONFLICT", {
+                    message: "The workspace model changed. Refresh and try again.",
+                  });
                 const data = {
                   provider: input.provider,
                   modelId: input.modelId!.trim(),
@@ -245,7 +313,11 @@ export function modelsRoutes(ctx: RouterContext) {
         const secrets = rows.length
           ? await deps.prisma.secret.findMany({
               where: {
-                id: { in: rows.map((row) => row.secretId) },
+                id: {
+                  in: rows
+                    .filter((row) => isModelProviderAllowed(row.provider))
+                    .map((row) => row.secretId),
+                },
                 userId: context.actor.userId,
                 spaceId: null,
               },
@@ -267,6 +339,15 @@ export function modelsRoutes(ctx: RouterContext) {
               defaultModel: preference?.modelId ?? null,
               thinkingLevel: preference?.thinkingLevel ?? null,
             };
+            const blocked = () => ({
+              id: row.id,
+              provider: row.provider,
+              label: row.label,
+              hasKey: true,
+              isDefault: false,
+              blockedByPolicy: true as const,
+            });
+            if (!isModelProviderAllowed(row.provider)) return blocked();
             const runsMain = main?.credential && main.credential.id === row.id;
             const dto = (plaintext?: string) => {
               const listed = modelCredentialDto(own, plaintext);
@@ -300,7 +381,16 @@ export function modelsRoutes(ctx: RouterContext) {
             const ciphertext = ciphertextById.get(row.secretId);
             if (!ciphertext) return dto();
             try {
-              return dto(await deps.secrets.load(ciphertext, row.secretId));
+              const plaintext = await deps.secrets.load(ciphertext, row.secretId);
+              const parsed = parseModelSecret(plaintext);
+              if (
+                !isModelEndpointAllowed(
+                  row.provider,
+                  parsed.kind === "openai_compatible" ? parsed.baseUrl : undefined,
+                )
+              )
+                return blocked();
+              return dto(plaintext);
             } catch (error) {
               if (error instanceof SecretStoreUnavailableError)
                 throw new ORPCError("SERVICE_UNAVAILABLE", { cause: error });
@@ -344,9 +434,9 @@ export function modelsRoutes(ctx: RouterContext) {
         );
       }),
       backups: authed.models.backups.handler(async ({ context }) =>
-        (await appliedModelRole(deps.prisma, context.actor, "main")).backups.map(
-          ({ provider, modelId }) => ({ provider, modelId }),
-        ),
+        (await appliedModelRole(deps.prisma, context.actor, "main")).backups
+          .filter((choice) => isModelProviderAllowed(choice.provider))
+          .map(({ provider, modelId }) => ({ provider, modelId })),
       ),
       setBackups: authed.models.setBackups.handler(async ({ context, input }) => {
         await requirePersonalModelsAllowed(context.actor);
@@ -375,6 +465,7 @@ export function modelsRoutes(ctx: RouterContext) {
       probeOpenAiCompatible: authed.models.probeOpenAiCompatible.handler(
         async ({ context, input }) => {
           await requireUnmanagedWorkspace(context.actor);
+          assertAllowedModelEndpoint(OPENAI_COMPATIBLE_PROVIDER_ID, input.baseUrl);
           let apiKey = input.apiKey;
           let headers = input.headers;
           if (!apiKey?.trim() || headers === undefined) {
@@ -460,7 +551,9 @@ export function modelsRoutes(ctx: RouterContext) {
         },
       ),
       probeCatalog: authed.models.probeCatalog.handler(async ({ context, input }) => {
+        assertAllowedModelProvider(input.provider);
         await requireUnmanagedWorkspace(context.actor);
+        assertAllowedModelProvider(input.provider);
         try {
           const models = await probeCatalogProviderModels(
             { provider: input.provider, apiKey: input.apiKey },
@@ -478,6 +571,7 @@ export function modelsRoutes(ctx: RouterContext) {
         }
       }),
       beginOAuth: authed.models.beginOAuth.handler(async ({ context, input }) => {
+        assertAllowedModelProvider(input.provider);
         await requirePersonalModelsAllowed(context.actor);
         // An older app's sign-in renews the provider's newest connection, bound now so a
         // disconnect of that connection retires it and it never lands on another one.
@@ -538,6 +632,7 @@ export function modelsRoutes(ctx: RouterContext) {
         const record = await firstModelConnectAnalytics(deps, context.actor, "oauth");
         const result = await deps.oauthLogins
           .finish(input.loginId, context.actor, async (login) => {
+            assertAllowedModelProvider(login.provider);
             provider = login.provider;
             const target = await modelConnectionTarget(
               deps,
@@ -585,6 +680,7 @@ export function modelsRoutes(ctx: RouterContext) {
         return { ok: true as const };
       }),
       setDefault: authed.models.setDefault.handler(async ({ context, input }) => {
+        assertAllowedModelProvider(input.provider);
         await requirePersonalModelsAllowed(context.actor);
         const modelId = usableModelId(input.modelId);
         if (!modelId) throw new ORPCError("BAD_REQUEST", { message: "Choose a model" });

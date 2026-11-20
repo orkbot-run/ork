@@ -16,6 +16,16 @@ export function transcriptMovedDown(previousScrollTop: number | null, scrollTop:
   return previousScrollTop !== null && scrollTop >= previousScrollTop;
 }
 
+/** Where to pin an answer that extends past the part of the viewport below the header. */
+export function longReplyScrollTop(
+  viewport: { top: number; height: number; scrollTop: number },
+  reply: { top: number; height: number },
+  topInset: number,
+): number | undefined {
+  if (viewport.height <= topInset || reply.height <= viewport.height - topInset) return;
+  return Math.max(0, viewport.scrollTop + reply.top - viewport.top - topInset);
+}
+
 /**
  * The first message row at or below the scroll position: the anchor a prepend
  * must hold steady. Content appended at the bottom moves no row, so anchoring

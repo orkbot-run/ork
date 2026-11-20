@@ -38,15 +38,17 @@ let editor: ReturnType<typeof useRoutineEditor>;
 let finishUpdate: (saved: Routine) => void;
 const update = vi.fn();
 const rotateWebhookSecret = vi.fn();
+const getWebhookConfig = vi.fn();
 let activeBot: Bot;
 let serverOrigin: string | undefined;
 
 function Harness() {
   editor = useRoutineEditor({
     serverOrigin,
-    rpc: { routines: { update }, bots: { rotateWebhookSecret } } as unknown as ReturnType<
-      typeof createSpaceRpc
-    >,
+    rpc: {
+      routines: { update },
+      bots: { rotateWebhookSecret, getWebhookConfig },
+    } as unknown as ReturnType<typeof createSpaceRpc>,
     active: activeBot,
     activeBotId: { current: activeBot.id },
     timezone: "UTC",
@@ -171,4 +173,48 @@ it("keeps each bot's revealed secret when rotations overlap", async () => {
   activeBot = { id: "bot-1", webhookConfigured: true } as Bot;
   act(() => root.render(<Harness />));
   expect(editor.editorProps!.webhook.secret).toBe("secret-1");
+});
+
+it("reveals an existing webhook key without rotating it", async () => {
+  activeBot = { ...activeBot, webhookConfigured: true };
+  act(() => root.render(<Harness />));
+  getWebhookConfig.mockResolvedValue({ secret: "existing-key" });
+  await act(async () => {
+    await editor.editorProps!.onRevealWebhook!();
+  });
+  expect(getWebhookConfig).toHaveBeenCalledWith({ botId: "bot-1" });
+  expect(rotateWebhookSecret).not.toHaveBeenCalled();
+  expect(editor.editorProps!.webhook.secret).toBe("existing-key");
+});
+
+it("discards a reveal response after leaving the editor", async () => {
+  let finish!: (result: { secret: string }) => void;
+  getWebhookConfig.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  let request!: Promise<void>;
+  act(() => {
+    request = editor.editorProps!.onRevealWebhook!();
+  });
+  act(() => editor.leaveRoutine());
+  await act(async () => {
+    finish({ secret: "stale" });
+    await request;
+  });
+  expect(editor.editorProps!.webhook.secret).toBeNull();
+});
+
+it("clears a revealed key after a minute", async () => {
+  vi.useFakeTimers();
+  getWebhookConfig.mockResolvedValue({ secret: "temporary-key" });
+  await act(async () => {
+    await editor.editorProps!.onRevealWebhook!();
+  });
+  expect(editor.editorProps!.webhook.secret).toBe("temporary-key");
+  act(() => vi.advanceTimersByTime(60_000));
+  expect(editor.editorProps!.webhook.secret).toBeNull();
+  vi.useRealTimers();
 });

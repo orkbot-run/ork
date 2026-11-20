@@ -5,6 +5,7 @@ import type { AgentRunModel } from "@orkbot/adapter-kit";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
 import { cloudflareProviderEnv } from "./cloudflare-ai-gateway.js";
 import { modelConnectionRouting } from "./model-connection-metadata.js";
+import { assertModelEndpointAllowed } from "./model-provider-policy.js";
 import { assertAllowedOpenAiCompatibleUrl } from "./openai-compatible-url.js";
 import type { StoredModelSecret } from "./pi-oauth.js";
 
@@ -15,6 +16,10 @@ export function modelFromAIConnection(
   apiKey: string,
   options: { allowPrivateEndpoint?: boolean } = {},
 ): AgentRunModel {
+  assertModelEndpointAllowed(
+    choice.provider,
+    secret.kind === "openai_compatible" ? secret.baseUrl : undefined,
+  );
   if (!apiKey.trim() && secret.kind !== "openai_compatible")
     throw new Error("AI connection is unavailable");
   const model: AgentRunModel = {
@@ -50,6 +55,7 @@ export function modelFromAIConnection(
       const routing = modelConnectionRouting({ provider: choice.provider }, secret);
       cloudflareProviderEnv({ provider: choice.provider, ...routing });
       Object.assign(model, {
+        zeroDataRetention: secret.zeroDataRetention,
         routing: routing?.routing,
         accountId: routing?.accountId,
         gatewayId: routing?.gatewayId,

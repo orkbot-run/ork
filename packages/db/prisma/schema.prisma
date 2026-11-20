@@ -88,6 +88,7 @@ model User {
   createdTickets              Ticket[]                     @relation("TicketCreatorUser")
   ticketComments              TicketComment[]              @relation("TicketCommentAuthorUser")
   pushToken                   PushToken?
+  pushRegistrations           PushRegistration[]
   callPushDevices             CallPushDevice[]
   trustedLinkSites            TrustedLinkSite[]
   feedbackReports             FeedbackReport[]
@@ -95,6 +96,8 @@ model User {
   signupSurvey                SignupSurvey?
   computerRuns                ComputerRun[]
   devices                     UserDevice[]
+
+  meetingSessions MeetingSession[]
 
   @@unique([email])
   @@map("user")
@@ -133,7 +136,7 @@ model Session {
   @@map("session")
 }
 
-/// One current device registration per account, matching the notification API contract.
+/// Legacy rolling-release mirror; remove only after the old API and workers have stopped.
 /// No session FK: password changes delete a session before the replacement is created.
 model PushToken {
   userId String @id
@@ -146,6 +149,21 @@ model PushToken {
   updatedAt DateTime @updatedAt
 
   @@map("push_tokens")
+}
+
+/// Message push registrations per active session/device. No session FK: password
+/// changes delete a session before its replacement is created.
+model PushRegistration {
+  tokenDigest String @id
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ciphertext String
+  sessionId String
+  presentation String?
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, sessionId])
+  @@map("push_registrations")
 }
 
 /// Encrypted call registrations per installation. Legacy message push remains compatible.
@@ -326,8 +344,9 @@ model BillingAccount {
   cancellationReason  String?
   cancellationComment String?
   subscribedAt        DateTime?
-  /// When a subscription was first seen active, so a trial that never paid is not a paid plan.
+  /// Legacy observation of an active subscription, retained without inferring a payment.
   paidAt              DateTime?
+  firstPaidInvoiceAt  DateTime?
   syncedAt            DateTime?
   checkoutLeaseId     String?
   checkoutLeaseExpiresAt DateTime?
@@ -515,6 +534,9 @@ model Space {
   agentSkillSpaces            AgentSkillSpace[]
   mcpServerSpaces             McpServerSpace[]
   capabilityInstallSpaces     CapabilityInstallSpace[]
+
+  meetingSessions MeetingSession[]
+  meetingDailyUsage MeetingDailyUsage[]
 
   @@unique([id, organizationId])
   @@index([admissionWorkspaceId])
@@ -843,6 +865,8 @@ model Bot {
   ticketComments    TicketComment[]   @relation("TicketCommentAuthorBot")
 
   externalConversations ExternalConversation[]
+
+  meetingSessions MeetingSession[]
 
   @@unique([spaceId, spawnKey])
   @@index([spaceId, userId, archivedAt, pinned, updatedAt])
@@ -1301,6 +1325,10 @@ model Routine {
   watchState     Json?
   lastRunAt      DateTime?
   nextRunAt      DateTime?
+  /// Archiving pauses an active routine and retains its pending occurrence for restore.
+  resumeOnRestore Boolean  @default(false)
+  /// Successful one-shot routines leave active views while their run history retains its id.
+  completedOneShotAt DateTime?
   /// Runs in a row the model provider refused for the account; each one spaces out the schedule.
   accountFailures Int      @default(0)
   createdAt      DateTime  @default(now())
@@ -1310,6 +1338,51 @@ model Routine {
   @@index([active, nextRunAt])
   @@index([spaceId, botId])
   @@map("routines")
+}
+
+model MeetingSession {
+  id                 String   @id @default(uuid())
+  spaceId            String
+  userId             String
+  botId              String
+  space              Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bot                Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  title              String
+  url                String?
+  platform           String
+  status             String
+  error              String?
+  scheduledAt        DateTime?
+  consentedAt        DateTime
+  startsAt           DateTime
+  deadlineAt         DateTime
+  nextCheckAt        DateTime?
+  joinAttemptedAt    DateTime?
+  leaveRequestedAt   DateTime?
+  leaveSentAt        DateTime?
+  deleteRequestedAt  DateTime?
+  mediaDeletedAt     DateTime?
+  leaseToken         String?
+  leaseUntil         DateTime?
+  providerId         String?  @unique
+  transcript         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([spaceId, userId, botId, createdAt])
+  @@index([nextCheckAt])
+  @@map("meeting_sessions")
+}
+
+model MeetingDailyUsage {
+  spaceId String
+  space   Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  day     DateTime @db.Date
+  used    Int
+
+  @@id([spaceId, day])
+  @@map("meeting_daily_usage")
 }
 
 model ScratchpadItem {
@@ -1543,6 +1616,7 @@ model Computer {
   /// The machine at `providerRef` came from a start whose restore never finished, so it holds no
   /// full copy of the saved home: nothing is saved from it, and the next start restores it.
   restorePending          Boolean                  @default(false)
+  bootHeartbeatAt         DateTime?
   /// Object storage only: random id naming the home's objects, its data key (wrapped by the
   /// space key) and the revision stored there. Deleting the computer deletes the key.
   homeStorageId           String?                  @unique
@@ -1578,7 +1652,30 @@ model Computer {
   homeDeletionNotice      HomeDeletionNotice?
 
   @@index([spaceId, scope])
+  @@index([kind, providerRef], map: "computers_kind_provider_ref_idx")
   @@map("computers")
+}
+
+/// An allocated machine that has yet to be attached to a computer. Survives computer deletion.
+model ComputerOrphanCleanup {
+  kind               String
+  providerRef        String
+  connection         String
+  providerInstanceId String    @default("")
+  computerId         String
+  homeKey            String
+  spaceId            String
+  userId             String
+  attempts           Int       @default(0)
+  nextAttemptAt      DateTime  @default(now())
+  leaseId            String?
+  leaseExpiresAt     DateTime?
+  failedAt           DateTime?
+
+  @@id([kind, providerRef, connection, providerInstanceId])
+  @@index([computerId, leaseExpiresAt], map: "computer_orphan_cleanup_computer_lease_idx")
+  @@index([failedAt, nextAttemptAt], map: "computer_orphan_cleanup_due_idx")
+  @@map("computer_orphan_cleanup")
 }
 
 /// Hosted billing only: a stopped computer whose saved home is due for deletion after its plan
@@ -1761,6 +1858,7 @@ model UsageRecord {
   createdAt          DateTime @default(now())
 
   @@index([spaceId, userId, createdAt])
+  @@index([spaceId, userId, botId, createdAt])
   @@map("usage_records")
 }
 

@@ -1,7 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited settings routing remains Apache-2.0. The audit route follows LICENSE.md.
+
 const SETTINGS_SECTIONS = [
   "general",
   "organization",
   "organization-models",
+  "organization-activity",
   "space",
   "models",
   "memory",

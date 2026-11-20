@@ -15,6 +15,7 @@ import {
   NodeTracerProvider,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-node";
+import type * as Core from "@orkbot/core";
 import { runWithLogContext } from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MISSING_TOOL_FINAL_RESPONSE_ERROR, PiAgentRuntime } from "./pi-runtime.js";
@@ -26,6 +27,15 @@ import {
 } from "./pi-telemetry.js";
 import { otelPiContext } from "./pi-telemetry-otel.js";
 import { observedPiStream } from "./pi-usage.js";
+
+// Telemetry integration uses real HTTP and Pi; retry backoff need not consume wall time.
+const retryDelay = vi.hoisted(() =>
+  vi.fn(async (_delayMs: number, signal?: AbortSignal) => signal?.throwIfAborted()),
+);
+vi.mock("@orkbot/core", async (original) => ({
+  ...(await original<typeof Core>()),
+  abortableDelay: retryDelay,
+}));
 
 const factory = vi.hoisted(() => vi.fn());
 vi.mock("./pi-telemetry-otel.js", async (original) => ({
@@ -49,6 +59,7 @@ afterEach(async () => {
   await shutdownPiTelemetry();
   vi.unstubAllEnvs();
   factory.mockReset();
+  retryDelay.mockClear();
   vi.restoreAllMocks();
 });
 
@@ -382,6 +393,13 @@ describe("Pi OpenTelemetry", () => {
       await expect(consume()).rejects.toThrow(
         failure === "provider" ? "private provider failure" : MISSING_TOOL_FINAL_RESPONSE_ERROR,
       );
+      if (failure === "missing final answer") {
+        // The first empty turn retries twice; three explicit recovery follow-ups run once each.
+        expect(calls).toBe(7);
+        expect(retryDelay.mock.calls.map(([delay]) => delay)).toEqual([2_000, 8_000]);
+      } else {
+        expect(retryDelay).not.toHaveBeenCalled();
+      }
       await provider.forceFlush();
       const run = output.getFinishedSpans().find((span) => span.name === "orkbot.agent.run")!;
       expect(run.status.code).toBe(SpanStatusCode.ERROR);

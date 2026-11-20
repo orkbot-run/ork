@@ -46,6 +46,14 @@ import {
   isIdleOwnComputerTakeover,
   revokeScreenControl,
 } from "./computer-control.js";
+import {
+  COMPUTER_BOOT_STALE_MS,
+  finishOrphanRegistration,
+  orphanCleanupInProgress,
+  recordUncommittedComputer,
+  scheduleFailedComputerCleanup,
+  tracksNewComputers,
+} from "./computer-orphan-cleanup.js";
 import { toComputerRef } from "./computer-support.js";
 import {
   checkpointComputerWorkspace,
@@ -76,7 +84,7 @@ const RUNNING_CHECK_RETRY_MS = [250, 750];
  * lower bound before reclaim/Reset may treat a lease-less claim as abandoned. Slow dedicated
  * boots past this window stay protected while their run worker lease still heartbeats.
  */
-const BOOT_CLAIM_STALE_MS = EXECUTION_LEASE_MS;
+const BOOT_CLAIM_STALE_MS = COMPUTER_BOOT_STALE_MS;
 
 /**
  * Booting and suspending claims newer than an execution-lease TTL are live.
@@ -192,11 +200,22 @@ export async function provisionComputer(
   const started = performance.now();
   const log = getLogger().child({ "computer.id": computerId, "run.id": context.runId });
   let existing = await deps.prisma.computer.findUniqueOrThrow({ where: { id: computerId } });
+  let loggedBusy: ComputerBusyError | undefined;
+  const busy = (reason: string) => {
+    log.warn("computer.busy", {
+      reason,
+      lastObservedState: existing.state,
+      "bot.id": context.botId,
+      durationMs: Math.round(performance.now() - started),
+    });
+    loggedBusy = new ComputerBusyError();
+    return loggedBusy;
+  };
   if (existing.state === "quarantined")
     throw new Error("Computer requires recovery after an unconfirmed stop");
   await deps.prisma.$transaction((tx) => lockSpaceForWork(tx, existing.spaceId));
   if (existing.maintenanceId && existing.maintenanceId !== context.operationId)
-    throw new ComputerBusyError();
+    throw busy("maintenance");
   if (existing.controlLeaseId && !hasActiveComputerControl(existing)) {
     await expireComputerControl(deps, existing.id, existing.controlLeaseId);
     existing = await deps.prisma.computer.findUniqueOrThrow({ where: { id: computerId } });
@@ -231,7 +250,7 @@ export async function provisionComputer(
         // A row activated by an older release has no clock yet; start it now.
         data: { updatedAt: new Date(), runningSince },
       });
-      if (retained.count !== 1) throw new ComputerBusyError();
+      if (retained.count !== 1) throw busy("running_claim_lost");
       await recordComputerRunStart(deps.prisma, existing, runningSince);
       const damaged = await deps.sandbox.prepare(ref, context).then(
         () => false,
@@ -261,7 +280,9 @@ export async function provisionComputer(
   }
 
   // A computer that bills starts only while its organization has allowance left this period.
-  const startKind = (await deps.sandbox.provisionKind?.(existing.homeKey)) ?? existing.kind;
+  const selectedKind = await deps.sandbox.provisionKind?.(existing.homeKey);
+  const startKind = selectedKind ?? existing.kind;
+  const trackAllocations = tracksNewComputers(startKind);
   if (await sandboxAllowanceUsedUp(deps, { spaceId: existing.spaceId, kind: startKind }))
     throw new SandboxAllowanceUsedError();
   const size = await planComputerSize(deps.prisma, existing.spaceId);
@@ -278,7 +299,7 @@ export async function provisionComputer(
   // by heldByNobodyElse; this guards the lease-less path (and expired-lease gaps).
   const reclaimStamp = existing.state === "booting" ? existing.updatedAt : null;
   const bootClaimIsStale =
-    reclaimStamp !== null && Date.now() - reclaimStamp.getTime() >= BOOT_CLAIM_STALE_MS;
+    reclaimStamp !== null && isAbandonedLifecycleClaim(existing.bootHeartbeatAt ?? reclaimStamp);
   // Idle stop does not refresh updatedAt while checkpointing or waiting on provider stop.
   // A live suspend can therefore age across the TTL during the ready wait; only reclaim
   // stamps that were already abandoned when we first saw them, matching booting reclaim.
@@ -287,13 +308,13 @@ export async function provisionComputer(
   // A fresh booting claim (or one whose run lease is still live) cannot be reclaimed after
   // the wait either, so do not block workers for the full boot-wait window.
   if (existing.state === "booting" && reclaimStamp !== null && !bootClaimIsStale) {
-    throw new ComputerBusyError();
+    throw busy("boot_in_progress");
   }
   if (
     existing.state === "booting" &&
     (await hasLiveForeignRunLease(deps.prisma, computerId, context.runId))
   ) {
-    throw new ComputerBusyError();
+    throw busy("boot_by_live_run");
   }
   if (existing.state === "booting" || existing.state === "suspending") {
     existing = await waitForComputerReady(deps.prisma, computerId, context);
@@ -309,17 +330,17 @@ export async function provisionComputer(
     !staleSuspending &&
     !["running", "stopped", "suspended", "error", "booting"].includes(existing.state)
   ) {
-    throw new ComputerBusyError();
+    throw busy("not_ready");
   }
   // Waited for suspending (or similar) and landed on booting we never stamped: another
   // caller owns that boot. Do not adopt its updatedAt / previousRef and double-provision.
   if (existing.state === "booting" && reclaimStamp === null) {
-    throw new ComputerBusyError();
+    throw busy("boot_started_during_wait");
   }
   // We came to reclaim abandoned booting; if another caller already activated, do not fall
   // through into reconnect (that would provision again under their providerRef).
   if (reclaimStamp !== null && existing.state === "running") {
-    throw new ComputerBusyError();
+    throw busy("boot_completed_during_wait");
   }
   // Stamp age is only a lower bound. Dedicated / lease-less boots can provision longer than
   // BOOT_CLAIM_STALE_MS; a heartbeating foreign run lease means the holder is still alive.
@@ -328,7 +349,7 @@ export async function provisionComputer(
     reclaimStamp !== null &&
     (await hasLiveForeignRunLease(deps.prisma, computerId, context.runId))
   ) {
-    throw new ComputerBusyError();
+    throw busy("boot_by_live_run");
   }
 
   const reconnecting =
@@ -348,6 +369,14 @@ export async function provisionComputer(
       ? {
           state: existing.state,
           updatedAt: existing.state === "booting" ? reclaimStamp! : suspendStamp!,
+          ...(existing.state === "booting" && trackAllocations
+            ? {
+                OR: [
+                  { bootHeartbeatAt: null },
+                  { bootHeartbeatAt: { lte: new Date(Date.now() - BOOT_CLAIM_STALE_MS) } },
+                ],
+              }
+            : {}),
           ...(existing.state === "suspending" ? previousRef : {}),
           ...heldByNobodyElse(bootLease),
         }
@@ -364,7 +393,7 @@ export async function provisionComputer(
   const claimStamp = new Date(Math.max(Date.now(), observedStamp.getTime() + 1));
   const claimed = await deps.prisma.$transaction(async (tx) => {
     await lockSpaceForWork(tx, existing.spaceId);
-    return tx.computer.updateMany({
+    const result = await tx.computer.updateMany({
       where: {
         id: computerId,
         ...claimWhere,
@@ -373,11 +402,41 @@ export async function provisionComputer(
         maintenanceId: existing.maintenanceId ?? null,
         ...(context.botId ? { bots: { some: { id: context.botId, archivedAt: null } } } : {}),
       },
-      data: { state: "booting", updatedAt: claimStamp },
+      data: {
+        state: "booting",
+        updatedAt: claimStamp,
+        ...(trackAllocations ? { bootHeartbeatAt: claimStamp } : {}),
+      },
     });
+    if (result.count === 1 && trackAllocations && (await orphanCleanupInProgress(tx, computerId))) {
+      throw busy("orphan_cleanup_in_progress");
+    }
+    return result;
   });
-  if (claimed.count !== 1) throw new ComputerBusyError();
+  if (claimed.count !== 1) throw busy("claim_lost");
+  const bootHeartbeat = trackAllocations
+    ? setInterval(() => {
+        void deps.prisma.computer
+          .updateMany({
+            where: { id: computerId, state: "booting", updatedAt: claimStamp },
+            data: { bootHeartbeatAt: new Date(), updatedAt: claimStamp },
+          })
+          .catch((error) => log.warn("computer.boot_heartbeat_failed", { error }));
+      }, 30_000)
+    : undefined;
+  bootHeartbeat?.unref();
   let provisioned: ComputerRef | undefined;
+  const registered = new Set<string>();
+  const machineKey = (ref: Pick<ComputerRef, "kind" | "providerRef">) =>
+    JSON.stringify([ref.kind, ref.providerRef]);
+  const recordCreated: Parameters<SandboxProvider["provision"]>[0]["recordCreated"] =
+    trackAllocations
+      ? async (machine, connection) => {
+          await recordUncommittedComputer(deps.prisma, existing, machine, connection);
+          registered.add(machineKey(machine));
+        }
+      : undefined;
+  let active = false;
   let incomplete = false;
   // A start that took over an abandoned boot cannot tell how far that boot restored, so it restores.
   const replaces = (ref: ComputerRef) =>
@@ -417,6 +476,8 @@ export async function provisionComputer(
               homePath,
               providerRef: existing.providerRef ?? undefined,
               providerKind: existing.kind as ComputerRef["kind"],
+              ...(selectedKind ? { expectedKind: selectedKind } : {}),
+              ...(recordCreated ? { recordCreated } : {}),
               // A save from an older release has no time; the provider keeps its own state then.
               savedAt:
                 existing.homeRevision === "empty"
@@ -459,7 +520,7 @@ export async function provisionComputer(
         },
         data: { restorePending: true, updatedAt: claimStamp },
       });
-      if (claim.count !== 1) throw new ComputerBusyError();
+      if (claim.count !== 1) throw busy("replacement_claim_lost");
     };
     let ref = await provision();
     provisioned = ref;
@@ -524,7 +585,7 @@ export async function provisionComputer(
     const continued =
       existing.state === "running" && existing.runningSince && !ref.started && !replacement;
     const runningSince = continued ? existing.runningSince! : new Date();
-    const activated = await deps.prisma.computer.updateMany({
+    const activation: Prisma.ComputerUpdateManyArgs = {
       where: {
         id: computerId,
         state: "booting",
@@ -539,6 +600,7 @@ export async function provisionComputer(
         kind: ref.kind,
         restorePending: false,
         runningSince,
+        ...(trackAllocations ? { bootHeartbeatAt: null } : {}),
         ...(!reconnecting
           ? {
               controlHolder: activeControl ? "user" : controlHolder,
@@ -553,10 +615,21 @@ export async function provisionComputer(
             }
           : {}),
       },
-    });
+    };
+    const activated =
+      trackAllocations && tracksNewComputers(ref.kind)
+        ? await deps.prisma.$transaction(async (tx) => {
+            const result = await tx.computer.updateMany(activation);
+            if (result.count === 1 && !(await finishOrphanRegistration(tx, computerId, ref))) {
+              throw busy("orphan_cleanup_in_progress");
+            }
+            return result;
+          })
+        : await deps.prisma.computer.updateMany(activation);
     if (activated.count !== 1) {
-      throw new ComputerBusyError();
+      throw busy("activation_claim_lost");
     }
+    active = true;
     // A computer we believed running that the provider had to resume or replace was stopped
     // or lost at the provider without us.
     await recordComputerRunStart(
@@ -572,14 +645,20 @@ export async function provisionComputer(
     });
     return ref;
   } catch (error) {
-    log.warn("computer.provision_failed", {
-      provider: existing.kind,
-      durationMs: Math.round(performance.now() - started),
-      error,
-    });
+    if (!loggedBusy || error !== loggedBusy) {
+      log.warn("computer.provision_failed", {
+        provider: existing.kind,
+        durationMs: Math.round(performance.now() - started),
+        error,
+      });
+    }
+    if (active) throw error;
+    const tracked = provisioned ? registered.has(machineKey(provisioned)) : false;
     // A failed reconnect never owns an existing workspace, even if setup failed.
+    // A tracked allocation must go through the reconciler's ownership check. This also
+    // covers an activation that committed just before the database connection was lost.
     const rollbackError =
-      provisioned && (!reconnecting || provisioned.fresh === true)
+      provisioned && !tracked && (!reconnecting || provisioned.fresh === true)
         ? await rollbackProvisionedComputer(deps.sandbox, provisioned, context, error)
         : undefined;
     const unsafeStop = isSandboxUnsafeStopError(error) || isSandboxUnsafeStopError(rollbackError);
@@ -593,6 +672,7 @@ export async function provisionComputer(
           maintenanceId: existing.maintenanceId ?? null,
         },
         data: {
+          ...(trackAllocations ? { bootHeartbeatAt: null } : {}),
           state:
             (reconnecting || rollbackError) && unsafeStop
               ? "quarantined"
@@ -617,6 +697,11 @@ export async function provisionComputer(
         "Computer provisioning failed and its failure could not be recorded",
       );
     }
+    if (registered.size > 0) {
+      await scheduleFailedComputerCleanup(deps.prisma, computerId).catch((error) =>
+        log.warn("computer.orphan_cleanup_schedule_failed", { error }),
+      );
+    }
     if (rollbackError) {
       // The provider was still down for the cleanup, which adds nothing to why the start failed.
       if (
@@ -633,6 +718,8 @@ export async function provisionComputer(
       );
     }
     throw error;
+  } finally {
+    if (bootHeartbeat) clearInterval(bootHeartbeat);
   }
 }
 
@@ -1071,7 +1158,13 @@ export async function replaceComputer(
     if (await hasForeignExecutionLease(deps.prisma, computerId, botId)) {
       throw new ComputerBusyError();
     }
-    if (!isAbandonedLifecycleClaim(existing.updatedAt)) {
+    if (
+      !isAbandonedLifecycleClaim(
+        existing.state === "booting"
+          ? (existing.bootHeartbeatAt ?? existing.updatedAt)
+          : existing.updatedAt,
+      )
+    ) {
       throw new ComputerBusyError();
     }
     const activeBootRun = await deps.prisma.run.findFirst({
@@ -1106,6 +1199,9 @@ export async function replaceComputer(
         // CAS the booting/suspending stamp so a concurrent live claim cannot be overwritten.
         ...(previousState === "booting" || previousState === "suspending"
           ? { updatedAt: existing.updatedAt }
+          : {}),
+        ...(previousState === "booting" && existing.bootHeartbeatAt
+          ? { bootHeartbeatAt: existing.bootHeartbeatAt }
           : {}),
         executionLeases: { none: { botId: { not: botId }, expiresAt: { gt: now } } },
         ...(handBackIdleTakeover

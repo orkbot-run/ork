@@ -197,13 +197,59 @@ describe("messaging another bot", () => {
     expect(harness.enqueue).not.toHaveBeenCalled();
   });
 
-  it("refuses an unknown target without starting a run", async () => {
-    const harness = deps();
+  it.each([{ confirm_name: "Anlyst" }, { bot_id: "archived-or-outside-workspace" }])(
+    "lists only scoped recipients when the target is unknown (%o)",
+    async (address) => {
+      const harness = deps();
+      const sent = await messageBot(harness.deps, run, sender, { ...address, message: "hello" });
+      expect(sent).toMatchObject({
+        ok: false,
+        error: expect.stringContaining("- Analyst (id: bot-target)"),
+      });
+      expect(harness.deps.prisma.bot.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { spaceId: run.spaceId, userId: run.userId, archivedAt: null },
+        }),
+      );
+      expect(harness.tx.run.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("names the matching bots when an inexact name is ambiguous and reports unsent files", async () => {
+    const thread = { id: "thread-target" };
+    const harness = deps({
+      bots: [
+        { id: "bot-1", name: "Analyst", thread },
+        { id: "bot-2", name: "analyst", thread },
+        { id: "bot-3", name: "Researcher", thread },
+      ],
+    });
+    const sent = await messageBot(harness.deps, run, sender, {
+      confirm_name: "ANALYST",
+      message: "hello",
+      files: ["notes.txt"],
+    });
+    expect(sent.ok).toBe(false);
+    if (!sent.ok) {
+      expect(sent.error).toContain("More than one reachable bot matches that name.");
+      expect(sent.error).toContain("Analyst (id: bot-1)");
+      expect(sent.error).toContain("analyst (id: bot-2)");
+      expect(sent.error).not.toContain("bot-3");
+      expect(sent.error).toMatch(/Nothing was sent\.$/);
+    }
+    expect(harness.tx.message.create).not.toHaveBeenCalled();
+  });
+
+  it("reports when the sender has no teammate to message", async () => {
+    const harness = deps({ bots: [{ ...sender, thread: { id: run.threadId } }] });
     const sent = await messageBot(harness.deps, run, sender, {
       bot_id: "bot-missing",
       message: "hello",
     });
-    expect(sent).toEqual({ ok: false, error: "no bot found with that id or name" });
+    expect(sent).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("There are no bots you can message in this workspace."),
+    });
     expect(harness.tx.run.create).not.toHaveBeenCalled();
   });
 

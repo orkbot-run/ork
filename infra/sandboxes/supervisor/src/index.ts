@@ -14,8 +14,10 @@ import { serve } from "@hono/node-server";
 import {
   boundedSandboxCommandTimeoutMs,
   readBoundedJsonResponse,
+  requestDeadline,
   resolveSupervisorToken,
   uploadSizeFromEnv,
+  withAbort,
 } from "@orkbot/core";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import { getLogger, SERVICE_NAMES } from "@orkbot/logging";
@@ -538,61 +540,77 @@ app.post("/computers/:id/exec", async (c) => {
     return c.json({ stdout: "", stderr: message, code: 1 }, 200);
   }
   const encoder = new TextEncoder();
+  let closed = false;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  const finish = () => {
+    closed = true;
+    clearInterval(heartbeat);
+    c.req.raw.signal.removeEventListener("abort", finish);
+  };
   const stream = new ReadableStream({
-    async start(controller) {
-      let closed = false;
+    start(controller) {
+      c.req.raw.signal.addEventListener("abort", finish, { once: true });
+      if (c.req.raw.signal.aborted) finish();
+      const enqueue = (line: string) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(line));
+        } catch {
+          finish();
+        }
+      };
+      if (!closed) heartbeat = setInterval(() => enqueue("\n"), 15_000);
       const send = (event: {
         type: "stdout" | "stderr" | "exit";
         data?: string;
         code?: number;
       }) => {
-        if (closed) return;
-        try {
-          controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
-        } catch {
-          closed = true;
-        }
+        enqueue(`${JSON.stringify(event)}\n`);
       };
-      try {
-        let streamedStderr = "";
-        const result = await runContainerCommand(
-          container,
-          body.argv.length ? body.argv : ["/bin/echo", "ready"],
-          {
-            workingDir: body.cwd ?? "/home/orkbot",
-            env: [
-              ...computerCommandEnv(layout),
-              ...Object.entries(body.env ?? {}).map(([k, v]) => `${k}=${v}`),
-            ],
-            timeoutMs,
-            onOutput: (chunk) => {
-              if (!chunk.data) return;
-              if (chunk.stream === "stderr") streamedStderr += chunk.data;
-              send({ type: chunk.stream, data: chunk.data });
-            },
-          },
-        );
-        const timeoutNote = `command timed out after ${timeoutMs} ms\n`;
-        if (result.stderr.startsWith(streamedStderr)) {
-          const extra = result.stderr.slice(streamedStderr.length);
-          if (extra) send({ type: "stderr", data: extra });
-        } else if (result.stderr.endsWith(timeoutNote) && !streamedStderr.endsWith(timeoutNote)) {
-          send({ type: "stderr", data: timeoutNote });
-        }
-        send({ type: "exit", code: result.code });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        send({ type: "stderr", data: message });
-        send({ type: "exit", code: 1 });
-      } finally {
-        closed = true;
+      // Keep start synchronous so cancelling the HTTP response does not await Docker exec.
+      void (async () => {
         try {
-          controller.close();
-        } catch {
-          // The client already went away.
+          let streamedStderr = "";
+          const result = await runContainerCommand(
+            container,
+            body.argv.length ? body.argv : ["/bin/echo", "ready"],
+            {
+              workingDir: body.cwd ?? "/home/orkbot",
+              env: [
+                ...computerCommandEnv(layout),
+                ...Object.entries(body.env ?? {}).map(([k, v]) => `${k}=${v}`),
+              ],
+              timeoutMs,
+              onOutput: (chunk) => {
+                if (!chunk.data) return;
+                if (chunk.stream === "stderr") streamedStderr += chunk.data;
+                send({ type: chunk.stream, data: chunk.data });
+              },
+            },
+          );
+          const timeoutNote = `command timed out after ${timeoutMs} ms\n`;
+          if (result.stderr.startsWith(streamedStderr)) {
+            const extra = result.stderr.slice(streamedStderr.length);
+            if (extra) send({ type: "stderr", data: extra });
+          } else if (result.stderr.endsWith(timeoutNote) && !streamedStderr.endsWith(timeoutNote)) {
+            send({ type: "stderr", data: timeoutNote });
+          }
+          send({ type: "exit", code: result.code });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          send({ type: "stderr", data: message });
+          send({ type: "exit", code: 1 });
+        } finally {
+          finish();
+          try {
+            controller.close();
+          } catch {
+            // The client already went away.
+          }
         }
-      }
+      })();
     },
+    cancel: finish,
   });
   return new Response(stream, {
     status: 200,
@@ -1270,32 +1288,68 @@ app.delete("/computers/:id/screen", async (c) => {
   }
 });
 
+// Docker's kill/wait both forward abortSignal to docker-modem. The local bound also
+// protects recovery when the daemon cannot complete termination (for example D-state).
+async function forceKillComputer(container: Docker.Container) {
+  const { signal, dispose } = requestDeadline(10_000, "computer force stop timed out");
+  try {
+    try {
+      await withAbort(container.kill({ signal: "SIGKILL", abortSignal: signal }), signal);
+    } catch (error) {
+      // A concurrent stop can end the container between the running check and kill.
+      if (
+        !error ||
+        typeof error !== "object" ||
+        !("statusCode" in error) ||
+        error.statusCode !== 409
+      ) {
+        throw error;
+      }
+    }
+    const options = { condition: "not-running" as const, abortSignal: signal };
+    await withAbort(container.wait(options), signal);
+  } finally {
+    dispose();
+  }
+}
+
 app.post("/computers/:id/stop", async (c) => {
   const id = c.req.param("id");
   const botId = c.req.header("x-orkbot-bot-id");
   try {
-    const { container } = await managedContainer(id, botId, c.req.header("x-orkbot-space-id"));
-    await withComputerScreenLock(id, async () => {
-      const info = await container.inspect();
-      if (info.State.Running) {
-        try {
-          // Every profile on the home volume, not only screens still held in memory.
-          const checkpoint = await runContainerCommand(container, [
-            "bash",
-            "-c",
-            quiesceBrowserProfilesCommand(),
-          ]);
-          if (checkpoint.code !== 0)
-            throw new Error(checkpoint.stderr || "bot browsers failed to stop");
-        } finally {
-          // Failed profiles remain on the durable home for recovery after restart.
-          await container.stop();
-          clearComputerScreenRegistry(computerScreens, computerScreenBoots, id);
-        }
-      }
+    const { container, info: managedInfo } = await managedContainer(
+      id,
+      botId,
+      c.req.header("x-orkbot-space-id"),
+    );
+    const discardUnsaved = c.req.header("x-ork-sandbox-discard-unsaved") === "true";
+    if (discardUnsaved) {
+      // Recovery must bypass the screen lock: a hung control operation may own it.
+      if (managedInfo.State.Running) await forceKillComputer(container);
       clearComputerScreenRegistry(computerScreens, computerScreenBoots, id);
-    });
-    if (botId && screenNetworkMode !== "internal") {
+    } else
+      await withComputerScreenLock(id, async () => {
+        const info = await container.inspect();
+        if (info.State.Running) {
+          try {
+            // Every profile on the home volume, not only screens still held in memory.
+            const checkpoint = await runContainerCommand(container, [
+              "bash",
+              "-c",
+              quiesceBrowserProfilesCommand(),
+            ]);
+            if (checkpoint.code !== 0)
+              throw new Error(checkpoint.stderr || "bot browsers failed to stop");
+          } finally {
+            // Failed profiles remain on the durable home for recovery after restart.
+            await container.stop();
+            clearComputerScreenRegistry(computerScreens, computerScreenBoots, id);
+          }
+        }
+        clearComputerScreenRegistry(computerScreens, computerScreenBoots, id);
+      });
+    // Recovery also avoids the lifecycle lock in network reclaim; reuse this network on restart.
+    if (!discardUnsaved && botId && screenNetworkMode !== "internal") {
       await reclaimComputerNetwork(container, botId).catch((error) => {
         getLogger().error("computer network reclaim failed", error);
       });

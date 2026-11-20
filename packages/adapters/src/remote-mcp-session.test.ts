@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { MCP_TOOL_INACTIVITY_MS } from "./mcp-tool-call.js";
 import { callRemoteMcpTool, RemoteMcpSessionCache } from "./remote-mcp.js";
 
 const publicResolver = async () => [{ address: "203.0.113.10", family: 4 as const }];
@@ -103,6 +104,42 @@ function scopedCall(
 }
 
 describe("run-scoped remote MCP sessions", () => {
+  it.each([true, false])(
+    "lets a slow tool finish after two minutes (pooled: %s)",
+    async (pooled) => {
+      let finish!: () => void;
+      const server = mcpServer(({ message, respond }) => {
+        if (message.method !== "tools/call") return undefined;
+        return new Promise<Response>((resolve) => {
+          finish = () =>
+            resolve(respond({ result: { content: [{ type: "text", text: "slow success" }] } }));
+        }) as unknown as Response;
+      });
+      const pool = new RemoteMcpSessionCache();
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const result = callRemoteMcpTool(
+          {
+            endpoint: ENDPOINT,
+            fetch: server.fetch,
+            resolveHostname: publicResolver,
+            ...(pooled ? { sessionPool: pool, sessionScope: "slow run" } : {}),
+          },
+          "slow",
+          {},
+        );
+        await vi.waitFor(() => expect(server.toolCalls).toHaveLength(1));
+        await vi.advanceTimersByTimeAsync(120_000);
+        finish();
+        await expect(result).resolves.toMatchObject({ content: [{ text: "slow success" }] });
+        expect(server.initializations()).toBe(1);
+      } finally {
+        vi.useRealTimers();
+        await pool.close();
+      }
+    },
+  );
+
   it("bounds each operation with a fresh timeout and closes the session it timed out on", async () => {
     let hangNext = true;
     const server = mcpServer(({ message, respond }) => {
@@ -119,7 +156,7 @@ describe("run-scoped remote MCP sessions", () => {
       const call = server.fetch.mock.calls.find(
         ([, init]) => typeof init?.body === "string" && init.body.includes('"tools/call"'),
       );
-      vi.advanceTimersByTime(30_000);
+      vi.advanceTimersByTime(MCP_TOOL_INACTIVITY_MS);
       await expect(hanging).rejects.toThrow();
       // The timed-out HTTP request is aborted and the server told to drop the session.
       await vi.waitFor(() => expect(call?.[1]?.signal?.aborted).toBe(true));
@@ -155,7 +192,7 @@ describe("run-scoped remote MCP sessions", () => {
         const hanging = scopedCall(pool, "run-1 srv", server, caller.signal);
         await vi.waitFor(() => expect(server.toolCalls).toHaveLength(1));
         // Both fire before the call's rejection is handled; the first one decides.
-        const expire = () => vi.advanceTimersByTime(30_000);
+        const expire = () => vi.advanceTimersByTime(MCP_TOOL_INACTIVITY_MS);
         if (deadlineFirst) {
           expire();
           caller.abort();
@@ -185,7 +222,7 @@ describe("run-scoped remote MCP sessions", () => {
       await scopedCall(pool, "run-1 srv", server);
       await scopedCall(pool, "run-1 srv", server, caller.signal);
       const requests = server.fetch.mock.calls.length;
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(MCP_TOOL_INACTIVITY_MS);
       caller.abort();
       // Flush any cancellation POST through the injected fetch.
       await vi.advanceTimersByTimeAsync(0);
@@ -318,7 +355,7 @@ describe("run-scoped remote MCP sessions", () => {
     let failCalls = true;
     const server = mcpServer(({ message, session, respond }) => {
       if (message.method === "tools/call") {
-        // A server error says nothing about the session, which stays usable.
+        // An HTTP failure retires this session but must never replay the write.
         if (failCalls) return new Response(null, { status: 500 });
         return respond({
           result: { content: [{ type: "text", text: `ok:${session}` }] },
@@ -334,9 +371,9 @@ describe("run-scoped remote MCP sessions", () => {
 
     failCalls = false;
     await expect(scopedCall(pool, "run-1 srv", server)).resolves.toMatchObject({
-      content: [{ text: "ok:session-1" }],
+      content: [{ text: "ok:session-2" }],
     });
-    expect(server.initializations()).toBe(1);
+    expect(server.initializations()).toBe(2);
     await pool.close();
   });
 

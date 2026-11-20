@@ -14,6 +14,12 @@ export const translateRunError: RunErrorTranslator = (message, values) => {
         message: "The computer service cannot start computers for this account.",
         values,
       });
+    case "The computer stopped responding. Try again.":
+      return i18n._({
+        id: "The computer stopped responding. Try again.",
+        message: "The computer stopped responding. Try again.",
+        values,
+      });
     case "This connection's request limit is too small. Choose another model.":
       return i18n._({
         id: "This connection's request limit is too small. Choose another model.",

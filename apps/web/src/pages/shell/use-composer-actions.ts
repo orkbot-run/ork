@@ -13,7 +13,12 @@ import type {
   ThreadMessage,
   ThreadSnapshot,
 } from "@orkbot/contracts";
-import { attachmentMaxBytes, attachmentMaxCount, attachmentSizeLabel } from "@orkbot/contracts";
+import {
+  attachmentMaxBytes,
+  attachmentMaxCount,
+  attachmentSizeLabel,
+  isAttachmentImageMimeType,
+} from "@orkbot/contracts";
 import type { ComposerMention } from "@orkbot/core";
 import {
   applyThreadSendReceipt,
@@ -55,6 +60,11 @@ export type OutgoingMessage = {
   attachments: string[];
   sending: boolean;
   receiptSeq?: number;
+};
+
+export type TranscriptSendReceipt = {
+  seq: number;
+  runIds: readonly string[];
 };
 
 type ThreadRefresh = RefObject<(id: string) => Promise<ThreadSnapshot>>;
@@ -117,7 +127,10 @@ export function useComposerActions({
   const [replyQuote, setReplyQuote] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [outgoingMessages, setOutgoingMessages] = useState<OutgoingMessage[]>([]);
-  const [sentCount, setSentCount] = useState(0);
+  const [lastSend, setLastSend] = useState<{
+    count: number;
+    receipt?: TranscriptSendReceipt & Pick<OutgoingMessage, "threadKey" | "spaceId" | "userId">;
+  }>({ count: 0 });
   useEffect(() => {
     setComposerUnsavedWork({ sending, attachments: pendingAttachments.length > 0 });
     return () => setComposerUnsavedWork({ sending: false, attachments: false });
@@ -372,7 +385,7 @@ export function useComposerActions({
           id: newClientId(),
           threadKey,
           file,
-          previewUrl: mimeType.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+          previewUrl: isAttachmentImageMimeType(mimeType) ? URL.createObjectURL(file) : undefined,
         });
       }
       if (next.length) setPendingAttachments((current) => [...current, ...next]);
@@ -444,7 +457,7 @@ export function useComposerActions({
       setSending(true);
       setSendError(null);
       clearReadBoundary();
-      setSentCount((count) => count + 1);
+      setLastSend(({ count }) => ({ count: count + 1 }));
       if (plan.shouldSend) {
         setOutgoingMessages((current) => [
           ...current.filter((message) => message.clientNonce !== clientNonce),
@@ -555,6 +568,18 @@ export function useComposerActions({
           ? (await rpc.threads.sendWithRoutines({ ...payload, routineIds: plan.routineIds })).send
           : await rpc.threads.send(payload);
         accepted = true;
+        if (sent) {
+          setLastSend(({ count }) => ({
+            count,
+            receipt: {
+              threadKey: groupTarget ?? botTarget,
+              spaceId: bootstrapMe?.spaceId,
+              userId: bootstrapMe?.userId,
+              seq: sent.seq,
+              runIds: sent.replyRunIds ?? (sent.runIds?.length ? sent.runIds : [sent.runId]),
+            },
+          }));
+        }
         setOutgoingMessages((current) =>
           current.map((message) =>
             message.clientNonce === clientNonce
@@ -717,7 +742,13 @@ export function useComposerActions({
     setReplyQuote,
     clearReply,
     sending,
-    sentCount,
+    sentCount: lastSend.count,
+    sendReceipt:
+      lastSend.receipt?.threadKey === (inGroup ? groupId : activeId) &&
+      lastSend.receipt?.spaceId === bootstrapMe?.spaceId &&
+      lastSend.receipt?.userId === bootstrapMe?.userId
+        ? lastSend.receipt
+        : undefined,
     sendMessage,
     stopRun,
     answerMessage,

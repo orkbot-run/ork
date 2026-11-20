@@ -1,9 +1,12 @@
-import type { Model, MutableModels, Provider } from "@earendil-works/pi-ai";
+import type { Model, MutableModels, Provider, ProviderStreams } from "@earendil-works/pi-ai";
 import { createProvider } from "@earendil-works/pi-ai";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
+import { Agent, EnvHttpProxyAgent, Pool } from "undici";
 
 import { declaredVisionModelIds, inputModalities } from "./model-modalities.js";
 import { LOCAL_PROVIDER_ID, localModelIds } from "./pi-local-provider-id.js";
+import { MODEL_STREAM_DISPATCHER_OPTIONS, modelConnectTimeoutMs } from "./pi-runtime-limits.js";
+import { fetchPairedWithDispatcher } from "./undici-fetch.js";
 
 /**
  * Local OpenAI-compatible model server (Ollama, LM Studio, llama.cpp, MLX).
@@ -74,6 +77,67 @@ function localModel(id: string): Model<"openai-completions"> {
   };
 }
 
+/** Match Node's opt-in: proxy variables alone do not enable the global fetch proxy. */
+function useEnvProxy(): boolean {
+  let enabled = process.env.NODE_USE_ENV_PROXY === "1";
+  // NODE_OPTIONS is processed before command-line flags; the last explicit flag wins.
+  const envFlags = [
+    ...(process.env.NODE_OPTIONS ?? "").matchAll(/(?:^|\s)"?(--(?:no-)?use-env-proxy)"?(?=\s|$)/g),
+  ].map((match) => match[1]);
+  for (const flag of [...envFlags, ...process.execArgv]) {
+    if (flag === "--use-env-proxy") enabled = true;
+    if (flag === "--no-use-env-proxy") enabled = false;
+  }
+  return enabled;
+}
+
+function localStreams(): ProviderStreams {
+  const api = openAICompletionsApi();
+  // Keep the connection pool across turns. Runtime deadlines and the caller's signal
+  // bound model silence instead of undici's independent headers/body defaults.
+  let dispatcher: Agent | EnvHttpProxyAgent | undefined;
+  const streamFetch = (baseFetch?: typeof globalThis.fetch): typeof globalThis.fetch => {
+    const transport = fetchPairedWithDispatcher(baseFetch);
+    return (input, init) => {
+      if (!dispatcher) {
+        const timeout = modelConnectTimeoutMs();
+        const options = {
+          ...MODEL_STREAM_DISPATCHER_OPTIONS,
+          connect: { timeout },
+        };
+        dispatcher = useEnvProxy()
+          ? new EnvHttpProxyAgent({
+              ...options,
+              connectTimeout: timeout,
+              // undici's HTTP forward proxy path only forwards `connect` to its
+              // pool factory. Apply model limits at that final pool as well.
+              factory: (origin, poolOptions) =>
+                new Pool(origin, {
+                  ...poolOptions,
+                  ...MODEL_STREAM_DISPATCHER_OPTIONS,
+                }),
+            })
+          : new Agent(options);
+      }
+      return transport(input, { ...init, dispatcher } as RequestInit & {
+        dispatcher: Agent | EnvHttpProxyAgent;
+      });
+    };
+  };
+  return {
+    stream: (model, context, options) =>
+      api.stream(model, context, {
+        ...options,
+        fetch: streamFetch(options?.fetch),
+      }),
+    streamSimple: (model, context, options) =>
+      api.streamSimple(model, context, {
+        ...options,
+        fetch: streamFetch(options?.fetch),
+      }),
+  };
+}
+
 export function localProvider(): Provider | undefined {
   const ids = localModelIds();
   if (!ids.length) return undefined;
@@ -91,7 +155,7 @@ export function localProvider(): Provider | undefined {
       },
     },
     models: ids.map(localModel),
-    api: openAICompletionsApi(),
+    api: localStreams(),
   });
 }
 

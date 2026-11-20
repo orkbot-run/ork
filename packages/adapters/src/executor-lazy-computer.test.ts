@@ -60,11 +60,14 @@ async function runRoutine(
     setupError?: Error;
     secrets?: string[];
     shutdownSignal?: AbortSignal;
+    runAdmissionSignal?: AbortSignal;
+    onRunRead?: () => void;
     /** User stop already flipped the run to cancelled before the turn ends. */
     cancelRun?: boolean;
     onRunStarted?: () => void;
     backgroundHelperWithoutComputer?: boolean;
     managedWorkspace?: boolean;
+    userPrompt?: string;
     authorizeWork?: Parameters<typeof createRunExecutor>[0]["authorizeWork"];
     onRuntimeStart?: () => void;
   } = {},
@@ -90,7 +93,7 @@ async function runRoutine(
         ? "bot_message"
         : options.delegation === "group"
           ? "follow_up"
-          : options.attachments && !options.steering
+          : options.userPrompt || (options.attachments && !options.steering)
             ? "user"
             : "routine",
     sourceMessageId:
@@ -144,7 +147,7 @@ async function runRoutine(
       yield { type: "takeover" as const, reason: "Sign in to the inbox." };
       return;
     }
-    yield { type: "text-delta" as const, text: "Inbox is clear." };
+    yield { type: "text" as const, text: "Inbox is clear." };
     yield { type: "done" as const, text: "Inbox is clear." };
   });
   const prisma = {
@@ -153,7 +156,10 @@ async function runRoutine(
       async (work: (tx: unknown) => Promise<unknown>): Promise<unknown> => work(prisma),
     ),
     run: {
-      findUnique: vi.fn(async () => run),
+      findUnique: vi.fn(async () => {
+        options.onRunRead?.();
+        return run;
+      }),
       findUniqueOrThrow: vi.fn(async () => run),
       // No other run of this bot waits for the computer.
       findFirst: vi.fn(async (args?: { where?: { status?: unknown } }) =>
@@ -284,7 +290,12 @@ async function runRoutine(
       ),
       count: vi.fn(async () => 0),
     },
-    task: { findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Sweep the inbox" })) },
+    task: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        id: run.taskId,
+        prompt: options.userPrompt ?? "Sweep the inbox",
+      })),
+    },
     computer: {
       updateMany: vi.fn(async () => ({ count: 1 })),
       findFirst: vi.fn(async () => ({
@@ -385,6 +396,7 @@ async function runRoutine(
           fallbacks: async () => [],
         }
       : undefined,
+    runAdmissionSignal: options.runAdmissionSignal,
     shutdownSignal: options.shutdownSignal
       ? AbortSignal.any([options.shutdownSignal, shutdownRelay.signal])
       : undefined,
@@ -423,6 +435,7 @@ async function runRoutine(
   };
   return {
     finalizeRun,
+    events,
     sandbox,
     sleepJobs,
     toolResults,
@@ -483,6 +496,31 @@ afterEach(() => {
 });
 
 describe("run computer provisioning", () => {
+  it("applies the requested effort and publishes text before finalizing the same user run", async () => {
+    const result = await runRoutine([], {
+      userPrompt: "/think quick Summarize the inbox",
+      secrets: ["x".repeat(256)],
+    });
+    expect(result.runtimeRun).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        model: expect.objectContaining({ thinkingLevel: "low" }),
+        prompt: expect.stringContaining("Summarize the inbox"),
+      }),
+      expect.anything(),
+    );
+    expect(result.runtimeRun.mock.calls[0]?.[0].prompt).not.toContain("/think");
+    const progress = result.events.append.mock.calls
+      .map((call, index) => ({
+        event: (call as unknown[])[0],
+        order: result.events.append.mock.invocationCallOrder[index]!,
+      }))
+      .find(({ event }) => (event as { type: string })?.type === "thread.progress");
+    expect(progress?.event).toMatchObject({
+      payload: { text: "Inbox is clear.", streaming: true },
+    });
+    expect(progress?.order).toBeLessThan(result.finalizeRun.mock.invocationCallOrder[0]!);
+  });
+
   it("runs a background helper without a computer or connector discovery", async () => {
     const result = await runRoutine([], { backgroundHelperWithoutComputer: true });
     expect(result.runtimeRun).toHaveBeenCalledOnce();
@@ -1062,6 +1100,44 @@ describe("run computer provisioning", () => {
     expect(prisma.attempt.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: "interrupted" }) }),
     );
+  });
+
+  it("does not claim a run whose lookup crossed the start of draining", async () => {
+    const admission = new AbortController();
+    const result = await runRoutine([], {
+      runAdmissionSignal: admission.signal,
+      onRunRead: () => admission.abort(),
+    });
+    expect(result.prisma.run.updateMany).not.toHaveBeenCalled();
+    expect(result.runtimeRun).not.toHaveBeenCalled();
+    expect(result.run).toMatchObject({ status: "queued", leaseOwner: null });
+  });
+
+  it("continues an owned turn after admission closes", async () => {
+    const admission = new AbortController();
+    const result = await runRoutine([], {
+      runAdmissionSignal: admission.signal,
+      onRunStarted: () => admission.abort(),
+    });
+    expect(result.runtimeRun).toHaveBeenCalledOnce();
+    expect(result.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "completed" }),
+    );
+    expect(continueJobs(result.enqueue)).toEqual([]);
+  });
+
+  it("does not retry a failed lookup for an unclaimed run after admission closes", async () => {
+    const admission = new AbortController();
+    const result = await runRoutine([], {
+      runAdmissionSignal: admission.signal,
+      onRunRead: () => {
+        admission.abort();
+        throw Object.assign(new Error("database unavailable"), { code: "P1001" });
+      },
+    });
+    expect(result.prisma.run.findUnique).toHaveBeenCalledOnce();
+    expect(result.prisma.run.updateMany).not.toHaveBeenCalled();
+    expect(result.enqueue).not.toHaveBeenCalled();
   });
 
   it("does not claim a run when the worker is already shutting down", async () => {

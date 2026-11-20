@@ -6,6 +6,7 @@ import type { IncomingMessage } from "node:http";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { AiConsentStatus, ModelCatalogEntry, RpcOutput } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import {
   activeBotId,
   captureScreenshot,
@@ -28,6 +29,36 @@ const LOCAL_MODEL_REPLY = "OpenAI-compatible endpoint verified end to end.";
 test.afterEach(async ({ page }) => {
   // Finish intercepted responses before the browser context is disposed.
   await page.unrouteAll({ behavior: "wait" });
+});
+
+test("operator model provider allowlist reaches the native renderer", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    process.env.ORKBOT_MODEL_PROVIDER_ALLOWLIST !== "scripted,ollama-cloud",
+    "Run with ORKBOT_MODEL_PROVIDER_ALLOWLIST=scripted,ollama-cloud",
+  );
+  await signup(page, `provider-policy-${Date.now()}@orkbot.test`, "password12", "Policy Member");
+  await completeOnboarding(page);
+  const catalog = await rpc<ModelCatalogEntry[]>(page, "models/list", {});
+  expect(new Set(catalog.map((entry) => entry.provider))).toEqual(
+    new Set(["scripted", "openai-compatible"]),
+  );
+  const blocked = await page.request.post("/rpc/models/probeCatalog", {
+    headers: { [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) },
+    data: { json: { provider: "openrouter", apiKey: "fixture-blocked-key" } },
+  });
+  expect(blocked.status()).toBe(403);
+  expect(await blocked.json()).toMatchObject({
+    json: { message: "This model provider is blocked by the server administrator." },
+  });
+
+  await openUserSettings(page, "models");
+  await page.getByTestId("model-providers").getByRole("button", { name: "Add provider" }).click();
+  await expect(page.getByRole("option", { name: "Ollama Cloud", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: "OpenAI-compatible", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "OpenRouter", exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "allowed-model-provider-picker");
 });
 
 test("the native renderer manages shared AI on its connected server", async ({
@@ -248,6 +279,8 @@ test("model settings cleanup frames", { tag: "@nightly" }, async ({ page }, test
   await expect(mainList.getByTestId("model-role-default")).toContainText("Choose a model");
   const dialog = await openModelConnection(page, "OpenRouter");
   await expect(dialog.getByLabel("API key")).toBeVisible();
+  const retention = dialog.getByRole("switch", { name: "Zero data retention" });
+  await expect(retention).not.toBeChecked();
   await captureScreenshot(page, testInfo, "model-settings-cleanup-1-not-connected");
 
   await dialog.getByLabel("API key").fill("rejected-fixture-key");
@@ -261,12 +294,20 @@ test("model settings cleanup frames", { tag: "@nightly" }, async ({ page }, test
 
   // Connecting from the empty first slot makes the provider's model the main model.
   await dialog.getByLabel("API key").fill("fake-cleanup-api-key");
+  await retention.click();
+  await expect(retention).toBeChecked();
+  await captureScreenshot(page, testInfo, "model-zero-data-retention");
   providerConnected = true;
   await dialog.getByRole("button", { name: "Connect API key", exact: true }).click();
   await expect(dialog).toBeHidden();
   await pickReopenedModel(page);
   const primary = mainList.getByTestId("model-role-row-1");
   await expect(primary).toContainText("OpenRouter");
+  expect(await rpc(page, "models/credentials", {})).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ provider: "openrouter", zeroDataRetention: true }),
+    ]),
+  );
   const addFallback = mainList.getByRole("button", { name: "Add fallback", exact: true });
   await expect(addFallback).toBeVisible();
   await captureScreenshot(page, testInfo, "model-settings-cleanup-2-connected");

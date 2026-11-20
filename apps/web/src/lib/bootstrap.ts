@@ -1,4 +1,4 @@
-import type { AppBootstrap } from "@orkbot/contracts";
+import type { AppBootstrap, Space } from "@orkbot/contracts";
 import { ATTACHMENT_MAX_BYTES, attachmentMaxBytes } from "@orkbot/contracts";
 import { displayIdentityResult } from "@orkbot/core";
 import { initialBootstrapTarget } from "./bootstrap-target";
@@ -22,12 +22,21 @@ export function subscribeTicketBoardEnabled(listener: () => void) {
   };
 }
 
+export type WorkspaceNavigationSpace = Pick<Space, "id" | "name" | "isDefault" | "bots" | "groups">;
+
+export type WorkspaceNavigationPreview = {
+  userId: string;
+  spaces: readonly WorkspaceNavigationSpace[];
+};
+
 let primedBootstrap: {
   botId?: string;
   spaceId?: string;
   promise: Promise<AppBootstrap>;
   /** What this space showed last time, painted while the fresh bootstrap loads. */
   seed?: AppBootstrap;
+  /** Previously authorized navigation data. Never used as identity or chat content. */
+  preview?: WorkspaceNavigationPreview;
 } | null = null;
 
 const initialTarget = initialBootstrapTarget(
@@ -99,8 +108,9 @@ export function primeSpaceBootstrap(
   botId?: string,
   seed?: AppBootstrap,
   promise = preloadSpaceBootstrap(spaceId, botId),
+  preview?: WorkspaceNavigationPreview,
 ): Promise<AppBootstrap> {
-  const entry = { botId, spaceId, promise, seed };
+  const entry = { botId, spaceId, promise, seed, preview };
   primedBootstrap = entry;
   void promise.then(
     (bootstrap) => {
@@ -112,8 +122,13 @@ export function primeSpaceBootstrap(
 }
 
 /** Fetches scoped data without changing selection, capabilities, or the primed shell. */
-export function preloadSpaceBootstrap(spaceId: string, botId?: string, signal?: AbortSignal) {
-  return requestBootstrap(botId, spaceId, signal).then((bootstrap) => {
+export function preloadSpaceBootstrap(
+  spaceId: string,
+  botId?: string,
+  signal?: AbortSignal,
+  priority?: RequestInit["priority"],
+) {
+  return requestBootstrap(botId, spaceId, signal, priority).then((bootstrap) => {
     if (bootstrap.me.spaceId !== spaceId) throw new Error("Workspace selection changed");
     return bootstrap;
   });
@@ -124,11 +139,16 @@ export function discardPrimedBootstrap(promise: Promise<AppBootstrap>): void {
   if (primedBootstrap?.promise === promise) primedBootstrap = null;
 }
 
-function requestBootstrap(botId?: string, spaceId?: string, signal?: AbortSignal) {
+function requestBootstrap(
+  botId?: string,
+  spaceId?: string,
+  signal?: AbortSignal,
+  priority?: RequestInit["priority"],
+) {
   markOnce("rk:renderer:bootstrap-request-start");
   const input = botId ? { botId } : {};
   const request = spaceId
-    ? rpc.bootstrap(input, { context: { spaceId }, ...(signal ? { signal } : {}) })
+    ? rpc.bootstrap(input, { context: { spaceId, priority }, ...(signal ? { signal } : {}) })
     : rpc.bootstrap(input);
   return request.then((bootstrap) => {
     markOnce("rk:renderer:bootstrap-response");

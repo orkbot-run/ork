@@ -25,6 +25,7 @@ import {
 import type * as Db from "@orkbot/db";
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
 import { clearThread, planComputerSize } from "@orkbot/db";
+import { createLogger, createTestSink, getLogger, installLogger } from "@orkbot/logging";
 import { describe, expect, it, vi } from "vitest";
 import {
   acquireComputerExecutionLease,
@@ -50,6 +51,13 @@ vi.mock("@orkbot/db", async (importOriginal) => ({
   planComputerSize: vi.fn(async () => "standard"),
 }));
 
+// The durable cleanup queue itself is exercised with a real database in its PostgreSQL suite.
+vi.mock("./computer-orphan-cleanup.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./computer-orphan-cleanup.js")>()),
+  orphanCleanupInProgress: vi.fn(async () => null),
+  finishOrphanRegistration: vi.fn(async () => true),
+}));
+
 const context = {
   operationId: "test",
   traceId: "test",
@@ -60,6 +68,65 @@ const context = {
 } satisfies AdapterContext;
 
 describe("computer provisioning", () => {
+  it.each([
+    { reason: "maintenance", state: "stopped", maintenanceId: "maintenance-job" },
+    { reason: "boot_in_progress", state: "booting", fresh: true },
+    { reason: "boot_by_live_run", state: "booting", liveRun: true },
+  ])("logs $reason once when it denies a start", async (scenario) => {
+    const sink = createTestSink();
+    const previousLogger = getLogger();
+    installLogger(createLogger({ service: "test", sinks: [sink] }));
+    const prisma = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      $transaction: vi.fn(async (work: (tx: PrismaClient) => Promise<unknown>) => work(prisma)),
+      computer: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          id: "computer-1",
+          homeKey: "bot-1",
+          scope: "dedicated",
+          kind: "fake",
+          spaceId: "workspace-1",
+          state: scenario.state,
+          maintenanceId: scenario.maintenanceId,
+          updatedAt: scenario.fresh ? new Date() : new Date(0),
+        }),
+      },
+      run: { findFirst: vi.fn().mockResolvedValue(scenario.liveRun ? { id: "other-run" } : null) },
+    } as unknown as PrismaClient;
+    const sandbox = new FakeSandboxProvider();
+    const provision = vi.spyOn(sandbox, "provision");
+    try {
+      await expect(
+        provisionComputer(
+          {
+            prisma,
+            sandbox,
+            home: {} as AgentHomeStore,
+            jobs: {} as JobPublisher,
+            events: {} as ThreadEvents,
+          },
+          "computer-1",
+          { ...context, runId: "run-1" },
+        ),
+      ).rejects.toThrow(new ComputerBusyError());
+      expect(sink.events).toEqual([
+        expect.objectContaining({
+          level: "warn",
+          message: "computer.busy",
+          reason: scenario.reason,
+          lastObservedState: scenario.state,
+          "computer.id": "computer-1",
+          "run.id": "run-1",
+          "bot.id": "bot-1",
+          durationMs: expect.any(Number),
+        }),
+      ]);
+      expect(provision).not.toHaveBeenCalled();
+    } finally {
+      installLogger(previousLogger);
+    }
+  });
+
   it("provisions a Private Computer with Wuying selected", async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-private-provision-"));
     const ref: ComputerRef = {
@@ -172,6 +239,9 @@ describe("computer provisioning", () => {
       releaseScreen,
     } as unknown as SandboxProvider;
 
+    const sink = createTestSink();
+    const previousLogger = getLogger();
+    installLogger(createLogger({ service: "test", sinks: [sink] }));
     try {
       await expect(
         provisionComputer(
@@ -187,6 +257,18 @@ describe("computer provisioning", () => {
           context,
         ),
       ).rejects.toThrow("Computer is busy");
+      expect(
+        sink.events.filter((event) =>
+          ["computer.busy", "computer.provision_failed"].includes(event.message),
+        ),
+      ).toEqual([
+        expect.objectContaining({
+          level: "warn",
+          message: "computer.busy",
+          reason: "activation_claim_lost",
+          lastObservedState: "stopped",
+        }),
+      ]);
       expect(releaseScreen).toHaveBeenCalledOnce();
       expect(stop).toHaveBeenCalledOnce();
       expect(prisma.computer.updateMany).toHaveBeenNthCalledWith(
@@ -204,6 +286,7 @@ describe("computer provisioning", () => {
         }),
       );
     } finally {
+      installLogger(previousLogger);
       await rm(dataDir, { recursive: true, force: true });
     }
   });
@@ -1157,7 +1240,10 @@ describe("computer provisioning", () => {
             kind: "boat",
             updatedAt: expect.any(Date),
           },
-          data: sameName ? { state: "error", restorePending: true } : { state: "running" },
+          data: {
+            bootHeartbeatAt: null,
+            ...(sameName ? { state: "error", restorePending: true } : { state: "running" }),
+          },
         });
         const marks = vi
           .mocked(prisma.computer.updateMany)
@@ -1307,6 +1393,8 @@ describe("computer provisioning", () => {
           context,
         ),
       ).rejects.toThrow();
+      expect(sandbox.stop).toHaveBeenCalledWith(resumed, context, { discardUnsaved: true });
+      expect(sandbox.provision).toHaveBeenCalledTimes(2);
       const markIndex = updateMany.mock.calls.findIndex(
         ([args]) => args.data.restorePending === true,
       );
@@ -1315,7 +1403,9 @@ describe("computer provisioning", () => {
         vi.mocked(sandbox.prepare).mock.invocationCallOrder[1]!,
       );
       expect(updateMany).toHaveBeenLastCalledWith(
-        expect.objectContaining({ data: { state: "error", restorePending: true } }),
+        expect.objectContaining({
+          data: { state: "error", restorePending: true, bootHeartbeatAt: null },
+        }),
       );
     } finally {
       await rm(dataDir, { recursive: true, force: true });
@@ -1457,6 +1547,7 @@ describe("computer provisioning", () => {
         await expect(started).resolves.toEqual(ref);
         const activation = {
           state: "running",
+          bootHeartbeatAt: null,
           providerRef: next.providerRef,
           kind: next.kind,
           restorePending: false,
@@ -1804,6 +1895,7 @@ describe("computer provisioning", () => {
           },
           data: {
             state: unsafeStop ? "quarantined" : "error",
+            bootHeartbeatAt: null,
             providerRef: "new-provider-1",
             kind: "e2b",
             restorePending: true,

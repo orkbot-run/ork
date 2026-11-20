@@ -200,7 +200,7 @@ export async function executeSubagent(
       );
     },
     isProviderFailure: (message) => providerFailures.has(message.content),
-    stream: (target, ctx, options) =>
+    stream: (target, ctx, options, onPacingWait) =>
       reliableModelStream(
         target.models,
         target.model,
@@ -225,6 +225,7 @@ export async function executeSubagent(
             {
               prepareContext: contextPolicy.prepareContext,
               imageTokens: estimatePiImageTokens,
+              onPacingWait,
               recordUsage: host.request.onUsage,
               onProviderError: (message) => providerFailures.add(message.content),
               onUsage: (usage) => {

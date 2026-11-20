@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork review failure handling follows LICENSE.md.
+
 import type { AdapterContext, AgentUsage, ModelCallObserver } from "./types.js";
 
 /** A bounded semantic choice. Callers own criteria and the policy applied to an answer. */
@@ -35,7 +39,14 @@ export interface DecisionProviderOptions {
 
 export class DecisionProviderError extends Error {
   constructor(
-    readonly kind: "authentication" | "invalid" | "invalid_response" | "busy" | "unavailable",
+    readonly kind:
+      | "authentication"
+      | "credits_required"
+      | "model_unavailable"
+      | "invalid"
+      | "invalid_response"
+      | "busy"
+      | "unavailable",
   ) {
     super("Decision provider could not complete the request");
   }

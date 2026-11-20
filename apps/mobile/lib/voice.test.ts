@@ -23,6 +23,7 @@ import {
   speakUtterance,
   speakWithDeviceVoice,
   speechClipType,
+  startSpeechStream,
   stopSpeaking,
   stopVoicePlayback,
   subscribeVoicePlayback,
@@ -120,6 +121,27 @@ describe("mobile speech", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("aborts a hosted stream's synthesis on owner stop", async () => {
+    vi.mocked(rpc).mockResolvedValue({ ready: true, utterances: ["First sentence."] } as never);
+    const fetchRequest = vi.fn(
+      (_url: string, _init: RequestInit) => new Promise<Response>(() => undefined),
+    );
+    vi.stubGlobal("fetch", fetchRequest);
+    const owner = claimSpeaker()!;
+    try {
+      const stream = startSpeechStream({ owner, botId: "call-bot" }, vi.fn());
+      stream.add(["First sentence.", "Second sentence."]);
+      await waitFor(() => fetchRequest.mock.calls.length === 1);
+      stopSpeaking(owner);
+      expect(fetchRequest.mock.calls[0]?.[1].signal?.aborted).toBe(true);
+      await expect(stream.settled).resolves.toBeUndefined();
+      expect(getVoicePlaybackState()).toEqual({ status: "idle", canPause: false });
+    } finally {
+      stopSpeaking(owner);
+      owner.release();
+    }
   });
 
   it("rolls back speaker admission when stopping previous device audio throws", async () => {

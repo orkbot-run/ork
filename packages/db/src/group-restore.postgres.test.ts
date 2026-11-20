@@ -146,4 +146,55 @@ describePostgres("archived groups and their bots (PostgreSQL)", () => {
       await groups.restoreGroup(actor, pair.id);
       expect(await archivedAt([dee.id, eve.id])).toEqual([false, false]);
     }));
+
+  it("restores only routines suspended by the group archive and returns their wakeups", () =>
+    runAsTenant(owner, async () => {
+      const groups = createGroupRepos(prisma);
+      const [ada, ben] = [await bot("Fern"), await bot("Gail")];
+      const crew = await groups.createGroup(actor, {
+        name: "Routine crew",
+        botIds: [ada.id, ben.id],
+      });
+      const system = asSystem(prisma);
+      const thread = await system.thread.findFirstOrThrow({ where: { groupId: crew.id } });
+      const base = {
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        botId: ada.id,
+        threadId: thread.id,
+        name: "Report",
+        prompt: "Report",
+        crons: ["0 8 * * *"],
+      };
+      const due = new Date(Date.now() + 60_000);
+      const active = await system.routine.create({
+        data: { ...base, active: true, nextRunAt: due },
+      });
+      const paused = await system.routine.create({ data: { ...base, active: false } });
+      const direct = await system.routine.create({
+        data: { ...base, threadId: null, active: true, nextRunAt: due },
+      });
+      await groups.archiveGroup(actor, crew.id);
+      expect(await system.routine.findUnique({ where: { id: active.id } })).toMatchObject({
+        active: false,
+        resumeOnRestore: true,
+        nextRunAt: due,
+      });
+      expect(await system.routine.findUnique({ where: { id: direct.id } })).toMatchObject({
+        active: true,
+      });
+      await expect(groups.restoreGroup(actor, crew.id)).resolves.toEqual([
+        { id: active.id, nextRunAt: due },
+      ]);
+      expect(await system.routine.findUnique({ where: { id: active.id } })).toMatchObject({
+        active: true,
+        resumeOnRestore: false,
+        nextRunAt: due,
+      });
+      expect(await system.routine.findUnique({ where: { id: paused.id } })).toMatchObject({
+        active: false,
+        resumeOnRestore: false,
+        nextRunAt: null,
+      });
+    }));
 });

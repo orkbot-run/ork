@@ -23,6 +23,7 @@ import type { RoutineDraft } from "../lib/routine-draft";
 import {
   draftFromRoutine,
   emptyRoutineDraft,
+  emptyRoutineHttpWatch,
   routineDraftChanged,
   routineSaveRequest,
   routineScheduleLocked,
@@ -296,6 +297,8 @@ function RoutineEditor({
   const busy = useRef(false);
   const dirty = routineDraftChanged(draft, base);
   const locked = routineScheduleLocked(base);
+  const httpWatch = draft.httpWatch;
+  const otherWatch = base?.watch && base.watch.kind !== "http";
 
   // On Android, back leaves the form for the routine instead of leaving the routine.
   useEffect(() => {
@@ -322,7 +325,11 @@ function RoutineEditor({
           ? t("Name this routine.")
           : request.error === "prompt"
             ? t("Write what this routine should do.")
-            : t("Add a schedule to run this routine."),
+            : request.error === "watchUrl"
+              ? t("Enter a public HTTPS address without credentials or a fragment")
+              : request.error === "watchSettings"
+                ? t("Check every 5 to 1,440 minutes and track up to five fields.")
+                : t("Add a schedule or an HTTPS address to run this routine."),
       );
       return;
     }
@@ -468,7 +475,7 @@ function RoutineEditor({
             />
           ))}
           {/* A change trigger checks on its own interval, so it never shares a schedule. */}
-          {base?.watch ? null : (
+          {otherWatch || httpWatch ? null : (
             <SettingsGroup>
               <SettingsRow
                 key="add"
@@ -479,6 +486,67 @@ function RoutineEditor({
               />
             </SettingsGroup>
           )}
+          {!otherWatch && !httpWatch && draft.schedules.length === 0 ? (
+            <SettingsGroup>
+              <SettingsRow
+                accessibilityRole="button"
+                tinted
+                key="add-watch"
+                title={t("Watch an HTTPS address")}
+                onPress={() => update({ httpWatch: emptyRoutineHttpWatch() })}
+              />
+            </SettingsGroup>
+          ) : null}
+          {httpWatch ? (
+            <SettingsGroup
+              label={t("HTTPS address")}
+              footer={t("Unchanged checks appear in history. You can also post them in chat.")}
+            >
+              <SettingsInputRow
+                key="url"
+                accessibilityLabel={t("HTTPS address")}
+                placeholder="https://example.com/status.json"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                maxLength={2048}
+                value={httpWatch.url}
+                onChangeText={(url) => update({ httpWatch: { ...httpWatch, url } })}
+              />
+              <SettingsInputRow
+                key="track"
+                accessibilityLabel={t("Fields that mark a change")}
+                placeholder={t("Fields to compare, e.g. id, modifiedTime (optional)")}
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={httpWatch.track}
+                onChangeText={(track) => update({ httpWatch: { ...httpWatch, track } })}
+              />
+              <SettingsInputRow
+                key="interval"
+                accessibilityLabel={t("Check interval in minutes")}
+                placeholder={t("Check interval in minutes")}
+                keyboardType="number-pad"
+                maxLength={4}
+                value={httpWatch.everyMinutes}
+                onChangeText={(everyMinutes) =>
+                  update({ httpWatch: { ...httpWatch, everyMinutes } })
+                }
+              />
+              <SettingsSwitch
+                key="loud"
+                label={t('Post "No changes" in chat')}
+                value={httpWatch.loud}
+                onChange={(loud) => update({ httpWatch: { ...httpWatch, loud } })}
+              />
+              <SettingsRow
+                key="remove"
+                accessibilityRole="button"
+                title={t("Remove change trigger")}
+                onPress={() => update({ httpWatch: null })}
+              />
+            </SettingsGroup>
+          ) : null}
         </View>
       )}
       {base ? (

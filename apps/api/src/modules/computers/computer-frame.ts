@@ -29,13 +29,14 @@ export async function computerFrame(
     )
   )
     throw new ORPCError("BAD_GATEWAY", { message: "Could not load the desktop." });
-  if (!(await validComputerFrameImage(observation)))
-    throw new ORPCError("BAD_GATEWAY", { message: "Could not load the desktop." });
   const id = createHash("sha256")
     .update(JSON.stringify([scope, observation.mimeType, observation.width, observation.height]))
     .update(observation.image)
     .digest("hex");
   if (id === previous) return null;
+  // Validate decoded dimensions only for an image that will be sent to a viewer.
+  if (!(await validComputerFrameImage(observation)))
+    throw new ORPCError("BAD_GATEWAY", { message: "Could not load the desktop." });
   return {
     id,
     capturedAt: observation.capturedAt,

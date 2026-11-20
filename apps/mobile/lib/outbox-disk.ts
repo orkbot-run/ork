@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 outbox storage is preserved. Verified draft handoff follows LICENSE.md.
 
+import { isAttachmentImageMimeType } from "@orkbot/contracts";
 import { Directory, File, Paths } from "expo-file-system";
 import type { SendAttempt, UnsentDisk } from "./thread-feedback";
 import { OUTBOX_MAX_ENTRIES } from "./thread-feedback";
@@ -146,7 +147,9 @@ export const outboxDisk: UnsentDisk = {
         target.write(attachment.contentBase64, { encoding: "base64" });
         if (!target.exists || target.base64Sync() !== attachment.contentBase64)
           throw new Error("OUTBOX_STORAGE_UNAVAILABLE");
-        attachment.previewUri = attachment.mimeType.startsWith("image/") ? target.uri : undefined;
+        attachment.previewUri = isAttachmentImageMimeType(attachment.mimeType)
+          ? target.uri
+          : undefined;
       });
       for (const attachment of attempt.payload.attachments) attachment.contentBase64 = "";
       return true;
@@ -231,7 +234,7 @@ export const outboxDisk: UnsentDisk = {
           (attachment: SendAttempt["payload"]["attachments"][number], index: number) => ({
             ...attachment,
             contentBase64: "",
-            previewUri: attachment.mimeType?.startsWith("image/")
+            previewUri: isAttachmentImageMimeType(attachment.mimeType ?? "")
               ? attachmentFile(entry.clientNonce, index).uri
               : undefined,
           }),

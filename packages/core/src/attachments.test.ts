@@ -21,7 +21,15 @@ describe("attachment helpers", () => {
   it.each([
     ["xls", "application/vnd.ms-excel"],
     ["xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
-  ])("accepts and preserves %s spreadsheet attachments", (extension, mimeType) => {
+    ["doc", "application/msword"],
+    ["docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+    ["ppt", "application/vnd.ms-powerpoint"],
+    ["pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+    ["heic", "image/heic"],
+    ["heif", "image/heif"],
+    ["mov", "video/quicktime"],
+    ["3gp", "video/3gpp"],
+  ])("accepts and preserves %s file attachments", (extension, mimeType) => {
     for (const reported of [undefined, "", mimeType, "application/octet-stream"]) {
       expect(inferAttachmentMimeType(`statement.${extension}`, reported)).toBe(mimeType);
       expect(inferAttachmentMimeType(`STATEMENT.${extension.toUpperCase()}`, reported)).toBe(

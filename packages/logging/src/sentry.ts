@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
+
 import type * as SentrySdk from "@sentry/node";
 import { CORRELATION_TAG_KEYS } from "./monitoring.js";
 import { isMonitoringUserId, monitoringPseudonymSecret, monitoringUserId } from "./pseudonym.js";
@@ -121,6 +126,13 @@ export async function createSentrySink(
       const message = redactSensitiveText(reportTitle(event));
       Sentry.withScope((scope) => {
         scope.setTag("service", service);
+        const fingerprint = event["error.fingerprint"];
+        if (
+          Array.isArray(fingerprint) &&
+          fingerprint.length > 0 &&
+          fingerprint.every((value) => typeof value === "string")
+        )
+          scope.setFingerprint(fingerprint.map((value) => redactSensitiveText(value)));
         for (const key of TAG_KEYS) {
           const value = event[key];
           if (typeof value === "string" && value.length > 0 && value.length <= 200)

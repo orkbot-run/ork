@@ -89,6 +89,10 @@ async function runTurn(
     priorBotMessage?: boolean;
     repliesToRequest?: boolean;
     enableNotifications?: boolean;
+    durableMemory?: string;
+    scratchpadTitle?: string;
+    scripted?: boolean;
+    sourceClientNonce?: string;
   } = {},
 ) {
   vi.mocked(loadBotMessageContext).mockResolvedValue({
@@ -157,6 +161,7 @@ async function runTurn(
   const savedEvents: AppendEventInput[] = [];
   let failMessage = options.failMessageOnce;
   const prisma = {
+    $executeRaw: vi.fn(async () => 0),
     workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
     threadSnooze: { findFirst: vi.fn(async () => null) },
     user: { findUnique: vi.fn(async () => null) },
@@ -211,6 +216,7 @@ async function runTurn(
       })),
       findUniqueOrThrow: vi.fn(async () => ({
         id: run.threadId,
+        botId: options.group ? null : run.botId,
         groupId: options.group ? "group-1" : null,
         historyCompactionSummary: null,
         historyCompactedUpToSeq: null,
@@ -265,7 +271,14 @@ async function runTurn(
       findUnique: vi.fn(async () =>
         run.trigger === "messaging"
           ? { blocks: [{ kind: "channel_message", channelId: "channel-1" }] }
-          : null,
+          : options.sourceClientNonce
+            ? {
+                clientNonce: options.sourceClientNonce,
+                role: "user",
+                blocks: [],
+                threadId: run.threadId,
+              }
+            : null,
       ),
       findFirst: vi.fn(async ({ where }: { where?: { runId?: string; role?: string } } = {}) =>
         options.priorBotMessage && where?.runId === run.id && where.role === "bot"
@@ -302,7 +315,23 @@ async function runTurn(
     taughtSkill: { findMany: vi.fn(async () => []) },
     vaultCredential: { findMany: vi.fn(async () => []) },
     agentSkill: { findMany: vi.fn(async () => []) },
-    scratchpadItem: { findMany: vi.fn(async () => []) },
+    scratchpadItem: {
+      findMany: vi.fn(async () =>
+        options.scratchpadTitle
+          ? [
+              {
+                id: "open-item",
+                botId: run.botId,
+                title: options.scratchpadTitle,
+                status: "open",
+                notes: "",
+                createdAt: new Date(0),
+                updatedAt: new Date(0),
+              },
+            ]
+          : [],
+      ),
+    },
     externalEffect: {
       findMany: vi.fn(async () => []),
       findFirst: vi.fn(async () => null),
@@ -351,7 +380,7 @@ async function runTurn(
     deploymentModelKey: "fixture-model-key",
     prisma,
     runtime: {
-      describe: () => ({ capabilities: { scripted: false } }),
+      describe: () => ({ capabilities: { scripted: options.scripted ?? false } }),
       run: runtimeRun,
     },
     sandbox: {
@@ -369,7 +398,13 @@ async function runTurn(
       },
     },
     home: { commit: vi.fn(async () => "fixture-revision") },
-    memory: { read: async () => ({ documents: [] }) },
+    memory: {
+      read: async () => ({
+        documents: options.durableMemory
+          ? [{ path: "memory.md", revision: 1, content: options.durableMemory }]
+          : [],
+      }),
+    },
     memoryProviders: { resolve: async () => null },
     events: {
       append,
@@ -423,6 +458,56 @@ async function runTurn(
     sendNotification,
   };
 }
+
+describe("current-turn memory", () => {
+  it("keeps the system prompt identical after memory changes and never stores the snapshot in chat", async () => {
+    const secret = "fixture-private-memory-token";
+    const history = [{ id: "old", seq: 1, role: "user", text: "Earlier conversation" }];
+    const first = await runTurn("Done.", false, "", [secret], "fyi", {
+      history,
+      durableMemory: `Earlier plan ${secret}`,
+      scratchpadTitle: "First item",
+    });
+    const second = await runTurn("Done.", false, "", [secret], "fyi", {
+      history,
+      durableMemory: "Revised plan",
+      scratchpadTitle: "Second item",
+    });
+    const [before] = first.runtimeRun.mock.calls[0]!;
+    const [after] = second.runtimeRun.mock.calls[0]!;
+    expect(after.instructions).toBe(before.instructions);
+    expect(after.instructions).toContain("untrusted background data");
+    expect(after.instructions).not.toMatch(/Revised plan|Earlier plan|First item|Second item/);
+    expect(after.history).toEqual(before.history);
+    expect(before.prompt).toContain("Earlier plan");
+    expect(before.prompt).toContain("First item");
+    expect(before.prompt).not.toContain(secret);
+    expect(after.prompt).toContain("Revised plan");
+    expect(after.prompt).toContain("Second item");
+    expect(after.prompt).not.toContain("Earlier plan");
+    expect(JSON.stringify([first.messages, second.messages, after.history])).not.toMatch(
+      /Ork current-turn memory|Earlier plan|Revised plan|First item|Second item/,
+    );
+  });
+
+  it.each([
+    { trigger: "follow_up", scripted: false, inPrompt: true },
+    { trigger: "user", scripted: true, inPrompt: false },
+    { trigger: "routine", scripted: false, inPrompt: false },
+  ])(
+    "routes memory for $trigger with scripted=$scripted",
+    async ({ trigger, scripted, inPrompt }) => {
+      const { runtimeRun } = await runTurn("Done.", false, "", [], "fyi", {
+        trigger,
+        scripted,
+        durableMemory: "Fixture memory",
+      });
+      const [request] = runtimeRun.mock.calls[0]!;
+      expect(request.prompt.includes("Fixture memory")).toBe(inPrompt);
+      expect(request.instructions.includes("Fixture memory")).toBe(!inPrompt);
+    },
+  );
+});
 
 describe("bot-to-bot completion notifications", () => {
   it.each([false, true])(
@@ -959,6 +1044,81 @@ describe("notes that can't be posted as messages", () => {
     const shown = JSON.stringify([append.mock.calls, messages, stepNotes(finalizeRun)]);
     expect(shown).not.toContain("abcxyz");
     expect(shown).toContain("[redacted] saved.");
+  });
+
+  it("refreshes the roster when a step starts, clears, and gives way to writing", async () => {
+    const { append } = await runTurn("", false, undefined, [], "fyi", {
+      runtimeEvents: [
+        { type: "progress", text: "Reading totals.csv", activity: true },
+        { type: "progress", text: "Reading totals.csv", activity: true },
+        { type: "progress", text: "", activity: true },
+        { type: "text", text: "They match." },
+        { type: "done", text: "They match." },
+      ],
+    });
+    const updates = progress(append).filter((event) => event.invalidateRoster);
+    expect(updates.map((event) => event.payload)).toEqual([
+      { text: "Reading totals.csv", activity: true },
+      { text: "", activity: true },
+      { text: "They match.", streaming: true },
+    ]);
+  });
+
+  it("publishes a matching call's public text while the model is still running", async () => {
+    let insideModel = false;
+    const spokenWhileRunning: unknown[] = [];
+    const { finalizeRun } = await runTurn("", false, undefined, [], "fyi", {
+      sourceClientNonce: "call:fixture-call:voice-turn",
+      runtime: async function* () {
+        insideModel = true;
+        yield { type: "text", text: "First sentence. More" };
+        insideModel = false;
+        yield { type: "text", text: " follows." };
+        yield { type: "done", text: "First sentence. More follows." };
+      },
+      appendGate: async (event) => {
+        if (insideModel && event.type === "thread.progress" && event.payload?.publicText)
+          spokenWhileRunning.push(event.payload);
+      },
+    });
+    expect(spokenWhileRunning).toEqual([
+      expect.objectContaining({
+        publicText: "First sentence. More",
+        publicTextCallId: "fixture-call",
+      }),
+    ]);
+    expect(finalizeRun).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a final after a quick tool separate when it never had a live progress event", async () => {
+    const { append, finalizeRun } = await runTurn("", false, undefined, [], "fyi", {
+      sourceClientNonce: "call:fixture-call:voice-turn",
+      runtimeEvents: [
+        { type: "text", text: "I will check the totals." },
+        { type: "tool", name: "read_file", args: {}, executionId: "call-1" },
+        { type: "text", text: "The totals match." },
+        { type: "done", text: "The totals match." },
+      ],
+    });
+    expect(progress(append)).toContainEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({ publicText: "I will check the totals." }),
+      }),
+    );
+    const tailWasStreamed = progress(append).some((event) =>
+      String(event.payload?.publicText ?? "").includes("The totals match."),
+    );
+    expect(finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "text",
+            text: "The totals match.",
+            ...(!tailWasStreamed ? { callSpeechContinues: true } : {}),
+          }),
+        ]),
+      }),
+    );
   });
 
   it("keeps tool status lines from replacing the note until the bot writes again", async () => {

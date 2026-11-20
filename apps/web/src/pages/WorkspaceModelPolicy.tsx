@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { ModelCatalogEntry } from "@orkbot/contracts";
+import type { ModelApiProtocol, ModelCatalogEntry } from "@orkbot/contracts";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
+import { modelConnectionOptions } from "@orkbot/core";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +19,7 @@ import {
   Label,
   NativeSelect,
   NativeSelectOption,
+  Switch,
 } from "@orkbot/ui-web";
 import { useEffect, useId, useRef, useState } from "react";
 import type { RpcClient } from "../lib/rpc";
@@ -30,7 +32,15 @@ export function WorkspaceModelPolicy({
   isCurrent,
   onChanged,
 }: {
-  value: { canManage: boolean; policy: { provider: string; modelId: string } | null };
+  value: {
+    canManage: boolean;
+    policy: {
+      provider: string;
+      modelId: string;
+      blockedByPolicy?: boolean;
+      zeroDataRetention?: boolean;
+    } | null;
+  };
   catalog: ModelCatalogEntry[];
   client: RpcClient;
   isCurrent: () => boolean;
@@ -41,10 +51,13 @@ export function WorkspaceModelPolicy({
   const [editing, setEditing] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [provider, setProvider] = useState("");
+  const [choice, setChoice] = useState("");
+  const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>("chat-completions");
   const [modelId, setModelId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [routing, setRouting] = useState<Record<string, string>>({});
+  const [zeroDataRetention, setZeroDataRetention] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const operation = useRef<AbortController | null>(null);
@@ -56,15 +69,26 @@ export function WorkspaceModelPolicy({
         .map((entry) => [entry.provider, entry]),
     ).values(),
   ];
+  const options = modelConnectionOptions(
+    catalog.filter((entry) => entry.auth !== "oauth" && entry.protocol !== "decisions"),
+  );
+  const optionKey = (option: (typeof options)[number]) =>
+    option.baseUrl ? JSON.stringify([option.id, option.baseUrl]) : option.id;
+  const selected = providers.find((entry) => entry.provider === provider);
   const fields =
     providers.find((entry) => entry.provider === provider)?.connection?.routingFields ?? [];
   const compatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
   function open() {
-    setProvider(value.policy?.provider ?? providers[0]?.provider ?? "");
-    setModelId(value.policy?.modelId ?? "");
+    const policy = value.policy?.blockedByPolicy ? null : value.policy;
+    const option = options.find((option) => option.id === policy?.provider) ?? options[0];
+    setChoice(option ? optionKey(option) : "");
+    setProvider(option?.id ?? "");
+    setModelId(policy && policy.provider === option?.id ? policy.modelId : "");
     setApiKey("");
-    setBaseUrl("");
+    setBaseUrl(option?.baseUrl ?? "");
+    setApiProtocol(option?.apiProtocol ?? "chat-completions");
     setRouting({});
+    setZeroDataRetention(policy?.zeroDataRetention ?? false);
     setError(null);
     setEditing(true);
   }
@@ -83,8 +107,9 @@ export function WorkspaceModelPolicy({
             modelId: modelId.trim(),
             apiKey: apiKey.trim(),
             credentialId: null,
-            ...(compatible ? { baseUrl: baseUrl.trim() } : {}),
+            ...(compatible ? { baseUrl: baseUrl.trim(), apiProtocol } : {}),
             ...(fields.length ? { routing } : {}),
+            ...(selected?.connection?.supportsZeroDataRetention ? { zeroDataRetention } : {}),
           },
           { signal: controller.signal },
         );
@@ -109,6 +134,11 @@ export function WorkspaceModelPolicy({
       {value.policy ? (
         <p className="mt-3 text-sm">
           <strong>{value.policy.provider}</strong> · {value.policy.modelId}
+          {value.policy.blockedByPolicy ? (
+            <span className="block text-muted-foreground">
+              <Trans>Blocked by the server administrator</Trans>
+            </span>
+          ) : null}
         </p>
       ) : null}
       {error ? (
@@ -142,19 +172,25 @@ export function WorkspaceModelPolicy({
             </Label>
             <NativeSelect
               id={`${id}-provider`}
-              value={provider}
+              value={choice}
               required
               onChange={(event) => {
-                setProvider(event.target.value);
+                const option = options.find((option) => optionKey(option) === event.target.value);
+                if (!option) return;
+                setChoice(event.target.value);
+                setProvider(option.id);
+                setBaseUrl(option.baseUrl ?? "");
+                setApiProtocol(option.apiProtocol ?? "chat-completions");
                 setModelId("");
                 setApiKey("");
                 setRouting({});
+                setZeroDataRetention(false);
               }}
             >
               <NativeSelectOption value="" disabled>{t`Choose a provider`}</NativeSelectOption>
-              {providers.map((entry) => (
-                <NativeSelectOption key={entry.provider} value={entry.provider}>
-                  {entry.providerName ?? entry.provider}
+              {options.map((option) => (
+                <NativeSelectOption key={optionKey(option)} value={optionKey(option)}>
+                  {option.name}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
@@ -188,8 +224,35 @@ export function WorkspaceModelPolicy({
                   type="url"
                   value={baseUrl}
                   onChange={(event) => setBaseUrl(event.target.value)}
+                  readOnly={selected?.connection?.customEndpointAllowed === false}
                   required
                 />
+              </>
+            ) : null}
+            {selected?.connection?.supportsZeroDataRetention ? (
+              <>
+                <label
+                  htmlFor={`${id}-zero-data-retention`}
+                  className="flex items-center justify-between gap-3 text-sm"
+                >
+                  <Trans>Zero data retention</Trans>
+                  <Switch
+                    id={`${id}-zero-data-retention`}
+                    aria-label={t`Zero data retention`}
+                    aria-describedby={`${id}-zero-data-retention-description`}
+                    checked={zeroDataRetention}
+                    disabled={busy}
+                    onCheckedChange={setZeroDataRetention}
+                  />
+                </label>
+                <p
+                  id={`${id}-zero-data-retention-description`}
+                  className="text-sm text-muted-foreground"
+                >
+                  <Trans>
+                    Route requests only to endpoints marked as eligible for zero data retention.
+                  </Trans>
+                </p>
               </>
             ) : null}
             {fields.map((field) => (

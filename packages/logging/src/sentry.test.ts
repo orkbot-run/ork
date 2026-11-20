@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
+
 import * as Sentry from "@sentry/node";
 import { afterEach, describe, expect, it } from "vitest";
 import { createRootLogger } from "./axiom.js";
@@ -281,6 +286,19 @@ describe("sentry sink", () => {
     // No synthetic stack: the collector titles and groups these by their message.
     expect(events.map((event) => event.exception)).toEqual([undefined, undefined]);
     expect(events[1]!.message).toBe("mail sync failed");
+  });
+
+  it("groups terminal job failures by their explicit task fingerprint", async () => {
+    const { events, transport } = recordingTransport();
+    const logger = createLogger({
+      service: "test",
+      sinks: [await createSentrySink("test", { dsn: DSN }, transport)],
+    });
+    logger.error("job.gave_up", new Error("different backend errors"), {
+      "error.fingerprint": ["job.gave_up", "computer.sleep"],
+    });
+    await logger.flush();
+    expect(events[0]?.fingerprint).toEqual(["job.gave_up", "computer.sleep"]);
   });
 
   it("titles a failed request report by its method, route and status", async () => {

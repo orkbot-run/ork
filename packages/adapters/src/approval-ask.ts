@@ -10,6 +10,7 @@ import {
   CARD_TITLE_ESCAPED_CHARACTERS,
   instructionUpdateDiff,
   messagingProviderName,
+  outgoingDraftForEffect,
   redactSecrets,
   SITE_SENDING_TOOLS,
   sanitizeMessagingLabel,
@@ -42,6 +43,9 @@ type ApprovalAskOptions = {
   summary?: FleetCardSummary;
   batch?: ToolBatch;
   mandatoryReason?: ApprovalReason;
+  userComputerName?: string;
+  /** Persisted route-bound request, used to bind editable outgoing fields. */
+  outgoingDraftRequest?: unknown;
 };
 
 export function buildApprovalAskBlock(
@@ -53,12 +57,39 @@ export function buildApprovalAskBlock(
 ): MessageBlock {
   const block = approvalAskBlock(effectId, toolName, args, secrets, options);
   if (block.kind !== "ask") return block;
-  const actions = options?.mandatoryReason
-    ? block.actions?.filter((action) => action.id !== "always")
-    : block.actions;
+  const outgoingDraft = outgoingDraftForEffect(
+    toolName,
+    redactLeaves(options?.outgoingDraftRequest ?? args, secrets),
+  );
+  const actions = outgoingDraft
+    ? [
+        { id: "allow", label: "Send" },
+        { id: "deny", label: "Deny" },
+      ]
+    : options?.mandatoryReason
+      ? block.actions?.filter((action) => action.id !== "always")
+      : block.actions;
   return {
     ...block,
     actions,
+    ...(outgoingDraft
+      ? {
+          outgoingDraft,
+          text: truncate(
+            redactSecrets(
+              `Review before ${describeApprovalAction(toolName, options?.batch ? args : {}, options?.batch)}`,
+              secrets,
+            ),
+            MAX_APPROVAL_SUMMARY_LENGTH,
+          ),
+          detail: options?.reviewReason?.trim()
+            ? truncate(
+                redactSecrets(options.reviewReason.trim(), secrets),
+                MAX_APPROVAL_DETAIL_LENGTH,
+              )
+            : undefined,
+        }
+      : {}),
     allowRule: actions?.some((action) => action.id === "always") ?? false,
     ...(options?.mandatoryReason ? { approvalReason: options.mandatoryReason } : {}),
   };
@@ -144,6 +175,13 @@ function approvalAskBlock(
       ],
     };
   }
+  const userComputerLabel = options?.userComputerName
+    ? redactSecrets(options.userComputerName, secrets)
+        .replaceAll(/\s+/g, " ")
+        .trim()
+        .slice(0, 80)
+        .replace(new RegExp(CARD_TITLE_ESCAPED_CHARACTERS, "g"), "\\$&")
+    : undefined;
   if (USER_COMPUTER_SCREEN_TOOLS.has(toolName)) {
     const app = userComputerAppName(args.app).replace(
       new RegExp(CARD_TITLE_ESCAPED_CHARACTERS, "g"),
@@ -153,7 +191,7 @@ function approvalAskBlock(
     return {
       kind: "ask",
       approvalEffectId: effectId,
-      text: `Use ${app || "an app"} on your computer?`,
+      text: `Use ${app || "an app"} on ${userComputerLabel || "your computer"}?`,
       ...(steps.length
         ? {
             detail: truncate(redactSecrets(steps.join("\n"), secrets), MAX_APPROVAL_DETAIL_LENGTH),
@@ -172,7 +210,7 @@ function approvalAskBlock(
     return {
       kind: "ask",
       approvalEffectId: effectId,
-      text: "Run on your computer?",
+      text: `Run on ${userComputerLabel || "your computer"}?`,
       detail: truncate(
         redactSecrets(`${cwd}${String(args.command ?? "")}`, secrets),
         MAX_APPROVAL_DETAIL_LENGTH,

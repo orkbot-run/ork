@@ -9,6 +9,7 @@ import type { OAuthMaterial } from "./mcp-oauth.js";
 import {
   McpOAuthBroker,
   McpOAuthClientRequiredError,
+  McpOAuthGrantUpdatedError,
   McpReauthorizationRequiredError,
   oauthMaterialSecrets,
   StoredMcpOAuthProvider,
@@ -685,6 +686,107 @@ describe("MCP OAuth", () => {
     expect(await worker.broker.statusFor(shared.server, shared.context)).toBe("connected");
   });
 
+  it("shares a non-rotating refresh and rejects stale clears of the new access token", async () => {
+    const shared = sharedCredentials(expiringMaterial(EXPIRED()));
+    const refresh = vi.fn(async () =>
+      Response.json({
+        access_token: "access-1",
+        refresh_token: "old-refresh",
+        token_type: "Bearer",
+        expires_in: 7200,
+      }),
+    );
+    const [api, worker, stale] = await Promise.all(
+      Array.from({ length: 3 }, () => shared.startProcess(refresh)),
+    );
+    const grants = await Promise.all([api!.provider.tokens(), worker!.provider.tokens()]);
+    expect(grants).toEqual([
+      expect.objectContaining({ access_token: "access-1" }),
+      expect.objectContaining({ access_token: "access-1" }),
+    ]);
+    expect(refresh).toHaveBeenCalledOnce();
+    await stale!.provider.invalidateCredentials("tokens");
+    expect((await shared.stored()).oauth?.tokens).toMatchObject({
+      access_token: "access-1",
+      refresh_token: "old-refresh",
+    });
+  });
+
+  it("keeps a new login without a refresh token after the previous bearer was rejected", async () => {
+    const material = reauthorizableMaterial();
+    delete (material.oauth.tokens as { refresh_token?: string }).refresh_token;
+    const shared = sharedCredentials(material);
+    const { provider: stale } = await shared.startProcess(vi.fn());
+    const { provider: fresh } = await shared.startProcess(vi.fn());
+    const fetch = stale.wrapFetch(async () => new Response(null, { status: 401 }));
+    await fetch("https://mcp.example.test/mcp", {
+      headers: { authorization: "Bearer old-access" },
+    });
+    await fresh.saveClientInformation({ client_id: "latest-client" });
+    await fresh.saveTokens({ access_token: "new-login", token_type: "Bearer" });
+
+    await stale.saveDiscoveryState({ authorizationServerUrl: "https://auth.example.test" });
+    await stale.saveCodeVerifier("stale-background-verifier");
+    await expect(
+      stale.redirectToAuthorization(new URL("https://auth.example.test/authorize")),
+    ).rejects.toBeInstanceOf(McpOAuthGrantUpdatedError);
+    expect(await stale.tokens()).toMatchObject({ access_token: "new-login" });
+    expect((await shared.stored()).oauth).toMatchObject({
+      tokens: { access_token: "new-login" },
+      clientInformation: { client_id: "latest-client" },
+    });
+    expect((await shared.stored()).oauth?.codeVerifier).toBeUndefined();
+  });
+
+  it("treats SDK metadata on refresh responses as a conditional write", async () => {
+    const auth = rotatingAuthServer();
+    const shared = sharedCredentials(reauthorizableMaterial());
+    const { provider: stale } = await shared.startProcess(auth.fetch);
+    const { provider: fresh } = await shared.startProcess(auth.fetch);
+    const fetch = stale.wrapFetch(auth.fetch);
+    const response = await fetch("https://auth.example.test/token", {
+      method: "POST",
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: "old-refresh" }),
+    });
+    const served = (await response.json()) as NonNullable<Awaited<ReturnType<typeof stale.tokens>>>;
+    await fresh.saveTokens({
+      access_token: "new-login",
+      refresh_token: "refresh-1",
+      token_type: "Bearer",
+    });
+    await stale.saveTokens({ ...served, issuer: "https://auth.example.test" } as typeof served);
+    expect((await shared.stored()).oauth?.tokens).toMatchObject({ access_token: "new-login" });
+    expect(await stale.tokens()).toMatchObject({ access_token: "new-login" });
+  });
+
+  it("connects a fresh session after user sign-in wins a real SDK authorization race", async () => {
+    const material = reauthorizableMaterial();
+    delete (material.oauth.tokens as { refresh_token?: string }).refresh_token;
+    const shared = sharedCredentials(material);
+    const { provider: fresh } = await shared.startProcess(vi.fn());
+    const mcp = earlyRevokingMcpServer(
+      async () => {
+        throw new Error("unexpected authorization server request");
+      },
+      async () => {
+        await fresh.saveTokens({ access_token: "new-login", token_type: "Bearer" });
+      },
+    );
+    const { provider: stale } = await shared.startProcess(mcp.network);
+    const first = new McpSession();
+    const second = new McpSession();
+    try {
+      await expect(mcp.connect(stale, first)).rejects.toBeInstanceOf(McpOAuthGrantUpdatedError);
+      await expect(mcp.connect(stale, second)).resolves.toMatchObject({
+        transport: "streamable-http",
+      });
+    } finally {
+      await Promise.all([first.close(), second.close()]);
+    }
+    expect(mcp.bearers).toEqual(expect.arrayContaining(["Bearer old-access", "Bearer new-login"]));
+    expect((await shared.stored()).oauth?.tokens).toMatchObject({ access_token: "new-login" });
+  });
+
   it("lets newly issued tokens replace the stored grant", async () => {
     const server = rotatingAuthServer();
     const shared = sharedCredentials(expiringMaterial(EXPIRED()));
@@ -1228,7 +1330,7 @@ describe("MCP OAuth", () => {
       expect(await provider.tokens()).toMatchObject({
         access_token: newerStoredGrant ? "newer-access" : "access-1",
       });
-      expect(commits).toBe(2);
+      expect(commits).toBe(newerStoredGrant ? 1 : 2);
       expect(server.requests.map((request) => request.get("refresh_token"))).toEqual([
         "old-refresh",
       ]);
@@ -1369,9 +1471,15 @@ describe("MCP OAuth", () => {
       );
       const prefix = "https://auth.example.test/authorize?state=";
       const url = new URL(prefix + "x".repeat(2000 - prefix.length));
-      await expect(provider.redirectToAuthorization(url)).rejects.toThrow(
-        "MCP URL exceeds 8192 characters",
-      );
+      if (foreground) {
+        await expect(provider.redirectToAuthorization(url)).rejects.toThrow(
+          "MCP URL exceeds 8192 characters",
+        );
+      } else {
+        await expect(provider.redirectToAuthorization(url)).rejects.toBeInstanceOf(
+          McpReauthorizationRequiredError,
+        );
+      }
       expect(provider.authorizationUrl).toBeUndefined();
       expect(onAuthorization).not.toHaveBeenCalled();
       if (foreground) {
@@ -1469,7 +1577,7 @@ describe("MCP OAuth", () => {
     expect(onAuthorization).toHaveBeenCalledWith(authorizationUrl);
   });
 
-  it("clears stale tokens when runtime authorization URL validation fails", async () => {
+  it("asks to reconnect a background run without validating a browser authorization URL", async () => {
     const persisted: { oauth?: { tokens?: unknown } }[] = [];
     const provider = new StoredMcpOAuthProvider(
       "server-1",
@@ -1481,14 +1589,14 @@ describe("MCP OAuth", () => {
 
     await expect(
       provider.redirectToAuthorization(new URL("http://auth.example.test/authorize")),
-    ).rejects.toThrow(/HTTPS/i);
+    ).rejects.toBeInstanceOf(McpReauthorizationRequiredError);
 
     expect(await provider.tokens()).toBeUndefined();
     expect(persisted.at(-1)?.oauth?.tokens).toBeUndefined();
   });
 
   it("persists SDK credentials and invalidates only the requested scope", async () => {
-    const persisted: unknown[] = [];
+    const persisted: OAuthMaterial[] = [];
     const provider = new StoredMcpOAuthProvider(
       "server-1",
       {
@@ -1509,6 +1617,8 @@ describe("MCP OAuth", () => {
       refresh_token: "rotated",
       token_type: "bearer",
     });
+    const grantId = persisted[0]?.oauth?.grantId;
+    expect(grantId).toMatch(/^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/);
     await provider.invalidateCredentials("tokens");
 
     expect(await provider.tokens()).toBeUndefined();
@@ -1517,6 +1627,9 @@ describe("MCP OAuth", () => {
       authorizationServerUrl: "https://auth.example.test",
     });
     expect(persisted).toHaveLength(2);
+    expect(persisted[1]?.oauth?.clearedGrant).toBe(grantId);
+    expect(persisted[1]?.oauth?.grantId).toBeUndefined();
+    expect(persisted[1]?.oauth?.tokens).toBeUndefined();
     await expect(
       provider.redirectToAuthorization(new URL("https://auth.example.test/authorize")),
     ).rejects.toThrow(McpReauthorizationRequiredError);
@@ -2974,6 +3087,14 @@ describe("MCP OAuth", () => {
     expect(secrets).toEqual([key]);
   });
 
+  it("extracts the credential after an authorization scheme across long whitespace", () => {
+    const header = `bEaReR${"\t".repeat(20_000)}fixture-credential`;
+    expect(oauthMaterialSecrets({ headers: { Authorization: header } })).toEqual([
+      header,
+      "fixture-credential",
+    ]);
+  });
+
   it("does not start authorization for a server that neither challenges nor publishes OAuth metadata", async () => {
     const requested: string[] = [];
     vi.stubGlobal(
@@ -3375,7 +3496,10 @@ describe("MCP OAuth", () => {
         deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       mcpOAuthSession: oauthSessionStore(),
-      $transaction: vi.fn().mockResolvedValue([]),
+      $transaction: vi.fn().mockResolvedValue({
+        server: { endpoint: "https://mcp.example.test/mcp", secretId: null },
+        secret: null,
+      }),
     };
     const broker = new McpOAuthBroker(prisma as never, { put } as never, TEST_NETWORK, true);
 

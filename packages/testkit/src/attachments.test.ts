@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { ThreadSnapshot } from "@orkbot/contracts";
+import type { MessageBlock, ThreadSnapshot } from "@orkbot/contracts";
 import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { BotIntroHarness } from "./discard-bot-intro.js";
@@ -135,6 +135,44 @@ describeAttachments("chat attachments", () => {
       artifactId: zip.id,
     });
     expect(Buffer.from(fetchedZip.contentBase64, "base64")).toEqual(zipBytes);
+
+    const phoneAndOfficeFiles = [
+      ["photo.HEIC", "image/heic"],
+      ["clip.mov", "video/quicktime"],
+      ["proposal.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      ["slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+    ] as const;
+    const uploads: Extract<MessageBlock, { kind: "file" }>[] = [];
+    for (const [name, mimeType] of phoneAndOfficeFiles) {
+      const contentBase64 = Buffer.from(name).toString("base64");
+      const upload = await rpc<{ id: string; mimeType: string }>(app, cookie, "artifacts/create", {
+        botId: bot.id,
+        name,
+        mimeType: "application/octet-stream",
+        contentBase64,
+      });
+      expect(upload.mimeType).toBe(mimeType);
+      expect(
+        await rpc(app, cookie, "artifacts/get", { botId: bot.id, artifactId: upload.id }),
+      ).toMatchObject({ contentBase64 });
+      uploads.push({
+        kind: "file",
+        artifactId: upload.id,
+        name,
+        mimeType,
+        size: Buffer.byteLength(name),
+      });
+    }
+    await sendAndWait(app, cookie, bot.id, { artifactIds: uploads.map((file) => file.artifactId) });
+    snapshot = await rpc<ThreadSnapshot>(app, cookie, "threads/get", { botId: bot.id });
+    const uploadedMessage = snapshot.messages.find((message) =>
+      message.blocks.some(
+        (block) => block.kind === "file" && block.artifactId === uploads[0]?.artifactId,
+      ),
+    );
+    expect(uploadedMessage?.blocks).toEqual(
+      expect.arrayContaining(uploads.map((upload) => expect.objectContaining(upload))),
+    );
 
     const badMime = await raw(app, cookie, "artifacts/create", {
       botId: bot.id,

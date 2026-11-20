@@ -70,7 +70,7 @@ export async function scheduleCreateRefusal(
 
 /** The task catalog, scratchpad, ticket board, schedules and skills. */
 export const taskTools: ToolHandlers = {
-  async task_catalog(ctx) {
+  async task_catalog(ctx, call) {
     const { deps, run, bot, thread } = ctx;
     return taskCatalogFromTool(deps, {
       spaceId: run.spaceId,
@@ -78,6 +78,8 @@ export const taskTools: ToolHandlers = {
       userId: run.userId,
       ...(thread.groupId ? { threadId: thread.id } : {}),
       tools: ctx.tools.offered,
+      skillQuery: typeof call.args.skillQuery === "string" ? call.args.skillQuery : undefined,
+      skillOffset: typeof call.args.skillOffset === "number" ? call.args.skillOffset : undefined,
     });
   },
   async scratchpad_list(ctx, call) {
@@ -242,6 +244,7 @@ export const taskTools: ToolHandlers = {
           delayMinutes: args.delayMinutes,
           delaySeconds: args.delaySeconds,
           startAt: args.startAt,
+          on: args.on,
         }),
       }),
     );

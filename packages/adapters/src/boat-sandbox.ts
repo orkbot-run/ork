@@ -274,6 +274,7 @@ export class BoatSandboxProvider implements SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      recordCreated?: (computer: Pick<ComputerRef, "kind" | "providerRef">) => Promise<void>;
       savedAt?: Date;
       size?: ComputerSize;
     },
@@ -300,6 +301,7 @@ export class BoatSandboxProvider implements SandboxProvider {
       botId: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      recordCreated?: (computer: Pick<ComputerRef, "kind" | "providerRef">) => Promise<void>;
       savedAt?: Date;
       size?: ComputerSize;
     },
@@ -350,6 +352,14 @@ export class BoatSandboxProvider implements SandboxProvider {
       created = await create().catch((failure: unknown) => {
         throw boatSizeError(failure);
       });
+    }
+    try {
+      await request.recordCreated?.({ kind: "boat", providerRef: created.sandbox.id });
+    } catch (error) {
+      await this.destroy(this.ref(created.sandbox.id, request.botId, true), context).catch(
+        () => undefined,
+      );
+      throw error;
     }
     return this.ref(created.sandbox.id, request.botId, true);
   }

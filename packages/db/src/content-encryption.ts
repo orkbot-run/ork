@@ -49,6 +49,12 @@ interface ModelSpec {
 
 /** Further content columns (external messages, steering, skills, …) add an entry here. */
 export const ENCRYPTED_MODELS: Record<string, ModelSpec> = {
+  MeetingSession: {
+    table: "meeting_sessions",
+    fields: { title: {}, url: {}, transcript: {} },
+    space: { column: "spaceId" },
+    ownerRelation: "user",
+  },
   Message: {
     table: "messages",
     fields: { blocks: { plainKeys: MESSAGE_BLOCK_PLAIN_KEYS } },

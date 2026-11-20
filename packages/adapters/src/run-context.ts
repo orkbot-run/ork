@@ -64,6 +64,8 @@ export interface RunLeaseState {
   lastCheckAt: number;
   /** A takeover keeps the computer lease past this attempt. */
   retainComputer: boolean;
+  /** Conservative deadline from the last successful renewal of both leases. */
+  databaseDeadline?: number;
 }
 
 export interface RunComputerUseState {
@@ -127,6 +129,11 @@ export interface ReplyState {
   pendingProgress: string;
   lastProgressAt: number;
   hasStreamedText: boolean;
+  /** Append-only public chat text for voice playback, independent of transient tool status. */
+  publicText?: string;
+  publicTextSegmentStart?: number;
+  publicTextLimitReached?: boolean;
+  rosterProgress?: string;
   /**
    * Set by a tool call or a new assistant message: the next text starts a new
    * assistant turn and needs a break from the earlier text that stayed in this reply.
@@ -241,6 +248,8 @@ export interface RunSource {
   peerMessage: Awaited<ReturnType<typeof loadBotMessageContext>>;
   /** Whose own computer user_computer_shell may reach (see userComputerOwner). */
   userComputerOwner: string | undefined;
+  /** Default device selected at the start of this attempt. */
+  userComputerDevice?: string;
   /** The exact paired device that reported screen readiness for this run. */
   userComputerScreenDevice?: string;
 }

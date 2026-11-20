@@ -15,7 +15,12 @@ import type {
 } from "@orkbot/adapter-kit";
 import { MessagingSendError, messagingDeliverJob, runContinueJob } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
-import { botMessageHopExhausted, nextBotMessageHop, pageLinksAsTitles } from "@orkbot/core";
+import {
+  botMessageHopExhausted,
+  formatMessagingOwnerPrompt,
+  nextBotMessageHop,
+  pageLinksAsTitles,
+} from "@orkbot/core";
 import type { Prisma, PrismaClient, Run, ThreadEvents } from "@orkbot/db";
 import {
   appendEventInTransaction,
@@ -26,12 +31,14 @@ import {
   THREAD_LOCK_TRANSACTION_OPTIONS,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
+import { loadBotMessageContext } from "./bot-messages.js";
 import {
   DIRECT_DELIVERY_VERSION,
   declareDirectDelivery,
   declareRejectedDelivery,
   directDeliverySourceAvailable,
   MESSAGING_ROW_IN_FLIGHT_MS,
+  OWNER_PROMPT_DELIVERY_VERSION,
   quarantineStaleDirectClaims,
   retireDirectDelivery,
   retireUnavailableUnknowns,
@@ -110,37 +117,33 @@ export async function mirrorMessagingOutbound(
   deps: MessagingDeliveryDeps,
   runId: string,
 ): Promise<void> {
-  await mirrorRun(deps, runId);
-  await deps.prisma.run.updateMany({
-    where: { id: runId, trigger: "messaging" },
-    data: { messagingMirroredAt: new Date() },
-  });
-}
-
-async function mirrorRun(deps: MessagingDeliveryDeps, runId: string): Promise<void> {
   const run = await deps.prisma.run.findUnique({
     where: { id: runId },
     include: { sourceMessage: true },
   });
   if (!run) return;
+  if (run.trigger !== "messaging" && run.trigger !== "bot_message") return;
+  const source = run.sourceMessage?.blocks;
+  const channelBlock =
+    run.trigger === "messaging" && Array.isArray(source)
+      ? (source as MessageBlock[]).find(
+          (block): block is Extract<MessageBlock, { kind: "channel_message" }> =>
+            block?.kind === "channel_message",
+        )
+      : undefined;
+  if (channelBlock) await mirrorChannelRun(deps, run, channelBlock);
+  else await queueDirectRun(deps, run, false);
 
-  if (run.trigger === "messaging") {
-    const sourceBlocks = (run.sourceMessage?.blocks ?? []) as MessageBlock[];
-    const channelBlock = sourceBlocks.find(
-      (block): block is Extract<MessageBlock, { kind: "channel_message" }> =>
-        block.kind === "channel_message",
-    );
-    if (channelBlock) {
-      await mirrorChannelRun(deps, run, channelBlock);
-      return;
-    }
-  } else if (run.trigger !== "bot_message") {
-    // Mirror inbound messaging runs and delegated bot_message replies only.
-    // Do not push in-app user/routine runs out to the linked chat.
-    return;
-  }
-
-  await queueDirectRun(deps, run, false);
+  // Fencing the marker prevents a delayed mirror from acknowledging a newer wait.
+  if (
+    run.trigger === "messaging" ||
+    run.status === "waiting_input" ||
+    run.status === "waiting_takeover"
+  )
+    await deps.prisma.run.updateMany({
+      where: { id: runId, trigger: run.trigger, status: run.status, updatedAt: run.updatedAt },
+      data: { messagingMirroredAt: new Date() },
+    });
 }
 
 /** Admit only durable direct text before the run's first attachment/page barrier. */
@@ -170,7 +173,10 @@ export async function mirrorMessagingProgress(
 
 async function queueDirectRun(
   deps: Pick<MessagingDeliveryDeps, "prisma" | "messaging">,
-  run: Pick<Run, "id" | "botId" | "spaceId" | "userId" | "threadId">,
+  run: Pick<
+    Run,
+    "id" | "botId" | "spaceId" | "userId" | "threadId" | "status" | "trigger" | "sourceMessageId"
+  >,
   progress: boolean,
 ): Promise<boolean> {
   const identity = await deps.prisma.messagingIdentity.findUnique({
@@ -178,9 +184,12 @@ async function queueDirectRun(
   });
   if (!identity || identity.spaceId !== run.spaceId || identity.userId !== run.userId) return false;
 
-  // bot_message runs can carry the bot's user-facing reply after a delegate wake.
-  // extractText keeps only text and page titles, so inter-bot chatter blocks never leak out.
-
+  const waiting = run.status === "waiting_input" || run.status === "waiting_takeover";
+  const fullReply =
+    run.trigger !== "bot_message" ||
+    run.status === "failed" ||
+    (await loadBotMessageContext(deps.prisma, run.sourceMessageId))?.repliesToRequest === true;
+  if (!fullReply && !waiting) return false;
   const committed = await deps.prisma.message.findMany({
     where: { runId: run.id, threadId: run.threadId, role: "bot" },
     orderBy: { seq: "asc" },
@@ -188,10 +197,12 @@ async function queueDirectRun(
   const barrier = progress
     ? committed.findIndex((message) => hasDeliveryBarrier(message.blocks))
     : -1;
-  const messages = barrier < 0 ? committed : committed.slice(0, barrier);
-  const sendsFiles = deps.messaging
-    .platforms()
-    .some((platform) => platform.provider === identity.provider && platform.capabilities.files);
+  const messages = !fullReply ? [] : barrier < 0 ? committed : committed.slice(0, barrier);
+  const sendsFiles =
+    fullReply &&
+    deps.messaging
+      .platforms()
+      .some((platform) => platform.provider === identity.provider && platform.capabilities.files);
   // One row per platform-sized part, then one per image or file, so a retry
   // re-sends only the parts that failed and never repeats delivered text.
   // The whole reply takes one explicit, non-overlapping range, like a group
@@ -223,11 +234,60 @@ async function queueDirectRun(
       }),
     )
   ).flat();
+  if (waiting) {
+    const prompts = committed.filter((message) => pendingOwnerPrompt(message.blocks, run.status));
+    if (prompts.length) {
+      const owner = await deps.prisma.user.findUnique({
+        where: { id: identity.userId },
+        select: { locale: true },
+      });
+      for (const message of prompts) {
+        const prompt = pendingOwnerPrompt(message.blocks, run.status, owner?.locale);
+        if (!prompt) continue;
+        const parts = await splitOutboundBody(identity.provider, prompt);
+        rows.push(
+          ...parts.map((body, index) => ({
+            idempotencyKey: `msg:${message.id}:owner-prompt:${index + 1}`,
+            kind: "dm",
+            identityId: identity.id,
+            body,
+            sourceMessageId: message.id,
+            requiredDeliveryVersion: OWNER_PROMPT_DELIVERY_VERSION,
+          })),
+        );
+      }
+    }
+  }
   if (rows.length === 0) return false;
   // Atomic dedupe: a concurrent messaging.deliver for the same run loses on
   // the idempotencyKey unique key instead of throwing P2002.
   await insertOutboundRows(deps.prisma, { identityId: identity.id }, rows);
   return true;
+}
+
+function pendingOwnerPrompt(blocks: unknown, status: string, locale?: string | null): string {
+  if (!Array.isArray(blocks)) return "";
+  return blocks
+    .map((block) => formatMessagingOwnerPrompt(block, status, locale))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+async function availableDirectSource(
+  tx: Prisma.TransactionClient,
+  identity: Parameters<typeof directDeliverySourceAvailable>[1],
+  row: MessagingOutboundRow,
+): Promise<boolean> {
+  if (!(await directDeliverySourceAvailable(tx, identity, row))) return false;
+  const sourceId = row.sourceMessageId;
+  if (!sourceId || !row.idempotencyKey.startsWith(`msg:${sourceId}:owner-prompt:`)) return true;
+  const message = await tx.message.findUnique({
+    where: { id: sourceId },
+    select: { blocks: true, runId: true },
+  });
+  if (!message?.runId) return false;
+  const run = await tx.run.findUnique({ where: { id: message.runId }, select: { status: true } });
+  return Boolean(run && pendingOwnerPrompt(message.blocks, run.status));
 }
 
 function hasDeliveryBarrier(blocks: unknown): boolean {
@@ -607,7 +667,7 @@ async function claimForSend(
         where: { id: conversation.identityId },
       });
       if (identity) await retireUnavailableUnknowns(tx, identity);
-      if (!identity || !(await directDeliverySourceAvailable(tx, identity, row))) {
+      if (!identity || !(await availableDirectSource(tx, identity, row))) {
         await retireDirectDelivery(tx, row.id);
         return "retired";
       }
@@ -622,7 +682,12 @@ async function claimForSend(
         ...(protectedDirect ? { requiredDeliveryVersion: DIRECT_DELIVERY_VERSION } : {}),
       },
     });
-    if (claim.count === 1 && protectedDirect) row.requiredDeliveryVersion = DIRECT_DELIVERY_VERSION;
+    if (claim.count === 1 && protectedDirect) {
+      row.requiredDeliveryVersion = Math.max(
+        row.requiredDeliveryVersion ?? 0,
+        DIRECT_DELIVERY_VERSION,
+      );
+    }
     return claim.count === 1 ? "claimed" : "held";
   });
 }
@@ -725,7 +790,7 @@ async function deliverRow(
         const claimed = await tx.messagingOutbound.findUnique({ where: { id: row.id } });
         if (claimed?.status !== "sent" || claimed.providerHandle != null) return false;
         const current = await tx.messagingIdentity.findUnique({ where: { id: identity.id } });
-        if (current && (await directDeliverySourceAvailable(tx, current, row))) return true;
+        if (current && (await availableDirectSource(tx, current, row))) return true;
         await retireDirectDelivery(tx, row.id);
         return false;
       });

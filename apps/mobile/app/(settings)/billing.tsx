@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved; billing recovery changes follow LICENSE.md.
+
 import { MenuView } from "@expo/ui/community/menu";
 import type { BillingStatus } from "@orkbot/contracts";
 import {
@@ -15,6 +19,7 @@ import { Alert, AppState, ScrollView, Share, StyleSheet } from "react-native";
 import { SettingsGroup, SettingsRow, useStackedSettings } from "../../components/settings-group";
 import { rpc, selectedSpaceId } from "../../lib/api";
 import {
+  billingNeedsRecovery,
   currentPlan,
   openBillingPage,
   ownKeySubscriptionCents,
@@ -90,6 +95,41 @@ export default function BillingScreen() {
     }
   }
   if (!status) return null;
+
+  if (billingNeedsRecovery(status))
+    return (
+      <ScrollView
+        style={sideInsets}
+        contentContainerStyle={[styles.content, stacked && styles.compactContent]}
+        contentInsetAdjustmentBehavior="automatic"
+      >
+        <SettingsGroup
+          footer={
+            status.state === "past_due"
+              ? status.canManage
+                ? t("Payment failed. Update your payment method to resume your plan.")
+                : t("Payment failed. Ask an owner to update the payment method.")
+              : status.canManage
+                ? t("Manage billing to resume your plan.")
+                : t("Ask an owner to resume your plan.")
+          }
+        >
+          {status.canManage && status.hasCustomer ? (
+            <SettingsRow
+              title={status.state === "past_due" ? t("Update payment method") : t("Manage billing")}
+              chevron="right"
+              disabled={pending}
+              onPress={() =>
+                void action(async () => {
+                  const result = await rpc("billing/portal", { client: "mobile" });
+                  show(await openBillingPage(result.url));
+                })
+              }
+            />
+          ) : null}
+        </SettingsGroup>
+      </ScrollView>
+    );
 
   const plan = currentPlan(status);
   const endsAt = planEndsAt(status);

@@ -24,13 +24,13 @@ import { ACTIVE_RUN_STATUSES } from "@orkbot/core";
 import type { Prisma, PrismaClient } from "@orkbot/db";
 import {
   cancelRunsInTransaction,
-  clearEndedRunState,
   computerScopeKey,
   createRepos,
   createThreadMessageInTransaction,
   deletePageShareSecrets,
   expireComputerExecutionLeases,
   legacyTeamHomeKey,
+  pauseRoutinesForArchive,
   recordComputerRunEnd,
   THREAD_LOCK_TRANSACTION_OPTIONS,
   withTransactionRetry,
@@ -320,28 +320,20 @@ export async function archiveBot(
     }),
     deps.prisma.run.findMany({
       where: { botId: bot.id, status: { in: [...ACTIVE_RUN_STATUSES] } },
-      select: { id: true },
+      select: { id: true, taskId: true, userId: true, spaceId: true },
     }),
     deps.prisma.routine.findMany({
       where: { botId: bot.id, active: true },
       select: { id: true },
     }),
   ]);
-  const runIds = activeRuns.map((run) => run.id);
   const now = new Date();
-  await deps.prisma.$transaction(async (tx) => {
-    await tx.run.updateMany({
-      where: { id: { in: runIds } },
-      data: { status: "cancelled", completedAt: now },
-    });
-    await clearEndedRunState(tx, runIds);
-    await tx.task.updateMany({
-      where: { runs: { some: { id: { in: runIds } } } },
-      data: { status: "cancelled" },
-    });
-    await tx.routine.updateMany({
-      where: { botId: bot.id },
-      data: { active: false, nextRunAt: null },
+  const cancelledRuns = await deps.prisma.$transaction(async (tx) => {
+    const cancelled = await cancelRunsInTransaction(tx, activeRuns, now);
+    await pauseRoutinesForArchive(tx, {
+      botId: bot.id,
+      spaceId: bot.spaceId,
+      userId: bot.userId,
     });
     await expireComputerExecutionLeases(tx, { botId: bot.id });
     await tx.computer.updateMany({
@@ -360,9 +352,10 @@ export async function archiveBot(
       where: { id: bot.id },
       data: { archivedAt: bot.archivedAt ?? now, pinned: false },
     });
+    return cancelled;
   });
   await Promise.allSettled([
-    ...activeRuns.map((run) => deps.jobs.cancel(runJobKey(run.id))),
+    ...cancelledRuns.map((run) => deps.jobs.cancel(runJobKey(run.id))),
     ...activeRoutines.map((routine) => deps.jobs.cancel(routineJobKey(routine.id))),
   ]);
   await releaseTeamComputerScreen(deps, bot, dedicated?.id, context);
@@ -413,19 +406,16 @@ export async function destroyBot(
     }),
     deps.prisma.run.findMany({
       where: { botId: bot.id, status: { in: [...ACTIVE_RUN_STATUSES] } },
-      select: { id: true },
+      select: { id: true, taskId: true, userId: true, spaceId: true },
     }),
     deps.prisma.routine.findMany({ where: { botId: bot.id }, select: { id: true } }),
   ]);
   context.signal.throwIfAborted();
-  const runIds = activeRuns.map((run) => run.id);
-  await deps.prisma.run.updateMany({
-    where: { id: { in: runIds } },
-    data: { status: "cancelled", completedAt: new Date() },
-  });
-  await clearEndedRunState(deps.prisma, runIds);
+  const cancelledRuns = activeRuns.length
+    ? await deps.prisma.$transaction((tx) => cancelRunsInTransaction(tx, activeRuns, new Date()))
+    : [];
   await Promise.allSettled([
-    ...activeRuns.map((run) => deps.jobs.cancel(runJobKey(run.id))),
+    ...cancelledRuns.map((run) => deps.jobs.cancel(runJobKey(run.id))),
     ...routines.map((routine) => deps.jobs.cancel(routineJobKey(routine.id))),
   ]);
   context.signal.throwIfAborted();

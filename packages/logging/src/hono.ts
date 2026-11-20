@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; database and queue recovery changes follow LICENSE.md.
+
 import type { MiddlewareHandler } from "hono";
 import { enrichLogContext, getLogContext } from "./context.js";
 import { correlationBindings, establishRequestCorrelation } from "./correlation.js";
@@ -5,7 +10,10 @@ import { formatTraceparent } from "./ids.js";
 import { getLogger } from "./logger.js";
 import type { Logger } from "./types.js";
 
-export function requestLogging(logger?: Logger): MiddlewareHandler {
+export function requestLogging(
+  logger?: Logger,
+  options: { isExpectedError?: (error: unknown) => boolean } = {},
+): MiddlewareHandler {
   return async (c, next) => {
     const log = logger ?? getLogger();
     const correlation = establishRequestCorrelation({
@@ -24,7 +32,8 @@ export function requestLogging(logger?: Logger): MiddlewareHandler {
         if (!c.error) throw error;
       } finally {
         const failure = c.error ?? thrown;
-        if (failure) log.error("http.request.failed", failure);
+        if (failure && !options.isExpectedError?.(failure))
+          log.error("http.request.failed", failure);
         const status = failure && c.res.status < 400 ? 500 : c.res.status;
         const context = getLogContext();
         // A client that disconnected never sees the status, so its 5xx is not a server failure.

@@ -292,6 +292,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
       homePath: string;
       providerRef?: string;
       providerKind?: ComputerRef["kind"];
+      recordCreated?: (computer: Pick<ComputerRef, "kind" | "providerRef">) => Promise<void>;
     },
     context: AdapterContext,
   ): Promise<ComputerRef> {
@@ -311,7 +312,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
     // The unique name lets a create that fails after Daytona accepted it find and delete the
     // sandbox: it never auto-stops or auto-deletes, so a leaked one bills until removed.
     const name = `orkbot-${randomUUID()}`;
-    let sandbox: DaytonaSandbox;
+    let sandbox: DaytonaSandbox | undefined;
     try {
       sandbox = await this.client.create(
         {
@@ -324,8 +325,9 @@ export class DaytonaSandboxProvider implements SandboxProvider {
         },
         { timeout: 120 },
       );
+      await request.recordCreated?.({ kind: "daytona", providerRef: sandbox.id });
     } catch (error) {
-      await this.deleteAbandoned(name);
+      await this.deleteAbandoned(sandbox?.id ?? name);
       throw daytonaStartupError(error);
     }
     this.boxes.set(sandbox.id, sandbox);

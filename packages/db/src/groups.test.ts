@@ -48,6 +48,7 @@ describe("listSpaceGroupsForSpaces", () => {
     ]);
     const repos = createGroupRepos({
       chatGroup: { findMany },
+      threadSnooze: { findMany: vi.fn(async () => []) },
       $queryRaw: vi.fn(async () => [
         {
           id: "message-1",
@@ -266,6 +267,7 @@ describe("archiveGroup", () => {
       run: { findMany: findManyRuns, updateManyAndReturn: runUpdateMany },
       attempt: { updateMany: attemptUpdateMany },
       task: { updateMany: taskUpdateMany },
+      routine: { updateMany: vi.fn(async () => ({ count: 0 })) },
       secret: { findMany: vi.fn().mockResolvedValue([]), deleteMany: vi.fn() },
       computerExecutionLease: { findMany: leaseFindMany, updateMany: leaseUpdateMany },
       computer: { findMany: findManyComputers, updateMany: computerUpdateMany },
@@ -579,6 +581,7 @@ describe("listGroups archived", () => {
       findMany,
       repos: createGroupRepos({
         chatGroup: { findMany },
+        threadSnooze: { findMany: vi.fn(async () => []) },
         $queryRaw: vi.fn(async () => []),
       } as unknown as PrismaClient),
     };

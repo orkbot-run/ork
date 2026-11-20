@@ -4,7 +4,7 @@
 import type { AgentRunRequest } from "@orkbot/adapter-kit";
 import { expect, it, vi } from "vitest";
 import type { ExecutorDeps } from "./executor-deps.js";
-import { autoReviewCheckerProvider } from "./run-auto-review.js";
+import { prepareAutoReviewCheckers } from "./run-auto-review.js";
 
 it("uses the workspace model even when an approval has a different personal checker", async () => {
   let request: AgentRunRequest | undefined;
@@ -37,12 +37,14 @@ it("uses the workspace model even when an approval has a different personal chec
     botId: "bot",
     threadId: "thread",
   };
-  const checker = await autoReviewCheckerProvider(
-    deps,
-    scope,
-    { memberChecker: true, registerSecrets },
-    { provider: "personal-provider", model: "personal-model" },
-  );
+  const prepared = await prepareAutoReviewCheckers(deps, scope, { registerSecrets }, [
+    { provider: "personal-provider", model: "personal-model", role: "member" },
+    { provider: "instance", model: "checker", role: "default", instance: true, fallback: true },
+  ]);
+  expect(prepared.candidates).toEqual([
+    expect.objectContaining({ provider: "openrouter", model: "company-model", role: "default" }),
+  ]);
+  const checker = await prepared.providerFor(prepared.candidates[0]!);
   const result = await checker.review(
     {
       toolName: "read",

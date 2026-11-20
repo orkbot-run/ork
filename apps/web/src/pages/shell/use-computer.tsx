@@ -374,8 +374,12 @@ export function useComputerState({
     }
   }
 
-  async function refreshComputerScreen(id: string, request?: number) {
-    if (!computerVisible.current || computerRef.current?.capabilities?.screen === false)
+  async function refreshComputerScreen(id: string, request?: number, signal?: AbortSignal) {
+    if (
+      signal?.aborted ||
+      !computerVisible.current ||
+      computerRef.current?.capabilities?.screen === false
+    )
       return null;
     const read = request ?? ++screenRequest.current;
     const issuedState = computerRef.current?.botId === id ? computerRef.current.state : undefined;
@@ -383,8 +387,9 @@ export function useComputerState({
       load: () =>
         desktopBridge()?.accounts?.signInToServer
           ? Promise.resolve({ url: COMPUTER_FRAME_SOURCE })
-          : rpc.computer.screenUrl({ botId: id }),
+          : rpc.computer.screenUrl({ botId: id }, signal ? { signal } : undefined),
       isCurrent: () =>
+        !signal?.aborted &&
         read === screenRequest.current &&
         (activeBotId.current === id || computerBotIdRef.current === id) &&
         computerVisible.current,
@@ -489,7 +494,11 @@ export function useComputerControls({
   activeGroupId: RefObject<string | undefined>;
   runStatus: Run["status"] | undefined;
   computerCapabilities: Me["computerCapabilities"] | undefined;
-  refreshThread: (botId: string) => Promise<ThreadSnapshot>;
+  refreshThread: (
+    botId: string,
+    signal?: AbortSignal,
+    options?: { screen?: false },
+  ) => Promise<ThreadSnapshot>;
   refreshGroupThread: (groupId: string) => Promise<ThreadSnapshot>;
 }) {
   const { t } = useLingui();
@@ -627,15 +636,20 @@ export function useComputerControls({
     const botId = active.id;
     // Opening the panel is a fresh try at a screen that failed.
     screenAwaitsRetry.current = false;
-    let cancelled = false;
+    const controller = new AbortController();
     void (async () => {
       // Refresh from the server first: a stale SSE "booting" snapshot would
       // otherwise hide an RPC takeover.
-      const snap = await refreshThread(botId).catch(() => null);
-      if (cancelled || activeBotId.current !== botId) return;
+      const snap = await refreshThread(botId, controller.signal, { screen: false }).catch(
+        () => null,
+      );
+      if (controller.signal.aborted || activeBotId.current !== botId) return;
       const state = snap?.computer?.state;
-      const screen = state === "running" ? await refreshComputerScreen(botId) : null;
-      if (cancelled || activeBotId.current !== botId) return;
+      const screen =
+        state === "running"
+          ? await refreshComputerScreen(botId, undefined, controller.signal)
+          : null;
+      if (controller.signal.aborted || activeBotId.current !== botId) return;
       const available = computerCapabilitiesFor(snap?.computer, computerCapabilities);
       if (
         !available.start ||
@@ -653,7 +667,7 @@ export function useComputerControls({
       }).catch(() => undefined);
     })();
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [panel, active?.id]);
 
@@ -819,7 +833,10 @@ export function useComputerControls({
           // background screen reads clear only their own error.
           screenAwaitsRetry.current = false;
           resetScreenReconnect();
-          if (computer?.state === "running") {
+          const restartNative =
+            embeddedScreenUrl === COMPUTER_FRAME_SOURCE &&
+            computerCapabilitiesFor(computer, computerCapabilities).start;
+          if (computer?.state === "running" && !restartNative) {
             setComputerError(null);
             setComputerErrorFromScreen(false);
             void refreshComputerScreen(computerBot.id);

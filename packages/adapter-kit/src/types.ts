@@ -7,6 +7,8 @@ import type {
   ByokTier,
   CacheCapabilities as ConnectionCacheCapabilities,
   ConnectionCatalogItem,
+  McpFormRequest,
+  McpFormResponse,
   ModelApiProtocol,
   ModelRoutingValues,
   PurchaseCardField,
@@ -28,6 +30,8 @@ export interface AdapterContext {
   /** When releasing a screen after cancel, also stop orphaned browser work on that screen. */
   cancelRunWork?: boolean;
   signal: AbortSignal;
+  /** Human form input for this run; absent for unattended calls. */
+  elicitMcpForm?: (request: McpFormRequest, signal: AbortSignal) => Promise<McpFormResponse>;
   /** Connected external accounts available to this run, including their owning connector. */
   connectedConnections?: ConnectedConnector[];
   /** @deprecated Prefer connectedConnections so providers with the same app slug cannot collide. */
@@ -285,10 +289,20 @@ export interface ConnectorTool {
   readOnly?: boolean;
   /** Set when the tool runs other actions named in its arguments; see ToolBatch. */
   batch?: ToolBatch;
+  /** Known outgoing payload fields. Runtime binding also verifies the persisted route and values. */
+  outgoingDraft?: OutgoingDraftBinding;
   /** What the person sees for a call, when the name the model uses would read badly. */
   label?: string;
   /** In-process routing metadata. It is never exposed to the model. */
   route?: ConnectorRoute;
+}
+
+/** Editable fields of a known outgoing send operation. */
+export interface OutgoingDraftBinding {
+  kind: "email" | "message";
+  recipientKeys: readonly string[];
+  bodyKeys: readonly string[];
+  subjectKey?: string;
 }
 
 /**
@@ -495,6 +509,7 @@ export interface AgentRunModel {
   callObserver?: ModelCallObserver;
   cacheCapabilities?: CacheCapabilities;
   provider: string;
+  zeroDataRetention?: boolean;
   id: string;
   /** Opaque id of the stored connection serving it, so a model can fall back to another account. */
   connectionId?: string;
@@ -723,6 +738,7 @@ export type AgentRuntimeEvent =
       /** Which model response made the call; calls from one response share it. */
       response?: number;
     }
+  | { type: "tool_loop_stop"; name: string; executionId: string; count: number }
   | {
       type: "ask";
       executionId?: string;
@@ -820,6 +836,7 @@ export interface BackgroundJobPayloads {
   "messaging.credential-cleanup": { installationId: string; ref: string };
   /** Reconcile durable remote-agent intent; scope is loaded from the database. */
   "cloud_agent.poll": { agentId: string };
+  "meeting.poll": { meetingId: string };
   "purchase.poll": { purchaseId: string };
   /** Check a submitted video and post it when ready; the ID is the bot-visible job ID. */
   "media.poll": { jobId: string };
@@ -1379,12 +1396,13 @@ export interface AutoReviewRequest {
   /** Caller must already redact secrets and sensitive keys. */
   args: Record<string, unknown>;
   userTask: string;
+  /** Redacted owner-authored text from before the current request, oldest first. */
+  priorOwnerMessages?: readonly string[];
   botDescription: string;
   matchingRules: AutoReviewMatchingRule[];
   /**
-   * A web_fetch to a site the run was not given. `args` is then only the full URL, and
-   * `userTask` only the owner's own words (their message or the routine's instructions), never
-   * tool results or inbound messages, so injected text cannot argue for the site.
+   * An outbound request to a site the run was not given. `args` is then only the full URL.
+   * The task and earlier owner messages contain no outside messages or tool results.
    */
   newSite?: boolean;
 }

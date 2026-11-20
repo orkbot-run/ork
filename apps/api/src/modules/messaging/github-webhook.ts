@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; raw-byte signature changes follow LICENSE.md.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import type { Hono } from "hono";
-import { readBoundedBody } from "#modules/platform/http-body";
+import { readBoundedBodyBytes } from "#modules/platform/http-body";
 import type { WebhookDeps, WebhookSecretCache } from "./webhook-inbound.js";
 import {
   deliverWebhookEvent,
@@ -17,7 +18,7 @@ import {
 export function hasValidGithubSignature(
   signature: string | undefined,
   secret: string,
-  raw: string,
+  raw: string | Uint8Array,
 ): boolean {
   if (!signature || !/^sha256=[0-9a-f]{64}$/.test(signature)) return false;
   const expected = `sha256=${createHmac("sha256", secret).update(raw).digest("hex")}`;
@@ -175,7 +176,7 @@ export function mountGithubWebhookRoute(
     const unauthorized = () => c.json({ error: "Unauthorized" }, 401);
 
     // Reject oversized bodies before target lookup so size limits do not reveal active bots.
-    const raw = await readBoundedBody(c.req.raw, WEBHOOK_MAX_BODY_BYTES);
+    const raw = await readBoundedBodyBytes(c.req.raw, WEBHOOK_MAX_BODY_BYTES);
     if (raw === null) {
       return c.json({ error: "Payload too large" }, 413);
     }
@@ -216,13 +217,14 @@ export function mountGithubWebhookRoute(
       return c.json({ ok: true, ignored: true });
     }
 
+    const text = new TextDecoder().decode(raw);
     const contentType = c.req.header("content-type");
     // GitHub's default form content type sends the JSON in the `payload` field.
     const mediaType = contentType?.split(";")[0]?.trim().toLowerCase();
     const body =
       mediaType === "application/x-www-form-urlencoded"
-        ? (new URLSearchParams(raw).get("payload") ?? "")
-        : raw;
+        ? (new URLSearchParams(text).get("payload") ?? "")
+        : text;
     const payload = parseWebhookPayload(body, contentType);
     const githubEvent = githubEventName(c.req.header("x-github-event"));
     const eventPrompt = formatGithubEventPrompt(githubEvent, payload);
@@ -233,7 +235,7 @@ export function mountGithubWebhookRoute(
         routines: githubRoutines,
         source: "github",
         // The signature covers only the body, so key on it: a replay with a fresh delivery id still dedupes.
-        idempotencyKey: raw,
+        idempotencyKey: raw.byteLength > 0 ? raw : undefined,
       }),
     );
   });

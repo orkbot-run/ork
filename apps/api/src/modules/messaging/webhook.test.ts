@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; raw-byte signature tests follow LICENSE.md.
 
 import { createHash, createHmac } from "node:crypto";
 import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
@@ -601,6 +602,36 @@ describe("GitHub event HTTP route", () => {
       body: await request.text(),
     };
   }
+
+  it("verifies signed opaque bytes before decoding and rejects a modified byte", async () => {
+    const deps = createDeps({ routines: [WEBHOOK_ROUTINE] });
+    const app = mount(deps);
+    const raw = new Uint8Array([0x7b, 0x22, 0x78, 0x22, 0x3a, 0x22, 0xff, 0x22, 0x7d]);
+    const signature = `sha256=${createHmac("sha256", SECRET).update(raw).digest("hex")}`;
+    const post = (body: Uint8Array) =>
+      app.request("/api/v1/bots/bot-1/github", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-hub-signature-256": signature },
+        body: Buffer.from(body),
+      });
+    expect((await post(raw)).status).toBe(200);
+    const modified = raw.slice();
+    modified[6] = 0xfe; // Both decode to U+FFFD, but their signed bytes differ.
+    expect((await post(modified)).status).toBe(401);
+    expect(deps.sendUserMessage).toHaveBeenCalledOnce();
+    const newSignature = `sha256=${createHmac("sha256", SECRET).update(modified).digest("hex")}`;
+    expect(
+      (
+        await app.request("/api/v1/bots/bot-1/github", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-hub-signature-256": newSignature },
+          body: Buffer.from(modified),
+        })
+      ).status,
+    ).toBe(200);
+    const nonces = deps.sendUserMessage.mock.calls.map((call) => call[0].clientNonce);
+    expect(nonces[0]).not.toBe(nonces[1]);
+  });
 
   it("wakes a githubEnabled routine with a sanitized emulator delivery", async () => {
     const deps = createDeps({

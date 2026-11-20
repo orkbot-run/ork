@@ -42,7 +42,7 @@ import {
   Toggle,
 } from "@orkbot/ui-web";
 import { useQuery } from "@tanstack/react-query";
-import { Download, FileText, Monitor, Repeat2, Settings, X } from "lucide-react";
+import { Download, FileText, Monitor, Repeat2, Settings, Video, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { ErrorBoundary, SectionLoadFailed } from "../../components/ErrorBoundary";
@@ -56,6 +56,7 @@ import { errorText } from "../../lib/user-error";
 import { AvatarStudioPopover } from "./avatar-studio-popover";
 import { BotReplyModeSetting } from "./bot-reply-mode";
 import { ChatModelPicker } from "./chat-model-picker";
+import { Meetings } from "./meetings";
 
 const ScratchpadSection = lazyComponent(() =>
   import("../ScratchpadSection").then((module) => module.ScratchpadSection),
@@ -109,7 +110,7 @@ export function ComputerModePicker({
   );
 }
 
-export type BotPanelTab = "computer" | "routines" | "pages" | "settings";
+export type BotPanelTab = "computer" | "routines" | "pages" | "meetings" | "settings";
 
 /** A bot's profile above its Computer, Routines, Pages and Advanced tabs. */
 export function BotSettings({
@@ -218,6 +219,7 @@ export function BotSettings({
   }, [bot.disabledBuiltinTools]);
   // Shared with the model and voice settings, so a revisit paints at once and refreshes behind.
   const queries = useSpaceQueries();
+  const meetingsStatus = useQuery(queries.meetings.status.queryOptions());
   const refresh = { refetchOnMount: "always" } as const;
   const voices = useQuery({ ...queries.voice.voices.queryOptions({ input: {} }), ...refresh }).data;
   const credentialsQuery = useQuery({ ...queries.models.credentials.queryOptions(), ...refresh });
@@ -604,6 +606,12 @@ export function BotSettings({
             <FileText aria-hidden="true" className="size-4" />
             <Trans>Pages</Trans>
           </TabsTrigger>
+          {meetingsStatus.data?.enabled ? (
+            <TabsTrigger value="meetings" className={panelTabClass}>
+              <Video aria-hidden="true" className="size-4" />
+              <Trans>Meetings</Trans>
+            </TabsTrigger>
+          ) : null}
           <TabsTrigger value="settings" className={panelTabClass}>
             <Settings aria-hidden="true" className="size-4" />
             <Trans>Advanced</Trans>
@@ -617,6 +625,9 @@ export function BotSettings({
         </TabsContent>
         <TabsContent value="pages" className="pt-4">
           {tab === "pages" ? <PagesList botId={bot.id} /> : null}
+        </TabsContent>
+        <TabsContent value="meetings" className="pt-4">
+          {tab === "meetings" ? <Meetings key={bot.id} botId={bot.id} /> : null}
         </TabsContent>
         {/* Stays mounted so scratchpad and knowledge drafts survive a tab switch. */}
         <TabsContent value="settings" keepMounted data-testid="bot-settings-advanced">

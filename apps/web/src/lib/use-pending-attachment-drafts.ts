@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { isAttachmentImageMimeType } from "@orkbot/contracts";
+import { inferAttachmentMimeType } from "@orkbot/core";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PendingAttachment } from "../pages/shell/chat-shared";
@@ -59,7 +61,9 @@ export function usePendingAttachmentDrafts(
           .filter((item) => !picked.has(item.id))
           .map((item) => ({
             ...item,
-            previewUrl: item.file.type.startsWith("image/")
+            previewUrl: isAttachmentImageMimeType(
+              inferAttachmentMimeType(item.file.name, item.file.type) ?? "",
+            )
               ? URL.createObjectURL(item.file)
               : undefined,
           }));

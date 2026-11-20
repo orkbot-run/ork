@@ -3,6 +3,78 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Add a schedule or an HTTPS address to run this routine.":
+    "このルーティンを実行するには、スケジュールまたはHTTPSアドレスを追加してください。",
+  "Ask an owner to resume your plan.": "オーナーにプランの再開を依頼してください。",
+  "Back to meetings": "会議一覧に戻る",
+  "Blocked by the server administrator": "サーバー管理者によりブロックされています",
+  "Check every 5 to 1,440 minutes and track up to five fields.":
+    "5〜1,440分ごとに確認し、最大5つのフィールドを追跡します。",
+  "Check interval in minutes": "確認間隔（分）",
+  "Confirm deletion": "削除の確認",
+  "Confirm that all participants have been informed before continuing.":
+    "続行する前に、すべての参加者に知らせたことを確認してください。",
+  "Could not submit this answer": "この回答を送信できませんでした",
+  "Daily limit: {dailyLimit}. Maximum meeting length: {maxMinutes} minutes.":
+    "1日の上限：{dailyLimit}。会議の最大時間：{maxMinutes}分。",
+  "Delete meeting": "会議を削除",
+  "Delete this meeting and its transcript? This cannot be undone.":
+    "この会議と文字起こしを削除しますか？この操作は取り消せません。",
+  "Enter a future date and time in YYYY-MM-DDTHH:mm format.":
+    "未来の日時をYYYY-MM-DDTHH:mm形式で入力してください。",
+  "Enter a message body": "メッセージ本文を入力してください",
+  "Enter a public HTTPS address without credentials or a fragment":
+    "認証情報やフラグメントを含まない公開HTTPSアドレスを入力してください",
+  "Enter a recipient": "宛先を入力してください",
+  "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link.":
+    "対応するGoogle Meet、Zoom、Microsoft Teamsの会議リンクを入力してください。",
+  "Fields that mark a change": "変更の判定に使うフィールド",
+  "Fields to compare, e.g. id, modifiedTime (optional)":
+    "比較するフィールド（例：id、modifiedTime、省略可）",
+  "Google Meet, Zoom and Microsoft Teams links are supported.":
+    "Google Meet、Zoom、Microsoft Teamsのリンクに対応しています。",
+  "HTTPS address": "HTTPSアドレス",
+  "I have informed all participants and have permission to record and transcribe this meeting.":
+    "すべての参加者に知らせ、この会議の録音と文字起こしの許可を得ています。",
+  "Invite your bot to a meeting": "ボットを会議に招待",
+  "Keep meeting": "会議を残す",
+  "Leave empty to join now. Scheduled time uses your device time zone.":
+    "空欄にすると今すぐ参加します。予約時刻にはデバイスのタイムゾーンを使用します。",
+  "Manage billing to resume your plan.": "請求設定でプランを再開してください。",
+  "Meeting link": "会議リンク",
+  Meetings: "会議",
+  "Meetings are not available on this server.": "このサーバーでは会議を利用できません。",
+  "Message body": "メッセージ本文",
+  No: "いいえ",
+  "No meetings yet.": "まだ会議がありません。",
+  "No transcript yet. It will appear after processing.":
+    "文字起こしはまだありません。処理後に表示されます。",
+  "Payment failed. Ask an owner to update the payment method.":
+    "支払いに失敗しました。オーナーに支払い方法の更新を依頼してください。",
+  "Payment failed. Update your payment method to resume your plan.":
+    "支払いに失敗しました。支払い方法を更新してプランを再開してください。",
+  'Post "No changes" in chat': "チャットに「変更なし」と投稿",
+  "Recipient changed. Review the updated draft and press Send again.":
+    "宛先が変更されました。更新された下書きを確認し、もう一度「送信」を押してください。",
+  Refresh: "更新",
+  Reject: "拒否",
+  "Remove change trigger": "変更トリガーを削除",
+  "Route requests only to endpoints marked as eligible for zero data retention.":
+    "ゼロデータ保持に対応するとマークされたエンドポイントにのみリクエストを送信します。",
+  "Schedule (optional)": "スケジュール（省略可）",
+  Subject: "件名",
+  "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it.":
+    "ボットは参加者に見える形で参加し、音声を録音して文字起こしを作成します。招待する前に、すべての参加者に知らせてください。",
+  "Title (optional)": "タイトル（省略可）",
+  To: "宛先",
+  "Unchanged checks appear in history. You can also post them in chat.":
+    "変更がない確認結果も履歴に表示されます。チャットに投稿することもできます。",
+  "Update payment method": "支払い方法を更新",
+  "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00":
+    "タイムゾーンを含む日時を使用してください（例：2026-11-20T14:30:00+01:00）",
+  "Watch an HTTPS address": "HTTPSアドレスを監視",
+  Yes: "はい",
+  "Zero data retention": "ゼロデータ保持",
   "Open Ork Accounts": "Ork Accountsを開く",
   "Could not open Ork Accounts. Try again.":
     "Ork Accountsを開けませんでした。もう一度お試しください。",
@@ -855,6 +927,7 @@ export const JA_MESSAGES: Record<string, string> = {
   "Treg token": "Tregトークン",
   Uninstall: "アンインストール",
   "Verify and add": "確認して追加",
+  "Thinking…": "考え中…",
   "Working…": "処理中…",
   "https://example.com/graphql": "https://example.com/graphql",
   "https://example.com/mcp": "https://example.com/mcp",
@@ -962,8 +1035,8 @@ export const JA_MESSAGES: Record<string, string> = {
   "Could not submit answer": "回答を送信できませんでした",
   Deny: "拒否",
   "Please try again.": "もう一度お試しください。",
-  "Authorization timed out. Please try again.":
-    "認可がタイムアウトしました。もう一度お試しください。",
+  "Waiting for authorization.": "認証を待っています。",
+  "Start over": "最初からやり直す",
   "Could not authorize this app": "このアプリを認可できませんでした",
   "{name} connection": "{name}の接続",
   "Notifications silenced": "通知をミュート中",

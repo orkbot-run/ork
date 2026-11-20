@@ -378,13 +378,13 @@ describe.skipIf(!enabled)("typed replies to waiting cards (PostgreSQL)", () => {
       },
     });
   }
-  function sendConfirmedImage(artifactId: string, text: string) {
+  function sendConfirmedImage(artifactId: string, text: string, clientNonce = randomUUID()) {
     return runAsTenant(actor, () =>
       sendThreadMessage(
         { prisma, sandbox: {} as never, events: { notify } as never, jobs: { enqueue } as never },
         actor,
         privateTarget(),
-        { text, artifactIds: [artifactId], imageHandling: "confirm", clientNonce: randomUUID() },
+        { text, artifactIds: [artifactId], imageHandling: "confirm", clientNonce },
       ),
     );
   }
@@ -487,7 +487,10 @@ describe.skipIf(!enabled)("typed replies to waiting cards (PostgreSQL)", () => {
       },
     });
     const artifact = await privateImage();
-    const result = await sendConfirmedImage(artifact.id, "Look at this");
+    const nonce = randomUUID();
+    const result = await sendConfirmedImage(artifact.id, "Look at this", nonce);
+    expect(result).toMatchObject({ runId: routine.id, replyRunIds: [] });
+    expect(await sendConfirmedImage(artifact.id, "Look at this", nonce)).toEqual(result);
     const message = await system.message.findFirstOrThrow({
       where: { threadId, seq: result.seq },
     });

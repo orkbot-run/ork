@@ -20,6 +20,7 @@ import {
 } from "./mcp.js";
 import { ModelHeadersSchema } from "./model-headers.js";
 import { NavLinkSchema } from "./nav-links.js";
+import { RoutineMessageProviderSchema, routineTriggerIssue } from "./routine-triggers.js";
 import { RoutineWatchSchema, RoutineWatchStateSchema } from "./routine-watch.js";
 import { RunRoutineNameSchema, RunTriggerSchema } from "./runs.js";
 import { SettingsScopeSchema } from "./settings-scope.js";
@@ -101,6 +102,12 @@ export const InstructionVersionSchema = z.object({
   createdAt: z.string(),
 });
 
+export const BotLiveActivitySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("step"), text: z.string() }),
+  z.object({ kind: z.literal("writing") }),
+]);
+export type BotLiveActivity = z.infer<typeof BotLiveActivitySchema>;
+
 export const BotSchema = z.object({
   id: Id,
   spaceId: Id,
@@ -127,6 +134,7 @@ export const BotSchema = z.object({
   preview: z.string(),
   status: z.string(),
   threadStatus: z.string().optional(),
+  liveActivity: BotLiveActivitySchema.optional(),
   runErrorId: Id.nullable().default(null),
   computerMode: ComputerModeSchema,
   updatedAt: z.string(),
@@ -301,6 +309,7 @@ export const SpaceBotSchema = BotSchema.pick({
   preview: true,
   status: true,
   threadStatus: true,
+  liveActivity: true,
   runErrorId: true,
   updatedAt: true,
 });
@@ -555,12 +564,7 @@ export const RoutineSchema = z.object({
   notify: z.boolean(),
   webhookEnabled: z.boolean(),
   githubEnabled: z.boolean(),
-  messageProvider: z
-    .string()
-    .min(1)
-    .max(50)
-    .regex(/^[a-z0-9._-]+$/i)
-    .nullable(),
+  messageProvider: RoutineMessageProviderSchema.nullable(),
   /** Null runs this routine on its bot's model. */
   modelProvider: z.string().nullable(),
   modelId: z.string().nullable(),
@@ -589,13 +593,7 @@ export const CreateRoutineInput = z
     active: z.boolean().default(false),
     webhookEnabled: z.boolean().default(false),
     githubEnabled: z.boolean().default(false),
-    messageProvider: z
-      .string()
-      .min(1)
-      .max(50)
-      .regex(/^[a-z0-9._-]+$/i)
-      .nullable()
-      .default(null),
+    messageProvider: RoutineMessageProviderSchema.nullable().default(null),
     modelProvider: z.string().trim().min(1).max(80).nullable().default(null),
     modelId: z.string().trim().min(1).max(200).nullable().default(null),
     thinkingLevel: ThinkingLevelSchema.nullable().default(null),
@@ -603,26 +601,8 @@ export const CreateRoutineInput = z
   })
   .superRefine((value, ctx) => {
     routineModelIssues(value, ctx);
-    if (
-      value.crons.length === 0 &&
-      !value.webhookEnabled &&
-      !value.githubEnabled &&
-      !value.messageProvider &&
-      !value.watch
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Add a schedule, webhook, GitHub, message, or change trigger",
-        path: ["crons"],
-      });
-    }
-    if (value.watch && value.crons.length > 0) {
-      ctx.addIssue({
-        code: "custom",
-        message: "A change trigger checks on its own interval; remove the schedule",
-        path: ["watch"],
-      });
-    }
+    const issue = routineTriggerIssue(value);
+    if (issue) ctx.addIssue({ code: "custom", message: issue.message, path: [issue.path] });
   });
 export type CreateRoutineInput = z.infer<typeof CreateRoutineInput>;
 
@@ -1444,6 +1424,7 @@ export type MessagingAgentConnection = z.infer<typeof MessagingAgentConnectionSc
 
 export const RunSchema = z.object({
   id: Id,
+  sourceMessageId: Id.optional(),
   userId: Id.optional(),
   botId: Id,
   threadId: Id,
@@ -1596,6 +1577,7 @@ export const ModelRoutingFieldSchema = z.object({
 });
 export type ModelRoutingField = z.infer<typeof ModelRoutingFieldSchema>;
 export const ModelConnectionPresetSchema = z.object({
+  id: z.string().trim().min(1).max(100).optional(),
   label: z.string().trim().min(1).max(80),
   baseUrl: z
     .string()
@@ -1613,17 +1595,21 @@ export const ModelConnectionPresetSchema = z.object({
 });
 export type ModelConnectionPreset = z.infer<typeof ModelConnectionPresetSchema>;
 export const ModelConnectionMetadataSchema = z.object({
+  supportsZeroDataRetention: z.boolean().optional(),
   routingFields: z
     .array(ModelRoutingFieldSchema)
     .max(8)
     .refine((fields) => new Set(fields.map((field) => field.key)).size === fields.length)
     .optional(),
   presets: z.array(ModelConnectionPresetSchema).max(16).optional(),
+  customEndpointAllowed: z.boolean().optional(),
 });
 export type ModelConnectionMetadata = z.infer<typeof ModelConnectionMetadataSchema>;
 
 export const ModelCredentialSchema = z.object({
   managed: z.boolean().optional(),
+  blockedByPolicy: z.boolean().optional(),
+  zeroDataRetention: z.boolean().optional(),
   /** Computed space preference order; credentials themselves remain newest first. */
   preferenceRank: z.number().int().nonnegative().optional(),
   ...ModelContextLimitsSchema.shape,
@@ -1705,6 +1691,7 @@ export const ModelConnectInputSchema = z
   .object({
     ...ModelContextLimitsSchema.shape,
     provider: z.string(),
+    zeroDataRetention: z.boolean().optional(),
     apiKey: z.string().optional(),
     accountId: z.string().optional(),
     gatewayId: z.string().optional(),
@@ -2209,6 +2196,26 @@ export const BILLING_CANCELLATION_REASONS = [
   "other",
 ] as const;
 export type BillingCancellationReason = (typeof BILLING_CANCELLATION_REASONS)[number];
+
+export function billingSubscriptionGrantsAccess(status: string | null | undefined): boolean {
+  return status === "trialing" || status === "active";
+}
+
+/** A subscription that can still be billed by the provider. */
+export function billingSubscriptionHoldsCheckout(status: string | null | undefined): boolean {
+  return (
+    billingSubscriptionGrantsAccess(status) ||
+    status === "past_due" ||
+    status === "incomplete" ||
+    status === "unpaid" ||
+    status === "paused"
+  );
+}
+
+/** Recover the existing subscription in the portal before another checkout can start. */
+export function billingSubscriptionNeedsRecovery(status: string | null | undefined): boolean {
+  return billingSubscriptionHoldsCheckout(status) && !billingSubscriptionGrantsAccess(status);
+}
 
 export const BillingStatusSchema = z.object({
   funding: z.enum(["byok", "credits"]).nullable().optional(),

@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import type { LookupFunction } from "node:net";
 import { isDeepStrictEqual } from "node:util";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
   StreamableHTTPClientTransport,
   StreamableHTTPError,
@@ -31,7 +31,7 @@ import type { Dispatcher } from "undici";
 import { createCheckedProxyDispatcher } from "./checked-proxy-dispatcher.js";
 import { composioToolBatch } from "./composio-batch.js";
 import { sensitiveQueryParameter } from "./connector-http.js";
-import { combineSignals } from "./connector-safety.js";
+import { redactConnectorPayload } from "./connector-safety.js";
 import { credentialDigest } from "./credential-digest.js";
 import type {
   McpDiscoveryDiagnostic,
@@ -39,7 +39,15 @@ import type {
   McpDiscoveryResult,
 } from "./mcp-discovery.js";
 import { mcpDiscoveryLimits } from "./mcp-discovery.js";
+import { createMcpClient } from "./mcp-output-schema.js";
 import { limitMcpResponseBody } from "./mcp-response-limit.js";
+import { prepareMcpImageResult } from "./mcp-result-images.js";
+import type { McpFormCallOptions } from "./mcp-tool-call.js";
+import {
+  callMcpToolWithDeadline,
+  installMcpFormHandler,
+  isBrokenMcpCall,
+} from "./mcp-tool-call.js";
 import type { ResolvedAddress, ResolveHostname } from "./network-address.js";
 import {
   createAddressCheckedLookup,
@@ -65,6 +73,8 @@ export interface RemoteTransportDependencies {
 
 export interface RemoteMcpOptions extends RemoteTransportDependencies, RemoteUrlPolicy {
   discoveryLimits?: Partial<McpDiscoveryLimits>;
+  /** Human input callback for this exact invocation, never stored on pooled sessions. */
+  form?: McpFormCallOptions;
   endpoint: string;
   headers?: Record<string, string>;
   signal?: AbortSignal;
@@ -176,7 +186,40 @@ export async function callRemoteMcpTool(
   projectResult?: (result: unknown) => unknown,
 ): Promise<unknown> {
   return withScopedMcpClient(options, (client, signal) =>
-    callMcpTool(client, signal, toolName, args, projectResult),
+    callMcpTool(
+      client,
+      signal,
+      toolName,
+      args,
+      (result) => limitRemoteMcpPayload(projectResult ? projectResult(result) : result),
+      options.form,
+    ),
+  );
+}
+
+/** Connector results may carry images, with their own budget separate from the text limit. */
+export async function callRemoteMcpConnectorTool(
+  options: RemoteMcpOptions,
+  toolName: string,
+  args: Record<string, unknown>,
+  secrets: string[],
+): Promise<unknown> {
+  return withScopedMcpClient(options, (client, signal) =>
+    callMcpTool(
+      client,
+      signal,
+      toolName,
+      args,
+      (result) => {
+        const redacted = redactConnectorPayload(result, secrets);
+        return (
+          prepareMcpImageResult(redacted, limitRemoteMcpPayload) ?? limitRemoteMcpPayload(redacted)
+        );
+      },
+      options.form
+        ? { ...options.form, secrets: () => [...secrets, ...(options.form?.secrets?.() ?? [])] }
+        : undefined,
+    ),
   );
 }
 
@@ -185,12 +228,10 @@ async function callMcpTool(
   signal: AbortSignal | undefined,
   toolName: string,
   args: Record<string, unknown>,
-  projectResult?: (result: unknown) => unknown,
+  shapeResult: (result: unknown) => unknown,
+  form?: McpFormCallOptions,
 ): Promise<unknown> {
-  const result = await client.callTool({ name: toolName, arguments: args }, undefined, {
-    signal,
-    timeout: MCP_TIMEOUT_MS,
-  });
+  const result = await callMcpToolWithDeadline(client, toolName, args, signal, form);
   const isError = result.isError === true;
   const envelope = {
     content: withoutDuplicatedStructuredText(result.content, result.structuredContent, isError),
@@ -198,9 +239,7 @@ async function callMcpTool(
     isError,
     _meta: result._meta,
   };
-  // Providers may extract a bounded domain result before the MCP envelope
-  // consumes the budget. The final limit still applies.
-  return limitRemoteMcpPayload(projectResult ? projectResult(envelope) : envelope);
+  return shapeResult(envelope);
 }
 
 /** FastMCP-style servers serialize `structuredContent` into a text block too,
@@ -316,7 +355,7 @@ async function withRemoteMcpClient<T>(
     options.resolveHostname ?? resolveHostname,
     policy,
   );
-  const signal = combineSignals(options.signal, AbortSignal.timeout(MCP_TIMEOUT_MS));
+  const signal = options.signal;
   const safeFetch = createSafeRemoteFetch(
     options.fetch,
     options.resolveHostname ?? resolveHostname,
@@ -326,11 +365,15 @@ async function withRemoteMcpClient<T>(
     requestInit: {
       headers: options.headers,
       redirect: "manual",
-      signal,
     },
     fetch: async (input, init) => limitMcpResponseBody(await safeFetch(input, init), init?.headers),
   });
-  const client = new Client({ name: "orkbot", version: "0.1.0" }, { capabilities: {} });
+  const client = createMcpClient(
+    { name: "orkbot", version: "0.1.0" },
+    { capabilities: { elicitation: { form: {} } } },
+    endpoint.hostname,
+  );
+  installMcpFormHandler(client);
   try {
     await client.connect(transport, { signal, timeout: MCP_TIMEOUT_MS });
     return await run(client, signal);
@@ -388,8 +431,6 @@ export class RemoteMcpSessionCache {
       const session = await this.sessionFor(key, options);
       session.inFlight += 1;
       const controller = new AbortController();
-      const deadlineReason = new DOMException("Timed out", "TimeoutError");
-      const deadline = setTimeout(() => controller.abort(deadlineReason), MCP_TIMEOUT_MS);
       const onAbort = () => controller.abort(options.signal?.reason);
       if (options.signal?.aborted) onAbort();
       else options.signal?.addEventListener("abort", onAbort, { once: true });
@@ -409,11 +450,9 @@ export class RemoteMcpSessionCache {
         // running on the transport; only closing the session aborts it and
         // tells the server to drop the work, as a one-off session does. The
         // combined signal keeps the reason of whichever signal fired first.
-        if (brokeMcpSession(session, error) || (signal.aborted && signal.reason === deadlineReason))
-          void this.drop(session);
+        if (brokeMcpSession(session, error)) void this.drop(session);
         throw error;
       } finally {
-        clearTimeout(deadline);
         options.signal?.removeEventListener("abort", onAbort);
         session.inFlight -= 1;
         session.lastUsedAt = this.now();
@@ -525,7 +564,12 @@ export class RemoteMcpSessionCache {
         return limitMcpResponseBody(response, init?.headers);
       },
     });
-    const client = new Client({ name: "orkbot", version: "0.1.0" }, { capabilities: {} });
+    const client = createMcpClient(
+      { name: "orkbot", version: "0.1.0" },
+      { capabilities: { elicitation: { form: {} } } },
+      endpoint.hostname,
+    );
+    installMcpFormHandler(client);
     const session: ScopedMcpSession = {
       key,
       client,
@@ -900,7 +944,7 @@ function assertPublicAddresses(addresses: ResolvedAddress[]): void {
   }
 }
 
-export function limitRemoteMcpPayload(value: unknown): unknown {
+export function limitRemoteMcpPayload<T>(value: T): T | { truncated: true; content: string } {
   const serialized = JSON.stringify(value);
   if (serialized === undefined) return value;
   if (Buffer.byteLength(serialized, "utf8") <= MAX_RESULT_BYTES) return value;
@@ -930,5 +974,7 @@ export function isMcpSessionGoneError(error: unknown): boolean {
  * same -32000 code the client uses for closure — cannot be trusted for the
  * next call. A missed closure is still caught by the server's next 404. */
 function brokeMcpSession(session: ScopedMcpSession, error: unknown): boolean {
-  return session.connectionClosed || error instanceof RemoteMcpTransportError;
+  return (
+    session.connectionClosed || error instanceof RemoteMcpTransportError || isBrokenMcpCall(error)
+  );
 }

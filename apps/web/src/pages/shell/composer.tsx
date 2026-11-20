@@ -4,6 +4,7 @@
 
 import { useLingui } from "@lingui/react/macro";
 import type { AgentSkillCatalogEntry, ThreadMessage } from "@orkbot/contracts";
+import { parseMeetingLink } from "@orkbot/contracts";
 import type {
   ComposerDraftContent,
   ComposerMention,
@@ -77,6 +78,7 @@ import {
   MentionOptionIcon,
   slashActionLabel,
 } from "./composer-mentions";
+import { MeetingLinkSuggestion } from "./meeting-link-suggestion";
 import { isApplePlatform, isEditableTarget, primaryModifier } from "./shell-shortcuts";
 import { useComposerLayout } from "./use-composer-layout";
 
@@ -724,6 +726,9 @@ const ComposerBody = memo(function Composer({
       <div role="status" data-testid="composer-announcement" className="sr-only">
         {replyAnnouncement}
       </div>
+      {draftKey.startsWith("bot:") && parseMeetingLink(draft.trim()) ? (
+        <MeetingLinkSuggestion key={draftKey} botId={draftKey.slice(4)} value={draft.trim()} />
+      ) : null}
       <ComposerError
         sendError={sendError}
         imageConfirmation={imageConfirmation}

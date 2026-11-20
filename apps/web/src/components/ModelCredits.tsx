@@ -1,8 +1,14 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved; billing recovery changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { BillingStatus, ByokInterval, ByokTier } from "@orkbot/contracts";
 import {
   ByokIntervalSchema,
   ByokTierSchema,
+  billingSubscriptionHoldsCheckout,
+  billingSubscriptionNeedsRecovery,
   byokTierChangeOffered,
   byokYearlySavingsPercent,
   byokYearlySwitchSavings,
@@ -51,18 +57,10 @@ import type { RpcClient } from "../lib/rpc";
 import { rpc } from "../lib/rpc";
 import { useSignOut } from "../lib/sign-out";
 import { AccountMenu } from "./AccountMenu";
+import { BillingRecovery } from "./BillingRecovery";
 
 type CreditAmount = (typeof MODEL_CREDIT_AMOUNTS)[number];
 type TierOffer = NonNullable<BillingStatus["byokTiers"]>[number];
-
-/** Subscription states that still bill: access now, or resumed from the billing portal. */
-const LIVE_STATES: BillingStatus["state"][] = [
-  "trialing",
-  "active",
-  "past_due",
-  "unpaid",
-  "paused",
-];
 
 function formatMonthlyUsd(cents: number, locale: string): string {
   return formatBillingPrice(
@@ -266,6 +264,7 @@ export function CreditChoice({
   function go(url: string) {
     if (!closed.current) window.location.assign(url);
   }
+  const recoverSubscription = billingSubscriptionNeedsRecovery(status.state);
   async function choose(ownKey: boolean) {
     setPending(true);
     setError(null);
@@ -287,6 +286,18 @@ export function CreditChoice({
       setPending(false);
     }
   }
+  if (recoverSubscription)
+    return (
+      <div
+        data-testid="billing-paywall"
+        className="mx-auto flex min-h-dvh max-w-xl flex-col justify-center gap-8 px-6 py-12"
+      >
+        {dismissible ? null : (
+          <AccountMenu disabled={pending} signingOut={signingOut} onLogOut={() => void logOut()} />
+        )}
+        <BillingRecovery status={status} />
+      </div>
+    );
   return (
     <div
       data-testid="billing-paywall"
@@ -457,9 +468,10 @@ export function ModelCreditsSettings({
   }
   const recurring =
     status.monthlyAmountCents && !["canceled", "none", "incomplete"].includes(status.state);
-  const freeUntil = status.byokFreeUntil
-    ? formatBillingDate(status.byokFreeUntil, i18n.locale || "en")
-    : null;
+  const freeUntil =
+    status.byokFreeUntil && !billingSubscriptionHoldsCheckout(status.state)
+      ? formatBillingDate(status.byokFreeUntil, i18n.locale || "en")
+      : null;
   const price = status.byokPriceCents
     ? formatBillingAmount(status.byokPriceCents, "usd", i18n.locale)
     : null;
@@ -471,7 +483,7 @@ export function ModelCreditsSettings({
     status.funding === "byok" &&
     status.byokPriceCents &&
     !status.monthlyAmountCents &&
-    LIVE_STATES.includes(status.state) &&
+    billingSubscriptionHoldsCheckout(status.state) &&
     !status.byokFreeUntil
       ? {
           price: formatBillingPrice(
@@ -518,6 +530,9 @@ export function ModelCreditsSettings({
   const checkoutAnnualPrice = checkoutAnnualCents
     ? formatBillingAmount(checkoutAnnualCents, "usd", i18n.locale)
     : null;
+  if (billingSubscriptionNeedsRecovery(status.state)) {
+    return <BillingRecovery status={status} client={client} />;
+  }
   return (
     <div data-testid="model-credits" className="space-y-5">
       {ownKeyPlan ? (

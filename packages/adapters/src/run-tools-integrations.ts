@@ -5,6 +5,7 @@ import { connectApp } from "./connect-app.js";
 import { addMcpServerFromTool } from "./mcp-server-tool.js";
 import type { RunContext } from "./run-context.js";
 import { runScopedToolExecutionId } from "./run-effects.js";
+import { askMcpForm } from "./run-mcp-form.js";
 import { flushProgress, publishMidTurnNarration, showNarrationStatus } from "./run-progress.js";
 import type { ToolCall, ToolHandlers } from "./run-tool-gate.js";
 import { webFetchFromTool, webSearchFromTool } from "./web-tools.js";
@@ -28,9 +29,13 @@ export async function connectorTool(ctx: RunContext, call: ToolCall) {
   const { name, args, effectKey, connectorCall } = call;
   if (deps.connector) {
     let result: unknown = { error: `unknown tool ${name}` };
+    const eligible =
+      ctx.source.ownerStartedRun && !ctx.source.messagingChannelRun && !ctx.source.callEndRun;
     for await (const event of deps.connector.execute(
       { ...connectorCall, tool: name, args, executionId: effectKey },
-      context,
+      eligible
+        ? { ...context, elicitMcpForm: (request, signal) => askMcpForm(ctx, request, signal) }
+        : context,
     )) {
       if (event.type === "result") {
         result = event.data;

@@ -11,6 +11,9 @@ import {
   formatCurrentTimeInstruction,
   hasHostedModelCredits,
   hostedModelCreditObserver,
+  isModelEndpointAllowed,
+  isModelProviderAllowed,
+  modelSupportsZeroDataRetention,
   parseModelSecret,
   resolveMemberMainModel,
   resolveStoredModelAuth,
@@ -246,12 +249,13 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
     );
     const requestedProvider = this.deps.providerOverride ?? bot.modelProvider;
     const requestedModel = this.deps.modelOverride ?? bot.modelId;
-    const overrideCredential = requestedProvider
+    const requestedProviderAllowed = requestedProvider && isModelProviderAllowed(requestedProvider);
+    const overrideCredential = requestedProviderAllowed
       ? await findModelCredential(this.deps.prisma, scope, requestedProvider)
       : null;
     const explicitJudgeOverride = Boolean(this.deps.providerOverride && this.deps.modelOverride);
     const useOverride = Boolean(
-      requestedProvider && requestedModel && (explicitJudgeOverride || overrideCredential),
+      requestedProviderAllowed && requestedModel && (explicitJudgeOverride || overrideCredential),
     );
     // The member's main model runs on its connection, or on funded deployment credits.
     const main =
@@ -268,18 +272,40 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
     const credential = useOverride ? overrideCredential : (main?.credential ?? null);
     const provider = useOverride ? requestedProvider : (main ?? fallback)?.provider;
     const modelId = useOverride ? requestedModel : (main ?? fallback)?.modelId;
-    if (!provider || !modelId) return null;
+    if (!provider || !modelId || !isModelProviderAllowed(provider)) return null;
 
     const hosted =
       settings?.modelCreditsEnabled &&
       (await hasHostedModelCredits(this.deps.prisma, scope, provider));
     if (!credential || hosted) {
+      if (!isModelEndpointAllowed(provider)) return null;
+      let zeroDataRetention: boolean | undefined;
+      if (hosted && modelSupportsZeroDataRetention(provider)) {
+        const policyCredential =
+          credential ?? (await findModelCredential(this.deps.prisma, scope, provider, modelId));
+        if (policyCredential) {
+          const saved = await this.deps.prisma.secret.findFirst({
+            where: { id: policyCredential.secretId, userId: bot.userId, spaceId: null },
+          });
+          if (!saved) return null;
+          const secret = parseModelSecret(await this.deps.secrets.load(saved.ciphertext, saved.id));
+          if (secret.kind === "api_key") zeroDataRetention = secret.zeroDataRetention;
+        }
+      }
       const apiKey =
         provider === this.deps.deploymentProvider ? this.deps.deploymentModelKey : undefined;
       const callObserver = settings?.modelCreditsEnabled
         ? await hostedModelCreditObserver(this.deps.prisma, scope)
         : undefined;
-      return { model: { provider, id: modelId, ...(apiKey ? { apiKey } : {}), callObserver } };
+      return {
+        model: {
+          provider,
+          id: modelId,
+          ...(apiKey ? { apiKey } : {}),
+          ...(zeroDataRetention !== undefined ? { zeroDataRetention } : {}),
+          callObserver,
+        },
+      };
     }
 
     const secret = await this.deps.prisma.secret.findFirst({
@@ -287,12 +313,20 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
     });
     if (!secret) return null;
     const plaintext = await this.deps.secrets.load(secret.ciphertext, secret.id);
+    const parsedSecret = parseModelSecret(plaintext);
+    if (
+      !isModelEndpointAllowed(
+        provider,
+        parsedSecret.kind === "openai_compatible" ? parsedSecret.baseUrl : undefined,
+      )
+    )
+      return null;
     const retire = retireToReconnectMarker(
       this.deps.prisma,
       this.deps.secrets,
       { userId: bot.userId, spaceId: bot.spaceId },
       credential,
-      parseModelSecret(plaintext).maxTokens,
+      parsedSecret.maxTokens,
     );
     const auth = await resolveStoredModelAuth(
       this.deps.prisma,
@@ -363,6 +397,9 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
         provider,
         id: modelId,
         apiKey: auth.apiKey,
+        ...(parsed.zeroDataRetention !== undefined
+          ? { zeroDataRetention: parsed.zeroDataRetention }
+          : {}),
         ...limit,
         ...context,
       },

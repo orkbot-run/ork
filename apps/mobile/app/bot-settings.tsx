@@ -68,6 +68,20 @@ export default function BotSettingsScreen() {
   currentBotTarget.current = botId;
   const scrollRef = useRef<ScrollView>(null);
   const modelY = useRef(0);
+  const [meetingsEnabled, setMeetingsEnabled] = useState(false);
+  useEffect(() => {
+    let current = true;
+    void rpc("meetings/status")
+      .then((status) => {
+        if (current) setMeetingsEnabled(status.enabled);
+      })
+      .catch(() => {
+        if (current) setMeetingsEnabled(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [botId]);
   const [bot, setBot] = useState<Bot | null>(null);
   const threadId = useRef<string | undefined>(undefined);
   const [name, setName] = useState("");
@@ -597,6 +611,13 @@ export default function BotSettingsScreen() {
             </View>
           </SettingsGroup>
         </View>
+        {meetingsEnabled && botId ? (
+          <NativeActionButton
+            label={t("Meetings")}
+            prominence="quiet"
+            onPress={() => router.push({ pathname: "/meetings", params: { botId } })}
+          />
+        ) : null}
         {botId ? <BotContextCards key={botId} botId={botId} /> : null}
         <Pressable
           accessibilityRole="button"

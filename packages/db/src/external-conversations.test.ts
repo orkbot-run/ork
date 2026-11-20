@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors (inherited material)
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; messaging-label filtering is an Ork addition.
+
 import type { Actor } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createExternalConversationRepos } from "./external-conversations.js";
@@ -39,7 +44,7 @@ describe("createExternalConversationRepos", () => {
     const queryRaw = vi.fn(async (query: unknown) => {
       const text = sqlText(query);
       if (text.includes("external_messages")) {
-        return [{ externalConversationId: "ext-1", senderId: "B1", senderName: "Pager" }];
+        return [{ externalConversationId: "ext-1", senderId: "B1", senderName: "Pager\u202e" }];
       }
       return [
         {
@@ -47,7 +52,7 @@ describe("createExternalConversationRepos", () => {
           threadId: "thread-1",
           seq: 3,
           role: "user",
-          blocks: [{ kind: "text", text: "Latest" }],
+          blocks: [{ kind: "text", text: "Latest שלום\u202e" }],
           botId: null,
           replyToMessageId: null,
           replyQuote: null,
@@ -66,7 +71,7 @@ describe("createExternalConversationRepos", () => {
       expect.objectContaining({
         id: "ext-1",
         threadId: "thread-1",
-        preview: "Latest",
+        preview: "Latest שלום\u202e",
         unread: true,
         automatedSenders: [{ id: "B1", name: "Pager" }],
       }),

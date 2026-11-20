@@ -37,6 +37,7 @@ import { isUniqueViolation } from "./database-errors.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { withNewestThreadMessages } from "./preview-messages.js";
 import { runAsSystemInTransaction } from "./row-security.js";
+import { threadLiveActivities } from "./run-live-activity.js";
 import { BotSectionNameConflictError, IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
 import {
@@ -237,6 +238,10 @@ export function createRepos(
       actor.userId,
       bots.flatMap((bot) => bot.thread?.id ?? []),
     );
+    const activities = await threadLiveActivities(
+      prisma,
+      bots.map((bot) => ({ threadId: bot.thread?.id, runs: bot.runs })),
+    );
     return bots.map((bot) => {
       if (!bot.thread) throw new IsolationError("Bot is missing its thread");
       const activeRun = primaryActiveRun(bot.runs);
@@ -257,6 +262,7 @@ export function createRepos(
         preview: previewFromBlocks(bot.thread.messages[0]?.blocks),
         status: activeRun?.status ?? "idle",
         threadStatus: threadRunStatus(bot.runs, bot.thread.id),
+        ...(activities.has(bot.thread.id) ? { liveActivity: activities.get(bot.thread.id) } : {}),
         runErrorId: rosterRunErrorId(bot.thread.runs[0], activeRun),
         updatedAt: rosterUpdatedAt(bot.thread.messages[0], bot.updatedAt).toISOString(),
       };
@@ -472,6 +478,10 @@ export function createRepos(
         }
         for (const id of missing) checkedRunIds.add(id);
       };
+      const activities = await threadLiveActivities(
+        prisma,
+        bots.map((bot) => ({ threadId: bot.thread?.id, runs: bot.runs })),
+      );
       await classifyRunIds(candidateRunIds);
       return Promise.all(
         bots.map(async (bot) => {
@@ -528,6 +538,9 @@ export function createRepos(
             ...mapped,
             ...(snoozes.has(mapped.threadId) ? { snoozedUntil: snoozes.get(mapped.threadId) } : {}),
             threadStatus: threadRunStatus(bot.runs, mapped.threadId),
+            ...(activities.has(mapped.threadId)
+              ? { liveActivity: activities.get(mapped.threadId) }
+              : {}),
           };
         }),
       );

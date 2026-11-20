@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited organization settings remain Apache-2.0. The audit menu follows LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import {
   AlertDialog,
@@ -9,11 +13,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Field,
   FieldLabel,
   Input,
 } from "@orkbot/ui-web";
-import { Plus } from "lucide-react";
+import { Ellipsis, Plus } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { CreateOrganizationDialog } from "../components/CreateOrganizationDialog";
 import { SettingsGroup, SettingsRow } from "../components/SettingsRows";
@@ -36,9 +44,6 @@ export function OrganizationSettingsPanel({
     <OrganizationSettings
       key={organization.id}
       organization={organization}
-      canDelete={
-        organization.canManage && organizations.filter((each) => each.canManage).length > 1
-      }
       onBusyChange={onBusyChange}
     />
   );
@@ -46,11 +51,9 @@ export function OrganizationSettingsPanel({
 
 function OrganizationSettings({
   organization,
-  canDelete,
   onBusyChange,
 }: {
   organization: Organization;
-  canDelete: boolean;
   onBusyChange?: (busy: boolean) => void;
 }) {
   const userId = useQueryUserId();
@@ -58,7 +61,6 @@ function OrganizationSettings({
   const [draft, setDraft] = useState(organization.name);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [creating, setCreating] = useState(false);
   useEffect(() => {
     onBusyChange?.(pending);
@@ -138,31 +140,69 @@ function OrganizationSettings({
           <Plus aria-hidden="true" />
           <Trans>Create organization</Trans>
         </Button>
-        {canDelete ? (
-          <Button
-            variant="destructive"
-            className="rounded-full"
-            onClick={() => setConfirmingDelete(true)}
-          >
-            <Trans>Delete organization</Trans>
-          </Button>
-        ) : null}
       </div>
       <CreateOrganizationDialog open={creating} onOpenChange={setCreating} />
-      {confirmingDelete ? (
+    </div>
+  );
+}
+
+export function OrganizationSettingsActions({
+  allowDelete,
+  disabled,
+  onOpenAudit,
+}: {
+  allowDelete: boolean;
+  disabled: boolean;
+  onOpenAudit?: () => void;
+}) {
+  const { t } = useLingui();
+  const { organizations, activeOrganizationId } = useOrganizations();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const organization = organizations.find((entry) => entry.id === activeOrganizationId);
+  const deletable =
+    allowDelete &&
+    organization?.canManage &&
+    organizations.filter((entry) => entry.canManage).length > 1
+      ? organization
+      : undefined;
+  if (!onOpenAudit && !deletable) return null;
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={t`Organization options`}
+          disabled={disabled}
+          render={<Button variant="ghost" size="icon-sm" />}
+        >
+          <Ellipsis aria-hidden="true" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {onOpenAudit ? (
+            <DropdownMenuItem onClick={onOpenAudit}>
+              <Trans>Activity log</Trans>
+            </DropdownMenuItem>
+          ) : null}
+          {deletable ? (
+            <DropdownMenuItem variant="destructive" onClick={() => setDeletingId(deletable.id)}>
+              <Trans>Delete organization</Trans>
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {deletable && deletingId === deletable.id ? (
         <DeleteOrganizationDialog
-          organization={organization}
-          onCancel={() => setConfirmingDelete(false)}
+          organization={deletable}
+          onCancel={() => setDeletingId(null)}
           onConfirm={async () => {
             const { activeSpaceId } = await rpc.organizations.remove({
-              organizationId: organization.id,
+              organizationId: deletable.id,
             });
             if (!selectSpace(activeSpaceId)) clearSpaceSelection();
             window.location.assign("/");
           }}
         />
       ) : null}
-    </div>
+    </>
   );
 }
 

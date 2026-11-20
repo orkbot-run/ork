@@ -70,10 +70,17 @@ GIT_SHA=$(git rev-parse HEAD) docker compose --env-file .env -f infra/compose/do
 
 `up --wait` does not report success until the new API is healthy and the worker and web containers
 are running. Compose stops the old worker before it starts the new one, and the stop waits for the
-jobs it is running to finish, for up to 45 minutes, instead of cutting them off; new jobs start once
-the new worker is up. The API starts only after the `migrate` container finishes, so a migration failure keeps the new API
-from starting. A failed CLI recreate does not auto-roll back; recover with the previous
-`ORKBOT_IMAGE_TAG` (or rebuild `local`) and `up -d --wait --pull never`.
+jobs it is running to finish. The old worker stops taking new work as soon as it receives the
+shutdown signal. Running bot turns keep renewing their leases and have up to 40 minutes by default
+to finish. A turn still running at that point is handed back to the queue. Maintenance jobs keep
+their separate 45-minute limit. Compose gives the worker 50 minutes for shutdown and cleanup.
+
+The production Compose files enable this behavior by default. Set `RUN_DRAIN_ENABLED=false` to
+interrupt bot turns on shutdown, or set `RUN_DRAIN_MS` to change the turn grace period in
+milliseconds. Keep the Docker stop grace period longer than the turn and maintenance limits.
+New jobs start once the new worker is up. The API starts only after the `migrate` container
+finishes. If a CLI recreate fails, recover with the previous `ORKBOT_IMAGE_TAG` (or rebuild
+`local`) and `up -d --wait --pull never`.
 
 The updater sidecar has its own image and tag so an update never recreates the process performing
 it. Move it deliberately by setting `ORKBOT_UPDATER_IMAGE_TAG` to the full `sha-<commit>` tag, then

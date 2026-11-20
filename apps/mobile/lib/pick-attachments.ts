@@ -3,8 +3,9 @@ import {
   ATTACHMENT_IMAGE_QUALITY,
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_MAX_COUNT,
+  isAttachmentImageMimeType,
 } from "@orkbot/contracts";
-import { inferAttachmentMimeType } from "@orkbot/core";
+import { attachmentExtensionForMimeType, inferAttachmentMimeType } from "@orkbot/core";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import type * as ImageManipulatorModule from "expo-image-manipulator";
@@ -51,8 +52,8 @@ async function prepareImage(
   height: number | undefined,
 ) {
   const mimeType = inferAttachmentMimeType(name, sourceMimeType ?? undefined);
-  // Preserve animation and transparency in GIF and WebP images.
-  if (mimeType === "image/gif" || mimeType === "image/webp") return { uri, name, mimeType };
+  // Only resize formats we can save back without changing how the attachment is used.
+  if (mimeType !== "image/jpeg" && mimeType !== "image/png") return { uri, name, mimeType };
   if (!width || !height || Math.max(width, height) <= ATTACHMENT_IMAGE_MAX_EDGE) {
     return { uri, name, mimeType };
   }
@@ -103,7 +104,7 @@ export async function pickFromLibrary(
   skipped: PickSkip[];
 }> {
   const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ["images"],
+    mediaTypes: ["images", "videos"],
     allowsMultipleSelection: true,
     quality: 1,
   });
@@ -111,7 +112,11 @@ export async function pickFromLibrary(
   const attachments: PickedAttachment[] = [];
   const skipped: PickSkip[] = [];
   for (const asset of result.assets) {
-    const originalName = asset.fileName ?? `photo-${asset.assetId ?? Date.now()}.jpg`;
+    const video = asset.type === "video";
+    const suffix =
+      attachmentExtensionForMimeType(asset.mimeType ?? "") || (video ? ".mp4" : ".jpg");
+    const originalName =
+      asset.fileName ?? `${video ? "video" : "photo"}-${asset.assetId ?? Date.now()}${suffix}`;
     // Once full, let the filter report the skip without processing the file.
     let candidate: Parameters<typeof filterPickedAttachments>[1][number] = {
       name: originalName,
@@ -266,7 +271,7 @@ export async function readDroppedFiles(
       let { uri, name, size } = file;
       let mimeType = inferAttachmentMimeType(name, file.mimeType || undefined);
       const full = existingCount + attachments.length >= maxCount;
-      if (!full && uri && file.width && file.height && mimeType?.startsWith("image/")) {
+      if (!full && uri && file.width && file.height && isAttachmentImageMimeType(mimeType ?? "")) {
         const prepared = await prepareImage(uri, name, mimeType, file.width, file.height);
         if (prepared.uri !== uri) {
           resized.push(prepared.uri);
@@ -311,9 +316,10 @@ export async function readDroppedFiles(
         skipped.push({ name, reason: attachmentSizeSkipReason(maxBytes) });
         continue;
       }
-      const previewUri = mimeType?.startsWith("image/")
-        ? `data:${mimeType};base64,${contentBase64}`
-        : undefined;
+      const previewUri =
+        mimeType && isAttachmentImageMimeType(mimeType)
+          ? `data:${mimeType};base64,${contentBase64}`
+          : undefined;
       attachments.push(pickedAttachment({ name, mimeType, size, contentBase64, previewUri }));
     }
   } finally {
@@ -346,9 +352,10 @@ export async function readSharedFiles(
         const mimeType = inferAttachmentMimeType(name, type || file.mimeType || undefined);
         const { contentBase64, size } = await readUriAsBase64(copy.uri, maxBytes);
         // The cache copy is removed after this read; previews must own their bytes.
-        const previewUri = mimeType?.startsWith("image/")
-          ? `data:${mimeType};base64,${contentBase64}`
-          : undefined;
+        const previewUri =
+          mimeType && isAttachmentImageMimeType(mimeType)
+            ? `data:${mimeType};base64,${contentBase64}`
+            : undefined;
         return filterPickedAttachments(
           existingCount + attachments.length,
           [{ name, mimeType, size, contentBase64, previewUri }],

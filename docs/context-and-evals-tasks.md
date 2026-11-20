@@ -740,6 +740,21 @@ All four advisory predictions matched the observed hit/miss outcome. Latency was
 mixed. This measures immediate reuse, not expiry or general production savings.
 No inference generated the probe's synthetic prefix or navigation snapshots.
 
+### Cache reuse after a memory update
+
+Use `--cache-probe --cache-probe-mode=turn-memory` with the live eval command to
+compare memory in the system instructions with memory at the end of the current
+turn. The probe runs an initial request, an identical replay and a memory update
+for each layout. Both layouts use the same synthetic history. Each phase must
+produce usage for exactly one model call.
+
+On llama.cpp `b12556` with Qwen2.5-0.5B-Instruct Q4_0 and an 8192-token window,
+three comparisons reported 1106–1110 cached tokens after changing system memory
+and 2713–2717 after changing turn memory. The identical replays confirmed cache
+reuse in both layouts. Median first text arrived in 119 ms and 19 ms,
+respectively. These measurements cover a single local model and synthetic chat.
+The three reports are archived under `test-report/evals/archive/t338-turn-memory/`.
+
 ### Qualification and rich-tool evidence
 
 The subsequent paired qualification passed all 12 distant recall samples with

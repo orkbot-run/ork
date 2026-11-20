@@ -165,22 +165,48 @@ describe("sandbox idle", () => {
   });
 
   it.each(["queued", "leased", "running"])(
-    "keeps a computer awake while a run is %s",
+    "suspends when a %s run has not acquired this computer",
     async (status) => {
       const harness = idleHarness();
       harness.prisma.run.findFirst.mockImplementation(async ({ where }) =>
         where.status.in.includes(status) ? { id: "run" } : null,
       );
-
       await sleepComputerIfIdle(harness.deps, harness.computer.id);
-
-      expect(harness.home.commit).not.toHaveBeenCalled();
-      expect(harness.sandbox.stop).not.toHaveBeenCalled();
-      expect(harness.sandbox.execute).not.toHaveBeenCalled();
-      expect(harness.sandbox.keepAlive).toHaveBeenCalledOnce();
-      expect(harness.jobs.enqueue).toHaveBeenCalledOnce();
+      expect(harness.sandbox.stop).toHaveBeenCalledOnce();
+      expect(harness.sandbox.keepAlive).not.toHaveBeenCalled();
     },
   );
+
+  it("keeps the computer awake for a running bot with a live execution lease", async () => {
+    const harness = idleHarness();
+    harness.prisma.computerExecutionLease.findMany.mockResolvedValue([{ runId: "run", fence: 1 }]);
+    harness.prisma.run.findFirst.mockResolvedValue({ id: "run" });
+    await sleepComputerIfIdle(harness.deps, harness.computer.id);
+    expect(harness.prisma.run.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: { in: ["run"] },
+          status: { in: ["leased", "running"] },
+          leaseExpiresAt: { gt: expect.any(Date) },
+        }),
+      }),
+    );
+    expect(harness.sandbox.stop).not.toHaveBeenCalled();
+    expect(harness.sandbox.keepAlive).toHaveBeenCalledOnce();
+  });
+
+  it("gives up the suspension when a bot acquires a lease during checkpointing", async () => {
+    const harness = idleHarness();
+    harness.prisma.computerExecutionLease.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ runId: "later", fence: 2 }]);
+    harness.prisma.run.findFirst.mockResolvedValue({ id: "later" });
+    await sleepComputerIfIdle(harness.deps, harness.computer.id);
+    expect(harness.home.commit).toHaveBeenCalledOnce();
+    expect(harness.sandbox.stop).not.toHaveBeenCalled();
+    expect(harness.computer.state).toBe("running");
+  });
 
   it.each([undefined, false, true])(
     "suspends a computer whose only active run is waiting_input (billsWhileRunning: %s)",
@@ -202,6 +228,7 @@ describe("sandbox idle", () => {
 
   it("leaves a held computer whose heartbeat finds the sandbox gone to its recovery", async () => {
     const harness = idleHarness();
+    harness.prisma.computerExecutionLease.findMany.mockResolvedValue([{ runId: "run", fence: 1 }]);
     harness.prisma.run.findFirst.mockResolvedValue({ id: "run" });
     harness.sandbox.keepAlive.mockRejectedValueOnce(
       Object.assign(new Error("sandbox removed"), { name: "SandboxNotFoundError" }),
@@ -599,6 +626,9 @@ describe("sandbox idle", () => {
 
     it("is left to the run that holds it", async () => {
       const harness = idleHarness({ stoppedAtProvider: true, homeRevisionAt: savedAt });
+      harness.prisma.computerExecutionLease.findMany.mockResolvedValue([
+        { runId: "active-run", fence: 1 },
+      ]);
       harness.prisma.run.findFirst.mockResolvedValue({ id: "active-run" });
 
       await sleepComputerIfIdle(harness.deps, harness.computer.id);
@@ -909,6 +939,7 @@ describe("sandbox idle", () => {
 
   it("leaves the run open when a stop is called off", async () => {
     const harness = idleHarness();
+    harness.prisma.computerExecutionLease.findMany.mockResolvedValue([{ runId: "run", fence: 1 }]);
     harness.prisma.run.findFirst.mockResolvedValueOnce({ id: "run" });
 
     await sleepComputerIfIdle(harness.deps, harness.computer.id);
@@ -1293,6 +1324,9 @@ describe("maximum active lifetime", () => {
 
   it("does not pull the computer out from under a run that is executing", async () => {
     const harness = idleHarness({ billsWhileRunning: true, runningSince: longAgo });
+    harness.prisma.computerExecutionLease.findMany.mockResolvedValue([
+      { runId: "executing", fence: 1 },
+    ]);
     harness.prisma.run.findFirst.mockResolvedValue({ id: "executing" });
 
     await sleepComputerIfIdle(harness.deps, harness.computer.id);
@@ -1396,6 +1430,9 @@ describe("maximum active lifetime", () => {
         runningSince: pastUnbilled,
         backgroundWorkProbeCode: 0,
       });
+      harness.prisma.computerExecutionLease.findMany.mockResolvedValue([
+        { runId: "executing", fence: 1 },
+      ]);
       harness.prisma.run.findFirst.mockResolvedValue({ id: "executing" });
 
       await sleepComputerIfIdle(harness.deps, harness.computer.id);
@@ -1508,6 +1545,9 @@ describe("monthly computer allowance", () => {
       backgroundWorkProbeCode: 0,
       computerHours: 25,
     });
+    harness.prisma.computerExecutionLease.findMany.mockResolvedValue([
+      { runId: "executing", fence: 1 },
+    ]);
     harness.prisma.run.findFirst.mockResolvedValue({ id: "executing" });
 
     await sleepComputerIfIdle(harness.deps, harness.computer.id);

@@ -104,7 +104,7 @@ export function turnCheckpointRequiresFileReader(messages: Message[]): boolean {
           : {};
     }
     return (
-      (name === "message_bot" || name === "handoff_to_bot") &&
+      (name === "message_bot" || name === "handoff_to_bot" || name === "post_to_group") &&
       args.files !== undefined &&
       (!Array.isArray(args.files) || args.files.length > 0)
     );

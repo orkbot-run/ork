@@ -61,6 +61,7 @@ export * from "./computer-disk.js";
 export * from "./computer-frame-image.js";
 export * from "./computer-idle.js";
 export * from "./computer-lifecycle.js";
+export { reconcileComputerOrphans } from "./computer-orphan-cleanup.js";
 export * from "./computer-provider-descriptor.js";
 export * from "./computer-provider-registry.js";
 export * from "./computer-screens.js";
@@ -120,6 +121,9 @@ export * from "./mcp-transport.js";
 export * from "./media-generation-factory.js";
 export * from "./media-generation-provider.js";
 export * from "./media-video-poll.js";
+export * from "./meeting-connection.js";
+export * from "./meeting-emulator.js";
+export * from "./meeting-service.js";
 export {
   AGENT_MEMORY_MAX_BYTES,
   buildAgentMemoryPrompt,
@@ -139,6 +143,7 @@ export * from "./model-connect-check.js";
 export * from "./model-connection-metadata.js";
 export { hostedModelCreditObserver } from "./model-credit-observer.js";
 export * from "./model-credit-reconciler.js";
+export * from "./model-provider-policy.js";
 export * from "./model-roles.js";
 export * from "./model-selection.js";
 export * from "./model-vision.js";
@@ -176,9 +181,11 @@ export * from "./purchase-service.js";
 export * from "./push-token-store.js";
 export type * from "./railway-sandbox.js";
 export * from "./realtime.js";
+export * from "./recall-meetings.js";
 export * from "./release-watch.js";
 export * from "./remote-mcp.js";
 export * from "./resend-email.js";
+export * from "./routine-backoff.js";
 export * from "./routine-watch.js";
 export * from "./run-resources.js";
 export * from "./run-secret.js";
