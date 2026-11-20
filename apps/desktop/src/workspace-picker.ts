@@ -17,7 +17,7 @@ export function desktopWorkspaceRoute(
   );
 }
 
-/** Display each authorized server once. The Accounts binding is used only for opening it. */
+/** Display the workspaces the member can use and keep their server routes internal. */
 export function renderWorkspacePicker(options: {
   document: Document;
   container: HTMLElement;
@@ -122,55 +122,55 @@ export function renderWorkspacePicker(options: {
   const entries: DesktopWorkspace[] = [];
   if (!organization) return entries;
   for (const server of organization.servers) {
-    const visibleWorkspaces = server.workspaces.filter((workspace) => workspace.role !== null);
     if (server.state === "disconnected") continue;
-    if (!visibleWorkspaces.length && organization.role === "member") continue;
     const route = desktopWorkspaceRoute(server.routes);
-    const landing =
-      route &&
-      visibleWorkspaces.find((workspace) =>
+    for (const workspace of server.workspaces.filter(
+      (row) => row.role !== null && row.state !== "disabled",
+    )) {
+      const available =
+        route &&
         catalogWorkspace(catalog, {
           organizationId: organization.id,
           serverId: server.id,
           workspaceId: workspace.id,
-        }),
-      );
-    const button = doc.createElement("button");
-    button.type = "button";
-    button.className = "choice workspace-choice";
-    button.dataset.directoryGroup = "servers";
-    button.dataset.serverId = server.id;
-    const text = doc.createElement("span");
-    const name = doc.createElement("strong");
-    name.textContent = server.name;
-    const status = doc.createElement("small");
-    if (landing && route) {
-      entries.push({ id: landing.id, name: server.name, url: route.address });
-      status.className = "workspace-availability";
-      status.dataset.workspaceId = landing.id;
-      button.addEventListener("click", () => options.open(landing.id));
-    } else {
-      button.disabled = true;
-      button.dataset.unavailable = "true";
-      status.textContent = t(
-        server.state === "pending" || visibleWorkspaces.some((row) => row.state === "provisioning")
-          ? "Preparing server"
-          : server.state === "update-required"
-            ? "Update Ork to connect to this server."
-            : server.state === "ready" && route && !visibleWorkspaces.some((row) => row.canOpen)
-              ? "Access required"
-              : "Server unavailable",
-      );
+        });
+      const button = doc.createElement("button");
+      button.type = "button";
+      button.className = "choice workspace-choice";
+      button.dataset.directoryGroup = "servers";
+      button.dataset.serverId = server.id;
+      const text = doc.createElement("span");
+      const name = doc.createElement("strong");
+      name.textContent = workspace.name;
+      const status = doc.createElement("small");
+      if (available && route) {
+        entries.push({ id: workspace.id, name: workspace.name, url: route.address });
+        status.className = "workspace-availability";
+        status.dataset.workspaceId = workspace.id;
+        button.addEventListener("click", () => options.open(workspace.id));
+      } else {
+        button.disabled = true;
+        button.dataset.unavailable = "true";
+        status.textContent = t(
+          workspace.state === "provisioning"
+            ? "Preparing workspace"
+            : server.state === "update-required"
+              ? "Update Ork to connect to this server."
+              : server.state === "ready" && route && !workspace.canOpen
+                ? "Access required"
+                : "Server unavailable",
+        );
+      }
+      text.append(name, status);
+      button.append(text);
+      container.append(button);
     }
-    text.append(name, status);
-    button.append(text);
-    container.append(button);
   }
   if (!container.querySelector('[data-directory-group="servers"]')) {
     const empty = doc.createElement("p");
     empty.className = "hint";
     empty.dataset.directoryGroup = "servers";
-    empty.textContent = t("No servers connected");
+    empty.textContent = t("No workspaces available");
     container.append(empty);
   }
   if (catalog.defaultOrganizationId !== organization.id) {

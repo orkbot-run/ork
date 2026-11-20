@@ -13,12 +13,14 @@ import { newSpaceCreation } from "../lib/new-space";
 import { refreshOrganizations } from "../lib/organizations";
 import { useSideInsets } from "../lib/side-insets";
 import { errorText } from "../lib/user-error";
+import { useWorkspacePicker } from "../lib/workspace-picker";
 
 export default function NewSpace() {
   const sideInsets = useSideInsets();
   const { t } = useI18n();
   const tokens = useMobileTokens();
   const router = useRouter();
+  const picker = useWorkspacePicker();
   const [name, setName] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +44,12 @@ export default function NewSpace() {
     try {
       const result = await createSpace(trimmed, () => active.current);
       if (result === "stale") return;
+      if (result === "directory") {
+        router.dismissAll();
+        router.replace("/");
+        picker?.open();
+        return;
+      }
       void refreshOrganizations();
       if (result === "selection_failed") {
         Alert.alert(t("Space created"), t("It could not be opened. Try again from the sidebar."));
