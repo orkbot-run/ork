@@ -7,11 +7,18 @@ import {
   catalogWorkspace,
   initialCatalogOrganization,
   initialCatalogWorkspace,
+  organizationDashboardUrl,
   parseWorkspaceLink,
 } from "./workspace-selection.js";
 
 const id = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 const target = { organizationId: id(1), serverId: id(2), workspaceId: id(3) };
+
+it("opens the central organization dashboard and falls back safely for an invalid id", () => {
+  expect(organizationDashboardUrl(id(1))).toBe(`https://app.ork.run/workspace/${id(1)}/overview`);
+  expect(organizationDashboardUrl("../other")).toBe("https://app.ork.run/");
+  expect(organizationDashboardUrl(null)).toBe("https://app.ork.run/");
+});
 const fixture = (): IdentityCatalog => ({
   version: 2,
   defaultOrganizationId: null,

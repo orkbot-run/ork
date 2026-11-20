@@ -4944,6 +4944,10 @@ msgstr "פתיחה בחלון מלא"
 msgid "Open navigation"
 msgstr "פתיחת הניווט"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Open Ork Accounts"
+msgstr ""
+
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Open sign-in page"
 msgstr "פתיחת דף הכניסה"

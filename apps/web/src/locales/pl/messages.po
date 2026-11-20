@@ -4944,6 +4944,10 @@ msgstr "Otwórz w pełnym oknie"
 msgid "Open navigation"
 msgstr "Otwórz nawigację"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Open Ork Accounts"
+msgstr "Otwórz Ork Accounts"
+
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Open sign-in page"
 msgstr "Otwórz stronę logowania"

@@ -4945,6 +4945,10 @@ msgstr "在完整視窗中開啟"
 msgid "Open navigation"
 msgstr "開啟導覽"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Open Ork Accounts"
+msgstr ""
+
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Open sign-in page"
 msgstr "開啟登入頁面"

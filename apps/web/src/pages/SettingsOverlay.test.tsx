@@ -210,6 +210,39 @@ it("separates organization and personal settings in a managed workspace", async 
   }
 });
 
+it("opens the current central organization's dashboard", async () => {
+  policyState.managed = true;
+  const organizationId = "00000000-0000-4000-8000-000000000001";
+  Object.defineProperty(window, "orkbotDesktop", {
+    configurable: true,
+    value: { accounts: { workspaceTarget: async () => ({ organizationId }) } },
+  });
+  const open = vi.spyOn(window, "open").mockImplementation(() => null);
+  const { container, cleanup } = await render({ section: "organization" });
+  try {
+    await vi.waitFor(() => {
+      const item = [...container.querySelectorAll("button")].find(
+        (button) => button.textContent === "Open Ork Accounts",
+      );
+      expect(item?.disabled).toBe(false);
+    });
+    const item = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Open Ork Accounts",
+    )!;
+    await act(async () => item.click());
+    expect(open).toHaveBeenCalledWith(
+      `https://app.ork.run/workspace/${organizationId}/overview`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  } finally {
+    open.mockRestore();
+    Reflect.deleteProperty(window, "orkbotDesktop");
+    policyState.managed = false;
+    await cleanup();
+  }
+});
+
 it("lists the spaces under General and opens the one picked", async () => {
   const onOpenSpace = vi.fn();
   const { container, cleanup } = await render({ spaces, onOpenSpace });
