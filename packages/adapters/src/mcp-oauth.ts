@@ -13,7 +13,6 @@ import {
   discoverOAuthProtectedResourceMetadata,
   refreshAuthorization,
 } from "@modelcontextprotocol/sdk/client/auth.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { InvalidGrantError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import type {
@@ -36,6 +35,7 @@ import type { Prisma, PrismaClient } from "@orkbot/db";
 import { availableInSpace, itemSecretIn, runAsSystem } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { sanitizeConnectorError } from "./connector-safety.js";
+import { createMcpClient } from "./mcp-output-schema.js";
 import { MCP_DYNAMIC_REGISTRATION_UNSUPPORTED, needsMcpOAuthClient } from "./mcp-server-health.js";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
 import { oauthRefreshSignal, withOAuthRefreshLock } from "./oauth-refresh-lock.js";
@@ -954,7 +954,11 @@ async function startRemoteAuthorization(
     authProvider: provider,
     fetch: provider.wrapFetch(network.fetch),
   });
-  const client = new Client({ name: "orkbot-oauth", version: "0.1.0" });
+  const client = createMcpClient(
+    { name: "orkbot-oauth", version: "0.1.0" },
+    undefined,
+    endpoint.hostname,
+  );
   const signal = AbortSignal.timeout(15_000);
   try {
     await client.connect(transport, { signal, timeout: 15_000 });

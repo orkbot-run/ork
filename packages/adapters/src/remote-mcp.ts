@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import type { LookupFunction } from "node:net";
 import { isDeepStrictEqual } from "node:util";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
   StreamableHTTPClientTransport,
   StreamableHTTPError,
@@ -38,6 +38,7 @@ import type {
   McpDiscoveryResult,
 } from "./mcp-discovery.js";
 import { mcpDiscoveryLimits } from "./mcp-discovery.js";
+import { createMcpClient } from "./mcp-output-schema.js";
 import { limitMcpResponseBody } from "./mcp-response-limit.js";
 import { callMcpToolWithDeadline, isBrokenMcpCall } from "./mcp-tool-call.js";
 import type { ResolvedAddress, ResolveHostname } from "./network-address.js";
@@ -326,7 +327,11 @@ async function withRemoteMcpClient<T>(
     },
     fetch: async (input, init) => limitMcpResponseBody(await safeFetch(input, init), init?.headers),
   });
-  const client = new Client({ name: "orkbot", version: "0.1.0" }, { capabilities: {} });
+  const client = createMcpClient(
+    { name: "orkbot", version: "0.1.0" },
+    { capabilities: {} },
+    endpoint.hostname,
+  );
   try {
     await client.connect(transport, { signal, timeout: MCP_TIMEOUT_MS });
     return await run(client, signal);
@@ -517,7 +522,11 @@ export class RemoteMcpSessionCache {
         return limitMcpResponseBody(response, init?.headers);
       },
     });
-    const client = new Client({ name: "orkbot", version: "0.1.0" }, { capabilities: {} });
+    const client = createMcpClient(
+      { name: "orkbot", version: "0.1.0" },
+      { capabilities: {} },
+      endpoint.hostname,
+    );
     const session: ScopedMcpSession = {
       key,
       client,

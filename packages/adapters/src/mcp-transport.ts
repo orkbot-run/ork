@@ -3,7 +3,7 @@
 // Inherited Apache-2.0 behavior is preserved; bounded discovery and guarded proxy changes follow LICENSE.md.
 
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { StdioServerParameters } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -16,6 +16,7 @@ import { combineSignals } from "./connector-safety.js";
 import { closeMcpResource } from "./mcp-close.js";
 import type { McpDiscoveryLimits, McpDiscoveryResult } from "./mcp-discovery.js";
 import { mcpDiscoveryLimits } from "./mcp-discovery.js";
+import { createMcpClient } from "./mcp-output-schema.js";
 import type { InstalledMcpBin } from "./mcp-package-installer.js";
 import {
   isInstalledMcpBin,
@@ -370,9 +371,10 @@ export class McpSession {
   }
 
   private newClient(): Client {
-    const client = new Client(
+    const client = createMcpClient(
       { name: this.clientOptions.name ?? "orkbot", version: this.clientOptions.version ?? "0.1.0" },
       this.clientOptions.capabilities,
+      this.clientOptions.name,
     );
     client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
       this.invalidateToolCatalog();
