@@ -8,6 +8,13 @@ export const PL_MESSAGES: Record<string, string> = {
     "Nie udało się otworzyć Ork Accounts. Spróbuj ponownie.",
   "This workspace was closed or your access was removed.":
     "Ta przestrzeń została zamknięta lub odebrano Ci do niej dostęp.",
+  "Check the required fields and value formats.": "Sprawdź wymagane pola i formaty wartości.",
+  "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00":
+    "Podaj datę i czas ze strefą czasową, np. 2026-11-20T14:30:00+01:00",
+  Required: "Wymagane",
+  Declined: "Odrzucono",
+  Expired: "Wygasło",
+
   "Could not submit this answer": "Nie udało się przesłać odpowiedzi",
   Reject: "Odrzuć",
   "Recipient changed. Review the updated draft and press Send again.":

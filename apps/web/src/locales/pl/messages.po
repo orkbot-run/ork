@@ -837,6 +837,7 @@ msgid "Answer"
 msgstr "Odbierz"
 
 #: src/components/AskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "Answered"
 msgstr "Odpowiedziano"
 
@@ -1288,6 +1289,7 @@ msgstr "Nie odczytuje obrazów"
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
+#: src/components/McpFormCard.tsx
 msgid "Cancel"
 msgstr "Anuluj"
 
@@ -1313,6 +1315,7 @@ msgstr "anulowano"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/components/McpFormCard.tsx
 msgid "Cancelled"
 msgstr "Anulowano"
 
@@ -2556,6 +2559,7 @@ msgstr "Nie udało się zatrzymać komputera"
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "Could not submit this answer"
 msgstr "Nie udało się wysłać tej odpowiedzi"
 
@@ -2789,6 +2793,7 @@ msgstr "dni"
 
 #: src/components/call/IncomingCall.tsx
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/components/McpFormCard.tsx
 msgid "Decline"
 msgstr "Odrzuć"
 
@@ -4692,6 +4697,7 @@ msgstr "Brak pasujących botów"
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "No longer active"
 msgstr "Już nieaktywne"
 
@@ -4995,6 +5001,7 @@ msgstr "Otwiera okno drukowania przeglądarki. Jako drukarkę wybierz Zapisz jak
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/components/McpFormCard.tsx
 msgid "Optional"
 msgstr "Opcjonalne"
 
@@ -5182,6 +5189,7 @@ msgstr "Wstrzymano"
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/RoutineRunHistory.tsx
+#: src/components/McpFormCard.tsx
 msgid "Pending"
 msgstr "Oczekuje"
 
@@ -6206,6 +6214,7 @@ msgstr "Wysyłanie do grupy…"
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/shell/transcript.tsx
+#: src/components/McpFormCard.tsx
 msgid "Sending…"
 msgstr "Wysyłanie…"
 
@@ -6667,6 +6676,7 @@ msgstr "subagent"
 
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
+#: src/components/McpFormCard.tsx
 msgid "Submit"
 msgstr "Wyślij"
 
@@ -7955,3 +7965,35 @@ msgstr "Wpisz treść wiadomości"
 
 msgid "Recipient changed. Review the updated draft and press Send again."
 msgstr "Adresat został zmieniony. Sprawdź zaktualizowany szkic i ponownie naciśnij Wyślij."
+
+#: src/components/McpFormCard.tsx
+msgid "Check the required fields and value formats."
+msgstr "Sprawdź wymagane pola i formaty wartości."
+
+#: src/components/McpFormCard.tsx
+msgid "Choose a value"
+msgstr "Wybierz wartość"
+
+#: src/components/McpFormCard.tsx
+msgid "Declined"
+msgstr "Odrzucono"
+
+#: src/components/McpFormCard.tsx
+msgid "Expired"
+msgstr "Wygasło"
+
+#: src/components/McpFormCard.tsx
+msgid "No"
+msgstr "Nie"
+
+#: src/components/McpFormCard.tsx
+msgid "Required"
+msgstr "Wymagane"
+
+#: src/components/McpFormCard.tsx
+msgid "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00"
+msgstr "Podaj datę i czas ze strefą czasową, np. 2026-11-20T14:30:00+01:00"
+
+#: src/components/McpFormCard.tsx
+msgid "Yes"
+msgstr "Tak"

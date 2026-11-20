@@ -106,7 +106,7 @@ export function useThreadRows({
 }) {
   const { t, locale } = useI18n();
   const { showBotSenderName, reactionView, exchanges, visibleMessages } = transcript;
-  const answerableAskIds = useMemo(() => answerableAskMessageIds(snap), [snap]);
+  const answerableAskIds = useMemo(() => answerableAskMessageIds(snap, userId), [snap, userId]);
   const dismissableAskIds = useMemo(() => dismissableAskMessageIds(snap, userId), [snap, userId]);
   const separatorIds = useMemo(() => timeSeparatorIds(visibleMessages), [visibleMessages]);
   const unreadDividerId = useMemo(

@@ -9,7 +9,12 @@ import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@orkbot/a
 import type { MessageBlock } from "@orkbot/contracts";
 import { stuckWorkStatusMessages } from "@orkbot/core";
 import type { Pool, PrismaClient, ThreadEvents } from "@orkbot/db";
-import { databaseOperationFailed, isDatabaseUnavailable, reconcileComputerRuns } from "@orkbot/db";
+import {
+  databaseOperationFailed,
+  isDatabaseUnavailable,
+  reconcileComputerRuns,
+  reconcileMcpForms,
+} from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import type { PoolClient } from "pg";
 import { deliverBackgroundHelperOutcome } from "./background-helper-delivery.js";
@@ -201,9 +206,12 @@ export function createJobReconciler(
       if (stopping && options.stopPendingPass) return;
 
       startHousekeeping();
+      const formEvents = deps.events;
       const auxiliary = await Promise.allSettled([
         reconcileCallRequests(deps),
         reconcileComputerRuns(deps.prisma),
+        formEvents &&
+          reconcileMcpForms(deps.prisma, (threadId, seq) => formEvents.notify(threadId, seq)),
       ]);
       for (const result of auxiliary) {
         if (result.status === "rejected")

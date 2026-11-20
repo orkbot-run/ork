@@ -11,11 +11,13 @@ import {
   MCP_TOOL_INACTIVITY_MS,
   MCP_TOOL_MAX_TOTAL_MS,
   McpToolTimeoutError,
+  mcpCallScope,
 } from "./mcp-tool-call.js";
 
 afterEach(() => vi.useRealTimers());
 
 async function fixture() {
+  let scope: ReturnType<typeof mcpCallScope.getStore>;
   let request: { id: number; params: { _meta: { progressToken: number } } };
   const transport: Transport = {
     start: async () => {},
@@ -34,7 +36,10 @@ async function fixture() {
             },
           }),
         );
-      } else if (message.method === "tools/call") request = message as typeof request;
+      } else if (message.method === "tools/call") {
+        request = message as typeof request;
+        scope = mcpCallScope.getStore();
+      }
     },
   };
   const client = new Client({ name: "test", version: "1" });
@@ -53,6 +58,7 @@ async function fixture() {
     transport,
     result,
     settled,
+    pause: () => scope!.pause(),
     progress: () =>
       transport.onmessage?.({
         jsonrpc: "2.0",
@@ -112,4 +118,38 @@ it("does not classify a server JSON-RPC timeout or closure code as a broken conn
   expect(isBrokenMcpCall(new McpError(ErrorCode.ConnectionClosed, "application error"))).toBe(
     false,
   );
+});
+
+it("preserves remaining inactivity after a suspended human wait", async () => {
+  const f = await fixture();
+  await vi.advanceTimersByTimeAsync(120_000);
+  const resume = f.pause();
+  await vi.advanceTimersByTimeAsync(MCP_TOOL_MAX_TOTAL_MS * 2);
+  let done = false;
+  void f.settled.then(() => {
+    done = true;
+  });
+  await Promise.resolve();
+  expect(done).toBe(false);
+  resume();
+  await vi.advanceTimersByTimeAsync(MCP_TOOL_INACTIVITY_MS - 120_000 - 1);
+  expect(done).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(await f.settled).toBeInstanceOf(McpToolTimeoutError);
+  await f.client.close();
+});
+
+it("preserves the remaining total budget when human input suspends both clocks", async () => {
+  const f = await fixture();
+  for (let elapsed = 0; elapsed < MCP_TOOL_MAX_TOTAL_MS - 30_000; elapsed += 30_000) {
+    await vi.advanceTimersByTimeAsync(30_000);
+    f.progress();
+  }
+  const resume = f.pause();
+  await vi.advanceTimersByTimeAsync(MCP_TOOL_MAX_TOTAL_MS * 2);
+  resume();
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(await f.settled).toBeInstanceOf(McpToolTimeoutError);
+  expect((await f.settled).message).toContain("15 minute");
+  await f.client.close();
 });

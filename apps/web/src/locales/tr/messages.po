@@ -837,6 +837,7 @@ msgid "Answer"
 msgstr "Yanıtla"
 
 #: src/components/AskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "Answered"
 msgstr "Yanıtlandı"
 
@@ -1284,6 +1285,7 @@ msgstr "Görselleri okuyamaz"
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
+#: src/components/McpFormCard.tsx
 msgid "Cancel"
 msgstr "İptal"
 
@@ -1309,6 +1311,7 @@ msgstr "iptal edildi"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/components/McpFormCard.tsx
 msgid "Cancelled"
 msgstr "İptal edildi"
 
@@ -2548,6 +2551,7 @@ msgstr "Bilgisayar durdurulamadı"
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "Could not submit this answer"
 msgstr "Bu yanıt gönderilemedi"
 
@@ -2781,6 +2785,7 @@ msgstr "gün"
 
 #: src/components/call/IncomingCall.tsx
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/components/McpFormCard.tsx
 msgid "Decline"
 msgstr "Reddet"
 
@@ -4684,6 +4689,7 @@ msgstr "Eşleşen bot yok"
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "No longer active"
 msgstr "Artık etkin değil"
 
@@ -4987,6 +4993,7 @@ msgstr "Tarayıcınızın yazdırma penceresini açar. Hedef olarak PDF olarak k
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/components/McpFormCard.tsx
 msgid "Optional"
 msgstr "İsteğe bağlı"
 
@@ -5174,6 +5181,7 @@ msgstr "Duraklatıldı"
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/RoutineRunHistory.tsx
+#: src/components/McpFormCard.tsx
 msgid "Pending"
 msgstr "Beklemede"
 
@@ -6198,6 +6206,7 @@ msgstr ""
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/shell/transcript.tsx
+#: src/components/McpFormCard.tsx
 msgid "Sending…"
 msgstr "Gönderiliyor…"
 
@@ -6659,6 +6668,7 @@ msgstr "alt ajan"
 
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
+#: src/components/McpFormCard.tsx
 msgid "Submit"
 msgstr "Gönder"
 
@@ -7845,3 +7855,35 @@ msgstr "Ses sağlayıcınız anahtarı reddetti."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "Posta kodu"
+
+#: src/components/McpFormCard.tsx
+msgid "Check the required fields and value formats."
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Choose a value"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Declined"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Expired"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "No"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Required"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Yes"
+msgstr ""

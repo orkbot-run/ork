@@ -287,6 +287,9 @@ export class PipedreamConnector implements ManagedConnectorProvider {
           signal: context.signal,
           fetch: this.dependencies.fetch,
           resolveHostname: this.dependencies.resolveHostname,
+          form: context.elicitMcpForm
+            ? { integrationName: app, elicit: context.elicitMcpForm }
+            : undefined,
         },
         call.route?.toolName ?? call.tool,
         call.args,

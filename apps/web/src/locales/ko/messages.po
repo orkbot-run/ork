@@ -837,6 +837,7 @@ msgid "Answer"
 msgstr "답변"
 
 #: src/components/AskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "Answered"
 msgstr "응답함"
 
@@ -1284,6 +1285,7 @@ msgstr "이미지를 읽을 수 없음"
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
+#: src/components/McpFormCard.tsx
 msgid "Cancel"
 msgstr "취소"
 
@@ -1309,6 +1311,7 @@ msgstr "취소됨"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/components/McpFormCard.tsx
 msgid "Cancelled"
 msgstr "취소됨"
 
@@ -2548,6 +2551,7 @@ msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "Could not submit this answer"
 msgstr "답변을 보내지 못했습니다."
 
@@ -2781,6 +2785,7 @@ msgstr "일"
 
 #: src/components/call/IncomingCall.tsx
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/components/McpFormCard.tsx
 msgid "Decline"
 msgstr "거절"
 
@@ -4684,6 +4689,7 @@ msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "No longer active"
 msgstr "이미 종료된 요청입니다"
 
@@ -4987,6 +4993,7 @@ msgstr "브라우저의 인쇄 대화상자를 엽니다. 대상으로 PDF로 �
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/components/McpFormCard.tsx
 msgid "Optional"
 msgstr "선택 사항"
 
@@ -5174,6 +5181,7 @@ msgstr "일시 중지됨"
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/RoutineRunHistory.tsx
+#: src/components/McpFormCard.tsx
 msgid "Pending"
 msgstr ""
 
@@ -6198,6 +6206,7 @@ msgstr ""
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/shell/transcript.tsx
+#: src/components/McpFormCard.tsx
 msgid "Sending…"
 msgstr "보내는 중…"
 
@@ -6659,6 +6668,7 @@ msgstr "보조 에이전트"
 
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
+#: src/components/McpFormCard.tsx
 msgid "Submit"
 msgstr "확인"
 
@@ -7844,4 +7854,36 @@ msgstr "음성 서비스에서 키를 거부했습니다."
 
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Check the required fields and value formats."
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Choose a value"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Declined"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Expired"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "No"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Required"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Yes"
 msgstr ""

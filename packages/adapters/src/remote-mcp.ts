@@ -42,7 +42,12 @@ import { mcpDiscoveryLimits } from "./mcp-discovery.js";
 import { createMcpClient } from "./mcp-output-schema.js";
 import { limitMcpResponseBody } from "./mcp-response-limit.js";
 import { prepareMcpImageResult } from "./mcp-result-images.js";
-import { callMcpToolWithDeadline, isBrokenMcpCall } from "./mcp-tool-call.js";
+import type { McpFormCallOptions } from "./mcp-tool-call.js";
+import {
+  callMcpToolWithDeadline,
+  installMcpFormHandler,
+  isBrokenMcpCall,
+} from "./mcp-tool-call.js";
 import type { ResolvedAddress, ResolveHostname } from "./network-address.js";
 import {
   createAddressCheckedLookup,
@@ -68,6 +73,8 @@ export interface RemoteTransportDependencies {
 
 export interface RemoteMcpOptions extends RemoteTransportDependencies, RemoteUrlPolicy {
   discoveryLimits?: Partial<McpDiscoveryLimits>;
+  /** Human input callback for this exact invocation, never stored on pooled sessions. */
+  form?: McpFormCallOptions;
   endpoint: string;
   headers?: Record<string, string>;
   signal?: AbortSignal;
@@ -179,8 +186,13 @@ export async function callRemoteMcpTool(
   projectResult?: (result: unknown) => unknown,
 ): Promise<unknown> {
   return withScopedMcpClient(options, (client, signal) =>
-    callMcpTool(client, signal, toolName, args, (result) =>
-      limitRemoteMcpPayload(projectResult ? projectResult(result) : result),
+    callMcpTool(
+      client,
+      signal,
+      toolName,
+      args,
+      (result) => limitRemoteMcpPayload(projectResult ? projectResult(result) : result),
+      options.form,
     ),
   );
 }
@@ -193,12 +205,21 @@ export async function callRemoteMcpConnectorTool(
   secrets: string[],
 ): Promise<unknown> {
   return withScopedMcpClient(options, (client, signal) =>
-    callMcpTool(client, signal, toolName, args, (result) => {
-      const redacted = redactConnectorPayload(result, secrets);
-      return (
-        prepareMcpImageResult(redacted, limitRemoteMcpPayload) ?? limitRemoteMcpPayload(redacted)
-      );
-    }),
+    callMcpTool(
+      client,
+      signal,
+      toolName,
+      args,
+      (result) => {
+        const redacted = redactConnectorPayload(result, secrets);
+        return (
+          prepareMcpImageResult(redacted, limitRemoteMcpPayload) ?? limitRemoteMcpPayload(redacted)
+        );
+      },
+      options.form
+        ? { ...options.form, secrets: () => [...secrets, ...(options.form?.secrets?.() ?? [])] }
+        : undefined,
+    ),
   );
 }
 
@@ -208,8 +229,9 @@ async function callMcpTool(
   toolName: string,
   args: Record<string, unknown>,
   shapeResult: (result: unknown) => unknown,
+  form?: McpFormCallOptions,
 ): Promise<unknown> {
-  const result = await callMcpToolWithDeadline(client, toolName, args, signal);
+  const result = await callMcpToolWithDeadline(client, toolName, args, signal, form);
   const isError = result.isError === true;
   const envelope = {
     content: withoutDuplicatedStructuredText(result.content, result.structuredContent, isError),
@@ -348,9 +370,10 @@ async function withRemoteMcpClient<T>(
   });
   const client = createMcpClient(
     { name: "orkbot", version: "0.1.0" },
-    { capabilities: {} },
+    { capabilities: { elicitation: { form: {} } } },
     endpoint.hostname,
   );
+  installMcpFormHandler(client);
   try {
     await client.connect(transport, { signal, timeout: MCP_TIMEOUT_MS });
     return await run(client, signal);
@@ -543,9 +566,10 @@ export class RemoteMcpSessionCache {
     });
     const client = createMcpClient(
       { name: "orkbot", version: "0.1.0" },
-      { capabilities: {} },
+      { capabilities: { elicitation: { form: {} } } },
       endpoint.hostname,
     );
+    installMcpFormHandler(client);
     const session: ScopedMcpSession = {
       key,
       client,

@@ -687,3 +687,47 @@ it("keeps a changed native recipient pending until staged review is explicitly s
   expect(JSON.parse(onAnswer.mock.calls[1]![0])).toMatchObject({ reviewId });
   expect(container.textContent).toContain("Approved to send");
 });
+
+const mcpForm = {
+  id: "680d939a-98de-4bb5-b649-91b1015dfb1c",
+  integrationName: "Example CRM",
+  status: "pending",
+  fields: [
+    { name: "notify", title: "Notify", required: true, type: "boolean", default: false },
+    { name: "quantity", title: "Quantity", required: true, type: "integer", default: 3 },
+    {
+      name: "kind",
+      title: "Kind",
+      required: false,
+      type: "enum",
+      options: [{ value: "a", label: "First kind" }],
+    },
+  ],
+};
+it("renders native MCP boolean choices and submits false and numbers with scalar types", async () => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  await render({ mcpForm }, onAnswer);
+  expect(container.textContent).toContain("Notify (Required)");
+  expect(container.textContent).toContain("First kind");
+  await act(async () => button("Submit").click());
+  expect(JSON.parse(onAnswer.mock.calls[0]![0]!)).toEqual({
+    mcpFormId: mcpForm.id,
+    action: "accept",
+    content: { notify: false, quantity: 3 },
+  });
+  expect(container.querySelector("input")).toBeNull();
+});
+it.each(["Decline", "Cancel"])("submits native MCP %s without content", async (label) => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  await render({ mcpForm }, onAnswer);
+  await act(async () => button(label).click());
+  expect(JSON.parse(onAnswer.mock.calls[0]![0]!)).toEqual({
+    mcpFormId: mcpForm.id,
+    action: label.toLowerCase(),
+  });
+});
+it("renders native expired MCP forms with no fields or actions", async () => {
+  await render({ mcpForm: { ...mcpForm, status: "expired" } });
+  expect(container.textContent).toContain("Expired");
+  expect(container.querySelector("input,button")).toBeNull();
+});

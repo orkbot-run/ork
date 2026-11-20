@@ -399,6 +399,7 @@ export class McpConnector implements ConnectorProvider {
   private readonly installing = new Set<string>();
   private reaper?: ReturnType<typeof setInterval>;
   private resolvedPackagesRoot?: string;
+  private readonly isolatedCalls = new Set<AbortController>();
   private readonly inFlight = new WeakMap<McpSession, number>();
   private readonly expired = new WeakSet<McpSession>();
   // Discovery runs more than once per run: once up front, then again on every lazy
@@ -718,12 +719,48 @@ export class McpConnector implements ConnectorProvider {
     const sessionKey = this.sessionKey(assignment.server, context);
     try {
       const toolName = call.route.toolName;
-      const result = await this.withSession(assignment.server, context, (session) => {
+      const result = await this.withSession(assignment.server, context, async (session) => {
         const entry = this.sessions.get(sessionKey);
         usedEntry = entry?.session === session ? entry : undefined;
         material = usedEntry?.material;
         launchSecrets = usedEntry?.launchSecrets ?? [];
-        return session.callTool(toolName, call.args, { signal: context.signal });
+        const form = context.elicitMcpForm
+          ? {
+              integrationName: assignment.server.name,
+              elicit: context.elicitMcpForm,
+              secrets: () => [
+                ...(material ? oauthMaterialSecrets(material) : []),
+                ...launchSecrets,
+              ],
+            }
+          : undefined;
+        if (form && session.requiresIsolatedElicitation) {
+          // Dedicated invocation failures must not retire the discovery/other-run session.
+          usedEntry = undefined;
+          // SSE/stdio provide no request-stream association. One dedicated session
+          // per eligible invocation avoids routing a form to another concurrent run.
+          const controller = new AbortController();
+          this.isolatedCalls.add(controller);
+          const signal = combineSignals(context.signal, controller.signal);
+          try {
+            const isolated = await this.connectSession(
+              assignment.server,
+              { ...context, signal },
+              () => {},
+              true,
+            );
+            material = isolated.material;
+            launchSecrets = isolated.launchSecrets ?? [];
+            try {
+              return await isolated.session.callTool(toolName, call.args, { signal, form });
+            } finally {
+              await closeEntry(isolated);
+            }
+          } finally {
+            this.isolatedCalls.delete(controller);
+          }
+        }
+        return session.callTool(toolName, call.args, { signal: context.signal, form });
       });
       const secrets = [...(material ? oauthMaterialSecrets(material) : []), ...launchSecrets];
       const redacted = redactConnectorPayload(result, secrets);
@@ -852,6 +889,7 @@ export class McpConnector implements ConnectorProvider {
 
   async close(): Promise<void> {
     this.unsubscribe();
+    for (const controller of this.isolatedCalls) controller.abort();
     if (this.reaper) clearInterval(this.reaper);
     this.reaper = undefined;
     await Promise.allSettled([...this.probes.values()]);
@@ -1060,6 +1098,7 @@ export class McpConnector implements ConnectorProvider {
     server: McpServer,
     context: AdapterContext,
     onRef: (ref: string, recordId: string, digest?: string) => void,
+    isolatedElicitation = false,
   ): Promise<{
     session: McpSession;
     material: OAuthMaterial;
@@ -1070,7 +1109,7 @@ export class McpConnector implements ConnectorProvider {
     credentialDir?: string;
     launchSecrets?: string[];
   }> {
-    let session = new McpSession({ name: `orkbot-${server.slug}` });
+    let session = new McpSession({ name: `orkbot-${server.slug}`, isolatedElicitation });
     let credentialDir: string | undefined;
     const launchSecrets: string[] = [];
     // Hoisted so a throw after the secret is decoded can still hand the material out.
@@ -1297,7 +1336,7 @@ export class McpConnector implements ConnectorProvider {
             throw error;
           if (isRejectedTokenError(error)) await authProvider.replaceRejectedToken();
           await closeMcpResource(() => session.close());
-          session = new McpSession({ name: `orkbot-${server.slug}` });
+          session = new McpSession({ name: `orkbot-${server.slug}`, isolatedElicitation });
           await connect();
         }
       }

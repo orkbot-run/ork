@@ -1019,3 +1019,141 @@ it("shows persisted outgoing fields on answered cards", async () => {
   );
   expect(button("Send")).toBeUndefined();
 });
+
+const mcpCard: AskBlock = {
+  kind: "ask",
+  text: "Provide details",
+  status: "pending",
+  mcpForm: {
+    id: "680d939a-98de-4bb5-b649-91b1015dfb1c",
+    integrationName: "Example CRM",
+    status: "pending",
+    fields: [
+      {
+        name: "quantity",
+        title: "Quantity",
+        required: true,
+        type: "integer",
+        minimum: 1,
+        default: 2,
+      },
+      { name: "notify", title: "Notify", required: true, type: "boolean", default: false },
+      {
+        name: "choice",
+        title: "Choice",
+        required: false,
+        type: "enum",
+        options: [{ value: "one", label: "First option" }],
+      },
+      { name: "time", title: "Time", required: false, type: "date-time" },
+    ],
+  },
+};
+
+it("submits typed MCP values through the existing answer callback and clears the local fields", async () => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  await act(async () =>
+    root.render(
+      <AskCard
+        block={mcpCard}
+        canAnswer
+        canDismiss={false}
+        onAnswer={onAnswer}
+        onDismiss={async () => undefined}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain("Example CRM");
+  expect(container.textContent).toContain("First option");
+  expect(container.textContent).toContain("2026-11-20T14:30:00+01:00");
+  expect(container.querySelector('input[name="quantity"]')?.getAttribute("type")).toBe("number");
+  await act(async () =>
+    container
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(onAnswer).toHaveBeenCalledWith(
+    JSON.stringify({
+      mcpFormId: mcpCard.mcpForm!.id,
+      action: "accept",
+      content: { quantity: 2, notify: false },
+    }),
+  );
+  expect(container.querySelector("input")).toBeNull();
+});
+
+it.each(["Decline", "Cancel"])("sends MCP %s without any field content", async (label) => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  await act(async () =>
+    root.render(
+      <AskCard
+        block={mcpCard}
+        canAnswer
+        canDismiss={false}
+        onAnswer={onAnswer}
+        onDismiss={async () => undefined}
+      />,
+    ),
+  );
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === label)!
+      .click(),
+  );
+  expect(JSON.parse(onAnswer.mock.calls[0]![0]!)).toEqual({
+    mcpFormId: mcpCard.mcpForm!.id,
+    action: label.toLowerCase(),
+  });
+});
+
+it("hides inactive MCP fields and renders expired status without rendering form markdown", async () => {
+  const block = {
+    ...mcpCard,
+    text: "[Follow this](https://example.test)",
+    mcpForm: { ...mcpCard.mcpForm!, status: "expired" as const },
+  };
+  await act(async () =>
+    root.render(
+      <AskCard
+        block={block}
+        canAnswer
+        canDismiss={false}
+        onAnswer={async () => undefined}
+        onDismiss={async () => undefined}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain("Expired");
+  expect(container.querySelector("input, select, button, a")).toBeNull();
+});
+
+it("rejects required boolean omission and leaves the form available for correction", async () => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  const block = {
+    ...mcpCard,
+    mcpForm: {
+      ...mcpCard.mcpForm!,
+      fields: [{ name: "ok", type: "boolean" as const, required: true }],
+    },
+  };
+  await act(async () =>
+    root.render(
+      <AskCard
+        block={block}
+        canAnswer
+        canDismiss={false}
+        onAnswer={onAnswer}
+        onDismiss={async () => undefined}
+      />,
+    ),
+  );
+  await act(async () =>
+    container
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(onAnswer).not.toHaveBeenCalled();
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    "Check the required fields",
+  );
+});

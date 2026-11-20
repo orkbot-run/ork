@@ -7,7 +7,8 @@
     "./mermaid": "./src/mermaid.ts",
     "./native": "./src/markdown.native.tsx",
     "./web": "./src/markdown.web.tsx",
-    "./outgoing-draft": "./src/outgoing-draft.ts"
+    "./outgoing-draft": "./src/outgoing-draft.ts",
+    "./mcp-form": "./src/mcp-form.ts"
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",

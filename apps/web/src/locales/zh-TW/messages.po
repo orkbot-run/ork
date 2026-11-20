@@ -838,6 +838,7 @@ msgid "Answer"
 msgstr "接聽"
 
 #: src/components/AskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "Answered"
 msgstr "已回答"
 
@@ -1285,6 +1286,7 @@ msgstr "無法讀取影像"
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
+#: src/components/McpFormCard.tsx
 msgid "Cancel"
 msgstr "取消"
 
@@ -1310,6 +1312,7 @@ msgstr "已取消"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/components/McpFormCard.tsx
 msgid "Cancelled"
 msgstr "已取消"
 
@@ -2549,6 +2552,7 @@ msgstr "無法停止電腦"
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "Could not submit this answer"
 msgstr "無法提交此回答"
 
@@ -2782,6 +2786,7 @@ msgstr "天"
 
 #: src/components/call/IncomingCall.tsx
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/components/McpFormCard.tsx
 msgid "Decline"
 msgstr "拒絕"
 
@@ -4685,6 +4690,7 @@ msgstr "沒有符合的機器人"
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "No longer active"
 msgstr "已停用"
 
@@ -4988,6 +4994,7 @@ msgstr "開啟瀏覽器的列印對話框。目的地請選擇「另存為 PDF�
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/components/McpFormCard.tsx
 msgid "Optional"
 msgstr "選填"
 
@@ -5175,6 +5182,7 @@ msgstr "已暫停"
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/RoutineRunHistory.tsx
+#: src/components/McpFormCard.tsx
 msgid "Pending"
 msgstr "待處理"
 
@@ -6199,6 +6207,7 @@ msgstr ""
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/shell/transcript.tsx
+#: src/components/McpFormCard.tsx
 msgid "Sending…"
 msgstr "正在傳送…"
 
@@ -6660,6 +6669,7 @@ msgstr "子代理程式"
 
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
+#: src/components/McpFormCard.tsx
 msgid "Submit"
 msgstr "提交"
 
@@ -7845,4 +7855,36 @@ msgstr "你的語音供應商拒絕了該金鑰。"
 
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Check the required fields and value formats."
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Choose a value"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Declined"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Expired"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "No"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Required"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Yes"
 msgstr ""

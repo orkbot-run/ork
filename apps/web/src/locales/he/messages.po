@@ -837,6 +837,7 @@ msgid "Answer"
 msgstr "תשובה"
 
 #: src/components/AskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "Answered"
 msgstr "נענה"
 
@@ -1284,6 +1285,7 @@ msgstr "לא ניתן לקרוא תמונות"
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
+#: src/components/McpFormCard.tsx
 msgid "Cancel"
 msgstr "ביטול"
 
@@ -1309,6 +1311,7 @@ msgstr "בוטל"
 
 #: src/components/AskCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/components/McpFormCard.tsx
 msgid "Cancelled"
 msgstr "בוטל"
 
@@ -2548,6 +2551,7 @@ msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "Could not submit this answer"
 msgstr "לא ניתן לשלוח את התשובה"
 
@@ -2781,6 +2785,7 @@ msgstr "ימים"
 
 #: src/components/call/IncomingCall.tsx
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/components/McpFormCard.tsx
 msgid "Decline"
 msgstr "דחייה"
 
@@ -4684,6 +4689,7 @@ msgstr "אין בוטים תואמים"
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
+#: src/components/McpFormCard.tsx
 msgid "No longer active"
 msgstr "כבר לא פעיל"
 
@@ -4987,6 +4993,7 @@ msgstr "פותח את חלון ההדפסה של הדפדפן. בחר/י „שמ
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/components/McpFormCard.tsx
 msgid "Optional"
 msgstr "אופציונלי"
 
@@ -5174,6 +5181,7 @@ msgstr "מושהה"
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/RoutineRunHistory.tsx
+#: src/components/McpFormCard.tsx
 msgid "Pending"
 msgstr ""
 
@@ -6198,6 +6206,7 @@ msgstr ""
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/shell/transcript.tsx
+#: src/components/McpFormCard.tsx
 msgid "Sending…"
 msgstr "שולח…"
 
@@ -6659,6 +6668,7 @@ msgstr "סוכן משנה"
 
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
+#: src/components/McpFormCard.tsx
 msgid "Submit"
 msgstr "שליחה"
 
@@ -7844,4 +7854,36 @@ msgstr "ספק הקול שלך דחה את המפתח."
 
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Check the required fields and value formats."
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Choose a value"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Declined"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Expired"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "No"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Required"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
+msgid "Yes"
 msgstr ""

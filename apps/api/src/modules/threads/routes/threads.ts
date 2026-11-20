@@ -24,6 +24,7 @@ import {
 import type { Prisma } from "@orkbot/db";
 import {
   AnswerTooLongError,
+  answerMcpForm,
   appendEventInTransaction,
   cancelBackgroundHelper,
   createExternalConversationRepos,
@@ -32,7 +33,9 @@ import {
   isUniqueViolation,
   lockOwnedGroup,
   lockSpaceForWork,
+  McpFormAnswerError,
   OutgoingDraftAnswerError,
+  parseMcpFormAnswer,
   returnBackgroundHelperOutcome,
   THREAD_LOCK_TRANSACTION_OPTIONS,
   touchGroupUpdatedAt,
@@ -677,6 +680,38 @@ export function threadsRoutes(ctx: RouterContext) {
       }),
       answer: authed.threads.answer.handler(async ({ context, input }) => {
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);
+        try {
+          const form = parseMcpFormAnswer(input.answer);
+          if (form) {
+            if (
+              input.fields !== undefined ||
+              input.username !== undefined ||
+              input.remember !== undefined ||
+              input.dismiss
+            )
+              throw new McpFormAnswerError("The MCP form response is invalid.");
+            const seq = await answerMcpForm(deps.prisma, {
+              spaceId: context.actor.spaceId,
+              threadId: target.threadId,
+              runId: input.runId,
+              messageId: input.messageId,
+              userId: context.actor.userId,
+              answer: form,
+            });
+            if (seq === undefined)
+              throw new ORPCError("CONFLICT", {
+                message: "This form is no longer awaiting an answer",
+              });
+            await deps.events.notify(target.threadId, seq).catch((error) => {
+              getLogger().error("mcp form answer realtime notification", error);
+            });
+            return { ok: true as const };
+          }
+        } catch (error) {
+          if (error instanceof McpFormAnswerError)
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+          throw error;
+        }
         const answered = await deps.events
           .answerRunInput({
             spaceId: context.actor.spaceId,

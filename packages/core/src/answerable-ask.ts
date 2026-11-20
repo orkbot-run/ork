@@ -4,23 +4,49 @@ type AskSnapshot = {
   messages: readonly {
     id: string;
     runId?: string | null;
-    blocks: readonly { kind: string; status?: string; input?: string; approvalEffectId?: string }[];
+    blocks: readonly {
+      kind: string;
+      status?: string;
+      input?: string;
+      approvalEffectId?: string;
+      mcpForm?: { status: string; ownerUserId?: string };
+    }[];
   }[];
   run?: { id: string; status: string; userId?: string } | null;
   activeRuns?: readonly { id: string; status: string; userId?: string }[];
 };
 
-export function answerableAskMessageIds(snapshot: AskSnapshot | null): Set<string> {
+export function answerableAskMessageIds(
+  snapshot: AskSnapshot | null,
+  userId?: string,
+): Set<string> {
   const answerable = new Set<string>();
   if (!snapshot) return answerable;
+  const runs = snapshot.activeRuns ?? (snapshot.run ? [snapshot.run] : []);
+  const interactiveRuns = new Map(
+    runs
+      .filter((run) => run.status === "running" || run.status === "waiting_input")
+      .map((run) => [run.id, run]),
+  );
   const waitingRunIds = new Set(
-    (snapshot.activeRuns ?? (snapshot.run ? [snapshot.run] : []))
-      .filter((run) => run.status === "waiting_input")
-      .map((run) => run.id),
+    runs.filter((run) => run.status === "waiting_input").map((run) => run.id),
   );
   for (const message of snapshot.messages) {
-    if (!message.runId || !waitingRunIds.has(message.runId)) continue;
-    if (message.blocks.some((block) => block.kind === "ask" && block.status !== "answered")) {
+    if (!message.runId) continue;
+    const interactiveRun = interactiveRuns.get(message.runId);
+    if (
+      message.blocks.some(
+        (block) =>
+          block.kind === "ask" &&
+          block.status !== "answered" &&
+          (block.mcpForm
+            ? block.mcpForm.status === "pending" &&
+              interactiveRun &&
+              userId &&
+              (block.mcpForm.ownerUserId ?? interactiveRun.userId) === userId
+            : waitingRunIds.has(message.runId!)),
+      )
+    ) {
       answerable.add(message.id);
     }
   }

@@ -330,6 +330,9 @@ export class InstalledConnectorProvider implements ConnectorProvider {
             headers: connectorHeaders(config, credential),
             signal: context.signal,
             ...this.mcpSessionOptions(context, install),
+            form: context.elicitMcpForm
+              ? { integrationName: install.name, elicit: context.elicitMcpForm }
+              : undefined,
           },
           call.route?.toolName ?? call.tool,
           call.args,

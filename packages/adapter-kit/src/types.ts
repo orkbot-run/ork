@@ -7,6 +7,8 @@ import type {
   ByokTier,
   CacheCapabilities as ConnectionCacheCapabilities,
   ConnectionCatalogItem,
+  McpFormRequest,
+  McpFormResponse,
   ModelApiProtocol,
   ModelRoutingValues,
   PurchaseCardField,
@@ -28,6 +30,8 @@ export interface AdapterContext {
   /** When releasing a screen after cancel, also stop orphaned browser work on that screen. */
   cancelRunWork?: boolean;
   signal: AbortSignal;
+  /** Human form input for this run; absent for unattended calls. */
+  elicitMcpForm?: (request: McpFormRequest, signal: AbortSignal) => Promise<McpFormResponse>;
   /** Connected external accounts available to this run, including their owning connector. */
   connectedConnections?: ConnectedConnector[];
   /** @deprecated Prefer connectedConnections so providers with the same app slug cannot collide. */

@@ -19,11 +19,14 @@ import { NativeActionButton } from "../native-action-button";
 import { NativeSymbol } from "../native-symbol";
 import { SecretAskSheet } from "../secret-ask-sheet";
 import { VaultItemEditor } from "../vault-item-editor";
+import { McpFormCard } from "./mcp-form-card";
 import type { MessageActionProps } from "./message-bubble";
 import { OutgoingDraftCard } from "./outgoing-draft-card";
 
 export function AskBlock(props: AskBlockProps) {
-  return props.ask.outgoingDraft ? (
+  return props.ask.mcpForm ? (
+    <McpFormCard key={props.ask.mcpForm.id} {...props} />
+  ) : props.ask.outgoingDraft ? (
     <OutgoingDraftCard
       key={props.ask.outgoingDraft.reviewId ?? "initial"}
       ask={props.ask}

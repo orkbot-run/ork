@@ -153,3 +153,39 @@ describe("dismissableAskMessageIds", () => {
     expect(answerableAskMessageIds(snapshot).has("secret")).toBe(true);
   });
 });
+
+it("allows pending MCP forms during running runs only for their owner", () => {
+  const snapshot = {
+    run: { id: "run", status: "running", userId: "owner" },
+    messages: [
+      {
+        id: "form",
+        runId: "run",
+        blocks: [{ kind: "ask", status: "pending", mcpForm: { status: "pending" } }],
+      },
+    ],
+  };
+  expect(answerableAskMessageIds(snapshot, "owner")).toEqual(new Set(["form"]));
+  expect(answerableAskMessageIds(snapshot, "other")).toEqual(new Set());
+  expect(answerableAskMessageIds(snapshot)).toEqual(new Set());
+  expect(
+    answerableAskMessageIds(
+      { ...snapshot, run: { ...snapshot.run, status: "completed" } },
+      "owner",
+    ),
+  ).toEqual(new Set());
+  expect(
+    answerableAskMessageIds(
+      {
+        ...snapshot,
+        messages: [
+          {
+            ...snapshot.messages[0]!,
+            blocks: [{ kind: "ask", status: "pending", mcpForm: { status: "expired" } }],
+          },
+        ],
+      },
+      "owner",
+    ),
+  ).toEqual(new Set());
+});

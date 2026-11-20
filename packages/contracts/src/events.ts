@@ -10,6 +10,7 @@ import { ApprovalReasonSchema } from "./decision-card.js";
 import { Id, ThinkingLevelSchema } from "./ids.js";
 import { IntegrationProviderIdSchema } from "./integration-settings.js";
 import { McpTransportSchema } from "./mcp.js";
+import { McpFormCardSchema } from "./mcp-form.js";
 import { OutgoingDraftSchema } from "./outgoing-draft.js";
 import { PAGE_TITLE_MAX_LENGTH } from "./pages.js";
 
@@ -141,6 +142,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     /** Whether this persisted approval can create a lasting rule; absent on legacy cards. */
     allowRule: z.boolean().optional(),
     outgoingDraft: OutgoingDraftSchema.optional(),
+    mcpForm: McpFormCardSchema.optional(),
     instructionUpdate: z
       .object({
         botId: Id,

@@ -24,7 +24,8 @@ import {
   isPackageRunnerCommand,
 } from "./mcp-package-installer.js";
 import { limitMcpResponseBody } from "./mcp-response-limit.js";
-import { callMcpToolWithDeadline } from "./mcp-tool-call.js";
+import type { McpFormCallOptions } from "./mcp-tool-call.js";
+import { callMcpToolWithDeadline, installMcpFormHandler, mcpCallScope } from "./mcp-tool-call.js";
 
 import type { RemoteTransportDependencies, SafeRemoteFetch } from "./remote-mcp.js";
 import {
@@ -127,6 +128,8 @@ export interface McpClientOptions {
   name?: string;
   version?: string;
   capabilities?: ConstructorParameters<typeof Client>[1];
+  /** Dedicated invocation for transports without request-stream correlation. */
+  isolatedElicitation?: boolean;
 }
 
 const DEFAULT_HEADERS = ["accept", "content-type", "authorization", "user-agent"];
@@ -361,6 +364,9 @@ export class McpSession {
   private transport?: Transport;
   private remoteFetch?: SafeRemoteFetch;
   private connected = false;
+  private correlated = false;
+  private exclusiveCall?: ReturnType<typeof mcpCallScope.getStore>;
+  private readonly formControllers = new Set<AbortController>();
   private connecting?: Promise<void>;
   private catalogGeneration = 0;
   private catalog?: { limitsKey: string; result: McpDiscoveryResult<Tool> };
@@ -373,19 +379,31 @@ export class McpSession {
   private newClient(): Client {
     const client = createMcpClient(
       { name: this.clientOptions.name ?? "orkbot", version: this.clientOptions.version ?? "0.1.0" },
-      this.clientOptions.capabilities,
+      {
+        ...this.clientOptions.capabilities,
+        capabilities: {
+          ...this.clientOptions.capabilities?.capabilities,
+          elicitation: { form: {} },
+        },
+      },
       this.clientOptions.name,
     );
+    installMcpFormHandler(client, () => this.exclusiveCall, this.formControllers);
     client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
       this.invalidateToolCatalog();
     });
     client.onclose = () => {
       if (this.client === client) {
         this.connected = false;
+        for (const controller of this.formControllers) controller.abort();
         this.invalidateToolCatalog();
       }
     };
     return client;
+  }
+
+  get requiresIsolatedElicitation(): boolean {
+    return !this.correlated;
   }
 
   get connectionClosed(): boolean {
@@ -438,6 +456,7 @@ export class McpSession {
               eventSourceInit: { fetch: fetch as never },
             });
       this.transport = transport;
+      this.correlated = kind === "streamable-http";
       await this.client.connect(transport, { signal, timeout: options.timeoutMs ?? 15_000 });
       this.connected = true;
     };
@@ -540,15 +559,26 @@ export class McpSession {
   async callTool(
     name: string,
     args: Record<string, unknown> = {},
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; form?: McpFormCallOptions },
   ): Promise<CallToolResult> {
     this.assertConnected();
+    if (this.clientOptions.isolatedElicitation && this.exclusiveCall)
+      throw new Error("Isolated MCP session is already in use");
+    const callClient = this.clientOptions.isolatedElicitation
+      ? {
+          callTool: (...args: Parameters<Client["callTool"]>) => {
+            this.exclusiveCall = mcpCallScope.getStore();
+            return this.client.callTool(...args);
+          },
+        }
+      : this.client;
     try {
       return (await callMcpToolWithDeadline(
-        this.client,
+        callClient,
         name,
         args,
         options?.signal,
+        options?.form,
       )) as CallToolResult;
     } catch (error) {
       // This includes unknown-tool protocol errors. Invalidate conservatively:
@@ -556,12 +586,15 @@ export class McpSession {
       // just to refresh discovery.
       this.invalidateToolCatalog();
       throw error;
+    } finally {
+      this.exclusiveCall = undefined;
     }
   }
 
   /** `afterClose` follows actual SDK shutdown, even if this call stops waiting. */
   async close(afterClose?: () => Promise<void>): Promise<void> {
     this.connecting = undefined;
+    for (const controller of this.formControllers) controller.abort();
     this.connected = false;
     this.invalidateToolCatalog();
     const client = this.client;
