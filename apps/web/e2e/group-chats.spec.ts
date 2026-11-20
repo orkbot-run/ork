@@ -164,7 +164,7 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
   await expect(transcript.getByText("Researcher", { exact: true }).first()).toBeVisible();
   await expect(transcript.getByText("Research Writer", { exact: true }).first()).toBeVisible();
   const researcherSpeak = transcript
-    .locator("div")
+    .locator("[data-message-id]")
     .filter({ has: page.getByText("Researcher", { exact: true }) })
     .filter({ has: page.getByRole("button", { name: "Speak this reply" }) })
     .first()
