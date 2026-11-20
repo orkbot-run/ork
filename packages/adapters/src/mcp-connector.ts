@@ -59,6 +59,8 @@ import type { McpOAuthBroker, OAuthMaterial } from "./mcp-oauth.js";
 import {
   accessTokenExpiresAt,
   looksLikeSecretValue,
+  McpCredentialRefusedError,
+  McpOAuthGrantUpdatedError,
   McpReauthorizationRequiredError,
   oauthMaterialSecrets,
   TOKEN_REFRESH_SKEW_MS,
@@ -158,7 +160,11 @@ function expectedFailure(error: unknown, depth = 0): ExpectedFailure | undefined
   if (depth > 5 || !(error instanceof Error)) return undefined;
   if (error instanceof McpConnectFailure) return error.expected;
   if (error instanceof McpDiscoveryTimeoutError) return "unreachable";
-  if (error instanceof McpReauthorizationRequiredError || error instanceof UnauthorizedError)
+  if (
+    error instanceof McpReauthorizationRequiredError ||
+    error instanceof McpCredentialRefusedError ||
+    error instanceof UnauthorizedError
+  )
     return "reconnect";
   if (error instanceof StreamableHTTPError) {
     // A timeout, rate limit or server error is the server's own outage.
@@ -1075,15 +1081,26 @@ export class McpConnector implements ConnectorProvider {
       if (server.secretId && !secret) {
         // OAuth refresh replaces the secret without updating this run's server snapshot.
         const current = await this.prisma.mcpServer.findFirst({
-          where: { id: server.id, revision: server.revision, ...availableInSpace(context) },
+          where: {
+            id: server.id,
+            revision: server.revision,
+            transport: server.transport,
+            endpoint: server.endpoint,
+            enabled: true,
+            ...availableInSpace(context),
+          },
           select: { secretId: true },
         });
-        if (current?.secretId) {
+        if (current?.secretId && current.secretId !== server.secretId) {
           secret = await this.prisma.secret.findFirst({
             where: { id: current.secretId, ...itemSecretIn(context) },
           });
         }
-        if (!secret) throw new Error("MCP server secret is unavailable; retry");
+        if (!secret)
+          throw new McpConnectFailure(
+            "MCP server credentials changed or are unavailable. Reconnect the server and try again.",
+            "reconnect",
+          );
       }
       let ref = secret?.ciphertext;
       let recordId = secret?.id;
@@ -1269,8 +1286,12 @@ export class McpConnector implements ConnectorProvider {
         try {
           await connect();
         } catch (error) {
-          if (!authProvider || !isRejectedTokenError(error)) throw error;
-          await authProvider.replaceRejectedToken();
+          if (
+            !authProvider ||
+            (!isRejectedTokenError(error) && !(error instanceof McpOAuthGrantUpdatedError))
+          )
+            throw error;
+          if (isRejectedTokenError(error)) await authProvider.replaceRejectedToken();
           await closeMcpResource(() => session.close());
           session = new McpSession({ name: `orkbot-${server.slug}` });
           await connect();

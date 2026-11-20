@@ -11,6 +11,7 @@ import {
   ServerError,
   TooManyRequestsError,
 } from "@modelcontextprotocol/sdk/server/auth/errors.js";
+import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import { createLogger, createTestSink, getLogger, installLogger } from "@orkbot/logging";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { ConnectorRegistry } from "./composio-connector.js";
@@ -21,7 +22,7 @@ import { DIRECT_TOOL_LIMIT } from "./lazy-tool-catalog.js";
 import { MCP_CLOSE_TIMEOUT_MS } from "./mcp-close.js";
 import { allowlistDrift, McpConnector } from "./mcp-connector.js";
 import type { McpOAuthBroker, OAuthMaterial } from "./mcp-oauth.js";
-import { StoredMcpOAuthProvider } from "./mcp-oauth.js";
+import { McpOAuthGrantUpdatedError, StoredMcpOAuthProvider } from "./mcp-oauth.js";
 import { McpSession } from "./mcp-transport.js";
 import { InMemoryRealtimeFanout } from "./realtime.js";
 import { checkRoutineWatch, validateRoutineWatch } from "./routine-watch.js";
@@ -1866,6 +1867,48 @@ describe("MCP connector session cache", () => {
     },
   );
 
+  it.each([false, true])(
+    "retries an externally updated grant once with a fresh session (repeated failure: %s)",
+    async (repeatFailure) => {
+      const updated = new McpOAuthGrantUpdatedError("server-1");
+      const connect = vi
+        .spyOn(McpSession.prototype, "connectRemote")
+        .mockRejectedValueOnce(updated);
+      if (repeatFailure) connect.mockRejectedValueOnce(updated);
+      else connect.mockResolvedValueOnce({ transport: "streamable-http", usedFallback: false });
+      const close = vi.spyOn(McpSession.prototype, "close").mockResolvedValue(undefined);
+      const replaceRejectedToken = vi.fn();
+      const connector = new McpConnector({} as never, {} as never, { network: TEST_NETWORK }, {
+        providerFor: vi.fn().mockResolvedValue({ replaceRejectedToken }),
+      } as unknown as McpOAuthBroker);
+      try {
+        const pending = (
+          connector as unknown as {
+            connectSession: (
+              server: unknown,
+              context: unknown,
+              onRef: () => void,
+            ) => Promise<unknown>;
+          }
+        ).connectSession(
+          SERVER,
+          { spaceId: "w1", userId: "u1", signal: new AbortController().signal },
+          () => undefined,
+        );
+        if (repeatFailure) await expect(pending).rejects.toBe(updated);
+        else await expect(pending).resolves.toMatchObject({ session: expect.any(McpSession) });
+        expect(connect).toHaveBeenCalledTimes(2);
+        expect(connect.mock.contexts[0]).not.toBe(connect.mock.contexts[1]);
+        expect(replaceRejectedToken).not.toHaveBeenCalled();
+        expect(close).toHaveBeenCalled();
+      } finally {
+        connect.mockRestore();
+        close.mockRestore();
+        await connector.close();
+      }
+    },
+  );
+
   it.each(["localhost", "127.0.0.1", "[::1]"])(
     "blocks OAuth rediscovery to HTTP %s after invalid_client from a public server",
     async (host) => {
@@ -2198,29 +2241,125 @@ describe("MCP connector session cache", () => {
     }
   });
 
-  it.each(["changed configuration", "missing replacement secret"])(
-    "does not connect with a stale server when the %s prevents loading credentials",
-    async (scenario) => {
-      const assignment = { ...ASSIGNMENT, server: { ...SERVER, secretId: "old" } };
-      const network = { ...TEST_NETWORK, fetch: vi.fn() };
-      const load = vi.fn();
+  it.each([
+    "changed revision",
+    "changed endpoint",
+    "changed transport",
+    "changed owner",
+    "disabled server",
+    "disconnected server",
+    "missing replacement secret",
+    "unchanged pointer",
+  ])("offers a reconnect without reporting a server error after %s", async (scenario) => {
+    const assignment = { ...ASSIGNMENT, server: { ...SERVER, secretId: "old" } };
+    const network = { ...TEST_NETWORK, fetch: vi.fn() };
+    const load = vi.fn();
+    const current = {
+      ...assignment.server,
+      userId: "u1",
+      enabled: true,
+      secretId: "new" as string | null,
+    };
+    if (scenario === "changed revision") current.revision++;
+    if (scenario === "changed endpoint") current.endpoint = "https://other.example/mcp";
+    if (scenario === "changed transport") current.transport = "sse";
+    if (scenario === "changed owner") current.userId = "other-owner";
+    if (scenario === "disabled server") current.enabled = false;
+    if (scenario === "disconnected server") current.secretId = null;
+    if (scenario === "unchanged pointer") current.secretId = "old";
+    const prisma = {
+      botMcpServer: { findMany: vi.fn().mockResolvedValue([assignment]) },
+      mcpServer: {
+        ...NO_SHARED_SERVERS,
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+          Object.entries(where).every(
+            ([key, value]) => key === "OR" || current[key as keyof typeof current] === value,
+          )
+            ? { secretId: current.secretId }
+            : null,
+        ),
+      },
+      secret: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+    const connector = new McpConnector(prisma as never, { load } as never, { network });
+    const context = {
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never;
+    const error = vi.spyOn(getLogger(), "error");
+    const warn = vi.spyOn(getLogger(), "warn");
+    try {
+      const tools = await connector.discoverTools(context);
+      expect(tools).toEqual(unavailableOnly());
+      expect(tools[0]?.description).toContain("Reconnect the server");
+      expect(error).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        "mcp discovery failed for server demo",
+        expect.objectContaining({ reason: expect.stringContaining("Reconnect the server") }),
+      );
+      expect(prisma.mcpServer.findFirst).toHaveBeenCalledTimes(1);
+      expect(prisma.mcpServer.findFirst).toHaveBeenCalledWith({
+        where: {
+          id: SERVER.id,
+          revision: SERVER.revision,
+          transport: SERVER.transport,
+          endpoint: SERVER.endpoint,
+          userId: "u1",
+          enabled: true,
+          OR: expect.any(Array),
+        },
+        select: { secretId: true },
+      });
+      expect(prisma.secret.findFirst).toHaveBeenCalledTimes(
+        scenario === "missing replacement secret" ? 2 : 1,
+      );
+      for (const [query] of prisma.secret.findFirst.mock.calls as unknown as Array<
+        [{ where: { userId: string; OR: unknown[] } }]
+      >) {
+        expect(query.where).toMatchObject({
+          userId: "u1",
+          OR: [{ spaceId: "w1" }, { spaceId: null }],
+        });
+      }
+      expect(load).not.toHaveBeenCalled();
+      expect(network.fetch).not.toHaveBeenCalled();
+      // A missing replacement is not retried indefinitely, even after another rotation.
+      await connector.discoverTools(context);
+      expect(prisma.mcpServer.findFirst).toHaveBeenCalledTimes(1);
+    } finally {
+      error.mockRestore();
+      warn.mockRestore();
+      await connector.close();
+    }
+  });
+
+  it.each(["initial row", "current pointer", "replacement row", "secret store"])(
+    "preserves transient failures from the %s during rotation recovery",
+    async (stage) => {
+      const failure = new SecretStoreUnavailableError();
       const prisma = {
         mcpServer: {
-          findFirst: vi.fn(async ({ where }: { where: { revision: number } }) =>
-            scenario === "changed configuration" && where.revision === 1
-              ? null
-              : { secretId: "new" },
-          ),
+          findFirst: vi.fn(async () => {
+            if (stage === "current pointer") throw failure;
+            return { secretId: "new" };
+          }),
         },
-        secret: { findFirst: vi.fn().mockResolvedValue(null) },
+        secret: {
+          findFirst: vi.fn(async ({ where }: { where: { id: string } }) => {
+            if (stage === "initial row" || (stage === "replacement row" && where.id === "new"))
+              throw failure;
+            return where.id === "new" ? { id: "new", ciphertext: "new-ref" } : null;
+          }),
+        },
       };
-      const connector = new McpConnector(prisma as never, { load } as never, { network });
-      const context = {
-        spaceId: "w1",
-        userId: "u1",
-        botId: "bot-1",
-        signal: new AbortController().signal,
-      } as never;
+      const connector = new McpConnector(
+        prisma as never,
+        { load: vi.fn().mockRejectedValue(failure) } as never,
+        { network: TEST_NETWORK },
+      );
       try {
         await expect(
           (
@@ -2231,13 +2370,12 @@ describe("MCP connector session cache", () => {
                 onRef: () => void,
               ) => Promise<unknown>;
             }
-          ).connectSession(assignment.server, context, () => undefined),
-        ).rejects.toThrow("MCP server secret is unavailable");
-        expect(prisma.mcpServer.findFirst).toHaveBeenCalledWith(
-          expect.objectContaining({ where: expect.objectContaining({ revision: 1 }) }),
-        );
-        expect(load).not.toHaveBeenCalled();
-        expect(network.fetch).not.toHaveBeenCalled();
+          ).connectSession(
+            { ...SERVER, secretId: "old" },
+            { spaceId: "w1", userId: "u1", signal: new AbortController().signal },
+            () => undefined,
+          ),
+        ).rejects.toBe(failure);
       } finally {
         await connector.close();
       }
