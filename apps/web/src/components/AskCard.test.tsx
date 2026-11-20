@@ -914,3 +914,108 @@ it.each([undefined, false, true])(
     expect(container.textContent).toContain("Always allowed");
   },
 );
+
+const outgoingCard: AskBlock = {
+  kind: "ask",
+  text: "Review email",
+  status: "pending",
+  approvalEffectId: "effect-draft",
+  outgoingDraft: {
+    kind: "email",
+    recipient: "client@example.test",
+    subject: "Hello",
+    body: "Original body",
+  },
+  detail: "Auto-review warning: check this recipient.",
+  actions: [
+    { id: "allow", label: "Allow once" },
+    { id: "always", label: "Always allow this tool" },
+    { id: "deny", label: "Deny" },
+  ],
+};
+async function editDraft(name: string, value: string) {
+  await act(async () => {
+    const input = container.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+      `[name="${name}"]`,
+    )!;
+    const prototype =
+      input.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+it("sends edited outgoing content once and retains its visible warning", async () => {
+  let complete!: () => void;
+  const onAnswer = vi.fn(
+    (_answer: string) =>
+      new Promise<void>((resolve) => {
+        complete = resolve;
+      }),
+  );
+  await render(outgoingCard, undefined, onAnswer);
+  expect(container.textContent).toContain("Auto-review warning");
+  expect(button("Always allow this tool")).toBeUndefined();
+  await editDraft("body", "Corrected body");
+  await act(async () => {
+    button("Send")!.click();
+    button("Send")!.click();
+  });
+  expect(onAnswer).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(onAnswer.mock.calls[0]![0] as string)).toEqual({
+    outgoingDraft: { recipient: "client@example.test", subject: "Hello", body: "Corrected body" },
+  });
+  await act(async () => complete());
+  expect(container.textContent).toContain("Approved to send");
+  expect((container.querySelector("textarea") as HTMLTextAreaElement).value).toBe("Corrected body");
+});
+it("validates whitespace-only body and recipient visibly and permits refusal", async () => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  await render(outgoingCard, undefined, onAnswer);
+  await editDraft("body", "  ");
+  await act(async () => button("Send")!.click());
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe("Enter a message body");
+  expect(onAnswer).not.toHaveBeenCalled();
+  await editDraft("recipient", "  ");
+  await act(async () => button("Send")!.click());
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe("Enter a recipient");
+  await act(async () => button("Reject")!.click());
+  expect(onAnswer).toHaveBeenCalledWith("deny");
+  expect(container.textContent).toContain("Denied");
+});
+it("waits for a staged recipient review and sends its review ID only after another click", async () => {
+  const onAnswer = vi.fn(async (_answer: string) => undefined);
+  await render(outgoingCard, undefined, onAnswer);
+  await editDraft("recipient", "other@example.test");
+  await act(async () => button("Send")!.click());
+  expect(container.textContent).not.toContain("Approved to send");
+  expect(button("Send")!.disabled).toBe(true);
+  const staged = {
+    ...outgoingCard,
+    outgoingDraft: {
+      ...outgoingCard.outgoingDraft!,
+      recipient: "other@example.test",
+      recipientChanged: true as const,
+      reviewId: "11111111-1111-4111-8111-111111111111",
+    },
+  };
+  await render(staged, undefined, onAnswer);
+  expect(button("Send")!.disabled).toBe(false);
+  expect(onAnswer).toHaveBeenCalledTimes(1);
+  await act(async () => button("Send")!.click());
+  expect(JSON.parse(onAnswer.mock.calls[1]![0]!)).toMatchObject({
+    reviewId: staged.outgoingDraft.reviewId,
+  });
+  expect(container.textContent).toContain("Approved to send");
+});
+it("shows persisted outgoing fields on answered cards", async () => {
+  await render({
+    ...outgoingCard,
+    status: "answered",
+    answer: "allow",
+    outgoingDraft: { ...outgoingCard.outgoingDraft!, body: "Saved edited body" },
+  });
+  expect((container.querySelector("textarea") as HTMLTextAreaElement).value).toBe(
+    "Saved edited body",
+  );
+  expect(button("Send")).toBeUndefined();
+});

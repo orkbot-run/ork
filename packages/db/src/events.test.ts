@@ -29,6 +29,7 @@ import {
   finalizeComputerControlRelease,
   finalizeRun,
   followThreadEvents,
+  OutgoingDraftAnswerError,
   pauseRunForInput,
   pauseRunForTakeover,
   sendUserMessage,
@@ -5826,6 +5827,99 @@ describe("held instruction answers", () => {
     expect(f.tx.externalEffect.update).toHaveBeenCalledWith({
       where: { id: "effect-1" },
       data: { status: "denied" },
+    });
+  });
+});
+
+describe("held outgoing draft answers", () => {
+  const original = { to: "original@example.test", subject: "Original", body: "Draft" };
+  const block = {
+    kind: "ask",
+    approvalEffectId: "effect-1",
+    text: "Send email?",
+    status: "pending",
+    outgoingDraft: {
+      kind: "email",
+      recipient: original.to,
+      subject: original.subject,
+      body: original.body,
+    },
+    actions: [
+      { id: "allow", label: "Send" },
+      { id: "deny", label: "Reject" },
+    ],
+  };
+
+  function fixture() {
+    const effect = { id: "effect-1", kind: "GMAIL_SEND_EMAIL", request: original };
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      run: {
+        findFirst: vi.fn(async () => ({ botId: "bot-1", userId: "owner" })),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+        findUnique: vi.fn(async () => ({ status: "queued" })),
+      },
+      message: {
+        findFirst: vi.fn().mockResolvedValue({ id: "message-1", blocks: [block] }),
+        update: vi.fn(async () => ({ id: "message-1" })),
+      },
+      externalEffect: {
+        findFirst: vi.fn().mockResolvedValue(effect),
+        update: vi.fn(),
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 10 })) },
+      event: {
+        create: vi.fn(async ({ data }: { data: { seq: number; type: string } }) => ({
+          ...event(data.seq),
+          type: data.type,
+        })),
+      },
+    };
+    const prisma = { $transaction: async (action: (client: typeof tx) => unknown) => action(tx) };
+    const answer = (value: string, userId = "owner") =>
+      answerRunInput(
+        prisma as never,
+        {
+          spaceId: "workspace-1",
+          threadId: "thread-1",
+          runId: "run-1",
+          messageId: "message-1",
+          answeredByUserId: userId,
+          answer: value,
+        },
+        new TestFanout(),
+      );
+    return { tx, answer };
+  }
+
+  it("rejects plain approvals, blank drafts and attempts from another member", async () => {
+    const { tx, answer } = fixture();
+    for (const value of [
+      "allow",
+      "always",
+      JSON.stringify({ outgoingDraft: { recipient: original.to, body: " " } }),
+    ]) {
+      await expect(answer(value)).rejects.toBeInstanceOf(OutgoingDraftAnswerError);
+    }
+    const edit = JSON.stringify({ outgoingDraft: { recipient: original.to, body: "Updated" } });
+    await expect(answer(edit, "another-member")).resolves.toBe(false);
+    await expect(answer("deny", "another-member")).resolves.toBe(false);
+    expect(tx.externalEffect.update).not.toHaveBeenCalled();
+    expect(tx.run.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("approves a body edit under the original effect key when the recipient is unchanged", async () => {
+    const { tx, answer } = fixture();
+    await expect(
+      answer(
+        JSON.stringify({
+          outgoingDraft: { recipient: original.to, subject: "Edited", body: "Updated" },
+        }),
+      ),
+    ).resolves.toBe(true);
+    expect(tx.externalEffect.update).toHaveBeenCalledExactlyOnceWith({
+      where: { id: "effect-1" },
+      data: { status: "approved", request: { ...original, subject: "Edited", body: "Updated" } },
     });
   });
 });

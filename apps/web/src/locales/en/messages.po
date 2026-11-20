@@ -931,6 +931,10 @@ msgstr "Approve this server to let your agent use its tools."
 msgid "Approved"
 msgstr "Approved"
 
+#: src/components/OutgoingDraftCard.tsx
+msgid "Approved to send"
+msgstr "Approved to send"
+
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Approving…"
 msgstr "Approving…"
@@ -7867,3 +7871,21 @@ msgstr "Unchanged checks appear in history. You can also post them in chat."
 #: src/lib/approval-messages.ts
 msgid "Watching an HTTPS address requires approval."
 msgstr "Watching an HTTPS address requires approval."
+
+msgid "Outgoing draft"
+msgstr "Outgoing draft"
+
+msgid "Subject"
+msgstr "Subject"
+
+msgid "Message body"
+msgstr "Message body"
+
+msgid "Enter a recipient"
+msgstr "Enter a recipient"
+
+msgid "Enter a message body"
+msgstr "Enter a message body"
+
+msgid "Recipient changed. Review the updated draft and press Send again."
+msgstr "Recipient changed. Review the updated draft and press Send again."

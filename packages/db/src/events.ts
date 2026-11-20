@@ -5,6 +5,7 @@
 // Inherited thread events remain Apache-2.0; Space work admission and decision-card guards are Ork additions.
 // Ork thread-lock budget coverage is PolyForm-covered.
 
+import { randomUUID } from "node:crypto";
 import type { ProductAnalytics, RealtimeFanout } from "@orkbot/adapter-kit";
 import type {
   BotSecretDestination,
@@ -12,6 +13,7 @@ import type {
   LoginFieldInput,
   MessageBlock,
   OneTimeCodeTarget,
+  OutgoingDraft,
   ProductEvent,
 } from "@orkbot/contracts";
 import {
@@ -24,6 +26,8 @@ import {
   loginAnswerValue,
   MessageBlock as MessageBlockSchema,
   normalizeOneTimeCode,
+  OUTGOING_DRAFT_BODY_LIMIT,
+  OutgoingDraftAnswerSchema,
   ROUTINE_CHECKLIST_EVENT_TYPE,
   ThreadActivityPayloadSchema,
 } from "@orkbot/contracts";
@@ -42,6 +46,8 @@ import {
   messageSteersRun,
   messagingChannelId,
   normalizeRunError,
+  outgoingDraftForEffect,
+  patchOutgoingDraftEffect,
   QUEUE_HOLDING_RUN_STATUSES,
   releasedTakeoverComputerBlocks,
   resolveAskChoice,
@@ -93,6 +99,13 @@ export class AnswerTooLongError extends Error {
   }
 }
 
+export class OutgoingDraftAnswerError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "OutgoingDraftAnswerError";
+  }
+}
+
 const EVENT_BATCH_SIZE = 200;
 const PUSH_CATCH_UP_MS = 30_000;
 const POLL_ONLY_CATCH_UP_MS = 400;
@@ -133,7 +146,7 @@ export interface ThreadEvents {
     spaceId: string,
     signal?: AbortSignal,
   ): AsyncGenerator<ChatAlert>;
-  answerRunInput(input: AnswerRunInput): Promise<boolean>;
+  answerRunInput(input: AnswerRunInput): Promise<boolean | "review-recipient">;
   append(input: AppendEventInput): Promise<ProductEvent>;
   claimSteering(input: ClaimSteeringInput): Promise<ClaimedSteeringMessage[]>;
   clearThread(input: ClearThreadInput): Promise<ClearThreadResult>;
@@ -934,6 +947,7 @@ async function commitAnswerRunInput(
   threadId: string;
   seq: number;
   approval?: { decision: string; effectKind: string };
+  recipientReview?: true;
 } | null> {
   // Thread row first, then run rows — the same order as clearThread and finalizeRun, so a
   // concurrent clear cannot deadlock against this transaction.
@@ -1015,7 +1029,9 @@ async function commitAnswerRunInput(
     batchActions: Prisma.JsonValue;
   } | null = null;
   let editedInstructions: string | undefined;
+  let editedDraft: { draft: OutgoingDraft; request: Prisma.InputJsonValue } | undefined;
   let approvalAnswer = input.answer;
+  if (approvalAsk && pendingAsk.outgoingDraft && input.answer !== "deny") approvalAnswer = "allow";
   if (approvalAsk && pendingAsk.instructionUpdate && input.answer.startsWith("{")) {
     try {
       const edited = JSON.parse(input.answer);
@@ -1044,6 +1060,61 @@ async function commitAnswerRunInput(
       },
     });
     if (!approvalEffect) return null;
+    if (pendingAsk.outgoingDraft) {
+      if (run.userId !== input.answeredByUserId) return null;
+      if (approvalAnswer === "allow") {
+        const shown = pendingAsk.outgoingDraft;
+        // A draft can be approved only by the form that displays its current review.
+        if (input.answer.length > OUTGOING_DRAFT_BODY_LIMIT * 7) throw new AnswerTooLongError();
+        let submitted: unknown;
+        try {
+          submitted = JSON.parse(input.answer);
+        } catch {
+          throw new OutgoingDraftAnswerError("Review the outgoing draft before sending.");
+        }
+        const edit = OutgoingDraftAnswerSchema.safeParse(submitted);
+        if (!edit.success)
+          throw new OutgoingDraftAnswerError("Enter a valid recipient and a non-empty message.");
+        if (edit.data.reviewId !== shown.reviewId) return null;
+        const { kind, request } = approvalEffect;
+        const current = outgoingDraftForEffect(kind, request);
+        if (
+          !current ||
+          current.kind !== shown.kind ||
+          current.recipient !== shown.recipient ||
+          current.subject !== shown.subject ||
+          current.body !== shown.body
+        )
+          return null;
+        const nextRequest = sanitizeJsonValue(
+          patchOutgoingDraftEffect(kind, request, edit.data.outgoingDraft),
+        );
+        const draft = nextRequest && outgoingDraftForEffect(kind, nextRequest);
+        if (!draft || !nextRequest)
+          throw new OutgoingDraftAnswerError("This draft cannot be sent with those fields.");
+        editedDraft = { draft, request: nextRequest };
+        if (draft.recipient !== current.recipient) {
+          const blocks = parsed.data.map((block) =>
+            block === pendingAsk
+              ? {
+                  ...pendingAsk,
+                  outgoingDraft: {
+                    ...draft,
+                    recipientChanged: true as const,
+                    reviewId: randomUUID(),
+                  },
+                }
+              : block,
+          );
+          await tx.externalEffect.update({
+            where: { id: approvalEffect.id, status: "intended" },
+            data: { request: editedDraft.request },
+          });
+          const updated = await updateAnswerMessage(tx, input, run.botId, message, blocks);
+          return { threadId: updated.threadId, seq: updated.seq, recipientReview: true };
+        }
+      }
+    }
     if (input.answer === "always" && !canSaveApprovalRule(approvalEffect, pendingAsk, run.trigger))
       return null;
     if (pendingAsk.instructionUpdate) {
@@ -1085,7 +1156,7 @@ async function commitAnswerRunInput(
 
   const recordedAnswer = secretAsk ? "" : (selectedChoice?.id ?? approvalAnswer);
   const callId = callIdFromClientNonce(input.clientNonce);
-  const recordsCallUtterance = Boolean(callId && !secretAsk);
+  const recordsCallUtterance = Boolean(callId && !secretAsk && !pendingAsk.outgoingDraft);
 
   // Give spoken answers the same durable, call-scoped user utterance as other voice turns.
   // Secret asks stay out of message history; the call UI requires those answers on screen.
@@ -1131,7 +1202,11 @@ async function commitAnswerRunInput(
     const allowed = approvalAnswer === "allow" || approvalAnswer === "always";
     await tx.externalEffect.update({
       where: { id: approvalEffect!.id },
-      data: { status: allowed ? "approved" : "denied" },
+      data: {
+        status: allowed ? "approved" : "denied",
+        // Keep the original effect key so retries claim the one approved delivery.
+        ...(allowed && editedDraft ? { request: editedDraft.request } : {}),
+      },
     });
     // "Always" on a card for a request to a site allows that site, never every site the tool can
     // reach, and on a batch allows each action in it, never every action the batch tool can run.
@@ -1209,6 +1284,7 @@ async function commitAnswerRunInput(
           answer: recordedAnswer,
           ...(dismissed ? { dismissed: true as const } : {}),
           ...(input.remember === false ? { remembered: false as const } : {}),
+          ...(editedDraft ? { outgoingDraft: editedDraft.draft } : {}),
           ...(editedInstructions !== undefined && pendingAsk.instructionUpdate
             ? {
                 instructionUpdate: { ...pendingAsk.instructionUpdate, after: editedInstructions },
@@ -1221,15 +1297,7 @@ async function commitAnswerRunInput(
         }
       : block,
   );
-  await tx.message.update({ where: { id: message.id }, data: { blocks } });
-  const updated = await appendEventInTransaction(tx, {
-    spaceId: input.spaceId,
-    threadId: input.threadId,
-    botId: run.botId,
-    type: "thread.message.updated",
-    runId: input.runId,
-    payload: { messageId: message.id, seq: message.seq, role: "bot", blocks },
-  });
+  const updated = await updateAnswerMessage(tx, input, run.botId, message, blocks);
   return {
     threadId: updated.threadId,
     seq: updated.seq,
@@ -1239,12 +1307,30 @@ async function commitAnswerRunInput(
   };
 }
 
+async function updateAnswerMessage(
+  tx: Prisma.TransactionClient,
+  input: AnswerRunInput,
+  botId: string,
+  message: { id: string; seq: number },
+  blocks: MessageBlock[],
+) {
+  await tx.message.update({ where: { id: message.id }, data: { blocks } });
+  return appendEventInTransaction(tx, {
+    spaceId: input.spaceId,
+    threadId: input.threadId,
+    botId,
+    type: "thread.message.updated",
+    runId: input.runId,
+    payload: { messageId: message.id, seq: message.seq, role: "bot", blocks },
+  });
+}
+
 export async function answerRunInput(
   prisma: PrismaClient,
   input: AnswerRunInput,
   realtime?: RealtimeFanout,
   runSecretWriter?: RunSecretWriter,
-): Promise<boolean> {
+): Promise<boolean | "review-recipient"> {
   const commit = (writer = runSecretWriter) =>
     prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await lockSpaceForWork(tx, input.spaceId);
@@ -1272,7 +1358,7 @@ export async function answerRunInput(
     });
   }
   await notifyRealtime(realtime, committed.threadId, committed.seq);
-  return true;
+  return committed.recipientReview ? "review-recipient" : true;
 }
 
 /** The caller holds the thread row lock acquired while accepting the new user message. */

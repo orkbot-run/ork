@@ -931,6 +931,10 @@ msgstr "Zatwierdź ten serwer, aby agent mógł używać jego narzędzi."
 msgid "Approved"
 msgstr "Zatwierdzono"
 
+#: src/components/OutgoingDraftCard.tsx
+msgid "Approved to send"
+msgstr "Zatwierdzono do wysłania"
+
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Approving…"
 msgstr "Zatwierdzanie…"
@@ -7929,3 +7933,21 @@ msgstr "Powodzenie"
 
 msgid "Failure"
 msgstr "Błąd"
+
+msgid "Outgoing draft"
+msgstr "Szkic wiadomości"
+
+msgid "Subject"
+msgstr "Temat"
+
+msgid "Message body"
+msgstr "Treść wiadomości"
+
+msgid "Enter a recipient"
+msgstr "Wpisz adresata"
+
+msgid "Enter a message body"
+msgstr "Wpisz treść wiadomości"
+
+msgid "Recipient changed. Review the updated draft and press Send again."
+msgstr "Adresat został zmieniony. Sprawdź zaktualizowany szkic i ponownie naciśnij Wyślij."

@@ -285,10 +285,20 @@ export interface ConnectorTool {
   readOnly?: boolean;
   /** Set when the tool runs other actions named in its arguments; see ToolBatch. */
   batch?: ToolBatch;
+  /** Known outgoing payload fields. Runtime binding also verifies the persisted route and values. */
+  outgoingDraft?: OutgoingDraftBinding;
   /** What the person sees for a call, when the name the model uses would read badly. */
   label?: string;
   /** In-process routing metadata. It is never exposed to the model. */
   route?: ConnectorRoute;
+}
+
+/** Editable fields of a known outgoing send operation. */
+export interface OutgoingDraftBinding {
+  kind: "email" | "message";
+  recipientKeys: readonly string[];
+  bodyKeys: readonly string[];
+  subjectKey?: string;
 }
 
 /**

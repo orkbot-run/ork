@@ -800,7 +800,7 @@ async function showApprovalCard(ctx: RunContext, call: ToolCall, card: ApprovalC
         name,
         name === "update_bot" && "previousInstructions" in args ? { ...args, botId: bot.id } : args,
         ctx.secrets,
-        card,
+        { ...card, outgoingDraftRequest: applied!.effect.request },
       ),
     ],
   });

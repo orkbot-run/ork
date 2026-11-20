@@ -184,6 +184,7 @@ async function main() {
       {
         ComposioConnector,
         FakeComposioClient,
+        ScriptedAgentRuntime,
         listPiCatalog,
         DestinationEmulator,
         EmailEmulator,
@@ -212,13 +213,46 @@ async function main() {
       { fetch: thirdParties.fetch, resolveHostname: thirdParties.resolveHostname },
     );
     const email = new EmailEmulator();
+    const composioClient = new FakeComposioClient();
+    // Keep the outgoing-draft journey on the same scripted model and offline Gmail connector.
+    class DraftFixtureRuntime extends ScriptedAgentRuntime {
+      override run(
+        ...[request, context]: Parameters<InstanceType<typeof ScriptedAgentRuntime>["run"]>
+      ) {
+        const id = /\bOutgoing draft fixture (\d+)\b/.exec(request.prompt)?.[1];
+        if (!id) return super.run(request, context);
+        const args = {
+          recipient_email: "original@example.test",
+          subject: `Fixture draft ${id}`,
+          body: "Original fixture body",
+        };
+        const direct = request.tools.some((tool) => tool.name === "GMAIL_SEND_EMAIL");
+        const call = direct
+          ? { name: "GMAIL_SEND_EMAIL", args }
+          : {
+              name: "COMPOSIO_MULTI_EXECUTE_TOOL",
+              args: { tools: [{ tool_slug: "GMAIL_SEND_EMAIL", arguments: args }] },
+            };
+        return super.run(
+          {
+            ...request,
+            script: [
+              { toolCalls: [call] },
+              { assistant: "Fixture request handled.", complete: true },
+            ],
+          },
+          context,
+        );
+      }
+    }
     // Scripted runs only: a real model would see a computer it could use in every spec.
     const userDevices = agentRuntime === "scripted" ? new UserDeviceEmulator() : undefined;
     const handles = await createApp({
       databaseUrl,
       modelConnectionFetch: createModelConnectionFixtureFetch(listPiCatalog()),
       prisma: undefined,
-      composio: new ComposioConnector({ client: new FakeComposioClient() }),
+      composio: new ComposioConnector({ client: composioClient }),
+      ...(agentRuntime === "scripted" ? { runtime: new DraftFixtureRuntime() } : {}),
       connectors: [new DestinationEmulator()],
       pipedream,
       email,
@@ -237,6 +271,12 @@ async function main() {
       fetch: async (request) => {
         if (new URL(request.url).pathname === "/__e2e/emails") {
           return Response.json(email.sent, { headers: { "cache-control": "no-store" } });
+        }
+        if (new URL(request.url).pathname === "/__e2e/outgoing-draft-deliveries") {
+          return Response.json(
+            composioClient.executions.filter((call) => call.tool === "GMAIL_SEND_EMAIL"),
+            { headers: { "cache-control": "no-store" } },
+          );
         }
         if (new URL(request.url).pathname === "/__e2e/user-device-requests") {
           return Response.json(userDevices?.requests ?? [], {

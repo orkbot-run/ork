@@ -31,6 +31,7 @@ import {
   resolveMcpOAuthEnv,
   resolveMcpOAuthFileTemplate,
 } from "@orkbot/contracts";
+import { outgoingDraftBindingForTool } from "@orkbot/core";
 import type { McpServer, PrismaClient, ThreadEvents } from "@orkbot/db";
 import { availableInSpace, itemSecretIn } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -540,6 +541,7 @@ export class McpConnector implements ConnectorProvider {
               inputSchema: tool.inputSchema as Record<string, unknown>,
               readOnly: tool.annotations?.readOnlyHint,
               batch: composioToolBatch(tool.name),
+              outgoingDraft: outgoingDraftBindingForTool(tool.name),
               route: {
                 connectorId: "mcp",
                 resourceId: assignment.serverId,

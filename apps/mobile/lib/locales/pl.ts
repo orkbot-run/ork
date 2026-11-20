@@ -8,6 +8,16 @@ export const PL_MESSAGES: Record<string, string> = {
     "Nie udało się otworzyć Ork Accounts. Spróbuj ponownie.",
   "This workspace was closed or your access was removed.":
     "Ta przestrzeń została zamknięta lub odebrano Ci do niej dostęp.",
+  "Could not submit this answer": "Nie udało się przesłać odpowiedzi",
+  Reject: "Odrzuć",
+  "Recipient changed. Review the updated draft and press Send again.":
+    "Adresat został zmieniony. Sprawdź zaktualizowany szkic i ponownie naciśnij Wyślij.",
+  "Enter a message body": "Wpisz treść wiadomości",
+  "Enter a recipient": "Wpisz adresata",
+  "Message body": "Treść wiadomości",
+  Subject: "Temat",
+  To: "Do",
+  "Outgoing draft": "Szkic wiadomości",
   "Zero data retention": "Zero retencji danych",
   "Route requests only to endpoints marked as eligible for zero data retention.":
     "Wysyłaj żądania tylko do endpointów oznaczonych jako nieprzechowujące danych.",
@@ -616,6 +626,7 @@ export const PL_MESSAGES: Record<string, string> = {
   Running: "Działa",
   Saved: "Zapisano",
   Sent: "Wysłano",
+  "Approved to send": "Zatwierdzono do wysłania",
   Send: "Wyślij",
   "Send answer": "Wyślij odpowiedź",
   "Sending…": "Wysyłanie…",

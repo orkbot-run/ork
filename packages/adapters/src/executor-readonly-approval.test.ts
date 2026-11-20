@@ -4740,3 +4740,44 @@ it.each(["message_bot", "handoff_to_bot"])(
     expect(f.pauseRunForInput).toHaveBeenCalledOnce();
   },
 );
+
+describe("edited outgoing approval replay", () => {
+  it("sends the stored revision once under the original effect key", async () => {
+    const f = fixture({ name: "GMAIL_SEND_EMAIL", readOnly: false });
+    const original = { to: "client@example.test", subject: "Hello", body: "Original" };
+    const edited = { ...original, body: "Edited by the owner" };
+    f.setCalls([{ args: original, executionId: "first-send" }]);
+    await f.run();
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.pauseRunForInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: [
+          expect.objectContaining({
+            outgoingDraft: {
+              kind: "email",
+              recipient: original.to,
+              subject: original.subject,
+              body: original.body,
+            },
+            allowRule: false,
+          }),
+        ],
+      }),
+    );
+    expect(f.effects).toHaveLength(1);
+    const effect = f.effects[0]!;
+    const originalKey = effect.idempotencyKey;
+    effect.request = edited;
+    effect.status = "approved";
+    f.setCalls([{ args: original, executionId: "resumed-send" }]);
+    await f.run();
+    expect(f.execute).toHaveBeenCalledTimes(1);
+    expect(f.execute.mock.calls[0]?.[0]).toMatchObject({ args: edited, executionId: originalKey });
+    expect(f.effects).toHaveLength(1);
+    expect(effect).toMatchObject({ status: "completed", idempotencyKey: originalKey });
+    // A retry of the original captured call reconciles the completed row.
+    await f.run();
+    expect(f.execute).toHaveBeenCalledTimes(1);
+    expect(f.effects).toHaveLength(1);
+  });
+});

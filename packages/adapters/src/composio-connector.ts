@@ -20,7 +20,7 @@ import type {
 import { ConnectorAuthUnavailableError } from "@orkbot/adapter-kit";
 import type { ConfiguredIntegration } from "@orkbot/contracts";
 import { IntegrationProviderIdSchema } from "@orkbot/contracts";
-import { humanizeToolName } from "@orkbot/core";
+import { humanizeToolName, outgoingDraftBindingForTool } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
 import { COMPOSIO_MULTI_EXECUTE_TOOL, composioToolBatch } from "./composio-batch.js";
 import type { ToolkitDirectoryEntry } from "./composio-catalog-cache.js";
@@ -78,6 +78,7 @@ function mapOneTool(item: unknown): ConnectorTool | undefined {
       description: String(fn.description ?? name),
       inputSchema: asObject(fn.parameters) ?? { type: "object", properties: {} },
       batch: composioToolBatch(name),
+      outgoingDraft: outgoingDraftBindingForTool(name),
       ...composioToolLabel(name),
       route: { connectorId: "composio", toolName: name },
     };
@@ -91,6 +92,7 @@ function mapOneTool(item: unknown): ConnectorTool | undefined {
       asObject(raw.inputSchema) ??
       asObject(raw.parameters) ?? { type: "object", properties: {} },
     batch: composioToolBatch(name),
+    outgoingDraft: outgoingDraftBindingForTool(name),
     ...composioToolLabel(name),
     route: { connectorId: "composio", toolName: name },
   };

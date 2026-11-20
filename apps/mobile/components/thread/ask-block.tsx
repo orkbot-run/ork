@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+
 import type { LoginFieldInput } from "@orkbot/contracts";
 import { normalizeOneTimeCode, vaultKind } from "@orkbot/contracts";
 import { isSecretAskBlock } from "@orkbot/core";
@@ -17,15 +20,22 @@ import { NativeSymbol } from "../native-symbol";
 import { SecretAskSheet } from "../secret-ask-sheet";
 import { VaultItemEditor } from "../vault-item-editor";
 import type { MessageActionProps } from "./message-bubble";
+import { OutgoingDraftCard } from "./outgoing-draft-card";
 
-export function AskBlock({
-  ask,
-  canAnswer,
-  canDismiss,
-  onAnswer,
-  onDismiss,
-  actionProps,
-}: {
+export function AskBlock(props: AskBlockProps) {
+  return props.ask.outgoingDraft ? (
+    <OutgoingDraftCard
+      key={props.ask.outgoingDraft.reviewId ?? "initial"}
+      ask={props.ask}
+      canAnswer={props.canAnswer}
+      onAnswer={props.onAnswer}
+    />
+  ) : (
+    <PromptAskBlock {...props} />
+  );
+}
+
+type AskBlockProps = {
   ask: Extract<MobileMessage["blocks"][number], { kind: "ask" }>;
   canAnswer: boolean;
   canDismiss: boolean;
@@ -34,10 +44,18 @@ export function AskBlock({
     fields?: readonly LoginFieldInput[],
     remember?: false,
   ) => Promise<void>;
-  /** Turns down a secret request without a value. */
   onDismiss: () => Promise<void>;
   actionProps: MessageActionProps;
-}) {
+};
+
+function PromptAskBlock({
+  ask,
+  canAnswer,
+  canDismiss,
+  onAnswer,
+  onDismiss,
+  actionProps,
+}: AskBlockProps) {
   const tokens = useMobileTokens();
   const { t } = useI18n();
   const [answer, setAnswer] = useState("");

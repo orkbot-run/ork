@@ -10,6 +10,7 @@ import {
   CARD_TITLE_ESCAPED_CHARACTERS,
   instructionUpdateDiff,
   messagingProviderName,
+  outgoingDraftForEffect,
   redactSecrets,
   SITE_SENDING_TOOLS,
   sanitizeMessagingLabel,
@@ -43,6 +44,8 @@ type ApprovalAskOptions = {
   batch?: ToolBatch;
   mandatoryReason?: ApprovalReason;
   userComputerName?: string;
+  /** Persisted route-bound request, used to bind editable outgoing fields. */
+  outgoingDraftRequest?: unknown;
 };
 
 export function buildApprovalAskBlock(
@@ -54,12 +57,39 @@ export function buildApprovalAskBlock(
 ): MessageBlock {
   const block = approvalAskBlock(effectId, toolName, args, secrets, options);
   if (block.kind !== "ask") return block;
-  const actions = options?.mandatoryReason
-    ? block.actions?.filter((action) => action.id !== "always")
-    : block.actions;
+  const outgoingDraft = outgoingDraftForEffect(
+    toolName,
+    redactLeaves(options?.outgoingDraftRequest ?? args, secrets),
+  );
+  const actions = outgoingDraft
+    ? [
+        { id: "allow", label: "Send" },
+        { id: "deny", label: "Deny" },
+      ]
+    : options?.mandatoryReason
+      ? block.actions?.filter((action) => action.id !== "always")
+      : block.actions;
   return {
     ...block,
     actions,
+    ...(outgoingDraft
+      ? {
+          outgoingDraft,
+          text: truncate(
+            redactSecrets(
+              `Review before ${describeApprovalAction(toolName, options?.batch ? args : {}, options?.batch)}`,
+              secrets,
+            ),
+            MAX_APPROVAL_SUMMARY_LENGTH,
+          ),
+          detail: options?.reviewReason?.trim()
+            ? truncate(
+                redactSecrets(options.reviewReason.trim(), secrets),
+                MAX_APPROVAL_DETAIL_LENGTH,
+              )
+            : undefined,
+        }
+      : {}),
     allowRule: actions?.some((action) => action.id === "always") ?? false,
     ...(options?.mandatoryReason ? { approvalReason: options.mandatoryReason } : {}),
   };

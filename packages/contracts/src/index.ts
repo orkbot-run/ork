@@ -40,6 +40,7 @@ export * from "./model-routing.js";
 export * from "./nav-links.js";
 export * from "./network-host.js";
 export * from "./openai-compatible-ui.js";
+export * from "./outgoing-draft.js";
 export * from "./pages.js";
 export * from "./payments.js";
 export * from "./personal-device.js";
