@@ -9,11 +9,8 @@ import type {
   TelemetryContext,
   TelemetrySpan,
 } from "@earendil-works/pi-telemetry";
+import type * as OtelApi from "@opentelemetry/api";
 import type { Attributes, Context, Link, Span, SpanContext, Tracer } from "@opentelemetry/api";
-import { ROOT_CONTEXT, SpanStatusCode, trace } from "@opentelemetry/api";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { resourceFromAttributes } from "@opentelemetry/resources";
-import { BatchSpanProcessor, NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { getLogContext } from "@orkbot/logging";
 
 // Allowlist metadata: unknown attributes (including future Pi payload fields) stay private.
@@ -67,9 +64,11 @@ function attributes(values: SpanAttributes = {}, captureContent: boolean): Attri
 export function otelPiContext(
   tracer: Tracer,
   captureContent: boolean,
+  api: typeof OtelApi,
   ids: SpanAttributes = {},
   parent?: Context,
 ): TelemetryContext {
+  const { SpanStatusCode, trace } = api;
   return {
     async startSpan(options, callback) {
       const correlation = {
@@ -78,7 +77,7 @@ export function otelPiContext(
           Object.entries(options.attributes ?? {}).filter(([key]) => key.startsWith("orkbot.")),
         ),
       };
-      const parentContext = parent ?? correlatedLogContext();
+      const parentContext = parent ?? correlatedLogContext(api);
       const span: Span = tracer.startSpan(
         options.name,
         {
@@ -93,6 +92,7 @@ export function otelPiContext(
       const child = otelPiContext(
         tracer,
         captureContent,
+        api,
         correlation,
         trace.setSpan(parentContext, span),
       );
@@ -128,7 +128,18 @@ export function otelPiContext(
   };
 }
 
-export function createPiTelemetryExporter() {
+export async function createPiTelemetryExporter() {
+  const [
+    api,
+    { OTLPTraceExporter },
+    { resourceFromAttributes },
+    { BatchSpanProcessor, NodeTracerProvider },
+  ] = await Promise.all([
+    import("@opentelemetry/api"),
+    import("@opentelemetry/exporter-trace-otlp-http"),
+    import("@opentelemetry/resources"),
+    import("@opentelemetry/sdk-trace-node"),
+  ]);
   const provider = new NodeTracerProvider({
     resource: resourceFromAttributes({
       "service.name": process.env.OTEL_SERVICE_NAME?.trim() || "orkbot-worker",
@@ -142,12 +153,13 @@ export function createPiTelemetryExporter() {
     context: otelPiContext(
       provider.getTracer("orkbot.pi", PI_AI_VERSION),
       process.env.OTEL_CAPTURE_CONTENT === "true",
+      api,
     ),
     shutdown: () => provider.shutdown(),
   };
 }
 
-function correlatedLogContext(): Context {
+function correlatedLogContext({ ROOT_CONTEXT, trace }: typeof OtelApi): Context {
   const log = getLogContext();
   const traceId = log["trace.id"];
   const spanId = log["span.id"];

@@ -23,7 +23,7 @@ const ENTRIES = [
 // @chat-adapter/state-memory is left out: it is the Chat SDK's own in-memory state, which
 // every messaging platform needs, not a vendor.
 const OPTIONAL_VENDORS =
-  /^(@aws-sdk\/.+|@alicloud\/.+|@kubernetes\/client-node|railway|@daytona\/sdk|@e2b\/desktop|novita-sandbox|@composio\/core|@stripe\/link-sdk|@chat-adapter\/(slack|telegram|whatsapp)|@boatdev\/sdk|@boxd-sh\/sdk|chat-adapter-sendblue|@axiomhq\/js|@sentry\/node)$/;
+  /^(@aws-sdk\/.+|@alicloud\/.+|@kubernetes\/client-node|railway|@daytona\/sdk|@e2b\/desktop|novita-sandbox|@composio\/core|@stripe\/link-sdk|@chat-adapter\/(slack|telegram|whatsapp)|@boatdev\/sdk|@boxd-sh\/sdk|chat-adapter-sendblue|@axiomhq\/js|@sentry\/node|@opentelemetry\/.+)$/;
 // Known static imports still to make lazy. Remove an entry once its SDK loads on demand.
 const PENDING = [
   // The wallet factory imports its module dynamically, but the bundle inlines that module,

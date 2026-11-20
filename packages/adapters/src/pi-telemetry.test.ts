@@ -9,6 +9,7 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { TelemetrySpan } from "@earendil-works/pi-telemetry";
 import { NOOP_TELEMETRY_CONTEXT } from "@earendil-works/pi-telemetry";
+import * as otelApi from "@opentelemetry/api";
 import { SpanStatusCode } from "@opentelemetry/api";
 import {
   InMemorySpanExporter,
@@ -48,7 +49,7 @@ function setup(captureContent = false) {
   const output = new InMemorySpanExporter();
   const provider = new NodeTracerProvider({ spanProcessors: [new SimpleSpanProcessor(output)] });
   factory.mockReturnValue({
-    context: otelPiContext(provider.getTracer("fixture"), captureContent),
+    context: otelPiContext(provider.getTracer("fixture"), captureContent, otelApi),
     shutdown: () => provider.shutdown(),
   });
   vi.stubEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector.example.test:4318");
@@ -72,8 +73,8 @@ describe("Pi OpenTelemetry", () => {
         spanProcessors: [new SimpleSpanProcessor(output)],
       });
       try {
-        const first = otelPiContext(provider.getTracer("first"), capture);
-        const second = otelPiContext(provider.getTracer("second"), capture);
+        const first = otelPiContext(provider.getTracer("first"), capture, otelApi);
+        const second = otelPiContext(provider.getTracer("second"), capture, otelApi);
         let target: TelemetrySpan | undefined;
         await first.startSpan({ name: "target" }, (span) => {
           target = span;
