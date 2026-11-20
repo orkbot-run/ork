@@ -393,6 +393,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["models/rename"],
       ["models/disconnect"],
       ["spaces/list"],
+      ["spaces/accessStatus", { spaceId: "missing-space" }],
       ["spaces/create", { name: "Nope" }],
       ["spaces/rename", { spaceId: "missing-space", name: "Nope" }],
       ["spaces/remove", { spaceId: "missing-space" }],

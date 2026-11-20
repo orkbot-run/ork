@@ -813,12 +813,30 @@ describe.skipIf(!enabled)(
         performance.now(),
       );
       const access = await authority!.session(sessionId, userId, peerSpaceId);
+      expect(await authority!.spaceAccessStatus(sessionId, userId, peerSpaceId)).toBe("available");
       expect(access).toMatchObject({
         spaceId: peerSpaceId,
         workspaceId: peerId,
         revision: peerRevision,
         entry: { workspaceId },
       });
+      const removedPeer = { ...peer, permissionVersion: peer.permissionVersion + 1, members: [] };
+      authority!.window.apply(
+        { ...projection, workspaces: [...projection.workspaces, removedPeer] },
+        performance.now(),
+      );
+      expect(await authority!.spaceAccessStatus(sessionId, userId, peerSpaceId)).toBe("removed");
+      authority!.window.apply(
+        {
+          ...projection,
+          workspaces: [
+            ...projection.workspaces,
+            { ...peer, permissionVersion: peer.permissionVersion + 2 },
+          ],
+        },
+        performance.now(),
+      );
+      expect(await authority!.spaceAccessStatus(sessionId, userId, peerSpaceId)).toBe("available");
       const watch = await authority!.watchSession(access!);
       try {
         expect(watch.signal.aborted).toBe(false);

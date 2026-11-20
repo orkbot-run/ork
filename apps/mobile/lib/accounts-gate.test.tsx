@@ -1762,7 +1762,7 @@ it("leaves a different selected workspace when its membership is removed", async
   await saveSelectedWorkspace(owner, remote.url, workspace);
   await render();
   state.selectedSpace = "local-space";
-  vi.mocked(rpc).mockResolvedValue({ organizations: [{ spaceIds: [] }] } as never);
+  vi.mocked(rpc).mockResolvedValue("removed" as never);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(15_000);
   });
@@ -1772,6 +1772,25 @@ it("leaves a different selected workspace when its membership is removed", async
     "This workspace was closed or your access was removed.",
   );
 });
+
+it.each(["available", "unknown"])(
+  "keeps a selected peer workspace when status is %s",
+  async (status) => {
+    vi.useFakeTimers();
+    const workspace = managedDirectory(companyId);
+    const owner = JSON.stringify([identity.issuer, identity.subject]);
+    state.storage.set("orkbot.accounts.product-owner", owner);
+    await saveSelectedWorkspace(owner, remote.url, workspace);
+    await render();
+    state.selectedSpace = "peer-workspace";
+    vi.mocked(rpc).mockResolvedValue(status as never);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    expect(host.textContent).toContain("Product screen");
+    expect(Alert.alert).not.toHaveBeenCalled();
+  },
+);
 
 it("notifies and leaves immediately after a revoked selected space is detected by a request", async () => {
   const workspace = managedDirectory(companyId);
@@ -1807,7 +1826,7 @@ it("ignores a late access check after the user switches workspaces", async () =>
   await act(async () => vi.advanceTimersByTimeAsync(15_000));
   state.selectedSpace = "another-space";
   state.selectedSequence++;
-  await act(async () => resolve({ organizations: [{ spaceIds: [] }] } as never));
+  await act(async () => resolve("removed" as never));
   expect(host.textContent).toContain("Product screen");
   expect(Alert.alert).not.toHaveBeenCalled();
 });

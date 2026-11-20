@@ -864,6 +864,59 @@ export class WorkspaceAuthority {
     });
   }
 
+  /** Report a removal only from a live, verified projection, never from an expired window. */
+  async spaceAccessStatus(
+    sessionId: string,
+    userId: string,
+    spaceId: string,
+  ): Promise<"available" | "removed" | "unknown"> {
+    const anchor = await this.session(sessionId, userId);
+    if (!anchor || anchor.personalDeviceId) return "unknown";
+    return runAsSystem("check the selected workspace against verified admission", async () => {
+      const entry = await workspaceAdmissionBinding(this.prisma, anchor.spaceId);
+      if (!entry) return "unknown";
+      const space = await this.prisma.space.findUnique({
+        where: { id: spaceId },
+        select: { organizationId: true },
+      });
+      if (!this.window.permits(anchor.workspaceId, anchor.subject, anchor.revision))
+        return "unknown";
+      if (!space) return "removed";
+      // Foreign and missing spaces have the same answer, without revealing whether an id exists.
+      if (space.organizationId !== entry.localOrganizationId) return "removed";
+      const target = await workspaceAdmissionBinding(this.prisma, spaceId);
+      if (
+        !target ||
+        target.serverId !== entry.serverId ||
+        target.centralOrganizationId !== entry.centralOrganizationId ||
+        target.bindingVersion !== entry.bindingVersion ||
+        !this.window.permits(anchor.workspaceId, anchor.subject, anchor.revision)
+      )
+        return "unknown";
+      const projected = this.window.workspace(target.id);
+      if (!projected) return "unknown";
+      if (projected.state === "disabled") return "removed";
+      if (
+        projected.localOrganizationId !== target.localOrganizationId ||
+        projected.localWorkspaceId !== target.spaceId
+      )
+        return "unknown";
+      if (projected.state !== "ready") return "unknown";
+      if (!projected.members.some((member) => member.userId === anchor.subject)) return "removed";
+      const membership = await this.prisma.spaceMember.findFirst({
+        where: { spaceId, userId },
+        select: { id: true },
+      });
+      if (
+        JSON.stringify(this.window.workspace(target.id)) !== JSON.stringify(projected) ||
+        !this.window.permits(anchor.workspaceId, anchor.subject, anchor.revision)
+      )
+        return "unknown";
+      if (!membership) return spaceId === target.spaceId ? "unknown" : "removed";
+      return "available";
+    });
+  }
+
   async watchSession(
     scope: WorkspaceAdmission & { entry?: WorkspaceAdmission },
   ): Promise<{ signal: AbortSignal; dispose(): void }> {

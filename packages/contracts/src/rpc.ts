@@ -416,6 +416,9 @@ export const appContract = {
   },
   spaces: {
     list: oc.output(SpaceNavigationSchema),
+    accessStatus: oc
+      .input(z.object({ spaceId: Id }))
+      .output(z.enum(["available", "removed", "unknown"])),
     create: oc.input(z.object({ name: spaceName })).output(SpaceSchema),
     rename: oc
       .input(z.object({ spaceId: Id, name: spaceName }))

@@ -52,12 +52,12 @@ export function WorkspaceAccessGuard({ children }: { children: ReactNode }) {
           return;
         }
         if (allowed && selected) {
-          const { organizations } = await context.client.organizations.list();
+          const status = await context.client.spaces.accessStatus({ spaceId: selected });
           if (
             active &&
             context.isCurrent() &&
             selectedSpaceId() === selected &&
-            !organizations.some((organization) => organization.spaceIds.includes(selected))
+            status === "removed"
           ) {
             retire();
           }

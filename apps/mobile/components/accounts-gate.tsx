@@ -781,16 +781,20 @@ export function AccountsGate({
             if (selected) {
               try {
                 const context = await captureApiRequestContext(null);
-                const { organizations } = await rpc("organizations/list", undefined, {
-                  requestContext: context,
-                });
+                const status = await rpc(
+                  "spaces/accessStatus",
+                  { spaceId: selected },
+                  {
+                    requestContext: context,
+                  },
+                );
                 if (
                   current() &&
                   selectedSpaceId() === selected &&
                   spaceSelectionSeq() === selectionSequence &&
                   JSON.stringify(installationRevocationScope(activeServer)) ===
                     JSON.stringify(scope) &&
-                  !organizations.some((organization) => organization.spaceIds.includes(selected))
+                  status === "removed"
                 ) {
                   leaveUnavailableWorkspace();
                   return;

@@ -70,7 +70,8 @@ export { callMarkerClientNonce } from "#modules/threads/routes/threads";
 export { HEARTBEAT_MS, SESSION_RECHECK_MS } from "./routes/shared.js";
 
 export interface RouterDeps {
-  workspaceAuthority?: Pick<WorkspaceAuthority, "session">;
+  workspaceAuthority?: Pick<WorkspaceAuthority, "session"> &
+    Partial<Pick<WorkspaceAuthority, "spaceAccessStatus">>;
   serverAI?: ServerAICatalog;
   serverAIModels?: ServerAIModels;
   serverUpdates?: ServerUpdatesService;
