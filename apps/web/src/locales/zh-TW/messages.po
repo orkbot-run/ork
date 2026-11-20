@@ -767,6 +767,11 @@ msgstr "不限時間"
 msgid "Allow"
 msgstr "允許"
 
+#. placeholder {0}: space.name
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Allow {0} to use the organization vault"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Allow cross-space bot communication"
 msgstr "允許跨空間機器人通訊"
@@ -785,10 +790,6 @@ msgstr ""
 
 #: src/pages/ServerAISettings.tsx
 msgid "Allow personal models"
-msgstr ""
-
-#: src/pages/OrganizationVaultSettings.tsx
-msgid "Allow workspace access"
 msgstr ""
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx

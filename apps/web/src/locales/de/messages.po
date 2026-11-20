@@ -766,6 +766,11 @@ msgstr ""
 msgid "Allow"
 msgstr "Erlauben"
 
+#. placeholder {0}: space.name
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Allow {0} to use the organization vault"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Allow cross-space bot communication"
 msgstr "Kommunikation zwischen Bots in verschiedenen Spaces erlauben"
@@ -784,10 +789,6 @@ msgstr ""
 
 #: src/pages/ServerAISettings.tsx
 msgid "Allow personal models"
-msgstr ""
-
-#: src/pages/OrganizationVaultSettings.tsx
-msgid "Allow workspace access"
 msgstr ""
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx

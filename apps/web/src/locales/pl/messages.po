@@ -628,7 +628,7 @@ msgstr "Dodaj zadanie w toku"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Add organization secret"
-msgstr ""
+msgstr "Dodaj sekret organizacji"
 
 #: src/components/PasskeyOffer.tsx
 #: src/components/PasskeySettings.tsx
@@ -645,7 +645,7 @@ msgstr "Dodaj regułę"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Add secret"
-msgstr ""
+msgstr "Dodaj sekret"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
@@ -766,6 +766,11 @@ msgstr "Cały okres"
 msgid "Allow"
 msgstr "Zezwól"
 
+#. placeholder {0}: space.name
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Allow {0} to use the organization vault"
+msgstr "Zezwól {0} na korzystanie z sejfu organizacji"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Allow cross-space bot communication"
 msgstr "Zezwól botom na komunikację między przestrzeniami"
@@ -785,10 +790,6 @@ msgstr "Zezwól Ork na rozpoznawanie mowy i dostęp do mikrofonu w Ustawieniach 
 #: src/pages/ServerAISettings.tsx
 msgid "Allow personal models"
 msgstr "Zezwól na modele osobiste"
-
-#: src/pages/OrganizationVaultSettings.tsx
-msgid "Allow workspace access"
-msgstr ""
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
@@ -1588,7 +1589,7 @@ msgstr "Wybierz sposób korzystania z Ork"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it."
-msgstr ""
+msgstr "Wybierz przestrzenie robocze na tym serwerze, które mogą korzystać z sekretów. Nowe przestrzenie nie mają dostępu, dopóki go nie przyznasz."
 
 #: src/components/WorkspaceAccessGuard.tsx
 msgid "Choose workspace"
@@ -2150,7 +2151,7 @@ msgstr "Nie udało się zmienić uprawnień do wyświetlania tej strony. Spróbu
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Could not change workspace access."
-msgstr ""
+msgstr "Nie udało się zmienić dostępu przestrzeni roboczej."
 
 #: src/components/ProtocolRecovery.tsx
 msgid "Could not check server compatibility."
@@ -2426,7 +2427,7 @@ msgstr "Nie udało się wczytać pulpitu."
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Could not load the organization vault. Check your access and try again."
-msgstr ""
+msgstr "Nie udało się załadować sejfu organizacji. Sprawdź dostęp i spróbuj ponownie."
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -2470,7 +2471,7 @@ msgstr "Nie udało się otworzyć rozliczeń"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Could not open the secret."
-msgstr ""
+msgstr "Nie udało się otworzyć sekretu."
 
 #: src/components/WorkspaceAccessGuard.tsx
 msgid "Could not open the workspace picker. Try again."
@@ -2543,7 +2544,7 @@ msgstr "Nie udało się usunąć danych uwierzytelniających"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Could not remove the secret."
-msgstr ""
+msgstr "Nie udało się usunąć sekretu."
 
 #: src/pages/model-settings/providers-section.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -2643,7 +2644,7 @@ msgstr "Nie udało się zapisać danych uwierzytelniających"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Could not save the secret. Please try again."
-msgstr ""
+msgstr "Nie udało się zapisać sekretu. Spróbuj ponownie."
 
 #: src/pages/shell/message-cards.tsx
 msgid "Could not save this choice"
@@ -2743,15 +2744,15 @@ msgstr "Nie udało się zaktualizować domyślnego zakresu pamięci"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Could not verify this organization. Sign in again and try again."
-msgstr ""
+msgstr "Nie udało się zweryfikować organizacji. Zaloguj się ponownie."
 
 #: src/components/VaultSettings.tsx
 msgid "Could not verify this organization's vault policy. Sign in again to continue."
-msgstr ""
+msgstr "Nie udało się zweryfikować zasad sejfu organizacji. Zaloguj się ponownie."
 
 #: src/components/VaultSettings.tsx
 msgid "Could not verify this organization's vault policy. Update the server or try again."
-msgstr ""
+msgstr "Nie udało się zweryfikować zasad sejfu organizacji. Zaktualizuj serwer lub spróbuj ponownie."
 
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
@@ -3327,7 +3328,7 @@ msgstr "Edytuj nazwę"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Edit organization secret"
-msgstr ""
+msgstr "Edytuj sekret organizacji"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Edit Profile"
@@ -4320,7 +4321,7 @@ msgstr "Ładowanie zużycia"
 #: src/components/VaultSettings.tsx
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Loading vault settings…"
-msgstr ""
+msgstr "Ładowanie ustawień sejfu…"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Loading voice providers…"
@@ -4394,7 +4395,7 @@ msgstr "Udostępnij organizacji"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Make credentials available to approved workspaces."
-msgstr ""
+msgstr "Udostępnij dane dostępowe wybranym przestrzeniom roboczym."
 
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
@@ -5090,7 +5091,7 @@ msgstr "Brak uruchomień"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "No secrets added yet."
-msgstr ""
+msgstr "Nie dodano jeszcze żadnych sekretów."
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -5373,7 +5374,7 @@ msgstr "Ustawienia organizacji"
 
 #: src/pages/settings-nav.ts
 msgid "Organization vault"
-msgstr ""
+msgstr "Sejf organizacji"
 
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
@@ -5575,11 +5576,11 @@ msgstr "Osobiste modele mogą przetwarzać dane poza serwerami firmy."
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Personal organizations use your personal vault. Open Your settings → Vault to manage your secrets."
-msgstr ""
+msgstr "Organizacje osobiste korzystają z Twojego sejfu. Zarządzaj sekretami w Twoje ustawienia → Sejf."
 
 #: src/components/VaultSettings.tsx
 msgid "Personal vaults are unavailable in shared organizations. Organization admins can manage secrets and workspace access in Organization settings → Organization vault."
-msgstr ""
+msgstr "Sejf osobisty jest niedostępny we wspólnych organizacjach. Administratorzy zarządzają sekretami i dostępem w Ustawienia organizacji → Sejf organizacji."
 
 #: src/components/vault/VaultItemDetail.tsx
 #: src/components/vault/VaultItemEditor.tsx
@@ -6575,7 +6576,7 @@ msgstr "Wyszukiwanie…"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Secrets"
-msgstr ""
+msgstr "Sekrety"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Security"
@@ -8193,7 +8194,7 @@ msgstr "Obszar roboczy"
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Workspace access"
-msgstr ""
+msgstr "Dostęp przestrzeni roboczych"
 
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Workspace model"
@@ -8329,7 +8330,7 @@ msgstr "Nie udało się zweryfikować roli w organizacji. Sprawdź, czy Accounts
 
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Your organization's server manages these secrets. Ork Accounts does not receive them. Only organization admins can manage this vault."
-msgstr ""
+msgstr "Sekretami zarządza serwer Twojej organizacji. Ork Accounts ich nie otrzymuje. Tylko administratorzy organizacji mogą zarządzać sejfem."
 
 #: src/components/ModelCredits.tsx
 msgid "Your plan becomes {annualPrice} / year when your trial ends."

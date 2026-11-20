@@ -272,7 +272,7 @@ export function OrganizationVaultSettings() {
               <div className="text-xs text-muted-foreground">{space.state}</div>
             </div>
             <Switch
-              aria-label={t`Allow workspace access`}
+              aria-label={t`Allow ${space.name} to use the organization vault`}
               checked={space.granted}
               disabled={busy}
               onCheckedChange={async (allowed) => {

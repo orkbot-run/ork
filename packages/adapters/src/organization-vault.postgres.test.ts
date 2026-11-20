@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { asSystem, createDb, runAsTenant } from "@orkbot/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadBotCommandEnvironment, storeBotSecret } from "./bot-secrets.js";
 import { OrganizationVault } from "./organization-vault.js";
 import { withSecretPersistence } from "./secret-persistence.js";
@@ -158,6 +158,33 @@ postgres("organization vault on the installation", () => {
       "Organization vault access denied",
     );
     expect(await vault.reveal(admin, item.destination.name)).toEqual({ value: item.plaintext });
+    const originalLoad = secrets.load.bind(secrets);
+    const interrupt = vi
+      .spyOn(secrets, "load")
+      .mockImplementationOnce(async (ciphertext, context) => {
+        await asSystem(owner.prisma).centralWorkspaceBinding.update({
+          where: { id: binding },
+          data: {
+            members: [
+              { userId: "central-member", accessVersion: "member-v1", organizationRole: "member" },
+            ],
+          },
+        });
+        return originalLoad(ciphertext, context);
+      });
+    await expect(vault.reveal(admin, item.destination.name)).rejects.toThrow(
+      "Organization vault access denied",
+    );
+    interrupt.mockRestore();
+    await asSystem(owner.prisma).centralWorkspaceBinding.update({
+      where: { id: binding },
+      data: {
+        members: [
+          { userId: "central-admin", accessVersion: "admin-v1", organizationRole: "admin" },
+          { userId: "central-member", accessVersion: "member-v1", organizationRole: "member" },
+        ],
+      },
+    });
     await expect(vault.setWorkspaceAccess(member, space, true)).rejects.toThrow(
       "Organization vault access denied",
     );

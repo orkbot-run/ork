@@ -766,6 +766,11 @@ msgstr "All time"
 msgid "Allow"
 msgstr "Allow"
 
+#. placeholder {0}: space.name
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Allow {0} to use the organization vault"
+msgstr "Allow {0} to use the organization vault"
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Allow cross-space bot communication"
 msgstr "Allow cross-space bot communication"
@@ -785,10 +790,6 @@ msgstr "Allow Ork to use Speech Recognition and the microphone in System Setting
 #: src/pages/ServerAISettings.tsx
 msgid "Allow personal models"
 msgstr "Allow personal models"
-
-#: src/pages/OrganizationVaultSettings.tsx
-msgid "Allow workspace access"
-msgstr "Allow workspace access"
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Allow writing"
