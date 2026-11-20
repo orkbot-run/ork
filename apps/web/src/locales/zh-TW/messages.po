@@ -644,10 +644,6 @@ msgstr "新增供應商"
 msgid "Add rule"
 msgstr ""
 
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Add secret"
-#~ msgstr ""
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
 msgstr "新增伺服器"
@@ -767,11 +763,6 @@ msgstr "不限時間"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "允許"
-
-#. placeholder {0}: space.name
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Allow {0} to use the organization vault"
-#~ msgstr ""
 
 #. placeholder {0}: space.name
 #: src/pages/OrganizationVaultSettings.tsx
@@ -1594,10 +1585,6 @@ msgstr "選擇 Ork 的使用方式"
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Choose which workspaces can use this secret."
 msgstr ""
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it."
-#~ msgstr ""
 
 #: src/components/WorkspaceAccessGuard.tsx
 msgid "Choose workspace"
@@ -2432,10 +2419,6 @@ msgstr "無法載入技能"
 #: src/components/NativeComputerScreen.tsx
 msgid "Could not load the desktop."
 msgstr "無法載入桌面。"
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Could not load the organization vault. Check your access and try again."
-#~ msgstr ""
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -4403,10 +4386,6 @@ msgstr "主模型"
 msgid "Make available to organization"
 msgstr ""
 
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Make credentials available to approved workspaces."
-#~ msgstr ""
-
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Manage"
@@ -5100,10 +5079,6 @@ msgstr "沒有符合篩選條件的執行紀錄。"
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr "還沒有執行紀錄"
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "No secrets added yet."
-#~ msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -6590,10 +6565,6 @@ msgstr "搜尋：{0}"
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "正在搜尋…"
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Secrets"
-#~ msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Security"

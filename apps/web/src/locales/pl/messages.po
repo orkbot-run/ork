@@ -643,10 +643,6 @@ msgstr "Dodaj dostawcę"
 msgid "Add rule"
 msgstr "Dodaj regułę"
 
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Add secret"
-#~ msgstr "Dodaj sekret"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
 msgstr "Dodaj serwer"
@@ -766,11 +762,6 @@ msgstr "Cały okres"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "Zezwól"
-
-#. placeholder {0}: space.name
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Allow {0} to use the organization vault"
-#~ msgstr "Zezwól {0} na korzystanie z sejfu organizacji"
 
 #. placeholder {0}: space.name
 #: src/pages/OrganizationVaultSettings.tsx
@@ -1593,10 +1584,6 @@ msgstr "Wybierz sposób korzystania z Ork"
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Choose which workspaces can use this secret."
 msgstr "Wybierz przestrzenie robocze, które mogą korzystać z tego sekretu."
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it."
-#~ msgstr "Wybierz przestrzenie robocze na tym serwerze, które mogą korzystać z sekretów. Nowe przestrzenie nie mają dostępu, dopóki go nie przyznasz."
 
 #: src/components/WorkspaceAccessGuard.tsx
 msgid "Choose workspace"
@@ -2431,10 +2418,6 @@ msgstr "Nie udało się wczytać umiejętności"
 #: src/components/NativeComputerScreen.tsx
 msgid "Could not load the desktop."
 msgstr "Nie udało się wczytać pulpitu."
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Could not load the organization vault. Check your access and try again."
-#~ msgstr "Nie udało się załadować sejfu organizacji. Sprawdź dostęp i spróbuj ponownie."
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -4402,10 +4385,6 @@ msgstr "Główny model"
 msgid "Make available to organization"
 msgstr "Udostępnij organizacji"
 
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Make credentials available to approved workspaces."
-#~ msgstr "Udostępnij dane dostępowe wybranym przestrzeniom roboczym."
-
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Manage"
@@ -5099,10 +5078,6 @@ msgstr "Żadne uruchomienie nie pasuje do tych filtrów."
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr "Brak uruchomień"
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "No secrets added yet."
-#~ msgstr "Nie dodano jeszcze żadnych sekretów."
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -6589,10 +6564,6 @@ msgstr "Wyszukiwanie: {0}"
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "Wyszukiwanie…"
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Secrets"
-#~ msgstr "Sekrety"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Security"

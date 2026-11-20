@@ -643,10 +643,6 @@ msgstr "Anbieter hinzufügen"
 msgid "Add rule"
 msgstr ""
 
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Add secret"
-#~ msgstr ""
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
 msgstr "Server hinzufügen"
@@ -766,11 +762,6 @@ msgstr ""
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "Erlauben"
-
-#. placeholder {0}: space.name
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Allow {0} to use the organization vault"
-#~ msgstr ""
 
 #. placeholder {0}: space.name
 #: src/pages/OrganizationVaultSettings.tsx
@@ -1593,10 +1584,6 @@ msgstr ""
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Choose which workspaces can use this secret."
 msgstr ""
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it."
-#~ msgstr ""
 
 #: src/components/WorkspaceAccessGuard.tsx
 msgid "Choose workspace"
@@ -2431,10 +2418,6 @@ msgstr "Skill konnte nicht geladen werden"
 #: src/components/NativeComputerScreen.tsx
 msgid "Could not load the desktop."
 msgstr "Der Desktop konnte nicht geladen werden."
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Could not load the organization vault. Check your access and try again."
-#~ msgstr ""
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -4402,10 +4385,6 @@ msgstr "Hauptmodell"
 msgid "Make available to organization"
 msgstr ""
 
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Make credentials available to approved workspaces."
-#~ msgstr ""
-
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Manage"
@@ -5099,10 +5078,6 @@ msgstr ""
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr ""
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "No secrets added yet."
-#~ msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -6589,10 +6564,6 @@ msgstr ""
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "Suche…"
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Secrets"
-#~ msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Security"

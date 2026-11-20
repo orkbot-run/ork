@@ -643,10 +643,6 @@ msgstr "Add provider"
 msgid "Add rule"
 msgstr "Add rule"
 
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Add secret"
-#~ msgstr "Add secret"
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
 msgstr "Add server"
@@ -766,11 +762,6 @@ msgstr "All time"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "Allow"
-
-#. placeholder {0}: space.name
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Allow {0} to use the organization vault"
-#~ msgstr "Allow {0} to use the organization vault"
 
 #. placeholder {0}: space.name
 #: src/pages/OrganizationVaultSettings.tsx
@@ -1593,10 +1584,6 @@ msgstr "Choose how to use Ork"
 #: src/pages/OrganizationVaultSettings.tsx
 msgid "Choose which workspaces can use this secret."
 msgstr "Choose which workspaces can use this secret."
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it."
-#~ msgstr "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it."
 
 #: src/components/WorkspaceAccessGuard.tsx
 msgid "Choose workspace"
@@ -2431,10 +2418,6 @@ msgstr "Could not load skill"
 #: src/components/NativeComputerScreen.tsx
 msgid "Could not load the desktop."
 msgstr "Could not load the desktop."
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Could not load the organization vault. Check your access and try again."
-#~ msgstr "Could not load the organization vault. Check your access and try again."
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -4402,10 +4385,6 @@ msgstr "Main model"
 msgid "Make available to organization"
 msgstr "Make available to organization"
 
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Make credentials available to approved workspaces."
-#~ msgstr "Make credentials available to approved workspaces."
-
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Manage"
@@ -5099,10 +5078,6 @@ msgstr "No runs match these filters."
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr "No runs yet"
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "No secrets added yet."
-#~ msgstr "No secrets added yet."
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -6589,10 +6564,6 @@ msgstr "Search: {0}"
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "Searching…"
-
-#: src/pages/OrganizationVaultSettings.tsx
-#~ msgid "Secrets"
-#~ msgstr "Secrets"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Security"
