@@ -99,6 +99,38 @@ describe("web SSRF policy", () => {
     expect(result.body).toContain("hello");
   });
 
+  it.each([
+    ["text/plain; charset=ISO-8859-2", "5a61bff3b3e62067eab66cb1206a61bcf1", "Zażółć gęślą jaźń"],
+    [
+      'text/plain; CHARSET="Windows-1250"',
+      "5a61bff3b3e62067ea9c6cb9206a619ff1",
+      "Zażółć gęślą jaźń",
+    ],
+    ["text/html; charset=Shift_JIS", "93fa967b8cea", "日本語"],
+  ])("decodes bytes using %s", async (contentType, hex, body) => {
+    const result = await fetchSafeWebText("https://example.test/doc", {
+      fetch: async () =>
+        new Response(Buffer.from(hex, "hex"), { headers: { "content-type": contentType } }),
+      resolveHostname: publicResolver,
+    });
+    expect(result).toMatchObject({ contentType, body });
+  });
+
+  it.each([null, "text/plain", "text/plain; charset=not-an-encoding", "bad mime; charset=cp1250"])(
+    "uses UTF-8 when the charset is unavailable in %s",
+    async (contentType) => {
+      const body = "Zażółć gęślą jaźń — 日本語";
+      const result = await fetchSafeWebText("https://example.test/doc", {
+        fetch: async () =>
+          new Response(new TextEncoder().encode(body), {
+            headers: contentType === null ? {} : { "content-type": contentType },
+          }),
+        resolveHostname: publicResolver,
+      });
+      expect(result).toMatchObject({ contentType, body });
+    },
+  );
+
   it("refuses ports outside allowedPorts on every hop", async () => {
     await expect(
       assertSafeWebUrl("https://example.test:8443/", publicResolver, undefined, [80, 443]),

@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 web egress is preserved; shared CONNECT transport extraction follows LICENSE.md.
 
 import { lookup } from "node:dns/promises";
+import { MIMEType } from "node:util";
 import {
   ipVersion,
   isCloudMetadataHost,
@@ -105,12 +106,24 @@ export function isBlockedHostname(hostname: string): boolean {
 
 type SafeWebResponse<Body> = { url: string; body: Body; contentType: string | null };
 
+function decoderForContentType(contentType: string | null): TextDecoder {
+  if (contentType !== null) {
+    try {
+      const charset = new MIMEType(contentType).params.get("charset");
+      if (charset) return new TextDecoder(charset);
+    } catch {
+      // Invalid media types and unsupported charset labels fall back to UTF-8.
+    }
+  }
+  return new TextDecoder();
+}
+
 export async function fetchSafeWebText(
   url: string,
   options: SafeWebFetchOptions = {},
 ): Promise<SafeWebResponse<string>> {
   const response = await fetchSafeWebBytes(url, options);
-  return { ...response, body: new TextDecoder().decode(response.body) };
+  return { ...response, body: decoderForContentType(response.contentType).decode(response.body) };
 }
 
 export async function fetchSafeWebBytes(
