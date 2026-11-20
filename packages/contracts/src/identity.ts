@@ -33,6 +33,7 @@ export const workspaceProjectionSchema = z
   .object({
     serverId: id,
     organizationId: id,
+    organizationType: z.enum(["personal", "shared"]).optional(),
     bindingVersion: positive,
     keyFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
     verifiedAt: positive,

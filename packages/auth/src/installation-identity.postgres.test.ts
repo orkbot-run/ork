@@ -84,6 +84,8 @@ function broker() {
   const personalDevices = new Set<string>();
   let personalDeviceVersion = 0;
   let synchronizeStatus = 200;
+  let organizationType: "shared" | "personal" | undefined;
+  let supportsOrganizationType = true;
   let transportClaims: Record<string, unknown> = {};
   let relayClaims: Record<string, unknown> = {};
   let relayEnabled = true;
@@ -234,11 +236,14 @@ function broker() {
       );
     }
     if (path.endsWith("/servers/synchronize")) {
+      if (!supportsOrganizationType && body.organizationTypeProtocol === 1)
+        return Response.json({ error: "unsupported" }, { status: 400 });
       if (synchronizeStatus !== 200)
         return Response.json({ error: "fixture refusal" }, { status: synchronizeStatus });
       const projection: WorkspaceProjection = {
         serverId,
         organizationId,
+        ...(body.organizationTypeProtocol === 1 && organizationType ? { organizationType } : {}),
         bindingVersion,
         keyFingerprint: fingerprint(),
         verifiedAt: now,
@@ -320,6 +325,12 @@ function broker() {
     },
     refuseSynchronization: (status: number) => {
       synchronizeStatus = status;
+    },
+    organizationType: (value: "shared" | "personal" | undefined) => {
+      organizationType = value;
+    },
+    supportsOrganizationType: (value: boolean) => {
+      supportsOrganizationType = value;
     },
     prepareReconnect: () => {
       synchronizeStatus = 401;
@@ -749,6 +760,58 @@ describe.skipIf(!enabled)(
         });
       });
     };
+    it.each(["shared", "personal"] as const)(
+      "restores the signed %s organization type for existing bindings without another login",
+      async (type) => {
+        await provision();
+        expect(
+          (
+            await system(() =>
+              prisma!.centralWorkspaceBinding.findUniqueOrThrow({ where: { id: workspaceId } }),
+            )
+          ).organizationType,
+        ).toBeNull();
+        server.organizationType(type);
+        await authority!.synchronize();
+        expect(
+          (
+            await system(() =>
+              prisma!.centralWorkspaceBinding.findUniqueOrThrow({ where: { id: workspaceId } }),
+            )
+          ).organizationType,
+        ).toBe(type);
+        server.organizationType(type === "shared" ? "personal" : "shared");
+        await expect(authority!.synchronize()).rejects.toThrow("Workspace authority unavailable");
+        expect(
+          (
+            await system(() =>
+              prisma!.centralWorkspaceBinding.findUniqueOrThrow({ where: { id: workspaceId } }),
+            )
+          ).organizationType,
+        ).toBe(type);
+      },
+    );
+    it("keeps older Accounts compatible and fills a legacy type after Accounts is upgraded", async () => {
+      server.supportsOrganizationType(false);
+      server.organizationType("shared");
+      await provision();
+      expect(
+        (
+          await system(() =>
+            prisma!.centralWorkspaceBinding.findUniqueOrThrow({ where: { id: workspaceId } }),
+          )
+        ).organizationType,
+      ).toBeNull();
+      server.supportsOrganizationType(true);
+      await authority!.synchronize();
+      expect(
+        (
+          await system(() =>
+            prisma!.centralWorkspaceBinding.findUniqueOrThrow({ where: { id: workspaceId } }),
+          )
+        ).organizationType,
+      ).toBe("shared");
+    });
     it("opens another legacy mapping on the same server only with an independent live grant", async () => {
       await provision();
       const projection = await authority!.synchronize();
