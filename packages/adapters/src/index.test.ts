@@ -175,6 +175,29 @@ describe("builtin tools", () => {
     for (const name of FLEET_TOOL_NAMES) expect(DELEGATION_TOOL_NAMES.has(name), name).toBe(true);
   });
 
+  it("offers group publication for direct chats, routines and other groups with a destination", () => {
+    const options = {
+      graphicalToolsAllowed: false,
+      groupId: null,
+      trigger: "user",
+      semanticMemoryEnabled: false,
+      messagingChannelRun: false,
+      hasOtherGroups: true,
+    };
+    const offersPost = (overrides: Partial<Parameters<typeof selectBuiltinToolsForRun>[0]>) =>
+      selectBuiltinToolsForRun({ ...options, ...overrides }).some(
+        (tool) => tool.name === "post_to_group",
+      );
+    expect(offersPost({})).toBe(true);
+    expect(offersPost({ trigger: "routine" })).toBe(true);
+    expect(offersPost({ groupId: "source-group" })).toBe(true);
+    expect(offersPost({ groupId: "source-group", hasOtherGroups: false })).toBe(false);
+    expect(offersPost({ trigger: "background_helper" })).toBe(false);
+    expect(offersPost({ trigger: "tickets" })).toBe(false);
+    expect(offersPost({ messagingChannelRun: true })).toBe(false);
+    expect(offersPost({ disabledBuiltinTools: ["post_to_group"] })).toBe(false);
+  });
+
   it("exposes the tools the executor actually applies", async () => {
     expect([...BUILTIN_TOOL_NAMES].sort()).toEqual(
       [...builtinAgentTools, ...agentConnectionTools].map((tool) => tool.name).sort(),

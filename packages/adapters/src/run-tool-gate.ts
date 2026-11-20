@@ -446,7 +446,7 @@ export async function gateToolCall(
           executionId,
           ctx.state.effects.consumedIds,
           batch && (batch.complete ? batch.actions : []),
-          (name === "message_bot" || name === "handoff_to_bot") &&
+          (name === "message_bot" || name === "handoff_to_bot" || name === "post_to_group") &&
             Array.isArray(args.files) &&
             args.files.length > 0,
         );

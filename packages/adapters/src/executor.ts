@@ -1664,6 +1664,33 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               );
           } else userComputer = "offline";
         }
+        const canPostToGroup =
+          !nonOwnerChatRun &&
+          run.trigger !== "created" &&
+          !isBackgroundRunTrigger(run.trigger) &&
+          !disabledBuiltinTools.has("post_to_group");
+        const [teammates, groupDirectory] = await Promise.all([
+          thread.groupId
+            ? []
+            : deps.prisma.bot.findMany({
+                where: {
+                  spaceId: run.spaceId,
+                  userId: run.userId,
+                  archivedAt: null,
+                  id: { not: bot.id },
+                  thread: { isNot: null },
+                },
+                select: { id: true, name: true, description: true },
+                orderBy: { createdAt: "asc" },
+                take: BOT_DIRECTORY_LIMIT,
+              }),
+          !thread.groupId || canPostToGroup
+            ? loadBotGroupDirectory(deps.prisma, run, {
+                currentGroupId: thread.groupId,
+                canPost: canPostToGroup,
+              })
+            : undefined,
+        ]);
         const builtins = [
           ...selectBuiltinToolsForRun({
             ticketBoardEnabled: deps.ticketBoardEnabled,
@@ -1672,6 +1699,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             graphicalToolsAllowed,
             pageBrowserAllowed,
             groupId: thread.groupId,
+            hasOtherGroups: Boolean(groupDirectory),
             trigger: run.trigger,
             semanticMemoryEnabled,
             semanticMemoryForgets: Boolean(semanticMemory?.forget),
@@ -2058,24 +2086,6 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             })
           : history;
         const runtimeHistory = [...historicalContext, ...historyWithImages];
-        // Without a roster a bot only knows the bots it spawned itself.
-        const [teammates, groupDirectory] = await Promise.all([
-          thread.groupId
-            ? []
-            : deps.prisma.bot.findMany({
-                where: {
-                  spaceId: run.spaceId,
-                  userId: run.userId,
-                  archivedAt: null,
-                  id: { not: bot.id },
-                  thread: { isNot: null },
-                },
-                select: { id: true, name: true, description: true },
-                orderBy: { createdAt: "asc" },
-                take: BOT_DIRECTORY_LIMIT,
-              }),
-          !thread.groupId ? loadBotGroupDirectory(deps.prisma, run) : undefined,
-        ]);
         const botDirectory =
           [renderBotDirectory(teammates), groupDirectory].filter(Boolean).join("\n\n") || undefined;
 

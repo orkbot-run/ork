@@ -14,6 +14,7 @@ import {
 import { messageBot } from "./bot-messages.js";
 import { endCallFromTool, requestUserCall } from "./call-request.js";
 import { handoffToGroupBot } from "./group-handoff.js";
+import { postToGroup } from "./group-post.js";
 import { isRunTainted } from "./run-context.js";
 import { publishMessage } from "./run-messages.js";
 import {
@@ -247,6 +248,36 @@ export const messagingTools: ToolHandlers = {
     );
     if (!result.ok) return call.finish({ error: result.error });
     return call.finish(result);
+  },
+  async post_to_group(ctx, call) {
+    const { deps, run } = ctx;
+    const { args, effectKey } = call;
+    if (
+      ctx.source.messagingChannelRun ||
+      isBackgroundRunTrigger(run.trigger) ||
+      run.trigger === "created"
+    )
+      return call.finish({ error: "Group publication is unavailable in this conversation." });
+    return call.finish(
+      await postToGroup(
+        deps,
+        run,
+        {
+          group: typeof args.group === "string" ? args.group : "",
+          message: typeof args.message === "string" ? redactSecrets(args.message, ctx.secrets) : "",
+          deliveryKey: effectKey,
+          files: args.files as string[] | undefined,
+        },
+        {
+          fileSource: {
+            computerId: ctx.computer.stored.id,
+            mode: ctx.computer.mode,
+            computer: () => ctx.computer.get("tool", call.name),
+            context: ctx.context,
+          },
+        },
+      ),
+    );
   },
   async handoff_to_bot(ctx, call) {
     const { deps, run, thread } = ctx;

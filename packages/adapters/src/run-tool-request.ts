@@ -383,7 +383,7 @@ export async function prepareToolRequest(
   const { name, executionId, nextApprovedTool } = request;
   if (name === "update_bot") request.args = normalizeOwnBotTarget(request.args, bot.id);
   let { args } = request;
-  if (name === "message_bot" || name === "handoff_to_bot") {
+  if (name === "message_bot" || name === "handoff_to_bot" || name === "post_to_group") {
     try {
       botFilePaths(args.files);
     } catch (error) {

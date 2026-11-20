@@ -137,6 +137,7 @@ export async function prepareBotFiles(
   requested: string[],
   deliveryKey: string | undefined,
   source: BotFileSource | undefined,
+  options?: { requireArtifacts?: boolean },
 ) {
   if (!requested.length) return undefined;
   if (
@@ -252,6 +253,7 @@ export async function prepareBotFiles(
       if (new Set(paths).size !== paths.length)
         throw new BotFileTransferError("files must not contain duplicate paths");
       const shared =
+        !options?.requireArtifacts &&
         target.computerId === snapshot.id &&
         source.mode === "team" &&
         (await withAbort(

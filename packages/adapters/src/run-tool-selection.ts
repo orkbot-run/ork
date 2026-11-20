@@ -58,6 +58,7 @@ export function selectBuiltinToolsForRun(options: {
   /** Page browser tools need a graphical computer (Chrome), not model vision. */
   pageBrowserAllowed?: boolean;
   groupId: string | null;
+  hasOtherGroups?: boolean;
   trigger: string;
   semanticMemoryEnabled: boolean;
   /** The configured provider can forget individual facts. */
@@ -107,6 +108,7 @@ export function selectBuiltinToolsForRun(options: {
       (!FLEET_TOOL_NAMES_SET.has(tool.name) ||
         (Boolean(options.fleetManagement) && ownerStartedRun)) &&
       (ownerStartedRun || (tool.name !== "update_preferences" && tool.name !== "feedback")) &&
+      (tool.name !== "post_to_group" || (options.hasOtherGroups && !options.messagingChannelRun)) &&
       (options.paymentWalletEnabled || !PURCHASE_TOOL_NAMES.has(tool.name)) &&
       (options.mediaImagesEnabled || tool.name !== "generate_image") &&
       (options.mediaVideoEnabled || tool.name !== "generate_video") &&
@@ -117,6 +119,7 @@ export function selectBuiltinToolsForRun(options: {
           "message_user",
           "message_bot",
           "handoff_to_bot",
+          "post_to_group",
           "message_agent",
           "generate_image",
           "generate_video",

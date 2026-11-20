@@ -154,6 +154,7 @@ export function renderBotDirectory(bots: readonly BotAddress[]): string | undefi
 /** Let bots address their groups from outside the group thread. */
 export function renderBotGroupDirectory(
   groups: readonly { id: string; name: string; members: readonly BotAddress[] }[],
+  options?: { currentGroupId: string | null; canPost: boolean },
 ): string | undefined {
   if (!groups.length) return undefined;
   return [
@@ -164,8 +165,16 @@ export function renderBotGroupDirectory(
         `- ${escapeDirectoryField(group.name)} (group_id: ${escapeDirectoryField(group.id)}): ${group.members.map((member) => `${escapeDirectoryField(member.name)} (id: ${escapeDirectoryField(member.id)})`).join(", ")}`,
     ),
     "</bot_groups>",
-    "Use message_bot to message a teammate directly, or handoff_to_bot with group_id and a member's bot_id to coordinate in a group. Choose the conversation that fits the work and follow the user's instructions. Send the relevant task or update, not unrelated chat history. Group replies appear in that group.",
-  ].join("\n");
+    options?.currentGroupId
+      ? undefined
+      : "Use message_bot to message a teammate directly, or handoff_to_bot with group_id and a member's bot_id to coordinate in a group. Group replies appear in that group.",
+    options?.canPost
+      ? "Use post_to_group to publish a requested report or update in a listed group. A post appears as your message without starting work for other bots."
+      : undefined,
+    "Choose the conversation that fits the work and follow the user's instructions. Share only information relevant to that conversation.",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /**

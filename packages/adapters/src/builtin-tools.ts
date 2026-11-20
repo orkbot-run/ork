@@ -116,6 +116,7 @@ export const DELEGATION_TOOL_NAMES = new Set<string>([
   "archive_bot",
   "handoff_to_bot",
   "message_bot",
+  "post_to_group",
   ...FLEET_TOOL_NAMES,
 ]);
 
@@ -1814,6 +1815,26 @@ export const builtinAgentTools: ConnectorTool[] = [
         },
       },
       required: ["message"],
+    },
+  },
+  {
+    name: "post_to_group",
+    description:
+      "Publish a report or update as your own message in another group you belong to. Use the group's name or ID from your groups list. Other bots receive no work from this post. Use your normal reply for the current group and handoff_to_bot to assign a next step to a teammate.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        group: { type: "string", description: "Exact group name or group ID." },
+        message: { type: "string", description: "Text to publish in the group." },
+        files: {
+          type: "array",
+          items: { type: "string", maxLength: 4096 },
+          maxItems: ATTACHMENT_MAX_COUNT,
+          description: "Optional files or directories from your computer to attach to the post.",
+        },
+      },
+      required: ["group", "message"],
+      additionalProperties: false,
     },
   },
   {

@@ -192,7 +192,7 @@ describe("turn checkpoint", () => {
   });
 });
 
-it.each(["message_bot", "handoff_to_bot"])(
+it.each(["message_bot", "handoff_to_bot", "post_to_group"])(
   "fences only unresolved direct/wrapped %s file calls",
   (name) => {
     for (const wrapped of [false, true]) {
