@@ -91,7 +91,7 @@ describe("routine mention batch endpoint", () => {
       select: { id: true },
     });
     expect(h.findRoutines).toHaveBeenCalledExactlyOnceWith({
-      where: { botId: { in: ids }, spaceId: actor.spaceId },
+      where: { botId: { in: ids }, spaceId: actor.spaceId, completedOneShotAt: null },
     });
   });
 

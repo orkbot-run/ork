@@ -303,6 +303,7 @@ const relayText = "Here's what Researcher found: done. i handled: peer-fold-alph
 async function openFoldedPeerReply(page: Page, name: string, testInfo: TestInfo) {
   await signup(page, `${name}-${Date.now()}@orkbot.test`, "password12", "Peer Fold");
   await completeOnboarding(page);
+  await rpc(page, "bots/update", { botId: activeBotId(page), replyMode: "chat" });
   await page.goto("/app");
   await page.waitForURL(/\/app\/[^/]+$/);
   const researcher = await rpc<{ id: string }>(page, "bots/create", {
@@ -385,8 +386,11 @@ test(
     await expect(page.getByRole("button", { name: "Send" })).toBeVisible({ timeout: 60_000 });
     await page.goto("/app");
     await chiefComposer.fill("message the bot named Researcher saying which city peer-fold-beta");
+    const sent = page.waitForResponse(
+      (response) => response.url().includes("/rpc/threads/send") && response.ok(),
+    );
     await chiefComposer.press("Enter");
-    await expect(page.getByRole("button", { name: "Send" })).toBeVisible({ timeout: 60_000 });
+    await sent;
     await page.goto(`/app/${researcher.id}`);
     const researcherTranscript = page.getByTestId("transcript");
     await expect(
@@ -396,7 +400,7 @@ test(
       researcherTranscript
         .getByTestId("peer-receipt-chip")
         .filter({ hasText: /Message from Chief|messages with Chief/ }),
-    ).toHaveCount(2);
+    ).toHaveText(["3 messages with Chief"]);
     await expect(
       researcherTranscript.getByText("i need a decision before i continue."),
     ).toHaveCount(0);

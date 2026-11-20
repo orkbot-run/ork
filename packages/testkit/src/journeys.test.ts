@@ -3356,7 +3356,12 @@ describeJourneys("required product journeys", () => {
     );
     await expect(
       prisma.routine.findUniqueOrThrow({ where: { id: routine.id } }),
-    ).resolves.toMatchObject({ active: false, nextRunAt: null, lastRunAt: null });
+    ).resolves.toMatchObject({
+      active: false,
+      nextRunAt: dueAt,
+      lastRunAt: null,
+      resumeOnRestore: true,
+    });
     await expect(prisma.run.count({ where: { routineId: routine.id } })).resolves.toBe(0);
   });
 

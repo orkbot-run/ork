@@ -51,6 +51,9 @@ export const FEEDBACK_DESCRIPTION_MAX_LENGTH = 2_000;
 
 /** Built-in tool names a bot may disable. Kept aligned with the adapter tool list. */
 export const BUILTIN_TOOL_NAMES = [
+  "meeting_list",
+  "meeting_read",
+  "meeting_schedule",
   "computer_observe",
   "computer_act",
   "browser_navigate",

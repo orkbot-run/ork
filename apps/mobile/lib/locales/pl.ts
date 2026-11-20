@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const PL_MESSAGES: Record<string, string> = {
+  No: "Nie",
+  Refresh: "Odśwież",
+  Yes: "Tak",
   "Open Ork Accounts": "Otwórz Ork Accounts",
   "Could not open Ork Accounts. Try again.":
     "Nie udało się otworzyć Ork Accounts. Spróbuj ponownie.",

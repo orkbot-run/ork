@@ -247,23 +247,25 @@ describeWithDatabase("Composio catalog reconciliation", () => {
     expect(JSON.stringify(partial)).not.toContain("fake-private");
   });
 
-  it("reconciles one scoped row per provider under concurrent catalog fetches", async () => {
+  it("reconciles only the authorized account in scope under concurrent catalog fetches", async () => {
     const ownerCookie = await signup(app, `owner-connections-${stamp}@orkbot.test`, "Owner");
     const otherCookie = await signup(app, `other-connections-${stamp}@orkbot.test`, "Other");
     const owner = await rpc<Actor>(app, ownerCookie, "me");
     const other = await rpc<Actor>(app, otherCookie, "me");
-    await connectRemote(composio, owner, "GMAIL");
+    const { state: activeRef } = await connectRemote(composio, owner, "GMAIL");
 
-    const first = await createConnection(owner, "GMAIL");
-    const duplicate = await createConnection(owner, "GMAIL");
+    const superseded = await createConnection(owner, "GMAIL", "pending-gmail-attempt");
+    const authorized = await createConnection(owner, "GMAIL", activeRef);
     const otherProvider = await createConnection(owner, "SLACK");
     const otherUser = await createConnection(
       { spaceId: owner.spaceId, userId: other.userId },
       "GMAIL",
+      activeRef,
     );
     const otherWorkspace = await createConnection(
       { spaceId: other.spaceId, userId: owner.userId },
       "GMAIL",
+      activeRef,
     );
 
     const catalogs = await Promise.all(
@@ -275,9 +277,9 @@ describeWithDatabase("Composio catalog reconciliation", () => {
       expect(catalog).toContainEqual(expect.objectContaining({ slug: "GMAIL", connected: true }));
     }
 
-    await expect(statuses([first.id, duplicate.id])).resolves.toEqual([
-      { id: first.id, status: "connected" },
-      { id: duplicate.id, status: "revoked" },
+    await expect(statuses([superseded.id, authorized.id])).resolves.toEqual([
+      { id: superseded.id, status: "revoked" },
+      { id: authorized.id, status: "connected" },
     ]);
     await expect(statuses([otherProvider.id, otherUser.id, otherWorkspace.id])).resolves.toEqual([
       { id: otherProvider.id, status: "pending" },
@@ -286,9 +288,9 @@ describeWithDatabase("Composio catalog reconciliation", () => {
     ]);
 
     await rpc(app, ownerCookie, "connections/catalog");
-    await expect(statuses([first.id, duplicate.id])).resolves.toEqual([
-      { id: first.id, status: "connected" },
-      { id: duplicate.id, status: "revoked" },
+    await expect(statuses([superseded.id, authorized.id])).resolves.toEqual([
+      { id: superseded.id, status: "revoked" },
+      { id: authorized.id, status: "connected" },
     ]);
   });
 
@@ -816,12 +818,13 @@ describeWithDatabase("Composio catalog reconciliation", () => {
     await rpc(app, cookie, "capabilities/remove", { id: install.id });
   });
 
-  async function createConnection(owner: Actor, provider: string) {
+  async function createConnection(owner: Actor, provider: string, providerRef?: string) {
     return asSystem(handles.prisma).connection.create({
       data: {
         spaceId: owner.spaceId,
         userId: owner.userId,
         provider,
+        providerRef,
         displayName: provider,
         status: "pending",
         createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, connectionOrdinal++)),
@@ -839,7 +842,7 @@ describeWithDatabase("Composio catalog reconciliation", () => {
 });
 
 async function connectRemote(composio: ComposioConnector, actor: Actor, provider: string) {
-  await composio.begin(
+  return composio.begin(
     { provider, redirectUrl: "http://127.0.0.1.invalid/callback" },
     {
       operationId: "connections-test",

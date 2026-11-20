@@ -260,7 +260,6 @@ describe("approval card arguments", () => {
       { to: "a@example.test", extra_recipients: ["e@example.test"] },
       "extra_recipients: e@example.test",
     ],
-    ["SLACK_SEND_MESSAGE", { channel: "C-OUTSIDE", text: "Hello" }, "channel: C-OUTSIDE"],
     [
       "GITHUB_CREATE_AN_ISSUE",
       { owner: "someone-else", repo: "public-repo", title: "Notes" },
@@ -273,6 +272,23 @@ describe("approval card arguments", () => {
     ],
   ])("shows where %s sends", (toolName, args, line) => {
     expect(detailOf(toolName, args).split("\n")).toContain(line);
+  });
+
+  it("shows the Slack destination and body in the editable outgoing draft", () => {
+    const block = buildApprovalAskBlock(
+      "effect-1",
+      "SLACK_SEND_MESSAGE",
+      { channel: "C-OUTSIDE", text: "Hello" },
+      [],
+    );
+    expect(block).toMatchObject({
+      kind: "ask",
+      outgoingDraft: { kind: "message", recipient: "C-OUTSIDE", body: "Hello" },
+      actions: [
+        { id: "allow", label: "Send" },
+        { id: "deny", label: "Deny" },
+      ],
+    });
   });
 
   it("puts every destination above long text, so none sits below a long body", () => {

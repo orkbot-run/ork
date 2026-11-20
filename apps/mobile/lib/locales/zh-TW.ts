@@ -3,6 +3,76 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  "Add a schedule or an HTTPS address to run this routine.":
+    "新增排程或 HTTPS 網址以執行此例行工作。",
+  "Ask an owner to resume your plan.": "請擁有者恢復您的方案。",
+  "Back to meetings": "返回會議列表",
+  "Blocked by the server administrator": "已遭伺服器管理員封鎖",
+  "Check every 5 to 1,440 minutes and track up to five fields.":
+    "每 5 至 1,440 分鐘檢查一次，最多追蹤五個欄位。",
+  "Check interval in minutes": "檢查間隔（分鐘）",
+  "Confirm deletion": "確認刪除",
+  "Confirm that all participants have been informed before continuing.":
+    "繼續前，請確認已告知所有參與者。",
+  "Could not submit this answer": "無法提交此答案",
+  "Daily limit: {dailyLimit}. Maximum meeting length: {maxMinutes} minutes.":
+    "每日上限：{dailyLimit}。單次會議最長：{maxMinutes} 分鐘。",
+  "Delete meeting": "刪除會議",
+  "Delete this meeting and its transcript? This cannot be undone.":
+    "刪除此會議及其逐字稿？此操作無法復原。",
+  "Enter a future date and time in YYYY-MM-DDTHH:mm format.":
+    "請以 YYYY-MM-DDTHH:mm 格式輸入未來的日期與時間。",
+  "Enter a message body": "請輸入訊息內容",
+  "Enter a public HTTPS address without credentials or a fragment":
+    "請輸入不含認證資訊或片段識別碼的公開 HTTPS 網址",
+  "Enter a recipient": "請輸入收件者",
+  "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link.":
+    "請輸入支援的 Google Meet、Zoom 或 Microsoft Teams 會議連結。",
+  "Fields that mark a change": "用來判斷變更的欄位",
+  "Fields to compare, e.g. id, modifiedTime (optional)":
+    "要比較的欄位，例如 id、modifiedTime（選填）",
+  "Google Meet, Zoom and Microsoft Teams links are supported.":
+    "支援 Google Meet、Zoom 和 Microsoft Teams 連結。",
+  "HTTPS address": "HTTPS 網址",
+  "I have informed all participants and have permission to record and transcribe this meeting.":
+    "我已告知所有參與者，並已取得錄製及轉錄此會議的許可。",
+  "Invite your bot to a meeting": "邀請您的機器人參加會議",
+  "Keep meeting": "保留會議",
+  "Leave empty to join now. Scheduled time uses your device time zone.":
+    "留空即可立即加入。預定時間使用您裝置的時區。",
+  "Manage billing to resume your plan.": "前往帳務管理以恢復您的方案。",
+  "Meeting link": "會議連結",
+  Meetings: "會議",
+  "Meetings are not available on this server.": "此伺服器不支援會議。",
+  "Message body": "訊息內容",
+  No: "否",
+  "No meetings yet.": "尚無會議。",
+  "No transcript yet. It will appear after processing.": "尚無逐字稿，處理完成後將顯示。",
+  "Payment failed. Ask an owner to update the payment method.": "付款失敗。請擁有者更新付款方式。",
+  "Payment failed. Update your payment method to resume your plan.":
+    "付款失敗。請更新付款方式以恢復您的方案。",
+  'Post "No changes" in chat': "在聊天中發布「無變更」",
+  "Recipient changed. Review the updated draft and press Send again.":
+    "收件者已變更。請檢查更新後的草稿，再次按下傳送。",
+  Refresh: "重新整理",
+  Reject: "拒絕",
+  "Remove change trigger": "移除變更觸發條件",
+  "Route requests only to endpoints marked as eligible for zero data retention.":
+    "僅將請求路由至標記為符合零資料保留條件的端點。",
+  "Schedule (optional)": "排程（選填）",
+  Subject: "主旨",
+  "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it.":
+    "機器人會以可見身分加入、錄製音訊並產生逐字稿。邀請前請告知每位參與者。",
+  "Title (optional)": "標題（選填）",
+  To: "收件者",
+  "Unchanged checks appear in history. You can also post them in chat.":
+    "沒有變更的檢查結果會顯示在歷史紀錄中。您也可以將其發布到聊天中。",
+  "Update payment method": "更新付款方式",
+  "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00":
+    "請使用包含時區的日期與時間，例如 2026-11-20T14:30:00+01:00",
+  "Watch an HTTPS address": "監測 HTTPS 網址",
+  Yes: "是",
+  "Zero data retention": "零資料保留",
   "Open Ork Accounts": "開啟 Ork Accounts",
   "Could not open Ork Accounts. Try again.": "無法開啟 Ork Accounts，請再試一次。",
   Checklist: "檢查清單",

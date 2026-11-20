@@ -20,6 +20,10 @@ msgstr ""
 msgid " (unread)"
 msgstr " (ungelesen)"
 
+#: src/pages/UsageSettingsPanel.tsx
+msgid "— = not reported"
+msgstr ""
+
 #. placeholder {0}: pinned.length
 #: src/pages/model-settings/space-bots-model.tsx
 msgid "{0, plural, one {# bot has its own model:} other {# bots have their own model:}}"
@@ -484,6 +488,10 @@ msgstr ""
 msgid "Account menu for {name}"
 msgstr "Kontomenü für {name}"
 
+#: src/components/AuditLog.tsx
+msgid "Action"
+msgstr ""
+
 #. placeholder {0}: bot.name
 #. placeholder {0}: group.spaceName
 #. placeholder {0}: page.title
@@ -510,6 +518,16 @@ msgstr ""
 #: src/pages/shell/sidebar-header.tsx
 msgid "Activity"
 msgstr "Aktivität"
+
+#: src/components/AuditLog.tsx
+#: src/pages/OrganizationSettingsPanel.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Activity log"
+msgstr ""
+
+#: src/components/AuditLog.tsx
+msgid "Actor"
+msgstr ""
 
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/SecretAskCard.tsx
@@ -557,7 +575,6 @@ msgid "Add a stdio command."
 msgstr "Gib einen stdio-Befehl ein."
 
 #: src/pages/RoutineEditor.tsx
-#: src/pages/shell/use-routine-editor.ts
 msgid "Add a trigger to run this routine."
 msgstr "Füge einen Auslöser für diese Routine hinzu."
 
@@ -715,7 +732,12 @@ msgstr "Die vollen {credit} fließen in die Modellnutzung."
 #: src/components/integrations/agent-access.tsx
 #: src/pages/Artifacts.tsx
 #: src/pages/shell/agent-import.tsx
+#: src/pages/UsageSettingsPanel.tsx
 msgid "All bots"
+msgstr ""
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "All models"
 msgstr ""
 
 #: src/components/integrations/space-availability.tsx
@@ -727,6 +749,7 @@ msgid "All statuses"
 msgstr ""
 
 #: src/pages/Artifacts.tsx
+#: src/pages/UsageSettingsPanel.tsx
 msgid "All time"
 msgstr ""
 
@@ -932,6 +955,10 @@ msgstr "Genehmige diesen Server, damit dein Agent seine Tools verwenden kann."
 msgid "Approved"
 msgstr ""
 
+#: src/components/OutgoingDraftCard.tsx
+msgid "Approved to send"
+msgstr ""
+
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Approving…"
 msgstr ""
@@ -966,6 +993,10 @@ msgstr ""
 msgid "Ask"
 msgstr "Fragen"
 
+#: src/components/BillingRecovery.tsx
+msgid "Ask an owner to resume your plan."
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask rules are inactive in Never ask."
 msgstr "Regeln mit \"Fragen\" sind im Modus \"Nie fragen\" inaktiv."
@@ -992,6 +1023,10 @@ msgstr "Datei anhängen"
 msgid "Attachment"
 msgstr "Anhang"
 
+#: src/components/AuditLog.tsx
+msgid "Audit events"
+msgstr ""
+
 #: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Authentication"
@@ -1013,12 +1048,6 @@ msgstr "Autorisierungsparameter (optional)"
 #: src/pages/McpServersOverlay.tsx
 msgid "Authorization server"
 msgstr "Autorisierungsserver"
-
-msgid "Waiting for authorization."
-msgstr "Autorisierung steht noch aus."
-
-msgid "Start over"
-msgstr "Neu starten"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Authorize"
@@ -1089,6 +1118,10 @@ msgstr "Zurück oder vorwärts"
 msgid "Back to chat"
 msgstr "Zurück zum Chat"
 
+#: src/pages/shell/meetings.tsx
+msgid "Back to meetings"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "Zurück zur Anmeldung"
@@ -1139,6 +1172,12 @@ msgstr "Blockieren"
 msgid "Blocked"
 msgstr ""
 
+#: src/pages/model-settings/providers-section.tsx
+#: src/pages/ServerAISettings.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Blocked by the server administrator"
+msgstr ""
+
 #: src/components/SidebarFooter.tsx
 #: src/pages/Board.tsx
 msgid "Board"
@@ -1153,6 +1192,7 @@ msgstr "Live-Desktop wird gestartet…"
 msgid "bot"
 msgstr "Bot"
 
+#: src/components/AuditLog.tsx
 #: src/lib/identity-display.ts
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/MessagingSettingsPanel.tsx
@@ -1160,6 +1200,7 @@ msgstr "Bot"
 #: src/pages/shell/avatar-studio-popover.tsx
 #: src/pages/shell/message-view.tsx
 #: src/pages/SpaceSearch.tsx
+#: src/pages/UsageSettingsPanel.tsx
 msgid "Bot"
 msgstr "Bot"
 
@@ -1226,6 +1267,14 @@ msgstr ""
 msgid "Built-in"
 msgstr "Integriert"
 
+#: src/pages/UsageSettingsPanel.tsx
+msgid "By bot"
+msgstr ""
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "By model"
+msgstr ""
+
 #: src/pages/shell/chat-header.tsx
 msgid "Call"
 msgstr "Anrufen"
@@ -1247,7 +1296,7 @@ msgstr "Ruft dich an…"
 msgid "Calling…"
 msgstr "Anruf läuft…"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/UsageSettingsPanel.tsx
 msgid "Calls"
 msgstr "Aufrufe"
 
@@ -1264,6 +1313,7 @@ msgstr "Kann keine Bilder lesen"
 #: src/components/ComputerMaintenanceActions.tsx
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/markdown-link-prompt.tsx
+#: src/components/McpFormCard.tsx
 #: src/components/ModelCredits.tsx
 #: src/components/PasskeySettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -1285,9 +1335,12 @@ msgstr "Kann keine Bilder lesen"
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
-#: src/components/McpFormCard.tsx
 msgid "Cancel"
 msgstr "Abbrechen"
+
+#: src/pages/shell/meetings.tsx
+msgid "Cancel meeting"
+msgstr ""
 
 #: src/pages/shell/agent-import.tsx
 msgid "Cancel new bot"
@@ -1302,6 +1355,7 @@ msgid "Cancel reply"
 msgstr "Antwort abbrechen"
 
 #: src/pages/BillingSettingsPanel.tsx
+#: src/pages/shell/meetings.tsx
 msgid "Canceled"
 msgstr ""
 
@@ -1310,8 +1364,8 @@ msgid "cancelled"
 msgstr "abgebrochen"
 
 #: src/components/AskCard.tsx
-#: src/pages/ActivityList.tsx
 #: src/components/McpFormCard.tsx
+#: src/pages/ActivityList.tsx
 msgid "Cancelled"
 msgstr "Abgebrochen"
 
@@ -1420,6 +1474,10 @@ msgstr "Prüfe den API-Schlüssel oder die Anmeldung und teste erneut."
 msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
 msgstr "Zuerst im Chat nachsehen. Das Markieren des Ergebnisses setzt ausstehende Nachrichten fort, ohne diese Nachricht erneut zu senden."
 
+#: src/components/McpFormCard.tsx
+msgid "Check the required fields and value formats."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
 msgstr "Prüfe die Server-URL und das Netzwerk und teste erneut."
@@ -1482,6 +1540,10 @@ msgstr ""
 #: src/components/ApprovalRuleToolPicker.tsx
 msgid "Choose a tool"
 msgstr "Werkzeug auswählen"
+
+#: src/components/McpFormCard.tsx
+msgid "Choose a value"
+msgstr ""
 
 #: src/pages/model-settings/workspace-ai-account-form.tsx
 msgid "Choose at least one model and enter valid limits."
@@ -1696,6 +1758,7 @@ msgid "Complete sign-in"
 msgstr "Anmeldung abschließen"
 
 #: src/components/SubagentCard.tsx
+#: src/pages/shell/meetings.tsx
 msgid "Completed"
 msgstr "Abgeschlossen"
 
@@ -1775,6 +1838,10 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 msgid "Confirm delete"
 msgstr "Löschen bestätigen"
+
+#: src/pages/shell/meetings.tsx
+msgid "Confirm deletion"
+msgstr ""
 
 #: src/components/ConfirmIdentityDialog.tsx
 msgid "Confirm it's you"
@@ -1906,6 +1973,10 @@ msgstr "Verbindung wird hergestellt…"
 msgid "Connection"
 msgstr "Verbindung"
 
+#: src/components/AuditLog.tsx
+msgid "Connection ID"
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Connection test failed."
 msgstr "Verbindungstest fehlgeschlagen."
@@ -1917,6 +1988,10 @@ msgstr "Die Verbindung zu {0} steht noch aus. Du kannst dieses Fenster schließe
 
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Connector"
+msgstr ""
+
+#: src/components/AuditLog.tsx
+msgid "Connector ID"
 msgstr ""
 
 #: src/components/vault/kinds.tsx
@@ -2007,9 +2082,9 @@ msgstr "Prompt kopieren"
 msgid "Copy rows"
 msgstr "Zeilen kopieren"
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Cost"
-msgstr "Kosten"
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Cost (USD)"
+msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -2229,6 +2304,10 @@ msgstr "{name} konnte nicht heruntergeladen werden. Versuche es erneut."
 msgid "Could not enable tools"
 msgstr ""
 
+#: src/components/AuditLog.tsx
+msgid "Could not export activity log. Try again."
+msgstr ""
+
 #: src/pages/AdminAccessPage.tsx
 msgid "Could not grant access"
 msgstr ""
@@ -2250,6 +2329,10 @@ msgstr "Laden fehlgeschlagen"
 
 #: src/pages/ActivityList.tsx
 msgid "Could not load activity"
+msgstr ""
+
+#: src/components/AuditLog.tsx
+msgid "Could not load activity log"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
@@ -2328,9 +2411,17 @@ msgstr "Dieser Chat konnte nicht geladen werden."
 msgid "Could not load this file."
 msgstr "Datei konnte nicht geladen werden."
 
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Could not load usage."
+msgstr ""
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Could not load voice settings"
 msgstr "Stimmeinstellungen konnten nicht geladen werden"
+
+#: src/pages/shell/use-routine-editor.ts
+msgid "Could not load webhook key"
+msgstr "Could not load webhook key"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not load workspace model settings."
@@ -2340,6 +2431,7 @@ msgstr ""
 msgid "Could not log out. Try again."
 msgstr "Abmelden fehlgeschlagen. Bitte erneut versuchen."
 
+#: src/components/BillingRecovery.tsx
 #: src/components/ModelCredits.tsx
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/Onboarding.tsx
@@ -2380,6 +2472,10 @@ msgstr "Server konnte nicht erreicht werden"
 #: src/pages/shell/agent-import.tsx
 msgid "Could not read these files"
 msgstr "Diese Dateien konnten nicht gelesen werden"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Could not refresh usage. Showing the last available numbers."
+msgstr ""
 
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Could not reject plugin"
@@ -2537,6 +2633,10 @@ msgstr "Zugangsdaten konnten nicht angezeigt werden"
 msgid "Could not sign in"
 msgstr ""
 
+#: src/lib/tts.ts
+msgid "Could not speak that."
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "OAuth konnte nicht gestartet werden"
@@ -2550,8 +2650,9 @@ msgid "Could not stop computer"
 msgstr ""
 
 #: src/components/AskCard.tsx
-#: src/components/SecretAskCard.tsx
 #: src/components/McpFormCard.tsx
+#: src/components/OutgoingDraftCard.tsx
+#: src/components/SecretAskCard.tsx
 msgid "Could not submit this answer"
 msgstr "Antwort konnte nicht gesendet werden"
 
@@ -2760,6 +2861,12 @@ msgstr "Bot-Avatar anpassen"
 msgid "Daily check-ins on unfinished work"
 msgstr "Tägliche Rückfragen zu offenen Aufgaben"
 
+#. placeholder {0}: status.data.dailyLimit
+#. placeholder {1}: status.data.maxMinutes
+#: src/pages/shell/meetings.tsx
+msgid "Daily limit: {0}. Maximum meeting length: {1} minutes."
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 msgid "Dark"
@@ -2768,6 +2875,10 @@ msgstr "Dunkel"
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Data"
+msgstr ""
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Date"
 msgstr ""
 
 #: src/lib/billing.ts
@@ -2784,10 +2895,14 @@ msgid "days"
 msgstr "Tage"
 
 #: src/components/call/IncomingCall.tsx
-#: src/pages/MessagingSettingsPanel.tsx
 #: src/components/McpFormCard.tsx
+#: src/pages/MessagingSettingsPanel.tsx
 msgid "Decline"
 msgstr "Ablehnen"
+
+#: src/components/McpFormCard.tsx
+msgid "Declined"
+msgstr ""
 
 #: src/components/ComputerProviderSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -2867,6 +2982,10 @@ msgstr "Konto löschen"
 msgid "Delete group"
 msgstr "Gruppe löschen"
 
+#: src/pages/shell/meetings.tsx
+msgid "Delete meeting"
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Delete memories too"
 msgstr "Erinnerungen ebenfalls löschen"
@@ -2884,6 +3003,10 @@ msgstr "Abschnitt löschen"
 msgid "Delete space"
 msgstr ""
 
+#: src/pages/shell/meetings.tsx
+msgid "Delete this meeting and its transcript? This cannot be undone."
+msgstr ""
+
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Delete this Space's credentials?"
 msgstr "Die Zugangsdaten dieses Bereichs löschen?"
@@ -2891,6 +3014,14 @@ msgstr "Die Zugangsdaten dieses Bereichs löschen?"
 #: src/pages/shell/message-view.tsx
 msgid "deleted"
 msgstr "gelöscht"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Deleted"
+msgstr ""
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Deleted bot"
+msgstr ""
 
 #: src/components/PasskeySettings.tsx
 #: src/pages/Artifacts.tsx
@@ -2904,6 +3035,8 @@ msgid "Deletion code"
 msgstr "Löschcode"
 
 #: src/components/AskCard.tsx
+#: src/components/AuditLog.tsx
+#: src/components/OutgoingDraftCard.tsx
 msgid "Denied"
 msgstr "Abgelehnt"
 
@@ -3186,9 +3319,25 @@ msgstr ""
 msgid "Enjoying Ork?"
 msgstr ""
 
+#: src/components/OutgoingDraftCard.tsx
+msgid "Enter a message body"
+msgstr ""
+
 #: src/lib/user-error.ts
 msgid "Enter a password"
 msgstr "Gib ein Passwort ein"
+
+#: src/pages/RoutineEditor.tsx
+msgid "Enter a public HTTPS address without credentials or a fragment"
+msgstr ""
+
+#: src/components/OutgoingDraftCard.tsx
+msgid "Enter a recipient"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link."
+msgstr ""
 
 #: src/pages/model-settings/workspace-ai-account-form.tsx
 msgid "Enter a valid budget."
@@ -3318,6 +3467,10 @@ msgstr "Tabelle erweitern"
 msgid "expired"
 msgstr "abgelaufen"
 
+#: src/components/McpFormCard.tsx
+msgid "Expired"
+msgstr ""
+
 #: src/components/vault/VaultItemDetail.tsx
 msgid "Expires"
 msgstr ""
@@ -3331,6 +3484,7 @@ msgid "Expiry"
 msgstr ""
 
 #: src/components/AccountDataSettings.tsx
+#: src/components/AuditLog.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "Exportieren"
@@ -3342,6 +3496,10 @@ msgstr "Daten exportieren"
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Export this week's list from the CRM and drop it in the shared folder"
 msgstr "Exportiere die Liste dieser Woche aus dem CRM und lege sie im freigegebenen Ordner ab"
+
+#: src/components/AuditLog.tsx
+msgid "Exporting…"
+msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/MessagingSettingsPanel.tsx
@@ -3363,6 +3521,7 @@ msgstr "fehlgeschlagen"
 
 #: src/components/SubagentCard.tsx
 #: src/pages/ActivityList.tsx
+#: src/pages/shell/meetings.tsx
 msgid "Failed"
 msgstr "Fehlgeschlagen"
 
@@ -3378,6 +3537,10 @@ msgstr "Stoppen fehlgeschlagen"
 #: src/lib/browser-notifications.ts
 msgid "Failed."
 msgstr "Fehlgeschlagen."
+
+#: src/components/AuditLog.tsx
+msgid "Failure"
+msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
@@ -3561,6 +3724,10 @@ msgstr "Zur Startseite"
 msgid "Go to bot"
 msgstr "Zu Bot wechseln"
 
+#: src/pages/shell/meetings.tsx
+msgid "Google Meet, Zoom and Microsoft Teams links are supported."
+msgstr ""
+
 #: src/pages/AdminAccessPage.tsx
 msgid "Grant"
 msgstr ""
@@ -3700,6 +3867,14 @@ msgstr "So wird geprüft"
 msgid "How will you use Ork?"
 msgstr ""
 
+#: src/pages/RoutineEditor.tsx
+msgid "HTTPS address"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "I have informed all participants and have permission to record and transcribe this meeting."
+msgstr ""
+
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "Ich bin fertig"
@@ -3771,9 +3946,9 @@ msgstr "Eingehender Anruf"
 msgid "Inherit default"
 msgstr "Standard übernehmen"
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Input"
-msgstr "Eingabe"
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Input tokens"
+msgstr ""
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Inputs"
@@ -3867,6 +4042,14 @@ msgstr "Freunde einladen"
 msgid "Invite link"
 msgstr "Einladungslink"
 
+#: src/pages/shell/meetings.tsx
+msgid "Invite your bot to a meeting"
+msgstr ""
+
+#: src/pages/shell/meeting-link-suggestion.tsx
+msgid "Invite your bot to this meeting?"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -3892,6 +4075,14 @@ msgstr "Seine Unterhaltung, Dateien und Routinen werden dauerhaft gelöscht. Von
 msgid "Its shared link stops working and its cards in chat show it as deleted. This can't be undone."
 msgstr "Der geteilte Link funktioniert dann nicht mehr und die Karten im Chat zeigen sie als gelöscht. Das lässt sich nicht rückgängig machen."
 
+#: src/pages/shell/meetings.tsx
+msgid "Join meeting"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Joining"
+msgstr ""
+
 #: src/pages/shell/transcript.tsx
 msgid "Jump to latest"
 msgstr "Zur neuesten Nachricht springen"
@@ -3903,6 +4094,10 @@ msgstr "Zur beantworteten Nachricht springen: {excerpt}"
 #: src/lib/relative-time.ts
 msgid "just now"
 msgstr "gerade eben"
+
+#: src/pages/shell/meetings.tsx
+msgid "Keep meeting"
+msgstr ""
 
 #: src/pages/shell/dialogs.tsx
 msgid "Keep memories"
@@ -3934,6 +4129,14 @@ msgstr "Bezeichnung"
 msgid "Language"
 msgstr "Sprache"
 
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Last 30 days"
+msgstr ""
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Last 7 days"
+msgstr ""
+
 #. placeholder {0}: new Date(state.checkedAt).toLocaleString()
 #: src/pages/RoutineEditor.tsx
 msgid "Last check {0}: changed"
@@ -3950,6 +4153,10 @@ msgstr ""
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Leave"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Leave empty to join now. Scheduled time uses your device time zone."
 msgstr ""
 
 #: src/components/ComputerDeviceSettings.tsx
@@ -4001,6 +4208,7 @@ msgstr "Hört zu…"
 msgid "Load earlier messages"
 msgstr "Frühere Nachrichten laden"
 
+#: src/components/AuditLog.tsx
 #: src/pages/Artifacts.tsx
 msgid "Load more"
 msgstr ""
@@ -4012,6 +4220,10 @@ msgstr "Ältere Ausführungen laden"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Load web images automatically"
 msgstr "Webbilder automatisch laden"
+
+#: src/components/AuditLog.tsx
+msgid "Loading activity log…"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "Loading activity…"
@@ -4043,6 +4255,10 @@ msgstr ""
 msgid "Loading preview…"
 msgstr "Vorschau wird geladen…"
 
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Loading usage"
+msgstr ""
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Loading voice providers…"
 msgstr "Stimmanbieter werden geladen…"
@@ -4052,6 +4268,7 @@ msgstr "Stimmanbieter werden geladen…"
 msgid "Loading workspace model…"
 msgstr ""
 
+#: src/components/AuditLog.tsx
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PageLoading.tsx
@@ -4062,7 +4279,9 @@ msgstr ""
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/RoutineRunHistory.tsx
+#: src/pages/shell/meetings.tsx
 #: src/pages/shell/transcript.tsx
+#: src/pages/shell/workspace-opening.tsx
 msgid "Loading…"
 msgstr "Wird geladen…"
 
@@ -4121,9 +4340,14 @@ msgstr "Verwalten"
 msgid "Manage {0}"
 msgstr "{0} verwalten"
 
+#: src/components/BillingRecovery.tsx
 #: src/components/ModelCredits.tsx
 #: src/pages/Paywall.tsx
 msgid "Manage billing"
+msgstr ""
+
+#: src/components/BillingRecovery.tsx
+msgid "Manage billing to resume your plan."
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -4218,6 +4442,20 @@ msgstr "Mittel"
 msgid "Medium"
 msgstr "Mittel"
 
+#: src/pages/shell/meetings.tsx
+msgid "Meeting link"
+msgstr ""
+
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/meeting-link-suggestion.tsx
+#: src/pages/shell/meetings.tsx
+msgid "Meetings"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Meetings are not available on this server."
+msgstr ""
+
 #: src/lib/identity-display.ts
 msgid "Member"
 msgstr "Mitglied"
@@ -4280,6 +4518,10 @@ msgstr "Nachricht"
 #: src/pages/shell/composer.tsx
 msgid "Message {activeName}"
 msgstr "Nachricht an {activeName}"
+
+#: src/components/OutgoingDraftCard.tsx
+msgid "Message body"
+msgstr ""
 
 #: src/pages/shell/composer.tsx
 msgid "Message composer"
@@ -4361,12 +4603,12 @@ msgstr "Verpasster Anruf"
 msgid "Mode"
 msgstr "Modus"
 
-#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/UsageSettingsPanel.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Model"
 msgstr "Modell"
@@ -4662,6 +4904,14 @@ msgstr "Nächste Seite"
 msgid "Next settings sections"
 msgstr ""
 
+#: src/components/McpFormCard.tsx
+msgid "No"
+msgstr ""
+
+#: src/components/AuditLog.tsx
+msgid "No activity yet"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
 msgstr "Keine Apps entsprechen deiner Suche."
@@ -4688,8 +4938,8 @@ msgid "No bots match"
 msgstr ""
 
 #: src/components/AskCard.tsx
+#: src/components/OutgoingDraftCard.tsx
 #: src/components/SecretAskCard.tsx
-#: src/components/McpFormCard.tsx
 msgid "No longer active"
 msgstr "Nicht mehr aktiv"
 
@@ -4710,6 +4960,10 @@ msgstr ""
 #: src/pages/shell/chat-model-picker.tsx
 msgid "No matching models"
 msgstr "Keine passenden Modelle"
+
+#: src/pages/shell/meetings.tsx
+msgid "No meetings yet."
+msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "No members yet"
@@ -4782,9 +5036,21 @@ msgstr ""
 msgid "No tools found."
 msgstr "Keine Tools gefunden."
 
+#: src/pages/shell/meetings.tsx
+msgid "No transcript yet. It will appear after processing."
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr ""
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "No usage in this period. Try another period or filter."
+msgstr ""
+
+#: src/pages/shell/use-routine-editor.ts
+msgid "No webhook key configured"
+msgstr "No webhook key configured"
 
 #: src/components/vault/VaultItemEditor.tsx
 msgid "None"
@@ -4989,11 +5255,11 @@ msgstr ""
 msgid "Opens your browser's print dialog. Choose Save as PDF as the destination."
 msgstr "Öffnet den Druckdialog deines Browsers. Wähle „Als PDF speichern“ als Ziel."
 
+#: src/components/McpFormCard.tsx
 #: src/components/SignupSurvey.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
-#: src/components/McpFormCard.tsx
 msgid "Optional"
 msgstr "Optional"
 
@@ -5024,6 +5290,10 @@ msgstr ""
 msgid "Organization models"
 msgstr ""
 
+#: src/pages/OrganizationSettingsPanel.tsx
+msgid "Organization options"
+msgstr ""
+
 #: src/components/SidebarFooter.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Organization settings"
@@ -5050,9 +5320,17 @@ msgstr "Anderes Modell…"
 msgid "Other tool"
 msgstr "Anderes Tool"
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Output"
-msgstr "Ausgabe"
+#: src/components/AuditLog.tsx
+msgid "Outcome"
+msgstr ""
+
+#: src/components/OutgoingDraftCard.tsx
+msgid "Outgoing draft"
+msgstr ""
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Output tokens"
+msgstr ""
 
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
@@ -5176,13 +5454,25 @@ msgstr "Füge deinen API-Schlüssel ein und teste erneut."
 msgid "Paused"
 msgstr ""
 
+#: src/components/BillingRecovery.tsx
+msgid "Payment failed. Ask an owner to update the payment method."
+msgstr ""
+
+#: src/components/BillingRecovery.tsx
+msgid "Payment failed. Update your payment method to resume your plan."
+msgstr ""
+
+#: src/components/McpFormCard.tsx
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/RoutineRunHistory.tsx
-#: src/components/McpFormCard.tsx
 msgid "Pending"
+msgstr ""
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Period"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -5308,6 +5598,7 @@ msgstr ""
 msgid "Preview {0}"
 msgstr "Vorschau von {0}"
 
+#: src/components/ArtifactFileCard.tsx
 #: src/pages/Artifacts.tsx
 msgid "Preview isn't available for this file type — download it to view it."
 msgstr ""
@@ -5338,6 +5629,10 @@ msgstr "Privat"
 
 #: src/pages/shell/bot-picker.tsx
 msgid "Private workspace with its own bots and groups."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Processing"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -5417,6 +5712,10 @@ msgstr ""
 msgid "Recent"
 msgstr "Kürzlich"
 
+#: src/components/OutgoingDraftCard.tsx
+msgid "Recipient changed. Review the updated draft and press Send again."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Recommended"
 msgstr ""
@@ -5439,6 +5738,10 @@ msgstr "Verbindung wird wiederhergestellt"
 
 #: src/components/ServerUpdates.tsx
 msgid "Reconnecting…"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Recording"
 msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
@@ -5508,6 +5811,7 @@ msgstr "Weiterleitungs-URI"
 #: src/App.tsx
 #: src/components/ErrorBoundary.tsx
 #: src/components/ModelCredits.tsx
+#: src/pages/shell/meetings.tsx
 msgid "Refresh"
 msgstr "Aktualisieren"
 
@@ -5531,6 +5835,7 @@ msgstr ""
 msgid "Registration is closed"
 msgstr "Registrierung ist geschlossen"
 
+#: src/components/OutgoingDraftCard.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Reject"
 msgstr ""
@@ -5725,6 +6030,10 @@ msgstr "Fordere einen neuen Code an"
 msgid "Requests"
 msgstr ""
 
+#: src/components/McpFormCard.tsx
+msgid "Required"
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Research & writing"
 msgstr ""
@@ -5806,6 +6115,7 @@ msgid "Restoring your workspace"
 msgstr ""
 
 #: src/components/AccountAccess.tsx
+#: src/components/AuditLog.tsx
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/ModelSetupGate.tsx
@@ -5822,6 +6132,7 @@ msgstr ""
 #: src/pages/ServerAISettings.tsx
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/SpaceSettingOverrides.tsx
+#: src/pages/UsageSettingsPanel.tsx
 msgid "Retry"
 msgstr "Erneut versuchen"
 
@@ -5844,6 +6155,10 @@ msgstr "Zurück zum Anruf mit {0}"
 msgid "Return to Ork"
 msgstr "Zurück zu Ork"
 
+#: src/pages/RoutineEditor.tsx
+msgid "Reveal key"
+msgstr "Reveal key"
+
 #: src/lib/user-error.ts
 msgid "Review data sharing before continuing."
 msgstr "Prüfe die Datenfreigabe, bevor du fortfährst."
@@ -5852,9 +6167,17 @@ msgstr "Prüfe die Datenfreigabe, bevor du fortfährst."
 msgid "Review delivery"
 msgstr "Zustellung prüfen"
 
+#: src/pages/shell/meeting-link-suggestion.tsx
+msgid "Review meeting invitation"
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "Prüfe die Anbietereinstellungen und teste erneut."
+
+#: src/pages/shell/meeting-link-suggestion.tsx
+msgid "Review the link and participant consent before inviting your bot."
+msgstr ""
 
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/MessagingSettingsPanel.tsx
@@ -5871,6 +6194,13 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Rotate key"
+msgstr ""
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Route requests only to endpoints marked as eligible for zero data retention."
 msgstr ""
 
 #: src/lib/identity-display.ts
@@ -5935,9 +6265,17 @@ msgstr "Läuft"
 msgid "Running…"
 msgstr "Wird ausgeführt…"
 
-#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/UsageSettingsPanel.tsx
 msgid "Runs"
 msgstr "Ausführungen"
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Runs over time"
+msgstr ""
+
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Runs over time. Exact values are available in the timeline data table."
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Runs when this bot receives a verified message from this provider."
@@ -6011,8 +6349,8 @@ msgid "Saved."
 msgstr "Gespeichert."
 
 #: src/pages/RoutineEditor.tsx
-msgid "Saved. Rotate to reveal."
-msgstr ""
+msgid "Saved. Reveal key to view."
+msgstr "Saved. Reveal key to view."
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Saving your workspace"
@@ -6032,6 +6370,7 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/shell/meetings.tsx
 msgid "Saving…"
 msgstr "Wird gespeichert…"
 
@@ -6039,9 +6378,21 @@ msgstr "Wird gespeichert…"
 msgid "Say yes or no, or answer in a sentence."
 msgstr "Antworte mit Ja oder Nein oder in einem Satz."
 
+#: src/pages/shell/meetings.tsx
+msgid "Schedule (optional)"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Schedule delayed"
 msgstr "Ausführung verzögert"
+
+#: src/pages/shell/meetings.tsx
+msgid "Schedule meeting"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Scheduled"
+msgstr ""
 
 #: src/components/ModelCredits.tsx
 msgid "Scheduled routines"
@@ -6158,6 +6509,7 @@ msgstr "Bot auswählen"
 msgid "Self-hosted"
 msgstr "Selbst gehostet"
 
+#: src/components/OutgoingDraftCard.tsx
 #: src/pages/shell/composer.tsx
 msgid "Send"
 msgstr "Senden"
@@ -6203,10 +6555,11 @@ msgid "Sending to group…"
 msgstr ""
 
 #: src/components/AskCard.tsx
+#: src/components/McpFormCard.tsx
+#: src/components/OutgoingDraftCard.tsx
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/shell/transcript.tsx
-#: src/components/McpFormCard.tsx
 msgid "Sending…"
 msgstr "Wird gesendet…"
 
@@ -6553,6 +6906,10 @@ msgstr ""
 msgid "Start {trialDays}-day free trial"
 msgstr "Kostenlose {trialDays}-Tage-Testphase starten"
 
+#: src/pages/shell/message-cards.tsx
+msgid "Start over"
+msgstr "Neu starten"
+
 #: src/components/ModelCredits.tsx
 msgid "Start plan"
 msgstr "Plan starten"
@@ -6627,6 +6984,10 @@ msgstr "{name} stoppen"
 msgid "Stop all"
 msgstr "Alle stoppen"
 
+#: src/pages/shell/meetings.tsx
+msgid "Stop and leave"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"
 msgstr ""
@@ -6666,9 +7027,13 @@ msgstr "Antworten streamen"
 msgid "subagent"
 msgstr "Subagent"
 
+#: src/components/OutgoingDraftCard.tsx
+msgid "Subject"
+msgstr ""
+
+#: src/components/McpFormCard.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
-#: src/components/McpFormCard.tsx
 msgid "Submit"
 msgstr "Absenden"
 
@@ -6699,6 +7064,10 @@ msgstr "Mit eigener KI abonnieren"
 
 #: src/pages/Paywall.tsx
 msgid "Subscription required"
+msgstr ""
+
+#: src/components/AuditLog.tsx
+msgid "Success"
 msgstr ""
 
 #: src/lib/cron.ts
@@ -6734,6 +7103,7 @@ msgstr "Zu jährlich wechseln?"
 msgid "Switching…"
 msgstr "Wird gewechselt…"
 
+#: src/components/AuditLog.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 msgid "System"
@@ -6748,6 +7118,7 @@ msgstr "Tabelle"
 msgid "Take control"
 msgstr "Kontrolle übernehmen"
 
+#: src/components/AuditLog.tsx
 #: src/components/ComputerProviderSettings.tsx
 msgid "Target"
 msgstr ""
@@ -6805,6 +7176,10 @@ msgstr "Wird getestet…"
 msgid "The bot can use the file but won't see the picture."
 msgstr "Der Bot kann die Datei nutzen, sieht das Bild aber nicht."
 
+#: src/pages/shell/meetings.tsx
+msgid "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it."
+msgstr ""
+
 #: src/lib/dictation.ts
 msgid "The browser keeps dropping the microphone. Start dictation again to retry."
 msgstr ""
@@ -6813,6 +7188,11 @@ msgstr ""
 #: src/lib/run-error.ts
 msgid "The computer service cannot start computers for this account."
 msgstr "Der Computerdienst kann für dieses Konto keine Computer starten."
+
+#. js-lingui-explicit-id
+#: src/lib/run-error.ts
+msgid "The computer stopped responding. Try again."
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
@@ -7055,11 +7435,20 @@ msgstr ""
 msgid "Thursday"
 msgstr "Donnerstag"
 
+#: src/components/AuditLog.tsx
+msgid "Time"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"
 msgstr "Uhrzeit"
 
+#: src/pages/UsageSettingsPanel.tsx
+msgid "Timeline data"
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/UsageSettingsPanel.tsx
 msgid "Timezone"
 msgstr ""
 
@@ -7071,6 +7460,11 @@ msgstr "Der Zeitplan kann abweichen"
 msgid "Title"
 msgstr "Titel"
 
+#: src/pages/shell/meetings.tsx
+msgid "Title (optional)"
+msgstr ""
+
+#: src/components/OutgoingDraftCard.tsx
 #: src/pages/ActivityList.tsx
 msgid "To"
 msgstr ""
@@ -7090,16 +7484,13 @@ msgstr "An:"
 
 #: src/pages/Artifacts.tsx
 #: src/pages/shell/chat-context.tsx
+#: src/pages/UsageSettingsPanel.tsx
 msgid "Today"
 msgstr "Heute"
 
 #: src/pages/shell/keyboard-shortcuts-dialog.tsx
 msgid "Toggle sidebar"
 msgstr "Seitenleiste ein-/ausblenden"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Tokens"
-msgstr "Token"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Tomorrow at 9"
@@ -7136,6 +7527,7 @@ msgid "Transcribing…"
 msgstr "Wird transkribiert…"
 
 #: src/components/call/CallCard.tsx
+#: src/pages/shell/meetings.tsx
 msgid "Transcript"
 msgstr "Transkript"
 
@@ -7211,11 +7603,16 @@ msgstr "Gib deine Antwort ein"
 
 #: src/pages/BotContextMenu.tsx
 #: src/pages/Shell.tsx
+#: src/pages/UsageSettingsPanel.tsx
 msgid "Unassigned"
 msgstr "Nicht zugewiesen"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Unavailable"
+msgstr ""
+
+#: src/pages/RoutineEditor.tsx
+msgid "Unchanged checks appear in history. You can also post them in chat."
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -7288,6 +7685,10 @@ msgstr ""
 
 #: src/components/ProtocolRecovery.tsx
 msgid "Update Ork to connect to this server."
+msgstr ""
+
+#: src/components/BillingRecovery.tsx
+msgid "Update payment method"
 msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
@@ -7366,6 +7767,10 @@ msgstr "{hostLabel} verwenden"
 msgid "Use {oauthEnvReference} for the access token."
 msgstr "Verwende {oauthEnvReference} für das Zugriffstoken."
 
+#: src/components/McpFormCard.tsx
+msgid "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00"
+msgstr ""
+
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
 msgid "Use a found model"
@@ -7413,6 +7818,10 @@ msgstr ""
 
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 msgid "Use up to 512 letters, digits, _ or -."
+msgstr ""
+
+#: src/components/AuditLog.tsx
+msgid "User"
 msgstr ""
 
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
@@ -7518,6 +7927,10 @@ msgstr "Warte kurz und teste erneut."
 msgid "Waiting for an organization administrator to set up models."
 msgstr ""
 
+#: src/pages/shell/message-cards.tsx
+msgid "Waiting for authorization."
+msgstr "Autorisierung steht noch aus."
+
 #: src/components/ServerUpdates.tsx
 msgid "Waiting for update status…"
 msgstr ""
@@ -7546,6 +7959,11 @@ msgstr "{0} aufwecken"
 
 #: src/pages/settings-nav.ts
 msgid "Wallet"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Watching an HTTPS address requires approval."
 msgstr ""
 
 #: src/components/ModelCredits.tsx
@@ -7711,6 +8129,10 @@ msgstr ""
 msgid "Yearly"
 msgstr "Jährlich"
 
+#: src/components/McpFormCard.tsx
+msgid "Yes"
+msgstr ""
+
 #: src/pages/shell/chat-context.tsx
 #: src/pages/shell/sidebar-roster.tsx
 msgid "Yesterday"
@@ -7852,170 +8274,13 @@ msgstr "Dein Stimmanbieter hat kein Guthaben mehr."
 msgid "Your voice provider key was rejected."
 msgstr "Der Schlüssel deines Stimmanbieters wurde abgelehnt."
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Zero data retention"
+msgstr ""
+
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
-msgstr ""
-
-#: src/components/McpFormCard.tsx
-msgid "Check the required fields and value formats."
-msgstr ""
-
-#: src/components/McpFormCard.tsx
-msgid "Choose a value"
-msgstr ""
-
-#: src/components/McpFormCard.tsx
-msgid "Declined"
-msgstr ""
-
-#: src/components/McpFormCard.tsx
-msgid "Expired"
-msgstr ""
-
-#: src/components/McpFormCard.tsx
-msgid "No"
-msgstr ""
-
-#: src/components/McpFormCard.tsx
-msgid "Required"
-msgstr ""
-
-#: src/components/McpFormCard.tsx
-msgid "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00"
-msgstr ""
-
-#: src/components/McpFormCard.tsx
-msgid "Yes"
-msgstr ""
-
-msgid "Reveal key"
-msgstr "Reveal key"
-
-msgid "Saved. Reveal key to view."
-msgstr "Saved. Reveal key to view."
-
-msgid "Could not load webhook key"
-msgstr "Could not load webhook key"
-
-msgid "No webhook key configured"
-msgstr "No webhook key configured"
-
-#: src/pages/shell/meetings.tsx
-msgid "Back to meetings"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Cancel meeting"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Confirm deletion"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Daily limit: {0}. Maximum meeting length: {1} minutes."
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Delete meeting"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Delete this meeting and its transcript? This cannot be undone."
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link."
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Google Meet, Zoom and Microsoft Teams links are supported."
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "I have informed all participants and have permission to record and transcribe this meeting."
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Invite your bot to a meeting"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Invite your bot to this meeting?"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Join meeting"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Joining"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Keep meeting"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Leave empty to join now. Scheduled time uses your device time zone."
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Meeting link"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Meetings"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Meetings are not available on this server."
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "No meetings yet."
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "No transcript yet. It will appear after processing."
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Processing"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Recording"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Review meeting invitation"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Review the link and participant consent before inviting your bot."
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Schedule (optional)"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Schedule meeting"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Scheduled"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Stop and leave"
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it."
-msgstr ""
-
-#: src/pages/shell/meetings.tsx
-msgid "Title (optional)"
 msgstr ""

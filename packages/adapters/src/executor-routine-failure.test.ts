@@ -842,7 +842,12 @@ describe("running a routine retry", () => {
       await executor.retryRoutineRun("run-1");
 
       expect(tx.routine.updateMany).toHaveBeenCalledWith({
-        where: { id: "routine-1", active: true, bot: { archivedAt: null } },
+        where: {
+          id: "routine-1",
+          active: true,
+          completedOneShotAt: null,
+          bot: { archivedAt: null },
+        },
         data: { active: true },
       });
       expect(tx.task.create).not.toHaveBeenCalled();
@@ -966,6 +971,7 @@ describe("running a routine retry", () => {
       where: {
         id: "routine-1",
         active: false,
+        completedOneShotAt: null,
         crons: { equals: ["@once"] },
         bot: { archivedAt: null },
       },

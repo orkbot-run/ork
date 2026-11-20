@@ -668,7 +668,10 @@ describe("reconcileStuckWork", () => {
     const prisma = {
       run: {
         findMany: vi.fn(async (args: { where?: unknown }) => {
-          if (JSON.stringify(args.where).includes("waiting_takeover")) {
+          if (
+            JSON.stringify(args.where).includes('"status":"waiting_takeover"') &&
+            JSON.stringify(args.where).includes('"updatedAt":{"lte":')
+          ) {
             throw new Error("stuck down");
           }
           return [];

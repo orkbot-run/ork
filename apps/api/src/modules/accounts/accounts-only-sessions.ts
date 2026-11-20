@@ -15,7 +15,8 @@ export async function expireNonOidcSessions(
     prisma.$transaction(async (tx) => {
       const expiredSessions = await tx.$executeRaw`
         UPDATE "session" AS session
-        SET "expiresAt" = date_trunc('milliseconds', NOW()), "updatedAt" = NOW()
+        -- Revocation is immediate even when the application clock lags behind PostgreSQL.
+        SET "expiresAt" = TIMESTAMP '1970-01-01 00:00:00', "updatedAt" = NOW()
         WHERE session."expiresAt" > NOW()
           AND (
             NOT EXISTS (

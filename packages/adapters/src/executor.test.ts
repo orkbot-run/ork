@@ -2409,8 +2409,15 @@ describe("createRunExecutor", () => {
     await executor.wakeRoutine("routine-1", scheduledAt.toISOString());
 
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: "routine-1", active: true },
-      data: { active: false, nextRunAt: null },
+      where: {
+        id: "routine-1",
+        active: true,
+        OR: [
+          { bot: { archivedAt: { not: null } } },
+          { thread: { group: { archivedAt: { not: null } } } },
+        ],
+      },
+      data: { active: false, resumeOnRestore: true },
     });
     expect($transaction).not.toHaveBeenCalled();
     expect(enqueue).not.toHaveBeenCalled();
@@ -2631,7 +2638,10 @@ description: Prepare standup notes
             })),
           },
           task: { create: taskCreate },
-          run: { create: vi.fn(async () => ({ id: "run-1" })) },
+          run: {
+            findUnique: vi.fn(async () => null),
+            create: vi.fn(async () => ({ id: "run-1" })),
+          },
         }),
       ),
     } as unknown as PrismaClient;
@@ -2696,7 +2706,10 @@ description: Prepare standup notes
             })),
           },
           task: { create: vi.fn(async () => ({ id: "task-1" })) },
-          run: { create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })) },
+          run: {
+            findUnique: vi.fn(async () => null),
+            create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })),
+          },
         }),
       ),
     } as unknown as PrismaClient;
@@ -2763,7 +2776,10 @@ description: Prepare standup notes
               })),
             },
             task: { create: vi.fn(async () => ({ id: "task-1" })) },
-            run: { create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })) },
+            run: {
+              findUnique: vi.fn(async () => null),
+              create: vi.fn(async () => ({ id: "run-1", taskId: "task-1" })),
+            },
           });
         }
         return callback({

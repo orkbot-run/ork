@@ -63,7 +63,8 @@ describe("built-in tool bridge", () => {
     // request_secret carries the card and contact kinds; update_bot carries instructions paging;
     // the history tools point at files from earlier messages; a watch says it takes no other timing;
     // read_file takes a line range; ask_user carries bounded proposal detail; history can find tool work.
-    expect(definitionBytes(listed)).toBeLessThanOrEqual(33_700);
+    // schedule_create repeats event trigger fields across its seven exclusive timing branches.
+    expect(definitionBytes(listed)).toBeLessThanOrEqual(40_000);
     expect(deferred.map((tool) => tool.name)).toEqual(
       expect.arrayContaining(["render_plot", "create_space", "generate_secret", "scratchpad_add"]),
     );

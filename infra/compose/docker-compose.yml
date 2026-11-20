@@ -499,6 +499,8 @@ services:
     environment:
       <<: *app-environment
       GRAPHILE_WORKER_CONCURRENCY:
+      RUN_DRAIN_ENABLED: "${RUN_DRAIN_ENABLED:-true}"
+      RUN_DRAIN_MS: "${RUN_DRAIN_MS:-}"
     volumes:
       - ../../data:/data
     depends_on:

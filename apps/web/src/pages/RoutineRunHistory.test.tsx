@@ -15,10 +15,11 @@ import { afterEach, expect, it, vi } from "vitest";
 
 const routines = vi.hoisted(() => ({ history: vi.fn() }));
 const threads = vi.hoisted(() => ({ get: () => new Promise(() => {}) }));
+const usage = vi.hoisted(() => ({ breakdown: vi.fn() }));
 vi.mock("../lib/rpc", () => ({
-  rpc: { routines, threads },
-  rpcForSpace: () => ({ routines, threads }),
-  createSpaceRpc: () => ({ routines, threads }),
+  rpc: { routines, threads, usage },
+  rpcForSpace: () => ({ routines, threads, usage }),
+  createSpaceRpc: () => ({ routines, threads, usage }),
   selectedSpaceId: () => null,
 }));
 vi.mock("@orkbot/core", async (original) => ({

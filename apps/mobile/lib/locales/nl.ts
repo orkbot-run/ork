@@ -3,6 +3,79 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "Add a schedule or an HTTPS address to run this routine.":
+    "Voeg een planning of HTTPS-adres toe om deze routine uit te voeren.",
+  "Ask an owner to resume your plan.": "Vraag een eigenaar om je abonnement te hervatten.",
+  "Back to meetings": "Terug naar vergaderingen",
+  "Blocked by the server administrator": "Geblokkeerd door de serverbeheerder",
+  "Check every 5 to 1,440 minutes and track up to five fields.":
+    "Controleer elke 5 tot 1.440 minuten en volg maximaal vijf velden.",
+  "Check interval in minutes": "Controle-interval in minuten",
+  "Confirm deletion": "Verwijderen bevestigen",
+  "Confirm that all participants have been informed before continuing.":
+    "Bevestig dat alle deelnemers zijn geïnformeerd voordat je doorgaat.",
+  "Could not submit this answer": "Dit antwoord kon niet worden verzonden",
+  "Daily limit: {dailyLimit}. Maximum meeting length: {maxMinutes} minutes.":
+    "Daglimiet: {dailyLimit}. Maximale vergaderduur: {maxMinutes} minuten.",
+  "Delete meeting": "Vergadering verwijderen",
+  "Delete this meeting and its transcript? This cannot be undone.":
+    "Deze vergadering en het transcript verwijderen? Dit kan niet ongedaan worden gemaakt.",
+  "Enter a future date and time in YYYY-MM-DDTHH:mm format.":
+    "Voer een toekomstige datum en tijd in de notatie YYYY-MM-DDTHH:mm in.",
+  "Enter a message body": "Voer een berichttekst in",
+  "Enter a public HTTPS address without credentials or a fragment":
+    "Voer een openbaar HTTPS-adres zonder inloggegevens of fragment in",
+  "Enter a recipient": "Voer een ontvanger in",
+  "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link.":
+    "Voer een ondersteunde vergaderlink van Google Meet, Zoom of Microsoft Teams in.",
+  "Fields that mark a change": "Velden die een wijziging aangeven",
+  "Fields to compare, e.g. id, modifiedTime (optional)":
+    "Te vergelijken velden, bijv. id, modifiedTime (optioneel)",
+  "Google Meet, Zoom and Microsoft Teams links are supported.":
+    "Links van Google Meet, Zoom en Microsoft Teams worden ondersteund.",
+  "HTTPS address": "HTTPS-adres",
+  "I have informed all participants and have permission to record and transcribe this meeting.":
+    "Ik heb alle deelnemers geïnformeerd en heb toestemming om deze vergadering op te nemen en te transcriberen.",
+  "Invite your bot to a meeting": "Nodig je bot uit voor een vergadering",
+  "Keep meeting": "Vergadering behouden",
+  "Leave empty to join now. Scheduled time uses your device time zone.":
+    "Laat dit leeg om nu deel te nemen. De geplande tijd gebruikt de tijdzone van je apparaat.",
+  "Manage billing to resume your plan.": "Beheer de facturering om je abonnement te hervatten.",
+  "Meeting link": "Vergaderlink",
+  Meetings: "Vergaderingen",
+  "Meetings are not available on this server.":
+    "Vergaderingen zijn niet beschikbaar op deze server.",
+  "Message body": "Berichttekst",
+  No: "Nee",
+  "No meetings yet.": "Nog geen vergaderingen.",
+  "No transcript yet. It will appear after processing.":
+    "Nog geen transcript. Het verschijnt na de verwerking.",
+  "Payment failed. Ask an owner to update the payment method.":
+    "Betaling mislukt. Vraag een eigenaar om de betaalmethode bij te werken.",
+  "Payment failed. Update your payment method to resume your plan.":
+    "Betaling mislukt. Werk je betaalmethode bij om je abonnement te hervatten.",
+  'Post "No changes" in chat': "‘Geen wijzigingen’ in de chat plaatsen",
+  "Recipient changed. Review the updated draft and press Send again.":
+    "De ontvanger is gewijzigd. Controleer het bijgewerkte concept en druk opnieuw op Verzenden.",
+  Refresh: "Vernieuwen",
+  Reject: "Afwijzen",
+  "Remove change trigger": "Wijzigingstrigger verwijderen",
+  "Route requests only to endpoints marked as eligible for zero data retention.":
+    "Stuur verzoeken alleen naar eindpunten die zijn gemarkeerd als geschikt voor verwerking zonder gegevensbewaring.",
+  "Schedule (optional)": "Tijdstip (optioneel)",
+  Subject: "Onderwerp",
+  "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it.":
+    "De bot neemt zichtbaar deel, neemt audio op en maakt een transcript. Informeer elke deelnemer voordat je de bot uitnodigt.",
+  "Title (optional)": "Titel (optioneel)",
+  To: "Aan",
+  "Unchanged checks appear in history. You can also post them in chat.":
+    "Controles zonder wijzigingen verschijnen in de geschiedenis. Je kunt ze ook in de chat plaatsen.",
+  "Update payment method": "Betaalmethode bijwerken",
+  "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00":
+    "Gebruik een datum en tijd met tijdzone, bijv. 2026-11-20T14:30:00+01:00",
+  "Watch an HTTPS address": "Een HTTPS-adres volgen",
+  Yes: "Ja",
+  "Zero data retention": "Geen gegevensbewaring",
   "Open Ork Accounts": "Ork Accounts openen",
   "Could not open Ork Accounts. Try again.":
     "Ork Accounts kon niet worden geopend. Probeer het opnieuw.",

@@ -136,7 +136,7 @@ it("shares the bot-wide group routine projection with schedule_list", async () =
   expect(catalog.routines).toEqual(schedules.routines);
   expect(catalog.routines.map((row) => row.inThisChat)).toEqual([true, false, false]);
   expect(findMany).toHaveBeenLastCalledWith({
-    where: { spaceId: "space-1", botId: "bot-1", userId: "user-1" },
+    where: { spaceId: "space-1", botId: "bot-1", userId: "user-1", completedOneShotAt: null },
     orderBy: { createdAt: "desc" },
   });
 });
