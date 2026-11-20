@@ -19,6 +19,7 @@ import {
   AVAILABILITY_SELECT,
   availableInSpace,
   isUniqueViolation,
+  itemSecretSpace,
   runAsSystemInTransaction,
   spaceAvailability,
 } from "@orkbot/db";
@@ -192,7 +193,7 @@ async function addServerRows(
       await tx.secret.create({
         data: {
           userId: install.userId,
-          spaceId: shared ? null : install.spaceId,
+          spaceId: await itemSecretSpace(tx, install.spaceId, shared),
           id: stored.id,
           kind: "mcp",
           ciphertext: stored.ciphertext,

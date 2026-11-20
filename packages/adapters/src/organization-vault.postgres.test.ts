@@ -4,6 +4,7 @@
 import { asSystem, createDb, runAsTenant } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadBotCommandEnvironment, revealBotSecret, storeBotSecret } from "./bot-secrets.js";
+import { McpOAuthBroker } from "./mcp-oauth.js";
 import { OrganizationVault } from "./organization-vault.js";
 import { withSecretPersistence } from "./secret-persistence.js";
 import { EncryptedSecretStore } from "./secrets.js";
@@ -140,6 +141,77 @@ postgres("organization vault on the installation", () => {
     await db.user.deleteMany({ where: { id: { in: [adminId, memberId] } } });
     await app.prisma.$disconnect();
     await owner.prisma.$disconnect();
+  });
+
+  it("starts OAuth for an integration marked available in all spaces without crossing workspace boundaries", async () => {
+    const server = await asSystem(owner.prisma).mcpServer.create({
+      data: {
+        spaceId: space,
+        userId: adminId,
+        slug: "oauth-test",
+        name: "OAuth test",
+        transport: "streamable_http",
+        endpoint: "https://mcp.example.test/mcp",
+        allSpaces: true,
+      },
+    });
+    const network = {
+      resolveHostname: async () => [{ address: "203.0.113.10", family: 4 as const }],
+      fetch: async (input: string | URL | Request, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(input, init);
+        const url = new URL(request.url);
+        const host = request.headers.get("host");
+        if (host) url.host = host;
+        if (url.href === "https://mcp.example.test/mcp" && request.method === "POST")
+          return new Response(null, {
+            status: 401,
+            headers: {
+              "WWW-Authenticate":
+                'Bearer resource_metadata="https://mcp.example.test/.well-known/oauth-protected-resource/mcp"',
+            },
+          });
+        if (url.href === "https://mcp.example.test/.well-known/oauth-protected-resource/mcp")
+          return Response.json({
+            resource: "https://mcp.example.test/mcp",
+            authorization_servers: ["https://auth.example.test"],
+          });
+        if (url.href === "https://auth.example.test/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: "https://auth.example.test",
+            authorization_endpoint: "https://auth.example.test/authorize",
+            token_endpoint: "https://auth.example.test/token",
+            registration_endpoint: "https://auth.example.test/register",
+            response_types_supported: ["code"],
+            code_challenge_methods_supported: ["S256"],
+          });
+        if (url.href === "https://auth.example.test/register")
+          return Response.json({
+            client_id: "test-client",
+            redirect_uris: ["https://example.test/mcp/oauth/callback"],
+            token_endpoint_auth_method: "none",
+          });
+        throw new Error(`Unexpected OAuth request: ${url.href}`);
+      },
+    };
+    const broker = new McpOAuthBroker(withSecretPersistence(app.prisma, secrets), secrets, network);
+    const result = await runAsTenant(admin, () =>
+      broker.begin({
+        ...admin,
+        serverId: server.id,
+        redirectUri: "https://example.test/mcp/oauth/callback",
+      }),
+    );
+    expect(result.status).toBe("authorization_required");
+    const stored = await asSystem(owner.prisma).mcpServer.findUniqueOrThrow({
+      where: { id: server.id },
+      include: { secret: true },
+    });
+    expect(stored.secret?.spaceId).toBe(space);
+    await expect(
+      runAsTenant({ userId: memberId, spaceId: space2 }, () =>
+        app.prisma.secret.findMany({ where: { id: stored.secretId! } }),
+      ),
+    ).resolves.toEqual([]);
   });
 
   it("requires organization administration, stores encrypted, and respects workspace grants", async () => {

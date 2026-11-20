@@ -33,6 +33,7 @@ import {
   IsolationError,
   isUniqueViolation,
   itemSecretIn,
+  itemSecretSpace,
   spaceAvailability,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -307,7 +308,7 @@ export function mcpRoutes(ctx: RouterContext) {
             await tx.secret.create({
               data: {
                 id: stored.id,
-                spaceId: null,
+                spaceId: await itemSecretSpace(tx, context.actor.spaceId, true),
                 userId: context.actor.userId,
                 kind: "connector",
                 ciphertext: stored.ciphertext,
@@ -575,7 +576,9 @@ export function mcpRoutes(ctx: RouterContext) {
                       data: {
                         id: stored.id,
                         userId: context.actor.userId,
-                        spaceId: await serverSecretSpace(tx, current),
+                        spaceId:
+                          (await serverSecretSpace(tx, current)) ??
+                          (await itemSecretSpace(tx, context.actor.spaceId, true)),
                         kind: "mcp",
                         ciphertext: stored.ciphertext,
                       },

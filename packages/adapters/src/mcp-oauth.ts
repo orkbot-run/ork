@@ -32,7 +32,7 @@ import {
 } from "@orkbot/contracts";
 import { readBoundedResponseBytes } from "@orkbot/core";
 import type { Prisma, PrismaClient } from "@orkbot/db";
-import { availableInSpace, itemSecretIn, runAsSystem } from "@orkbot/db";
+import { availableInSpace, itemSecretIn, itemSecretSpace, runAsSystem } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { sanitizeConnectorError } from "./connector-safety.js";
 import { createMcpClient } from "./mcp-output-schema.js";
@@ -1879,7 +1879,7 @@ export class McpOAuthBroker {
       await tx.secret.create({
         data: {
           id: stored.id,
-          spaceId: shared ? null : context.spaceId,
+          spaceId: await itemSecretSpace(tx, context.spaceId, shared),
           userId: context.userId,
           kind: "mcp",
           ciphertext: stored.ciphertext,
