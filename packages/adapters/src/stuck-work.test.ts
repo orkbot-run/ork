@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited tests are preserved. Configurable threshold coverage follows LICENSE.md.
+
 import type { JobPublisher, NotificationProvider } from "@orkbot/adapter-kit";
 import { STUCK_WORK_NOTICE, stuckWorkStatusMessage } from "@orkbot/core";
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
@@ -12,6 +16,7 @@ const budget = { timeout: 20_000 };
 
 afterEach(async () => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 function age(hours: number) {
@@ -49,6 +54,53 @@ function notifications() {
 }
 
 describe("reconcileStuckWork", () => {
+  it("uses configured thresholds in the scan and reminder snapshot checks", async () => {
+    vi.stubEnv("STUCK_WORK_NOTIFY_AFTER_MS", "60000");
+    vi.stubEnv("STUCK_WORK_EXPIRE_AFTER_MS", "120000");
+    const run = { ...candidate("waiting_input", 0), updatedAt: new Date(now.getTime() - 60_000) };
+    const prisma = noticePrisma(run, []);
+    const { jobs } = publisher();
+    const { provider, send } = notifications();
+    await reconcileStuckWork({ prisma, jobs, notifications: provider, now, batchSize: 100 });
+    expect(prisma.run.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          AND: [
+            {
+              OR: ["queued", "waiting_input", "waiting_takeover"].map((status) => ({
+                status,
+                updatedAt: {
+                  lte: new Date(
+                    now.getTime() - (status === "waiting_takeover" ? 30 * 60_000 : 60_000),
+                  ),
+                },
+              })),
+            },
+          ],
+        },
+      }),
+    );
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({ kind: "help" }), expect.anything());
+  });
+
+  it("cancels at configured expiration through the canonical helper", async () => {
+    vi.stubEnv("STUCK_WORK_NOTIFY_AFTER_MS", "60000");
+    vi.stubEnv("STUCK_WORK_EXPIRE_AFTER_MS", "120000");
+    const run = { ...candidate("queued", 0), updatedAt: new Date(now.getTime() - 120_000) };
+    const client = expireClient(run);
+    const { jobs } = publisher();
+    await reconcileStuckWork({
+      prisma: client as unknown as PrismaClient,
+      jobs,
+      now,
+      batchSize: 100,
+    });
+    expect(client.message.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        blocks: [{ kind: "meta", text: stuckWorkStatusMessage("queued") }],
+      }),
+    });
+  });
   it("does not send reminders for an aged background helper", async () => {
     const helper = {
       ...candidate("queued", 5),

@@ -65,6 +65,15 @@ BOAT_API_KEY=             # when SANDBOX_PROVIDER=boat
 `COMPUTER_TAKEOVER_TTL_MS` (default `900000`, 15 minutes) is how long a person's takeover of a bot's
 screen lasts before control expires.
 
+`STUCK_WORK_NOTIFY_AFTER_MS` (default `14400000`, 4 hours) controls the reminder for queued runs
+and unanswered questions. `STUCK_WORK_EXPIRE_AFTER_MS` (default `86400000`, 24 hours) controls when that
+work is cancelled. Both accept whole milliseconds from `60000` (one minute) through `2592000000`
+(30 days), inclusive. Missing, blank, invalid or out-of-range values use the respective default.
+The reminder is capped at expiration, which takes precedence when the thresholds coincide.
+Unanswered screen takeover requests expire after 30 minutes.
+In Compose, update `.env` and recreate the API and worker with `docker compose up -d api worker`
+using the files for your installation.
+
 `MODEL_STREAM_MAX_RETRIES` (0 to 5, default `1`) retries a model stream that fails partway; more
 retries let long turns survive brief provider failures.
 
