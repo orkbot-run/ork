@@ -2197,6 +2197,26 @@ export const BILLING_CANCELLATION_REASONS = [
 ] as const;
 export type BillingCancellationReason = (typeof BILLING_CANCELLATION_REASONS)[number];
 
+export function billingSubscriptionGrantsAccess(status: string | null | undefined): boolean {
+  return status === "trialing" || status === "active";
+}
+
+/** A subscription that can still be billed by the provider. */
+export function billingSubscriptionHoldsCheckout(status: string | null | undefined): boolean {
+  return (
+    billingSubscriptionGrantsAccess(status) ||
+    status === "past_due" ||
+    status === "incomplete" ||
+    status === "unpaid" ||
+    status === "paused"
+  );
+}
+
+/** Recover the existing subscription in the portal before another checkout can start. */
+export function billingSubscriptionNeedsRecovery(status: string | null | undefined): boolean {
+  return billingSubscriptionHoldsCheckout(status) && !billingSubscriptionGrantsAccess(status);
+}
+
 export const BillingStatusSchema = z.object({
   funding: z.enum(["byok", "credits"]).nullable().optional(),
   balanceUsd: z.number().optional(),

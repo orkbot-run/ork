@@ -577,6 +577,8 @@ export interface BillingProvider {
   createPortal(input: { customerId: string; returnUrl: string }): Promise<{ url: string }>;
   /** Current subscription for the customer, preferring one that grants access. */
   getCustomerSubscription(customerId: string): Promise<BillingSubscriptionSnapshot | null>;
+  /** The first subscription invoice settled by a payment or from the customer's invoice balance. */
+  getFirstPaidSubscriptionInvoiceAt?(customerId: string): Promise<Date | null>;
   /** Sets seats on the customer's subscription; a no-op when none can still take updates. */
   updateSeats(customerId: string, seats: number): Promise<void>;
   cancelCustomerSubscriptions(customerId: string): Promise<void>;

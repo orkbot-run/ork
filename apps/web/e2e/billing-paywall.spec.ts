@@ -34,6 +34,49 @@ async function enableBilling(route: Route, path: "me" | "bootstrap") {
   await route.fulfill({ response, json: body });
 }
 
+for (const plan of ["model credits", "seat plan"] as const) {
+  test(`recovers a declined ${plan} payment through the existing portal`, async ({
+    page,
+  }, testInfo) => {
+    const stamp = Date.now();
+    await signup(page, `billing-recovery-${stamp}@orkbot.test`, "password12", "Demo Customer");
+    await completeOnboarding(page);
+    await page.route("**/api/auth/capabilities", async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({ response, json: { ...(await response.json()), billing: true } });
+    });
+    await page.route("**/rpc/me", (route) => enableBilling(route, "me"));
+    await page.route("**/rpc/bootstrap", (route) => enableBilling(route, "bootstrap"));
+    let status = billingStatus({
+      state: "past_due",
+      access: false,
+      trialAvailable: false,
+      hasCustomer: true,
+      ...(plan === "model credits"
+        ? { funding: "credits" as const, monthlyAmountCents: 1200, balanceUsd: 12 }
+        : {}),
+    });
+    await page.route("**/rpc/billing/status", (route) => route.fulfill({ json: { json: status } }));
+    await page.route("**/rpc/billing/portal", async (route) => {
+      status = { ...status, state: "active", access: true };
+      await route.fulfill({ json: { json: { url: new URL("/app", page.url()).href } } });
+    });
+    await page.reload();
+    await expect(page.getByRole("status").filter({ hasText: /Payment failed/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Subscribe|free trial/ })).toHaveCount(0);
+    const update = page.getByRole("button", { name: "Update payment method" });
+    await expect(update).toBeVisible();
+    if (plan === "model credits")
+      await captureScreenshot(page, testInfo, "billing-payment-recovery");
+    await Promise.all([
+      page.waitForResponse((response) => response.url().endsWith("/rpc/billing/portal")),
+      update.click(),
+    ]);
+    await expect(page.getByTestId("billing-recovery")).toHaveCount(0);
+    await expect(page.getByText("Chief").first()).toBeVisible();
+  });
+}
+
 test("choose your own key or monthly credits, then add a one-time top-up", async ({
   page,
 }, testInfo) => {

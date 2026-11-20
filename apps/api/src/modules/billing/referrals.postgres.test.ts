@@ -127,12 +127,22 @@ dbTests("referrals", () => {
     await expect(service.status(friend)).resolves.toMatchObject({ trialDays: INVITED_TRIAL_DAYS });
   });
 
-  it("grants the referrer a free month when the friend starts a trial with a new card", async () => {
+  it("credits an overdue referrer only after the friend pays the first invoice", async () => {
     const referrer = await newOrganization("referrer");
     const referrerCustomer = await startTrial(referrer);
+    provider.failSubscriptionPayment(referrerCustomer);
+    await service.sync(referrerCustomer);
     const friend = await newOrganization("friend");
     await service.claimReferral(friend, await inviteCode(referrer));
     const friendCustomer = await startTrial(friend);
+    await expect(service.status(referrer)).resolves.toMatchObject({
+      state: "past_due",
+      access: false,
+      byokFreeUntil: null,
+      referral: { rewards: 0 },
+    });
+    expect(provider.balanceCredits.get(referrerCustomer)).toBeUndefined();
+    await service.endTrial(friend);
     expect(provider.balanceCredits.get(referrerCustomer)).toBe(
       BYOK_TIERS.standard.monthlyPriceCents,
     );
@@ -152,12 +162,15 @@ dbTests("referrals", () => {
     const sameCard = await newOrganization("same-card");
     await service.claimReferral(sameCard, code);
     await startTrial(sameCard, "shared-card");
+    await service.endTrial(sameCard);
     const first = await newOrganization("first");
     await service.claimReferral(first, code);
     await startTrial(first, "reused-card");
+    await service.endTrial(first);
     const reused = await newOrganization("reused");
     await service.claimReferral(reused, code);
     await startTrial(reused, "reused-card");
+    await service.endTrial(reused);
     expect(provider.balanceCredits.get(referrerCustomer)).toBe(
       BYOK_TIERS.standard.monthlyPriceCents,
     );
@@ -172,8 +185,8 @@ dbTests("referrals", () => {
     });
     const friend = await newOrganization("free-friend");
     await service.claimReferral(friend, await inviteCode(referrer));
-    const friendCustomer = await startTrial(friend);
-    await service.sync(friendCustomer);
+    await startTrial(friend);
+    await service.endTrial(friend);
     const credits = await prisma.modelCreditAccount.findUniqueOrThrow({
       where: { organizationId: referrer.organizationId },
     });
@@ -194,14 +207,17 @@ dbTests("referrals", () => {
       await service.selectFunding(friend, "byok");
       const { customerId } = (await billingAccountForOrganization(prisma, friend.organizationId))!;
       provider.completeByokCheckout(customerId);
+      await provider.endTrial(customerId);
       customers.push(customerId);
     }
-    const before = Date.now();
+    const [{ now }] = await prisma.$queryRaw<[{ now: Date }]>`SELECT now()`;
     await Promise.all(customers.map((customerId) => service.sync(customerId)));
     const credits = await prisma.modelCreditAccount.findUniqueOrThrow({
       where: { organizationId: referrer.organizationId },
     });
-    expect(credits.byokFreeUntil!.getTime()).toBeGreaterThanOrEqual(before + 60 * 86_400_000);
+    expect(credits.byokFreeUntil!.getTime()).toBeGreaterThanOrEqual(
+      now.getTime() + 60 * 86_400_000,
+    );
     await expect(service.status(referrer)).resolves.toMatchObject({ referral: { rewards: 2 } });
   });
 
@@ -211,6 +227,7 @@ dbTests("referrals", () => {
     const friend = await newOrganization("restart-friend");
     await service.claimReferral(friend, await inviteCode(referrer));
     const friendCustomer = await startTrial(friend);
+    await service.endTrial(friend);
     await prisma.referral.update({
       where: { organizationId: friend.organizationId },
       data: { rewardedAt: null },
@@ -231,6 +248,7 @@ dbTests("referrals", () => {
     const friendCustomer = (await billingAccountForOrganization(prisma, friend.organizationId))!
       .customerId;
     provider.completeByokCheckout(friendCustomer, "decided-card");
+    await provider.endTrial(friendCustomer);
     await prisma.referral.update({
       where: { organizationId: friend.organizationId },
       data: { outcome: "balance", cardFingerprint: "decided-card" },
@@ -282,6 +300,7 @@ dbTests("referrals", () => {
     const friend = await newOrganization("credits-friend");
     await service.claimReferral(friend, await inviteCode(referrer));
     await startTrial(friend);
+    await service.endTrial(friend);
     await expect(service.status(referrer)).resolves.toMatchObject({
       balanceUsd: before + BYOK_TIERS.standard.monthlyPriceCents! / 100,
       referral: { rewards: 1 },

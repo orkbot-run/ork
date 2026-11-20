@@ -1,5 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; billing recovery changes follow LICENSE.md.
 
 // @vitest-environment jsdom
 
@@ -75,9 +78,12 @@ const status = {
   trialAvailable: false,
 };
 
+let responseStatus: Record<string, unknown> = status;
+
 const requests: Array<{ url: string; spaceId: string | null }> = [];
 
 beforeEach(() => {
+  responseStatus = status;
   localStorage.setItem("orkbot:space-id", "space-a");
   vi.stubGlobal(
     "fetch",
@@ -87,7 +93,7 @@ beforeEach(() => {
         spaceId: new Headers(init?.headers ?? request.headers).get("x-orkbot-space-id"),
       });
       return Response.json({
-        json: request.url.endsWith("/billing/endTrial") ? {} : status,
+        json: request.url.endsWith("/billing/endTrial") ? {} : responseStatus,
       });
     }),
   );
@@ -145,3 +151,21 @@ it("sends the panel's confirmations to the space it opened for", async () => {
   act(() => root.unmount());
   container.remove();
 });
+
+it.each([undefined, "byok", "credits"])(
+  "shows portal recovery in settings for past-due %s billing",
+  async (funding) => {
+    responseStatus = { ...status, funding, state: "past_due", hasCustomer: true, access: false };
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<BillingSettingsPanel />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(container.querySelector('[data-testid="billing-recovery"]')).not.toBeNull();
+    expect(container.querySelectorAll("button")).toHaveLength(1);
+    expect(button(container, "Update payment method")).toBeDefined();
+    act(() => root.unmount());
+  },
+);

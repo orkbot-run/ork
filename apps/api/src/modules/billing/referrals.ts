@@ -14,6 +14,7 @@ import {
   FREE_MONTH_DAYS,
   hasBillingAccess,
   isUniqueViolation,
+  needsBillingPortal,
   Prisma,
   reconcileCreditPurchase,
 } from "@orkbot/db";
@@ -127,7 +128,7 @@ export function createReferrals(deps: {
     },
 
     /**
-     * Called whenever the invited organization's subscription grants access. The outcome is saved
+     * Called after confirming the invited organization's first paid subscription invoice. The outcome is saved
      * before granting and every grant is idempotent, so the next sync finishes an interrupted
      * reward exactly as decided. A failure never blocks the sync.
      */
@@ -154,12 +155,14 @@ export function createReferrals(deps: {
             organizationId,
             referrerCard === cardFingerprint
               ? "declined"
-              : // Monthly credit invoices turn what is paid into credits, so a balance buys nothing.
-                modelCredits?.mode === "credits"
-                ? "credits"
-                : billing && hasBillingAccess(billing.status)
-                  ? "balance"
-                  : "free_period",
+              : billing && needsBillingPortal(billing.status)
+                ? "balance"
+                : // Monthly credit invoices turn what is paid into credits, so a balance buys nothing.
+                  modelCredits?.mode === "credits"
+                  ? "credits"
+                  : billing && hasBillingAccess(billing.status)
+                    ? "balance"
+                    : "free_period",
             cardFingerprint,
           );
         }

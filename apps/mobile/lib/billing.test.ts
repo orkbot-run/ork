@@ -1,6 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved; billing recovery changes follow LICENSE.md.
+
 import type { BillingStatus } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
+  billingNeedsRecovery,
   currentPlan,
   ownKeyOffer,
   ownKeySubscriptionCents,
@@ -121,4 +126,24 @@ describe("subscribed plan", () => {
   it("shows no own-key price for a subscription that is not on the own-key plan", () => {
     expect(ownKeySubscriptionCents(status({ access: true, state: "active" }))).toBeNull();
   });
+});
+
+describe("billing recovery", () => {
+  it.each(["past_due", "unpaid", "incomplete", "paused"] as const)(
+    "keeps the existing %s plan available for portal recovery without granting access",
+    (state) => {
+      const suspended = status({ state, funding: "byok", access: false, hasCustomer: true });
+      expect(billingNeedsRecovery(suspended)).toBe(true);
+      expect(currentPlan(suspended)).toBeNull();
+      expect(subscribedPlan(suspended)).toBe("byok");
+      expect(ownKeySubscriptionCents(suspended)).toBe(1000);
+      expect(subscribedPlan({ ...suspended, funding: "credits", monthlyAmountCents: 2000 })).toBe(
+        "credits",
+      );
+    },
+  );
+  it.each(["active", "trialing", "canceled", "none"] as const)(
+    "does not replace legitimate plan choices for %s with recovery",
+    (state) => expect(billingNeedsRecovery(status({ state }))).toBe(false),
+  );
 });

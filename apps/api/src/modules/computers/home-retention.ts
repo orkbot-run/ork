@@ -23,7 +23,7 @@ const NO_CREDITS = { mode: null, balanceMicros: 0n, byokFreeUntil: null };
 type Account = {
   billing: {
     status: string | null;
-    paidAt: Date | null;
+    firstPaidInvoiceAt: Date | null;
     endedAt: Date | null;
     currentPeriodEndsAt: Date | null;
     updatedAt: Date;
@@ -51,7 +51,7 @@ export function homeDeletionDue(account: Account, lastUsedAt: Date, now = new Da
   const { billing, modelCredits } = account;
   const credited = modelCredits?.lots[0]?.createdAt;
   const since = credited ? latest(credited, lastUsedAt) : lastUsedAt;
-  if (billing?.paidAt) {
+  if (billing?.firstPaidInvoiceAt) {
     const ended = billing.endedAt ?? billing.currentPeriodEndsAt ?? billing.updatedAt;
     return { at: addDays(latest(ended, since), PLAN_ENDED_DAYS), reason: "plan-ended" };
   }
@@ -153,7 +153,7 @@ async function dueDates(db: Db, where: Prisma.ComputerWhereInput, now: Date, cur
               billing: {
                 select: {
                   status: true,
-                  paidAt: true,
+                  firstPaidInvoiceAt: true,
                   endedAt: true,
                   currentPeriodEndsAt: true,
                   updatedAt: true,

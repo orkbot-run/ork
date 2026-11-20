@@ -1,7 +1,13 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved; billing recovery changes follow LICENSE.md.
+
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import type { BillingStatus } from "@orkbot/contracts";
+import { billingSubscriptionNeedsRecovery } from "@orkbot/contracts";
 import { Button, Skeleton } from "@orkbot/ui-web";
 import { useEffect, useState } from "react";
+import { BillingRecovery } from "../components/BillingRecovery";
 import { ModelCreditsSettings } from "../components/ModelCredits";
 import { billingDateLabel, formatBillingPrice } from "../lib/billing";
 import { createSpaceRpc, selectedSpaceId } from "../lib/rpc";
@@ -62,6 +68,9 @@ export function BillingSettingsPanel() {
 
   const price = status?.price ? formatBillingPrice(status.price, locale) : null;
   const seats = status?.seats ?? 0;
+
+  if (status && billingSubscriptionNeedsRecovery(status.state))
+    return <BillingRecovery status={status} client={client} />;
 
   if (status?.funding !== undefined)
     return (

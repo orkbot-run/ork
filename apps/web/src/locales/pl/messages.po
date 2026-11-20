@@ -8009,3 +8009,23 @@ msgstr "Nie udało się odczytać klucza webhooka"
 
 msgid "No webhook key configured"
 msgstr "Brak skonfigurowanego klucza webhooka"
+
+#: src/components/BillingRecovery.tsx
+msgid "Payment failed. Update your payment method to resume your plan."
+msgstr "Płatność nie powiodła się. Zaktualizuj metodę płatności, aby wznowić plan."
+
+#: src/components/BillingRecovery.tsx
+msgid "Payment failed. Ask an owner to update the payment method."
+msgstr "Płatność nie powiodła się. Poproś właściciela o zaktualizowanie metody płatności."
+
+#: src/components/BillingRecovery.tsx
+msgid "Manage billing to resume your plan."
+msgstr "Przejdź do rozliczeń, aby wznowić plan."
+
+#: src/components/BillingRecovery.tsx
+msgid "Ask an owner to resume your plan."
+msgstr "Poproś właściciela o wznowienie planu."
+
+#: src/components/BillingRecovery.tsx
+msgid "Update payment method"
+msgstr "Zaktualizuj metodę płatności"

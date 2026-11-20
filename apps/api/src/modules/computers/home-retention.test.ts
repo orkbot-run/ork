@@ -10,7 +10,7 @@ const at = (day: number) => new Date(Date.UTC(2026, 0, 1) + day * DAY);
 const now = at(200);
 const billing = (fields: Record<string, unknown> = {}) => ({
   status: null,
-  paidAt: null,
+  firstPaidInvoiceAt: null,
   endedAt: null,
   currentPeriodEndsAt: null,
   updatedAt: at(0),
@@ -29,7 +29,7 @@ describe("saved home deletion date", () => {
     for (const status of ["trialing", "active", "past_due", "unpaid", "paused"])
       expect(
         homeDeletionDue(
-          { billing: billing({ status, paidAt: at(0) }), modelCredits: null },
+          { billing: billing({ status, firstPaidInvoiceAt: at(0) }), modelCredits: null },
           at(0),
           now,
         ),
@@ -37,7 +37,7 @@ describe("saved home deletion date", () => {
   });
 
   it("never deletes while the organization can still run bots on credits or a free period", () => {
-    const canceled = billing({ status: "canceled", paidAt: at(0), endedAt: at(10) });
+    const canceled = billing({ status: "canceled", firstPaidInvoiceAt: at(0), endedAt: at(10) });
     expect(
       homeDeletionDue(
         { billing: canceled, modelCredits: credits({ balanceMicros: 1n }) },
@@ -56,7 +56,7 @@ describe("saved home deletion date", () => {
 
   it("gives an ended plan 30 days from its end or its last use, whichever is later", () => {
     const ended = {
-      billing: billing({ status: "canceled", paidAt: at(0), endedAt: at(100) }),
+      billing: billing({ status: "canceled", firstPaidInvoiceAt: at(0), endedAt: at(100) }),
       modelCredits: credits(),
     };
     expect(homeDeletionDue(ended, at(50), now)).toEqual({ at: at(130), reason: "plan-ended" });
@@ -65,7 +65,7 @@ describe("saved home deletion date", () => {
 
   it("moves the date out from the latest credit purchase, even once those credits are spent", () => {
     const bought = {
-      billing: billing({ status: "canceled", paidAt: at(0), endedAt: at(100) }),
+      billing: billing({ status: "canceled", firstPaidInvoiceAt: at(0), endedAt: at(100) }),
       modelCredits: credits({ lots: [{ createdAt: at(120) }] }),
     };
     expect(homeDeletionDue(bought, at(50), now)).toEqual({ at: at(150), reason: "plan-ended" });

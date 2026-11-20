@@ -8,6 +8,14 @@ export const PL_MESSAGES: Record<string, string> = {
     "Nie udało się otworzyć Ork Accounts. Spróbuj ponownie.",
   "This workspace was closed or your access was removed.":
     "Ta przestrzeń została zamknięta lub odebrano Ci do niej dostęp.",
+  "Payment failed. Update your payment method to resume your plan.":
+    "Płatność nie powiodła się. Zaktualizuj metodę płatności, aby wznowić plan.",
+  "Payment failed. Ask an owner to update the payment method.":
+    "Płatność nie powiodła się. Poproś właściciela o zaktualizowanie metody płatności.",
+  "Manage billing to resume your plan.": "Przejdź do rozliczeń, aby wznowić plan.",
+  "Ask an owner to resume your plan.": "Poproś właściciela o wznowienie planu.",
+  "Update payment method": "Zaktualizuj metodę płatności",
+
   "Check the required fields and value formats.": "Sprawdź wymagane pola i formaty wartości.",
   "Use a date and time with timezone, e.g. 2026-11-20T14:30:00+01:00":
     "Podaj datę i czas ze strefą czasową, np. 2026-11-20T14:30:00+01:00",

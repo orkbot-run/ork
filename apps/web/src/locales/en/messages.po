@@ -7947,3 +7947,23 @@ msgstr "Could not load webhook key"
 
 msgid "No webhook key configured"
 msgstr "No webhook key configured"
+
+#: src/components/BillingRecovery.tsx
+msgid "Payment failed. Update your payment method to resume your plan."
+msgstr "Payment failed. Update your payment method to resume your plan."
+
+#: src/components/BillingRecovery.tsx
+msgid "Payment failed. Ask an owner to update the payment method."
+msgstr "Payment failed. Ask an owner to update the payment method."
+
+#: src/components/BillingRecovery.tsx
+msgid "Manage billing to resume your plan."
+msgstr "Manage billing to resume your plan."
+
+#: src/components/BillingRecovery.tsx
+msgid "Ask an owner to resume your plan."
+msgstr "Ask an owner to resume your plan."
+
+#: src/components/BillingRecovery.tsx
+msgid "Update payment method"
+msgstr "Update payment method"

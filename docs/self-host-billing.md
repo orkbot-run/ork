@@ -36,6 +36,21 @@ switching skips those checks and allows both directions, including yearly back t
 own proration, so enable it only if that is acceptable; the yearly price exists after the first yearly checkout or switch. Runs check
 access on the server, so a lapsed organization's bots and routines stop until it subscribes.
 
+## Failed payments and recovery
+
+A trial or active subscription grants plan access and its computer allowance. A past-due,
+unpaid, incomplete, or paused subscription keeps its place with the payment provider and
+suspends plan access and computer hours. Purchased credits stay on the account. The owner can
+update the payment method and resolve the invoice in the billing portal. Ork restores access
+when the provider reports the subscription as active again. A subscription awaiting recovery
+prevents another recurring checkout.
+
+Ork records the first payment from a settled subscription invoice, including an invoice paid
+from the customer's balance. A zero-value trial invoice does not count. Existing subscription
+and credit records stay in place. Ork verifies historical payments with the provider on the
+next billing sync. A referral reward is earned after a confirmed payment, and a referrer with
+an overdue plan receives the reward in their billing balance.
+
 ## Model credits
 
 Configure the managed default model through the existing model connection settings. The default

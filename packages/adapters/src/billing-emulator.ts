@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved; billing recovery changes follow LICENSE.md.
+
 import type {
   BillingByokCheckoutRequest,
   BillingByokPlan,
@@ -14,6 +18,7 @@ import {
   BillingCustomerNotFoundError,
   BillingNoMonthlyCreditsError,
 } from "@orkbot/adapter-kit";
+import { billingSubscriptionGrantsAccess } from "@orkbot/contracts";
 import {
   holdsBillingSubscription,
   parseStripeWebhook,
@@ -45,6 +50,15 @@ export class BillingEmulator implements BillingProvider {
   readonly subscriptions: EmulatedSubscription[] = [];
   /** Account credit granted per customer, in cents. */
   readonly balanceCredits = new Map<string, number>();
+  readonly invoices: Array<{
+    id: string;
+    customerId: string;
+    subscriptionId: string;
+    amountCents: number;
+    status: "open" | "paid";
+    paidAt: Date | null;
+    payment?: "card" | "balance";
+  }> = [];
   private readonly now: () => number;
   private sequence = 0;
   private customerSequence = 0;
@@ -94,7 +108,9 @@ export class BillingEmulator implements BillingProvider {
     if (
       input.monthly &&
       this.forCustomer(input.customerId).some(
-        (s) => s.priceId !== BYOK_PRICE_ID && holdsBillingSubscription(s.status),
+        (s) =>
+          holdsBillingSubscription(s.status) &&
+          (s.priceId !== BYOK_PRICE_ID || !billingSubscriptionGrantsAccess(s.status)),
       )
     )
       throw new BillingCheckoutCompletedError();
@@ -113,6 +129,7 @@ export class BillingEmulator implements BillingProvider {
   async endTrial(customerId: string) {
     const chosen = pickBillingSubscription(this.forCustomer(customerId));
     if (chosen?.status !== "trialing" || chosen.cancelAtPeriodEnd) return;
+    this.invoiceSubscription(customerId);
     chosen.status = "active";
     chosen.trialEndsAt = new Date(this.now());
     chosen.currentPeriodStartsAt = new Date(this.now());
@@ -193,6 +210,7 @@ export class BillingEmulator implements BillingProvider {
       cancelAtPeriodEnd: false,
       endedAt: null,
     });
+    this.recordCheckoutInvoice(customerId, `sub_byok_${n}`);
     return `sub_byok_${n}`;
   }
 
@@ -205,7 +223,7 @@ export class BillingEmulator implements BillingProvider {
   async setMonthlyCredits(customerId: string, amountCents: number) {
     this.renewCredits(customerId);
     const chosen = pickBillingSubscription(this.forCustomer(customerId));
-    if (!chosen?.creditAmountCents || !holdsBillingSubscription(chosen.status))
+    if (!chosen?.creditAmountCents || !billingSubscriptionGrantsAccess(chosen.status))
       throw new BillingNoMonthlyCreditsError();
     if (amountCents > chosen.creditAmountCents) {
       this.creditPurchases.set(customerId, [
@@ -253,6 +271,7 @@ export class BillingEmulator implements BillingProvider {
         endedAt: null,
       });
     }
+    if (checkout.monthly) this.recordCheckoutInvoice(customerId, `sub_credit_${this.sequence}`);
     return purchase;
   }
 
@@ -269,9 +288,107 @@ export class BillingEmulator implements BillingProvider {
     return { ...snapshot };
   }
 
+  async getFirstPaidSubscriptionInvoiceAt(customerId: string): Promise<Date | null> {
+    this.requireCustomer(customerId);
+    const times = this.invoices
+      .filter(
+        (invoice) =>
+          invoice.customerId === customerId &&
+          invoice.status === "paid" &&
+          invoice.amountCents > 0 &&
+          invoice.paidAt,
+      )
+      .map((invoice) => invoice.paidAt!.getTime());
+    return times.length ? new Date(Math.min(...times)) : null;
+  }
+
+  /** Test helper: issue and attempt a subscription invoice without real payments. */
+  invoiceSubscription(
+    customerId: string,
+    options: {
+      amountCents?: number;
+      payment?: "card" | "balance" | "declined";
+    } = {},
+  ): string {
+    const subscription = pickBillingSubscription(this.forCustomer(customerId));
+    if (!subscription) throw new Error(`No subscription for ${customerId}`);
+    const amountCents =
+      options.amountCents ??
+      subscription.creditAmountCents ??
+      subscription.byokPriceCents ??
+      this.price.amount * subscription.seats;
+    if (!Number.isSafeInteger(amountCents) || amountCents < 0)
+      throw new Error("Invalid invoice amount");
+    const id = `invoice_${this.namespace}_${++this.sequence}`;
+    this.invoices.push({
+      id,
+      customerId,
+      subscriptionId: subscription.subscriptionId,
+      amountCents,
+      status: "open",
+      paidAt: null,
+    });
+    if (options.payment === "declined") subscription.status = "past_due";
+    else this.settleSubscriptionInvoice(customerId, id, options.payment);
+    return id;
+  }
+
+  failSubscriptionPayment(customerId: string, amountCents?: number): string {
+    return this.invoiceSubscription(customerId, { amountCents, payment: "declined" });
+  }
+
+  /** Test helper: recover an outstanding period with a card or previously granted balance. */
+  settleSubscriptionInvoice(
+    customerId: string,
+    invoiceId?: string,
+    payment: "card" | "balance" = "card",
+  ): string {
+    const invoice = this.invoices.findLast(
+      (entry) =>
+        entry.customerId === customerId &&
+        (invoiceId ? entry.id === invoiceId : entry.status === "open"),
+    );
+    if (!invoice) throw new Error("No subscription invoice");
+    if (invoice.status === "paid") return invoice.id;
+    const subscription = this.forCustomer(customerId).find(
+      (entry) => entry.subscriptionId === invoice.subscriptionId,
+    );
+    if (!subscription || subscription.status === "canceled")
+      throw new Error("No live subscription");
+    if (payment === "balance") {
+      const available = this.balanceCredits.get(customerId) ?? 0;
+      if (available < invoice.amountCents) throw new Error("Insufficient invoice balance");
+      this.balanceCredits.set(customerId, available - invoice.amountCents);
+    }
+    invoice.status = "paid";
+    invoice.paidAt = new Date(this.now());
+    invoice.payment = payment;
+    if (invoice.amountCents > 0) subscription.status = "active";
+    return invoice.id;
+  }
+
+  private recordCheckoutInvoice(customerId: string, subscriptionId: string) {
+    const subscription = this.forCustomer(customerId).find(
+      (entry) => entry.subscriptionId === subscriptionId,
+    )!;
+    if (subscription.status === "trialing")
+      this.invoiceSubscription(customerId, { amountCents: 0 });
+    else if (subscription.status === "active") this.invoiceSubscription(customerId);
+    else if (holdsBillingSubscription(subscription.status)) {
+      const status = subscription.status;
+      this.failSubscriptionPayment(customerId);
+      subscription.status = status;
+    }
+  }
+
   async updateSeats(customerId: string, seats: number) {
     const chosen = pickBillingSubscription(this.forCustomer(customerId));
-    if (chosen && chosen.priceId !== BYOK_PRICE_ID && holdsBillingSubscription(chosen.status))
+    if (
+      chosen &&
+      chosen.priceId !== BYOK_PRICE_ID &&
+      holdsBillingSubscription(chosen.status) &&
+      chosen.status !== "incomplete"
+    )
       chosen.seats = seats;
   }
 
@@ -309,6 +426,8 @@ export class BillingEmulator implements BillingProvider {
       cancelAtPeriodEnd: false,
       endedAt: null,
     });
+    this.checkouts.delete(customerId);
+    this.recordCheckoutInvoice(customerId, `sub_emulated_${n}`);
     return `sub_emulated_${n}`;
   }
 

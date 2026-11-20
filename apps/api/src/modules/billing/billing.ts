@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork adds payment-based recovery and conversion.
 
 import { setTimeout as sleep } from "node:timers/promises";
 import type {
@@ -44,6 +45,7 @@ import {
   organizationSeatCount,
   ownedBillingAccounts,
   reconcileCreditPurchase,
+  recordFirstPaidSubscriptionInvoice,
   releaseByokTrialCheckout,
   releaseByokTrialCheckouts,
   releaseCheckoutLease,
@@ -202,24 +204,6 @@ export function createBillingService(deps: {
   }
 
   async function sync(customerId: string): Promise<void> {
-    if (modelCredits && provider.listCreditPurchases) {
-      const account = await prisma.billingAccount.findUnique({ where: { customerId } });
-      if (account) {
-        let added = false;
-        for (const purchase of await provider.listCreditPurchases(customerId)) {
-          if ((await reconcileCreditPurchase(prisma, account.organizationId, purchase)) > 0)
-            added = true;
-        }
-        await prisma.modelCreditAccount.updateMany({
-          where: {
-            organizationId: account.organizationId,
-            balanceMicros: { gt: 0n },
-            OR: [{ mode: null }, ...(added ? [{ pendingCreditCheckout: true }] : [])],
-          },
-          data: { mode: "credits", pendingCreditCheckout: false },
-        });
-      }
-    }
     const previous = await prisma.billingAccount.findUnique({ where: { customerId } });
     // Assigned in the callback, which control-flow narrowing does not follow.
     let snapshot = null as BillingSubscriptionSnapshot | null;
@@ -233,8 +217,33 @@ export function createBillingService(deps: {
     }
     const live = snapshot;
     if (live) await reportCancellation(previous, live);
-    if (live && hasBillingAccess(live.status))
+    // Store the latest access state before reconciling invoices. An unavailable invoice listing
+    // must never delay revocation after a declined payment.
+    let firstPaidInvoiceAt = previous.firstPaidInvoiceAt;
+    if (!firstPaidInvoiceAt && (live || previous.subscribedAt)) {
+      firstPaidInvoiceAt = (await provider.getFirstPaidSubscriptionInvoiceAt?.(customerId)) ?? null;
+      if (firstPaidInvoiceAt) {
+        await recordFirstPaidSubscriptionInvoice(prisma, customerId, firstPaidInvoiceAt);
+      }
+    }
+    if (live && firstPaidInvoiceAt) {
       await referrals.settle(previous.organizationId, live.cardFingerprint);
+    }
+    if (modelCredits && provider.listCreditPurchases) {
+      let added = false;
+      for (const purchase of await provider.listCreditPurchases(customerId)) {
+        if ((await reconcileCreditPurchase(prisma, previous.organizationId, purchase)) > 0)
+          added = true;
+      }
+      await prisma.modelCreditAccount.updateMany({
+        where: {
+          organizationId: previous.organizationId,
+          balanceMicros: { gt: 0n },
+          OR: [{ mode: null }, ...(added ? [{ pendingCreditCheckout: true }] : [])],
+        },
+        data: { mode: "credits", pendingCreditCheckout: false },
+      });
+    }
     if (!modelCredits || !live) return;
     // A newly paid own-key plan becomes the funding, wherever its checkout returned.
     if (
@@ -433,7 +442,7 @@ export function createBillingService(deps: {
         account.creditAmountCents ||
         account.cancelAtPeriodEnd ||
         // Paid up: an overdue period must not be credited against the new plan.
-        (account.status !== "active" && account.status !== "trialing")
+        !hasBillingAccess(account.status)
       )
         throw conflict();
       const from = {
@@ -469,6 +478,8 @@ export function createBillingService(deps: {
       const { organizationId } = await managedOrganization(actor);
       const account = await creditAccount(prisma, organizationId);
       const subscription = await billingAccountForOrganization(prisma, organizationId);
+      if (needsBillingPortal(subscription?.status ?? null))
+        throw new ORPCError("CONFLICT", { message: "Resume the subscription in billing" });
       if (
         funding === "byok" &&
         subscription?.creditAmountCents &&
@@ -558,7 +569,8 @@ export function createBillingService(deps: {
         const freeUntil =
           credits.mode === "byok" &&
           BYOK_TIERS.standard.monthlyPriceCents !== null &&
-          !hasBillingAccess(account?.status ?? null)
+          !hasBillingAccess(account?.status ?? null) &&
+          !needsBillingPortal(account?.status ?? null)
             ? byokFreeUntil(credits)
             : null;
         const subscribed = subscribedByokPrice(account);
