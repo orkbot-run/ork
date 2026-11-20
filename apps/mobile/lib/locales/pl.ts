@@ -8,6 +8,52 @@ export const PL_MESSAGES: Record<string, string> = {
     "Nie udało się otworzyć Ork Accounts. Spróbuj ponownie.",
   "This workspace was closed or your access was removed.":
     "Ta przestrzeń została zamknięta lub odebrano Ci do niej dostęp.",
+  "Back to meetings": "Wróć do spotkań",
+  "Cancel meeting": "Anuluj spotkanie",
+  "Confirm deletion": "Potwierdź usunięcie",
+  "Daily limit: {0}. Maximum meeting length: {1} minutes.":
+    "Limit dzienny: {0}. Maksymalna długość spotkania: {1} min.",
+  "Delete meeting": "Usuń spotkanie",
+  "Delete this meeting and its transcript? This cannot be undone.":
+    "Usunąć spotkanie i jego transkrypcję? Tej operacji nie można cofnąć.",
+  "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link.":
+    "Wpisz obsługiwany link do spotkania w Google Meet, Zoom lub Microsoft Teams.",
+  "Google Meet, Zoom and Microsoft Teams links are supported.":
+    "Obsługiwane są linki Google Meet, Zoom i Microsoft Teams.",
+  "I have informed all participants and have permission to record and transcribe this meeting.":
+    "Wszyscy uczestnicy zostali poinformowani i mam zgodę na nagrywanie oraz transkrypcję tego spotkania.",
+  "Invite your bot to a meeting": "Zaproś bota na spotkanie",
+  "Invite your bot to this meeting?": "Zaprosić bota na to spotkanie?",
+  "Join meeting": "Dołącz do spotkania",
+  "Keep meeting": "Zachowaj spotkanie",
+  "Leave empty to join now. Scheduled time uses your device time zone.":
+    "Pozostaw puste, aby dołączyć teraz. Termin jest podany w strefie czasowej urządzenia.",
+  "Meeting link": "Link do spotkania",
+  Meetings: "Spotkania",
+  "Meetings are not available on this server.": "Spotkania nie są dostępne na tym serwerze.",
+  "No meetings yet.": "Nie ma jeszcze spotkań.",
+  "No transcript yet. It will appear after processing.":
+    "Nie ma jeszcze transkrypcji. Pojawi się po przetworzeniu.",
+  "Review meeting invitation": "Sprawdź zaproszenie na spotkanie",
+  "Review the link and participant consent before inviting your bot.":
+    "Przed zaproszeniem bota sprawdź link i zgodę uczestników.",
+  "Schedule (optional)": "Termin (opcjonalnie)",
+  "Schedule meeting": "Zaplanuj spotkanie",
+  "Stop and leave": "Zatrzymaj i opuść",
+  "Title (optional)": "Tytuł (opcjonalnie)",
+  "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it.":
+    "Bot dołącza jako widoczny uczestnik, nagrywa dźwięk i tworzy transkrypcję. Poinformuj wszystkich uczestników przed jego zaproszeniem.",
+  Joining: "Dołączanie",
+  Recording: "Nagrywanie",
+  Processing: "Przetwarzanie",
+  Canceled: "Anulowane",
+  Scheduled: "Zaplanowane",
+  "Confirm that all participants have been informed before continuing.":
+    "Przed kontynuowaniem potwierdź poinformowanie wszystkich uczestników.",
+  "Enter a future date and time in YYYY-MM-DDTHH:mm format.":
+    "Wpisz przyszłą datę i godzinę w formacie RRRR-MM-DDTGG:mm.",
+  "Daily limit: {dailyLimit}. Maximum meeting length: {maxMinutes} minutes.":
+    "Limit dzienny: {dailyLimit}. Maksymalna długość spotkania: {maxMinutes} min.",
   "Payment failed. Update your payment method to resume your plan.":
     "Płatność nie powiodła się. Zaktualizuj metodę płatności, aby wznowić plan.",
   "Payment failed. Ask an owner to update the payment method.":

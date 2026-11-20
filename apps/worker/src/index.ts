@@ -46,6 +46,7 @@ import {
   createDeadJobPruner,
   createIdleComputerSweeper,
   createJobReconciler,
+  createMeetingConnection,
   createMessagingContextLoader,
   createModelCreditReconciler,
   createPaymentWalletProvider,
@@ -87,6 +88,7 @@ import {
   reconcileComputerOrphans,
   reconcileComputerUpdates,
   reconcileMediaVideos,
+  reconcileMeetings,
   reconcilePurchases,
   resolveDeploymentModel,
   resolvePiSessionRoot,
@@ -347,6 +349,7 @@ async function main() {
   });
   // One provider instance so emulator launches and polls share the same Map.
   const cloudAgent = createCloudAgentConnection();
+  const meetings = createMeetingConnection();
   const paymentWallet = await createPaymentWalletProvider();
   const maxUploadSizeBytes = uploadSizeFromEnv(process.env);
   // Shared with the reconciler so a stuck wait uses the same push path as a finish notice.
@@ -418,6 +421,7 @@ async function main() {
     messaging: messaging ? createMessagingContextLoader(prisma, { messaging, jobs }) : undefined,
     web: createWebProvider(),
     cloudAgent,
+    meetings,
     // Device sockets live in an API process; the worker forwards to whichever one holds it.
     userDevices:
       process.env.USER_DEVICES_ENABLED === "false"
@@ -463,6 +467,7 @@ async function main() {
     deploymentModelConfigured,
     messaging,
     cloudAgent,
+    meetings,
     paymentWallet,
     notifications,
     mediaGeneration,
@@ -481,6 +486,7 @@ async function main() {
       }),
       reconcileStrategicInitiatives: createStrategicInitiativeReconciler({ prisma, jobs }),
       reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
+      reconcileMeetings: () => reconcileMeetings({ prisma, jobs, meetings }),
       reconcilePurchases: () => reconcilePurchases({ prisma, jobs, paymentWallet }),
       reconcileMediaVideos: () => reconcileMediaVideos({ prisma, jobs, mediaGeneration }),
       reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),

@@ -23,6 +23,7 @@ import type {
 } from "@orkbot/adapter-kit";
 import type { PrismaClient, RunLease, ThreadEvents } from "@orkbot/db";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
+import type { MeetingConnection } from "./meeting-service.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import type { CodexLiveCatalog } from "./pi-codex-catalog.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
@@ -84,6 +85,7 @@ export interface ExecutorDeps {
   /** Builtin web_search / web_fetch. Defaults to keyless HTTP when omitted. */
   web?: WebProvider;
   mediaGeneration?: MediaGenerationProvider;
+  meetings?: MeetingConnection | null;
   /** Page browser (DOM refs) on the bot computer. Defaults to the sandbox live browser when supported. */
   browser?: BrowserProvider;
   secretHttp?: RemoteTransportDependencies;

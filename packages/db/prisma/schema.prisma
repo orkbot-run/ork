@@ -97,6 +97,8 @@ model User {
   computerRuns                ComputerRun[]
   devices                     UserDevice[]
 
+  meetingSessions MeetingSession[]
+
   @@unique([email])
   @@map("user")
   messagingInstallations MessagingInstallation[]
@@ -533,6 +535,9 @@ model Space {
   mcpServerSpaces             McpServerSpace[]
   capabilityInstallSpaces     CapabilityInstallSpace[]
 
+  meetingSessions MeetingSession[]
+  meetingDailyUsage MeetingDailyUsage[]
+
   @@unique([id, organizationId])
   @@index([admissionWorkspaceId])
   @@index([organizationId, createdAt])
@@ -860,6 +865,8 @@ model Bot {
   ticketComments    TicketComment[]   @relation("TicketCommentAuthorBot")
 
   externalConversations ExternalConversation[]
+
+  meetingSessions MeetingSession[]
 
   @@unique([spaceId, spawnKey])
   @@index([spaceId, userId, archivedAt, pinned, updatedAt])
@@ -1331,6 +1338,51 @@ model Routine {
   @@index([active, nextRunAt])
   @@index([spaceId, botId])
   @@map("routines")
+}
+
+model MeetingSession {
+  id                 String   @id @default(uuid())
+  spaceId            String
+  userId             String
+  botId              String
+  space              Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bot                Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  title              String
+  url                String?
+  platform           String
+  status             String
+  error              String?
+  scheduledAt        DateTime?
+  consentedAt        DateTime
+  startsAt           DateTime
+  deadlineAt         DateTime
+  nextCheckAt        DateTime?
+  joinAttemptedAt    DateTime?
+  leaveRequestedAt   DateTime?
+  leaveSentAt        DateTime?
+  deleteRequestedAt  DateTime?
+  mediaDeletedAt     DateTime?
+  leaseToken         String?
+  leaseUntil         DateTime?
+  providerId         String?  @unique
+  transcript         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([spaceId, userId, botId, createdAt])
+  @@index([nextCheckAt])
+  @@map("meeting_sessions")
+}
+
+model MeetingDailyUsage {
+  spaceId String
+  space   Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  day     DateTime @db.Date
+  used    Int
+
+  @@id([spaceId, day])
+  @@map("meeting_daily_usage")
 }
 
 model ScratchpadItem {

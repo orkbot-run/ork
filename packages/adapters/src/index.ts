@@ -121,6 +121,9 @@ export * from "./mcp-transport.js";
 export * from "./media-generation-factory.js";
 export * from "./media-generation-provider.js";
 export * from "./media-video-poll.js";
+export * from "./meeting-connection.js";
+export * from "./meeting-emulator.js";
+export * from "./meeting-service.js";
 export {
   AGENT_MEMORY_MAX_BYTES,
   buildAgentMemoryPrompt,
@@ -178,6 +181,7 @@ export * from "./purchase-service.js";
 export * from "./push-token-store.js";
 export type * from "./railway-sandbox.js";
 export * from "./realtime.js";
+export * from "./recall-meetings.js";
 export * from "./release-watch.js";
 export * from "./remote-mcp.js";
 export * from "./resend-email.js";

@@ -217,6 +217,7 @@ Compose bot homes mount only their own subdirectory of the application volume us
   and SIEM forwarding.
 - [Apps and clients](./self-host-clients.md): mobile and desktop apps, push, client updates and web
   page settings.
+- [Meetings](./self-host-meetings.md): optional audio recording and transcripts.
 - [Billing](./self-host-billing.md): optional Stripe plans and model credits.
 - [Restricted networks](./self-host-restricted-network.md): mirrors when downloads are blocked.
 

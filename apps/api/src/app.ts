@@ -34,6 +34,7 @@ import {
 import type {
   ComposioProvider,
   ConnectorRegistry,
+  MeetingConnection,
   PluginRepoFetcher,
   PluginTextReader,
   RemoteConnectorDependencies,
@@ -52,6 +53,7 @@ import {
   createConnectorStack,
   createIdleComputerSweeper,
   createJobReconciler,
+  createMeetingConnection,
   createMessagingContextLoader,
   createMessagingTeamChatHistory,
   createMessagingTeamChatSender,
@@ -93,6 +95,7 @@ import {
   reconcileComputerOrphans,
   reconcileComputerUpdates,
   reconcileMediaVideos,
+  reconcileMeetings,
   reconcilePurchases,
   removePiUserSessions,
   resolveDeploymentModel,
@@ -204,6 +207,7 @@ import { mountSharedPages } from "#modules/content/shared-pages";
 import { endUserDeviceSession, mountUserDeviceRoutes } from "#modules/devices/user-devices";
 import { pluginSubmissionRoutes } from "#modules/integrations/plugin-submissions";
 import { moveMcpArgsIntoSecrets } from "#modules/mcp/mcp-args-migration";
+import { mountMeetingWebhook } from "#modules/meetings/routes";
 import { configuredEmailProvider } from "#modules/messaging/email";
 import {
   createMessagingInboundHandler,
@@ -312,6 +316,7 @@ type CreateAppOverrides = Partial<AppEnv> & {
   email?: TransactionalEmailProvider;
   notifications?: NotificationProvider;
   billing?: BillingProvider;
+  meetings?: MeetingConnection | null;
   remoteConnectors?: RemoteConnectorDependencies;
   pluginRepoFetcher?: PluginRepoFetcher;
   pluginMarketplaceRead?: PluginTextReader;
@@ -338,6 +343,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     email: emailOverride,
     notifications: notificationsOverride,
     billing: billingOverride,
+    meetings: meetingsOverride,
     remoteConnectors,
     modelConnectionFetch,
     pluginRepoFetcher,
@@ -796,6 +802,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     CURSOR_API_KEY: env.cursorApiKey,
     CLOUD_AGENT_SPACE_ID: env.cloudAgentSpaceId,
   });
+  const meetings = meetingsOverride === undefined ? createMeetingConnection() : meetingsOverride;
   const paymentWallet = await createPaymentWalletProvider({
     PAYMENT_WALLET_PROVIDER: env.paymentWalletProvider,
     PAYMENT_WALLET_CLIENT_ID: env.paymentWalletClientId,
@@ -866,6 +873,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     messaging: messaging ? createMessagingContextLoader(prisma, { messaging, jobs }) : undefined,
     web: createWebProvider(),
     cloudAgent,
+    meetings,
     userDevices: userDevicesOverride ?? userDevices,
     paymentWallet,
     shutdownSignal: shutdown.signal,
@@ -890,6 +898,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     deploymentModelConfigured: env.deploymentModelConfigured,
     messaging,
     cloudAgent,
+    meetings,
     paymentWallet,
     mediaGeneration,
     maxUploadSizeBytes: env.maxUploadSizeBytes,
@@ -909,6 +918,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
           lookup: deploymentModelUsageLookup(),
         }),
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
+        reconcileMeetings: () => reconcileMeetings({ prisma, jobs, meetings }),
         reconcilePurchases: () => reconcilePurchases({ prisma, jobs, paymentWallet }),
         reconcileMediaVideos: () => reconcileMediaVideos({ prisma, jobs, mediaGeneration }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
@@ -1011,6 +1021,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     pluginRepoFetcher,
     pluginMarketplaceRead,
     cloudAgent,
+    meetings,
     paymentWallet,
     codexCatalog,
     prisma,
@@ -1400,6 +1411,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     },
     sessionActor,
   );
+  mountMeetingWebhook(app, { prisma, jobs, meetings });
   mountWebhookHttpRoutes(app, { prisma, secrets, events, jobs });
   if (billing && billingProvider) {
     mountBillingRoutes(app, {

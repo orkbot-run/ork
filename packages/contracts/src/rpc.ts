@@ -175,6 +175,12 @@ import {
   IntegrationSetupStateSchema,
 } from "./integration-settings.js";
 import { McpAuthorizationUrlSchema } from "./mcp.js";
+import {
+  CreateMeetingInputSchema,
+  MeetingDetailSchema,
+  MeetingSummarySchema,
+  MeetingsStatusSchema,
+} from "./meetings.js";
 import { ModelHeadersSchema } from "./model-headers.js";
 import { ModelRoleSchema, ModelRoleUpdateSchema, ModelRoleViewSchema } from "./model-roles.js";
 import {
@@ -1641,6 +1647,14 @@ export const appContract = {
     /** Starts a sign-in the user finishes with the provider; `status` then reports it. */
     connect: oc.output(PaymentWalletStatusSchema),
     disconnect: oc.output(PaymentWalletStatusSchema),
+  },
+  meetings: {
+    status: oc.output(MeetingsStatusSchema),
+    list: oc.input(z.object({ botId: Id })).output(z.array(MeetingSummarySchema)),
+    get: oc.input(z.object({ meetingId: Id })).output(MeetingDetailSchema),
+    create: oc.input(CreateMeetingInputSchema).output(MeetingSummarySchema),
+    leave: oc.input(z.object({ meetingId: Id })).output(z.object({ ok: z.literal(true) })),
+    remove: oc.input(z.object({ meetingId: Id })).output(z.object({ ok: z.literal(true) })),
   },
   voice: {
     catalog: oc.output(z.array(VoiceCatalogEntrySchema)),

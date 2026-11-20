@@ -10,6 +10,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../lib/rpc", () => {
   const rpc = {
+    meetings: {
+      status: vi.fn().mockResolvedValue({ enabled: false, dailyLimit: 10, maxMinutes: 60 }),
+    },
     voice: { voices: vi.fn(async () => []) },
     models: {
       workspacePolicy: vi.fn().mockResolvedValue({ canManage: false, policy: null }),

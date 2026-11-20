@@ -160,7 +160,8 @@ export type SpaceSource =
   | "messages"
   | "events"
   | "memory_documents"
-  | "memory_revisions";
+  | "memory_revisions"
+  | "meeting_sessions";
 
 export interface SpaceKeyStore {
   forSpace(spaceId: string): Promise<SpaceKeyRecord[]>;
@@ -189,6 +190,7 @@ export const ROW_OWNER: Record<SpaceSource, string> = {
   events: "threadId",
   memory_documents: "userId",
   memory_revisions: "documentId",
+  meeting_sessions: "userId",
 };
 
 export interface Queryable {
@@ -197,6 +199,7 @@ export interface Queryable {
 
 const COLUMNS = `id, "spaceId", version, "masterKeyId", "wrappedKey"`;
 const ROW_CONTEXT: Record<SpaceSource, string> = {
+  meeting_sessions: `SELECT "spaceId", "userId" AS owner FROM meeting_sessions WHERE id = $1`,
   threads: `SELECT "spaceId", "userId" AS owner FROM threads WHERE id = $1`,
   events: `SELECT "spaceId", "threadId" AS owner FROM events WHERE id = $1`,
   memory_documents: `SELECT "spaceId", "userId" AS owner FROM memory_documents WHERE id = $1`,

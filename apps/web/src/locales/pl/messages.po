@@ -8029,3 +8029,123 @@ msgstr "Poproś właściciela o wznowienie planu."
 #: src/components/BillingRecovery.tsx
 msgid "Update payment method"
 msgstr "Zaktualizuj metodę płatności"
+
+#: src/pages/shell/meetings.tsx
+msgid "Back to meetings"
+msgstr "Wróć do spotkań"
+
+#: src/pages/shell/meetings.tsx
+msgid "Cancel meeting"
+msgstr "Anuluj spotkanie"
+
+#: src/pages/shell/meetings.tsx
+msgid "Confirm deletion"
+msgstr "Potwierdź usunięcie"
+
+#: src/pages/shell/meetings.tsx
+msgid "Daily limit: {0}. Maximum meeting length: {1} minutes."
+msgstr "Limit dzienny: {0}. Maksymalna długość spotkania: {1} min."
+
+#: src/pages/shell/meetings.tsx
+msgid "Delete meeting"
+msgstr "Usuń spotkanie"
+
+#: src/pages/shell/meetings.tsx
+msgid "Delete this meeting and its transcript? This cannot be undone."
+msgstr "Usunąć spotkanie i jego transkrypcję? Tej operacji nie można cofnąć."
+
+#: src/pages/shell/meetings.tsx
+msgid "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link."
+msgstr "Wpisz obsługiwany link do spotkania w Google Meet, Zoom lub Microsoft Teams."
+
+#: src/pages/shell/meetings.tsx
+msgid "Google Meet, Zoom and Microsoft Teams links are supported."
+msgstr "Obsługiwane są linki Google Meet, Zoom i Microsoft Teams."
+
+#: src/pages/shell/meetings.tsx
+msgid "I have informed all participants and have permission to record and transcribe this meeting."
+msgstr "Wszyscy uczestnicy zostali poinformowani i mam zgodę na nagrywanie oraz transkrypcję tego spotkania."
+
+#: src/pages/shell/meetings.tsx
+msgid "Invite your bot to a meeting"
+msgstr "Zaproś bota na spotkanie"
+
+#: src/pages/shell/meetings.tsx
+msgid "Invite your bot to this meeting?"
+msgstr "Zaprosić bota na to spotkanie?"
+
+#: src/pages/shell/meetings.tsx
+msgid "Join meeting"
+msgstr "Dołącz do spotkania"
+
+#: src/pages/shell/meetings.tsx
+msgid "Joining"
+msgstr "Dołączanie"
+
+#: src/pages/shell/meetings.tsx
+msgid "Keep meeting"
+msgstr "Zachowaj spotkanie"
+
+#: src/pages/shell/meetings.tsx
+msgid "Leave empty to join now. Scheduled time uses your device time zone."
+msgstr "Pozostaw puste, aby dołączyć teraz. Termin jest podany w strefie czasowej urządzenia."
+
+#: src/pages/shell/meetings.tsx
+msgid "Meeting link"
+msgstr "Link do spotkania"
+
+#: src/pages/shell/meetings.tsx
+msgid "Meetings"
+msgstr "Spotkania"
+
+#: src/pages/shell/meetings.tsx
+msgid "Meetings are not available on this server."
+msgstr "Spotkania nie są dostępne na tym serwerze."
+
+#: src/pages/shell/meetings.tsx
+msgid "No meetings yet."
+msgstr "Nie ma jeszcze spotkań."
+
+#: src/pages/shell/meetings.tsx
+msgid "No transcript yet. It will appear after processing."
+msgstr "Nie ma jeszcze transkrypcji. Pojawi się po przetworzeniu."
+
+#: src/pages/shell/meetings.tsx
+msgid "Processing"
+msgstr "Przetwarzanie"
+
+#: src/pages/shell/meetings.tsx
+msgid "Recording"
+msgstr "Nagrywanie"
+
+#: src/pages/shell/meetings.tsx
+msgid "Review meeting invitation"
+msgstr "Sprawdź zaproszenie na spotkanie"
+
+#: src/pages/shell/meetings.tsx
+msgid "Review the link and participant consent before inviting your bot."
+msgstr "Przed zaproszeniem bota sprawdź link i zgodę uczestników."
+
+#: src/pages/shell/meetings.tsx
+msgid "Schedule (optional)"
+msgstr "Termin (opcjonalnie)"
+
+#: src/pages/shell/meetings.tsx
+msgid "Schedule meeting"
+msgstr "Zaplanuj spotkanie"
+
+#: src/pages/shell/meetings.tsx
+msgid "Scheduled"
+msgstr "Zaplanowane"
+
+#: src/pages/shell/meetings.tsx
+msgid "Stop and leave"
+msgstr "Zatrzymaj i opuść"
+
+#: src/pages/shell/meetings.tsx
+msgid "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it."
+msgstr "Bot dołącza jako widoczny uczestnik, nagrywa dźwięk i tworzy transkrypcję. Poinformuj wszystkich uczestników przed jego zaproszeniem."
+
+#: src/pages/shell/meetings.tsx
+msgid "Title (optional)"
+msgstr "Tytuł (opcjonalnie)"

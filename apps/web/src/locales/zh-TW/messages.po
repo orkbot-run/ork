@@ -7900,3 +7900,123 @@ msgstr "Could not load webhook key"
 
 msgid "No webhook key configured"
 msgstr "No webhook key configured"
+
+#: src/pages/shell/meetings.tsx
+msgid "Back to meetings"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Cancel meeting"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Confirm deletion"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Daily limit: {0}. Maximum meeting length: {1} minutes."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Delete meeting"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Delete this meeting and its transcript? This cannot be undone."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Enter a supported Google Meet, Zoom or Microsoft Teams meeting link."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Google Meet, Zoom and Microsoft Teams links are supported."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "I have informed all participants and have permission to record and transcribe this meeting."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Invite your bot to a meeting"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Invite your bot to this meeting?"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Join meeting"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Joining"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Keep meeting"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Leave empty to join now. Scheduled time uses your device time zone."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Meeting link"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Meetings"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Meetings are not available on this server."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "No meetings yet."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "No transcript yet. It will appear after processing."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Processing"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Recording"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Review meeting invitation"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Review the link and participant consent before inviting your bot."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Schedule (optional)"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Schedule meeting"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Scheduled"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Stop and leave"
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "The bot joins visibly, records audio and creates a transcript. Inform every participant before inviting it."
+msgstr ""
+
+#: src/pages/shell/meetings.tsx
+msgid "Title (optional)"
+msgstr ""

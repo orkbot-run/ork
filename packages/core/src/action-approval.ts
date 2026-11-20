@@ -49,6 +49,7 @@ const APPROVAL_REQUIRED_BUILTIN_TOOLS = new Set([
   "feedback",
 ]);
 const EXPLICIT_APPROVAL_BUILTIN_TOOLS = new Set([
+  "meeting_schedule",
   "respond_agent_connection",
   "create_space",
   "set_child_instructions",

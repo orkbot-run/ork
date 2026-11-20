@@ -49,6 +49,7 @@ import {
 } from "./run-effects.js";
 import { fleetPrepareDeps } from "./run-model.js";
 import { BUILTIN_AGENT_TOOL_NAMES, FLEET_WRITE_TOOL_NAMES_SET } from "./run-tool-selection.js";
+import { validateMeetingTool } from "./run-tools-meetings.js";
 import { preparePageSaveRequest } from "./run-tools-pages.js";
 import { scheduleCreateRefusal } from "./run-tools-tasks.js";
 import {
@@ -383,6 +384,24 @@ export async function prepareToolRequest(
   const { name, executionId, nextApprovedTool } = request;
   if (name === "update_bot") request.args = normalizeOwnBotTarget(request.args, bot.id);
   let { args } = request;
+  const meetingRefusal = validateMeetingTool(ctx, name, args);
+  if (meetingRefusal) return meetingRefusal;
+  if (name === "meeting_schedule") {
+    if (isSubagentToolExecution(executionId))
+      return { error: "Helpers cannot schedule meeting recordings." };
+    request.heldForApproval = true;
+    request.mandatoryApproval = true;
+    const destination = new URL(String(args.url));
+    request.fleetSummary = {
+      title: "Record meeting audio?",
+      lines: [
+        destination.host + destination.pathname,
+        String(args.scheduledAt),
+        "Approve only if all participants were informed and you have permission to record and share the transcript with this bot.",
+      ],
+      onceOnly: true,
+    };
+  }
   if (name === "message_bot" || name === "handoff_to_bot" || name === "post_to_group") {
     try {
       botFilePaths(args.files);

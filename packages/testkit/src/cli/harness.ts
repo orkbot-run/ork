@@ -91,6 +91,8 @@ async function main() {
     process.env.VERIFY_DATABASE = "1";
     process.env.WAKEUP_DRIVER = "memory";
     process.env.SANDBOX_PROVIDER = sandboxProvider;
+    if (process.env.ORKBOT_MEETING_PROVIDER !== "emulator")
+      process.env.ORKBOT_MEETING_PROVIDER = "none";
     process.env.AGENT_RUNTIME = agentRuntime;
     process.env.ORKBOT_LIVE_MODEL_CATALOG = "off";
     if (!integration) {
@@ -224,6 +226,45 @@ async function main() {
       override run(
         ...[request, context]: Parameters<InstanceType<typeof ScriptedAgentRuntime>["run"]>
       ) {
+        const scheduleMeetingFixture = /\bSchedule meeting fixture ([0-9TZ:.+-]+)/i.exec(
+          request.prompt,
+        );
+        if (scheduleMeetingFixture) {
+          return super.run(
+            {
+              ...request,
+              script: [
+                {
+                  toolCalls: [
+                    {
+                      name: "meeting_schedule",
+                      args: {
+                        url: "https://teams.microsoft.com/meet/1234567890123",
+                        title: "Calendar fixture",
+                        scheduledAt: scheduleMeetingFixture[1],
+                      },
+                    },
+                  ],
+                },
+                { assistant: "Meeting scheduling checked.", complete: true },
+              ],
+            },
+            context,
+          );
+        }
+        const meetingFixture = /\bRead meeting fixture ([a-z0-9_-]+)\b/i.exec(request.prompt);
+        if (meetingFixture) {
+          return super.run(
+            {
+              ...request,
+              script: [
+                { toolCalls: [{ name: "meeting_read", args: { meetingId: meetingFixture[1] } }] },
+                { assistant: "Meeting transcript checked.", complete: true },
+              ],
+            },
+            context,
+          );
+        }
         const routineFixture = /\bRoutine event fixture (hooks|chat|edit)(?: ([a-z0-9]+))?/i.exec(
           request.prompt,
         );

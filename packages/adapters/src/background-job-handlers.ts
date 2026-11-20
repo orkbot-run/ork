@@ -30,6 +30,8 @@ import type { createRunExecutor } from "./executor.js";
 import type { ExpoPushProvider } from "./expo-push.js";
 import { compactHistory } from "./history-compaction.js";
 import { pollMediaVideo } from "./media-video-poll.js";
+import type { MeetingConnection } from "./meeting-service.js";
+import { pollMeeting } from "./meeting-service.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
 import { pollPurchase } from "./purchase-poll.js";
@@ -74,6 +76,7 @@ export function createBackgroundJobHandlers(deps: {
   deploymentModelConfigured?: boolean;
   messaging?: MessagingSurface;
   cloudAgent?: CloudAgentConnection | null;
+  meetings?: MeetingConnection | null;
   paymentWallet?: PaymentWalletProvider | null;
   notifications?: ExpoPushProvider;
   mediaGeneration?: MediaGenerationProvider;
@@ -117,6 +120,8 @@ export function createBackgroundJobHandlers(deps: {
     deps.prisma.taughtSkill.findUnique({ where: { id: skillId }, select: OWNER });
   const cloudAgent = ({ agentId }: { agentId: string }) =>
     deps.prisma.cloudAgent.findUnique({ where: { id: agentId }, select: OWNER });
+  const meeting = ({ meetingId }: { meetingId: string }) =>
+    deps.prisma.meetingSession.findUnique({ where: { id: meetingId }, select: OWNER });
   const purchase = ({ purchaseId }: { purchaseId: string }) =>
     deps.prisma.purchase.findUnique({ where: { id: purchaseId }, select: OWNER });
   const mediaJob = async ({ jobId }: { jobId: string }) =>
@@ -213,6 +218,9 @@ export function createBackgroundJobHandlers(deps: {
         { prisma: deps.prisma, jobs: deps.jobs, events: deps.events, cloudAgent: deps.cloudAgent },
         payload,
       );
+    }),
+    "meeting.poll": asOwner(meeting, async ({ meetingId }) => {
+      await pollMeeting(deps, meetingId);
     }),
     "purchase.poll": asOwner(purchase, async (payload) => {
       await pollPurchase(

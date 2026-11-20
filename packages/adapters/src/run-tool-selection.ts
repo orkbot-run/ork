@@ -13,6 +13,7 @@ import { builtinAgentTools } from "./builtin-tools.js";
 import { selectCloudAgentTools } from "./cloud-agent-tools-select.js";
 import { selectMemoryTools } from "./memory-tools.js";
 import { filterImageReturningComputerTools } from "./model-vision.js";
+import { MEETING_TOOL_NAMES } from "./run-tools-meetings.js";
 import { USER_COMPUTER_SCREEN_TOOLS } from "./run-tools-user-computer.js";
 import {
   filterBuiltinToolsForRun,
@@ -64,6 +65,7 @@ export function selectBuiltinToolsForRun(options: {
   /** The configured provider can forget individual facts. */
   semanticMemoryForgets?: boolean;
   cloudAgentEnabled?: boolean;
+  meetingsEnabled?: boolean;
   /** The run's user connected a payment wallet. */
   paymentWalletEnabled?: boolean;
   mediaImagesEnabled?: boolean;
@@ -103,6 +105,11 @@ export function selectBuiltinToolsForRun(options: {
   ).filter(
     (tool) =>
       !disabled.has(tool.name) &&
+      (!MEETING_TOOL_NAMES.has(tool.name) ||
+        (options.meetingsEnabled &&
+          ownerStartedRun &&
+          !options.groupId &&
+          !options.messagingChannelRun)) &&
       backgroundHelperToolAllowed(options.trigger, tool.name) &&
       (options.trigger !== "created" || CREATED_RUN_TOOL_NAMES.has(tool.name)) &&
       (!FLEET_TOOL_NAMES_SET.has(tool.name) ||

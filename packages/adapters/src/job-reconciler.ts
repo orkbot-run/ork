@@ -135,6 +135,7 @@ export function createJobReconciler(
     reconcileComputerUpdates?: () => Promise<void>;
     reconcileComputerOrphans?: () => Promise<void>;
     reconcileCloudAgents?: () => Promise<void>;
+    reconcileMeetings?: () => Promise<void>;
     reconcilePurchases?: () => Promise<void>;
     reconcileMediaVideos?: () => Promise<void>;
     reconcileModelCredits?: () => Promise<void>;
@@ -173,6 +174,7 @@ export function createJobReconciler(
   // External housekeeping runs beside recovery scans. Only the same task waits for its last pass.
   const housekeeping = [
     deps.reconcileCloudAgents,
+    deps.reconcileMeetings,
     deps.reconcilePurchases,
     deps.reconcileMediaVideos,
     deps.reconcileModelCredits,
