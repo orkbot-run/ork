@@ -723,6 +723,7 @@ export type AgentRuntimeEvent =
       /** Which model response made the call; calls from one response share it. */
       response?: number;
     }
+  | { type: "tool_loop_stop"; name: string; executionId: string; count: number }
   | {
       type: "ask";
       executionId?: string;

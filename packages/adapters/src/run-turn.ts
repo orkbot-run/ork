@@ -100,6 +100,7 @@ import {
   loopGuardStopText,
   MAX_CONSECUTIVE_OVER_LIMIT_ACTION_CALLS,
   overLimitStopText,
+  sameToolResultStopText,
   toolResultFingerprint,
 } from "./tool-loop.js";
 import {
@@ -234,6 +235,9 @@ export async function consumeRunEvents(
             await deps.events.notify(updated.threadId, updated.eventSeq).catch(() => undefined);
         }
         if (await onToolCalled(ctx, event)) return true;
+      } else if (event.type === "tool_loop_stop") {
+        await stopStuckToolLoop(ctx, event.name, event);
+        return true;
       } else if (event.type === "subagent") {
         await publishSubagent(ctx, event);
       } else if (event.type === "usage" && !event.accounted) {
@@ -650,13 +654,41 @@ async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promi
 }
 
 /** The model keeps repeating the same call: finish the run with what it has and say why. */
-async function stopStuckToolLoop(ctx: RunContext, toolName: string) {
+async function stopStuckToolLoop(
+  ctx: RunContext,
+  toolName: string,
+  repeatedResult?: RuntimeEvent<"tool_loop_stop">,
+) {
   ctx.stopProduction();
   const { deps, run, runId, bot, thread, workerId, fence } = ctx;
   const { reply } = ctx.state;
   ctx.tools.approvedReplays.assertDrained();
   flushPendingTools(reply);
   if (!(await renewRunLease(deps, runId, workerId, fence))) return;
+  if (repeatedResult) {
+    const toolLoopStop = {
+      reason: "same_result",
+      name: redactSecrets(toolName, ctx.secrets),
+      executionId: redactSecrets(repeatedResult.executionId, ctx.secrets),
+      count: repeatedResult.count,
+    };
+    getLogger().info("agent.tool.loop_stopped", { "run.id": runId, ...toolLoopStop });
+    await deps.events
+      .append({
+        spaceId: run.spaceId,
+        threadId: thread.id,
+        botId: bot.id,
+        runId,
+        type: "thread.meta",
+        lease: { owner: workerId, fence },
+        payload: { toolLoopStop },
+      })
+      .catch((error) => {
+        if (!(error instanceof RunHistoryWriteError)) {
+          getLogger().warn("agent tool loop audit append failed", { error });
+        }
+      });
+  }
   if (reply.messageSegments.length > 0) {
     await publishMessage(deps, run, "bot", redactBlocks(reply.messageSegments, ctx.secrets));
   }
@@ -664,8 +696,9 @@ async function stopStuckToolLoop(ctx: RunContext, toolName: string) {
   ctx.state.terminalCheckpointComplete = true;
   const overLimit = ctx.state.overLimitActionCalls;
   const humanName = humanizeToolName(toolName);
-  const stuckText =
-    overLimit >= MAX_CONSECUTIVE_OVER_LIMIT_ACTION_CALLS
+  const stuckText = repeatedResult
+    ? sameToolResultStopText(humanName, repeatedResult.count)
+    : overLimit >= MAX_CONSECUTIVE_OVER_LIMIT_ACTION_CALLS
       ? overLimitStopText(humanName, overLimit)
       : loopGuardStopText(humanName, ctx.state.toolCallStreak);
   await ctx.settleRunningHelpers();

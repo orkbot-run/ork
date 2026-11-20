@@ -43,6 +43,7 @@ import {
   uncertainEffectResult,
 } from "./approval-effect.js";
 import { automated, withAutomatedLabels } from "./automated-messages.js";
+import { USE_TOOL } from "./builtin-tool-bridge.js";
 import { withCloudflareAuth } from "./cloudflare-ai-gateway.js";
 import { neutralizeSpeakerLabels } from "./history-speakers.js";
 import { estimatePiImageTokens } from "./pi-image-context.js";
@@ -100,6 +101,7 @@ import type { RuntimeContextDecision } from "./runtime-context.js";
 import { createRuntimeContextPolicy } from "./runtime-context.js";
 import { deliverFinishedShells } from "./shell-command-stream.js";
 import { withoutThinkingFrom } from "./thinking-signatures.js";
+import { advanceToolResultStreak, MAX_CONSECUTIVE_SIMILAR_TOOL_CALLS } from "./tool-loop.js";
 import type { ComputerModeCheckpoint } from "./turn-checkpoint.js";
 import {
   restoreTurnCheckpoint,
@@ -464,6 +466,8 @@ export class PiAgentRuntime implements AgentRuntime {
         let activeStreamTarget = host.activeModel;
         // A tool result that ended the turn carries the reply the user must still see.
         let terminatedReply: string | undefined;
+        let toolResultStreak: ReturnType<typeof advanceToolResultStreak> | undefined;
+        let stoppedForRepeatedResults = false;
         let fallbackState: FallbackStreamState = {
           request,
           getActive: () => activeStreamTarget,
@@ -647,6 +651,39 @@ export class PiAgentRuntime implements AgentRuntime {
               ? async () => activeStreamTarget.credentials?.accessToken ?? activeStreamTarget.apiKey
               : async () => apiKey,
           finishTurn: async (turn, turnSignal) => {
+            const calls = turn.message.content.filter((part) => part.type === "toolCall");
+            const [call] = calls;
+            const [result] = turn.toolResults;
+            if (
+              calls.length === 1 &&
+              turn.toolResults.length === 1 &&
+              call &&
+              result?.toolCallId === call.id &&
+              turn.message.stopReason !== "length" &&
+              !host.pausePending &&
+              !terminatedReply &&
+              !host.toolCallBudget.exceeded &&
+              !signal.aborted &&
+              !turnSignal?.aborted
+            ) {
+              const name =
+                call.name === USE_TOOL && typeof call.arguments.name === "string"
+                  ? call.arguments.name
+                  : call.name;
+              toolResultStreak = advanceToolResultStreak(toolResultStreak, { name, result });
+              if (toolResultStreak.count >= MAX_CONSECUTIVE_SIMILAR_TOOL_CALLS) {
+                stoppedForRepeatedResults = true;
+                queue.push({
+                  type: "tool_loop_stop",
+                  name,
+                  executionId: JSON.stringify(["pi-tool", host.agentNamespace ?? "main", call.id]),
+                  count: toolResultStreak.count,
+                });
+                return { action: "end" };
+              }
+            } else {
+              toolResultStreak = undefined;
+            }
             await deliverFinishedShells(
               (text) => {
                 agent.followUp({
@@ -686,7 +723,10 @@ export class PiAgentRuntime implements AgentRuntime {
             const steering = await request.claimSteering([...seenSteeringIds]);
             if (steering.length === 0) return update;
             const fromRunUser = steering.some((item) => item.origin === "user");
-            if (fromRunUser) userSteeringNeedsReview = true;
+            if (fromRunUser) {
+              userSteeringNeedsReview = true;
+              toolResultStreak = undefined;
+            }
             seenSteeringIds.push(...steering.map((item) => item.id));
             for (const item of steering) representedHistoryIds.add(item.messageId);
             if (steering.some((item) => item.images?.length && !item.imageFileFallback))
@@ -923,6 +963,7 @@ export class PiAgentRuntime implements AgentRuntime {
             }
           }
           if (event.type === "turn_end") {
+            if (stoppedForRepeatedResults) return;
             // Pi reports tool starts before argument validation. Count only calls
             // admitted by the runtime's tool budget.
             if (host.toolCallBudget.count > admittedTools && !host.toolCallBudget.exceeded) {
@@ -1252,6 +1293,7 @@ export class PiAgentRuntime implements AgentRuntime {
             signal.removeEventListener("abort", onAbort);
           }
         }
+        if (stoppedForRepeatedResults) return;
         // A continuation that failed or stopped early still hands over what it wrote.
         releaseJoin();
 
