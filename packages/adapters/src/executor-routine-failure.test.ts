@@ -60,6 +60,7 @@ interface Scenario {
   resumeAfterScheduleEdit?: boolean;
   lateLookupFails?: boolean;
   setupFailsOnce?: boolean;
+  waitForConversation?: boolean;
 }
 
 async function failRun(scenario: Scenario) {
@@ -68,6 +69,7 @@ async function failRun(scenario: Scenario) {
     return scenario.unreadChats ?? 0;
   });
   const trigger = scenario.trigger ?? "routine";
+  let conversationBusy = scenario.waitForConversation ?? false;
   const run = {
     id: "run-1",
     botId: "bot-1",
@@ -83,6 +85,7 @@ async function failRun(scenario: Scenario) {
     lateSince: scenario.lateSince ?? null,
     leaseFence: 0,
     startedAt: scenario.startedAt ?? null,
+    createdAt: NOW,
     ...(scenario.pinnedTo
       ? {
           modelPinned: true,
@@ -109,16 +112,22 @@ async function failRun(scenario: Scenario) {
     run: {
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => ({ ...run, routine: scenario.routine ?? null })),
-      findFirst: vi.fn(async () => ({
-        bot: {
-          id: "bot-1",
-          name: "Assistant",
-          color: "blue",
-          avatarSet: "default",
-          notifyOnFinish: scenario.notifyOnFinish ?? true,
-        },
-        thread: { groupId: null },
-      })),
+      findFirst: vi.fn(async ({ select }: { select?: { id?: boolean } }) =>
+        select?.id
+          ? conversationBusy
+            ? { id: "active-chat" }
+            : null
+          : {
+              bot: {
+                id: "bot-1",
+                name: "Assistant",
+                color: "blue",
+                avatarSet: "default",
+                notifyOnFinish: scenario.notifyOnFinish ?? true,
+              },
+              thread: { groupId: null },
+            },
+      ),
       updateMany: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         // Prisma leaves a field unchanged when its value is undefined.
         for (const [key, value] of Object.entries(data))
@@ -290,6 +299,14 @@ async function failRun(scenario: Scenario) {
   } as unknown as Parameters<typeof createRunExecutor>[0]);
 
   await executor.continueRun(run.id, "worker-1");
+  if (scenario.waitForConversation) {
+    expect(run).toMatchObject({ status: "queued", leaseFence: 0 });
+    expect(prisma.attempt.create).not.toHaveBeenCalled();
+    expect(runtimeRun).not.toHaveBeenCalled();
+    expect(finalizeRun).not.toHaveBeenCalled();
+    conversationBusy = false;
+    await executor.continueRun(run.id, "worker-1");
+  }
   if (scenario.setupFailsOnce) {
     expect(run.status).toBe("queued");
     expect(runtimeRun).not.toHaveBeenCalled();
@@ -384,6 +401,15 @@ describe("routine failure notifications", () => {
 });
 
 describe("a scheduled run that starts late", () => {
+  it("leaves the routine queued until the active chat turn ends", async () => {
+    const { runtimeRun } = await failRun({
+      error: overloaded(),
+      waitForConversation: true,
+      clientNonce: "routine-timer:routine-1:2026-03-02T08:55:00.000Z",
+    });
+    expect(runtimeRun).toHaveBeenCalledOnce();
+  });
+
   const timer = (scheduledFor: string) => `routine-timer:routine-1:${scheduledFor}`;
   const lateWrites = (prisma: Awaited<ReturnType<typeof failRun>>["prisma"]) =>
     prisma.run.updateMany.mock.calls.filter(([args]) => args.data.lateSince !== undefined);

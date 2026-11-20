@@ -1,9 +1,10 @@
 import type { Prisma } from "@orkbot/db";
 import { appendEventInTransaction } from "@orkbot/db";
+import { ROUTINE_TIMER_NONCE_PREFIX } from "./routine-conversation.js";
 
 /** Reserved provenance for recurring timer ticks; manual/event/retry runs never use it. */
 export function routineTimerNonce(routineId: string, scheduledFor: string): string {
-  return `routine-timer:${routineId}:${scheduledFor}`;
+  return `${ROUTINE_TIMER_NONCE_PREFIX}${routineId}:${scheduledFor}`;
 }
 
 /** The scheduled occurrence a recurring timer run was created for, if it is one. */
@@ -40,7 +41,7 @@ export async function findPendingRoutineTick(
     routineId: config.routineId,
     // Older firings did not distinguish recurring ticks from one-shot schedules.
     // Preserve all ambiguous legacy work, even when routine.fired was recorded.
-    clientNonce: { startsWith: `routine-timer:${config.routineId}:` },
+    clientNonce: { startsWith: routineTimerNonce(config.routineId, "") },
     spaceId: config.spaceId,
     botId: config.botId,
     userId: config.userId,

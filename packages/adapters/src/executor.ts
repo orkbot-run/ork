@@ -154,6 +154,12 @@ import { loadPurchaseRedactions } from "./purchase-service.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
 import { backOffRoutineAfterAccountError } from "./routine-backoff.js";
 import { redactRoutineChecklist } from "./routine-checklist.js";
+import {
+  isScheduledRoutineRun,
+  liveScheduledRoutine,
+  lockRunConversation,
+  mayClaimScheduledRoutine,
+} from "./routine-conversation.js";
 import { lateRoutineRunDueAt, lateRoutineRunInstruction } from "./routine-lateness.js";
 import { lazyRunComputer } from "./run-computer.js";
 import type {
@@ -380,23 +386,39 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
 
       const fence = nextFence(run.leaseFence);
       const now = new Date();
+      const scheduledRoutine = isScheduledRoutineRun(run);
       const leased = await deps.prisma.$transaction(async (tx) => {
         // Keep the accepted run unchanged while deletion is pending. A thrown guard leaves
         // both the durable run and its retryable job available if deletion is cancelled.
         await lockSpaceForWork(tx, run.spaceId);
         await declareRunReaderVersion(tx);
+        await lockRunConversation(tx, run);
         deps.runAdmissionSignal?.throwIfAborted();
+        const claimTime = new Date();
+        if (
+          scheduledRoutine &&
+          run.status === "queued" &&
+          !(await mayClaimScheduledRoutine(tx, run, claimTime))
+        ) {
+          // The queued row remains runnable. Completion wakes it and reconciliation repairs
+          // a missed wakeup without publishing a delayed job that could overwrite a fresh one.
+          return { count: 0 };
+        }
         recovery.fence = fence;
         const result = await tx.run.updateMany({
           where: {
             id: runId,
             ...continueRunClaimFence(run),
-            AND: [{ OR: [{ wakeAt: null }, { wakeAt: { lte: now } }] }],
+            leaseFence: run.leaseFence,
+            ...(run.status === "queued" && !scheduledRoutine
+              ? { thread: { runs: { none: liveScheduledRoutine(run.botId, claimTime) } } }
+              : {}),
+            AND: [{ OR: [{ wakeAt: null }, { wakeAt: { lte: claimTime } }] }],
             OR: [
               { status: { in: ["queued", "waiting_input", "waiting_takeover"] } },
               {
                 status: { in: ["leased", "running"] },
-                leaseExpiresAt: { lte: now },
+                leaseExpiresAt: { lte: claimTime },
               },
             ],
           },
@@ -2551,7 +2573,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           await releaseComputerExecutionLease(deps.prisma, computerLease).catch(() => undefined);
           // A stopping process requeues this run instead, which must keep its turn.
           if (!deps.shutdownSignal?.aborted) {
-            await startNextWaitingRun(deps, run.botId, runId).catch((error) =>
+            await startNextWaitingRun(deps, run.botId, runId, run.threadId).catch((error) =>
               getLogger().error("start next waiting run", error),
             );
           }

@@ -25,6 +25,7 @@ import { protectedComputerLifecycleRefusal } from "./desktop-command-guard.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { routineRunModelPin } from "./model-selection.js";
 import { findPendingRoutineTick, routineTimerNonce } from "./routine-coalescing.js";
+import { scheduledRoutineNonce } from "./routine-conversation.js";
 import { tickRoutineWatch } from "./routine-watch.js";
 import { notifyRun } from "./run-notifications.js";
 import { listAgentSkillCatalog, loadReferencedAgentSkills } from "./skill-tools.js";
@@ -236,8 +237,10 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
       expandSkillReferencesInPrompt(current.prompt, skillRecords) +
       (watchTick?.run ? watchTick.note : "");
     const timerTick = routine.watch == null && !isOneShotRoutineCrons(routine.crons);
-    const timerNonce = timerTick ? routineTimerNonce(routine.id, scheduledFor) : undefined;
-    if (timerNonce) {
+    const nonce = timerTick
+      ? routineTimerNonce(routine.id, scheduledFor)
+      : scheduledRoutineNonce(routine.id, scheduledFor);
+    if (timerTick) {
       const pending = await findPendingRoutineTick(tx, {
         routineId: routine.id,
         spaceId: routine.spaceId,
@@ -248,13 +251,13 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         ...routineRunModelPin(current),
       });
       if (pending) return { ...pending, coalesced: true };
-      // An edit racing an earlier tick can rewind the schedule onto an occurrence that already ran.
-      const fired = await tx.run.findUnique({
-        where: { spaceId_clientNonce: { spaceId: routine.spaceId, clientNonce: timerNonce } },
-        select: { id: true },
-      });
-      if (fired) return "fired" as const;
     }
+    // An edit racing an earlier tick can rewind the schedule onto an occurrence that already ran.
+    const fired = await tx.run.findUnique({
+      where: { spaceId_clientNonce: { spaceId: routine.spaceId, clientNonce: nonce } },
+      select: { id: true },
+    });
+    if (fired) return "fired" as const;
     const task = await tx.task.create({
       data: {
         spaceId: routine.spaceId,
@@ -275,7 +278,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
         status: "queued",
         trigger: "routine",
         routineId: routine.id,
-        clientNonce: timerNonce,
+        clientNonce: nonce,
         ...routineRunModelPin(current),
       },
     });
