@@ -21,7 +21,12 @@ import { rpc } from "../lib/rpc";
 import { TRANSCRIPT_CONTENT_PADDING } from "../lib/transcript-layout";
 import { transcriptIsNearEnd } from "../lib/transcript-scroll";
 import { ArtifactImage } from "./shell/message-cards";
+import { VirtualChatRows } from "./shell/virtual-chat-rows";
 import { WindowChrome } from "./WindowChrome";
+
+function peerRowKey(row: { key: string }) {
+  return row.key;
+}
 
 /**
  * Full-screen view-only transcript of a bot-to-bot exchange.
@@ -73,6 +78,15 @@ export function PeerMessagesOverlay({
     return peerConversations(history.data).find((entry) => entry.peerBotId === peerBotId) ?? null;
   }, [history.data, peerBotId]);
   const peerBotName = conversation?.peerBotName ?? initialPeerBotName;
+  const rows = useMemo(() => {
+    const occurrences = new Map<string, number>();
+    return (conversation?.messages ?? []).map((message) => {
+      const id = `${message.messageId}:${message.direction}`;
+      const occurrence = occurrences.get(id) ?? 0;
+      occurrences.set(id, occurrence + 1);
+      return { message, key: `${id}:${occurrence}` };
+    });
+  }, [conversation]);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const followingEnd = useRef(true);
   // Opens at the latest message like the chat transcript, and follows a refresh while still there.
@@ -167,53 +181,52 @@ export function PeerMessagesOverlay({
             onScroll={(event) => {
               followingEnd.current = transcriptIsNearEnd(event.currentTarget);
             }}
-            className={`rk-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto py-5 md:py-6 ${TRANSCRIPT_CONTENT_PADDING}`}
+            className={`rk-scroll flex min-h-0 flex-1 flex-col overflow-y-auto py-5 [overflow-anchor:none] md:py-6 ${TRANSCRIPT_CONTENT_PADDING}`}
           >
-            {conversation.messages.map((peerMessage, index) => {
-              const sent = peerMessage.direction === "sent";
-              return (
-                <div
-                  key={`${peerMessage.messageId}-${index}`}
-                  className={`flex ${sent ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
-                      sent ? "bg-accent" : "bg-muted"
-                    }`}
-                  >
+            <VirtualChatRows rows={rows} getKey={peerRowKey} gap={10}>
+              {({ message: peerMessage }) => {
+                const sent = peerMessage.direction === "sent";
+                return (
+                  <div className={`flex ${sent ? "justify-end" : "justify-start"}`}>
                     <div
-                      className="mb-1 text-[12px] font-medium"
-                      style={{ color: sent ? botColor : peerBotColor }}
-                      dir="auto"
+                      className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                        sent ? "bg-accent" : "bg-muted"
+                      }`}
                     >
-                      {sent ? botName : peerBotName}
-                    </div>
-                    <div className="text-[14.5px] leading-[1.5] text-foreground/90" dir="auto">
-                      <ChatMarkdown>{peerMessage.text}</ChatMarkdown>
-                      {peerMessage.blocks?.map((block, index) =>
-                        block.kind === "image" ? (
-                          <ArtifactImage
-                            key={index}
-                            target={{ botId }}
-                            artifactId={block.artifactId}
-                            name={block.name}
-                          />
-                        ) : block.kind === "file" ? (
-                          <ArtifactFileCard
-                            key={index}
-                            target={{ botId }}
-                            artifactId={block.artifactId}
-                            name={block.name}
-                            mimeType={block.mimeType}
-                            size={block.size}
-                          />
-                        ) : null,
-                      )}
+                      <div
+                        className="mb-1 text-[12px] font-medium"
+                        style={{ color: sent ? botColor : peerBotColor }}
+                        dir="auto"
+                      >
+                        {sent ? botName : peerBotName}
+                      </div>
+                      <div className="text-[14.5px] leading-[1.5] text-foreground/90" dir="auto">
+                        <ChatMarkdown>{peerMessage.text}</ChatMarkdown>
+                        {peerMessage.blocks?.map((block, index) =>
+                          block.kind === "image" ? (
+                            <ArtifactImage
+                              key={index}
+                              target={{ botId }}
+                              artifactId={block.artifactId}
+                              name={block.name}
+                            />
+                          ) : block.kind === "file" ? (
+                            <ArtifactFileCard
+                              key={index}
+                              target={{ botId }}
+                              artifactId={block.artifactId}
+                              name={block.name}
+                              mimeType={block.mimeType}
+                              size={block.size}
+                            />
+                          ) : null,
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              }}
+            </VirtualChatRows>
           </div>
         )}
       </DialogContent>

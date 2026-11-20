@@ -15,7 +15,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Search, SlidersHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { InviteDialog } from "../../components/InviteDialog";
 import { PasskeyOffer } from "../../components/PasskeyOffer";
 import { SidebarFooter } from "../../components/SidebarFooter";
@@ -32,6 +32,7 @@ import type { SettingsSection } from "../shell-overlay";
 import { SidebarHeader } from "./sidebar-header";
 import type { SnoozedChat } from "./snoozed-chats";
 import type { SidebarSearch } from "./use-sidebar-search";
+import { SidebarScrollContext } from "./virtual-sidebar-list";
 
 /** Focuses the search box once it renders, its text selected so typing replaces it. */
 export function focusSidebarSearch() {
@@ -111,6 +112,7 @@ export function ShellSidebar({
   openSpaceChat: (spaceId: string, path: string) => void;
 }) {
   const { t } = useLingui();
+  const scrollRef = useRef<HTMLDivElement>(null);
   const {
     query,
     setQuery,
@@ -249,43 +251,49 @@ export function ShellSidebar({
                 ) : null}
               </InputGroup>
             )}
-            <div className="rk-scroll scroll-fade-y scroll-fade-12 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
-              {showSpaceSearch && !mini ? (
-                <SpaceSearchResults
-                  hits={searchHits}
-                  loading={searchLoading}
-                  error={searchError}
-                  onRetry={retrySearch}
-                  onSelect={(hit) => jumpToSearchHit(hit)}
-                />
-              ) : (
-                <>
-                  {activityMode && !mini ? (
-                    <ActivityList
-                      bots={bots}
-                      groups={groups}
-                      snoozedChats={snoozedChats}
-                      toggledSections={collapsedSidebarSections}
-                      onToggleSection={toggleSidebarSection}
-                      filters={activityFilters}
-                      onFiltersChange={setActivityFilters}
-                      filtersExpanded={activityFiltersExpanded}
-                      filtersId={activityFiltersId}
-                      onOpenRun={(run) => {
-                        setMobileOpen(false);
-                        if (run.groupId) navigate(`/app/g/${run.groupId}`);
-                        else navigate(`/app/${run.botId}`);
-                      }}
-                    />
-                  ) : null}
-                  {roster}
-                </>
-              )}
-              <div className={mini ? "hidden" : "contents"}>
-                {snoozed}
-                {archived}
+            <SidebarScrollContext.Provider value={scrollRef}>
+              <div
+                ref={scrollRef}
+                data-testid="sidebar-scroll"
+                className="rk-scroll scroll-fade-y scroll-fade-12 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3"
+              >
+                {showSpaceSearch && !mini ? (
+                  <SpaceSearchResults
+                    hits={searchHits}
+                    loading={searchLoading}
+                    error={searchError}
+                    onRetry={retrySearch}
+                    onSelect={(hit) => jumpToSearchHit(hit)}
+                  />
+                ) : (
+                  <>
+                    {activityMode && !mini ? (
+                      <ActivityList
+                        bots={bots}
+                        groups={groups}
+                        snoozedChats={snoozedChats}
+                        toggledSections={collapsedSidebarSections}
+                        onToggleSection={toggleSidebarSection}
+                        filters={activityFilters}
+                        onFiltersChange={setActivityFilters}
+                        filtersExpanded={activityFiltersExpanded}
+                        filtersId={activityFiltersId}
+                        onOpenRun={(run) => {
+                          setMobileOpen(false);
+                          if (run.groupId) navigate(`/app/g/${run.groupId}`);
+                          else navigate(`/app/${run.botId}`);
+                        }}
+                      />
+                    ) : null}
+                    {roster}
+                  </>
+                )}
+                <div className={mini ? "hidden" : "contents"}>
+                  {snoozed}
+                  {archived}
+                </div>
               </div>
-            </div>
+            </SidebarScrollContext.Provider>
             <div className={mini ? "hidden" : "contents"}>
               <PasskeyOffer />
             </div>

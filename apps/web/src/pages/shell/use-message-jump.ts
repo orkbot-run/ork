@@ -258,7 +258,7 @@ export function useMessageJump({
     const messageId = jumpTargetId(transcriptRef.current, replyId);
     const inTranscript =
       transcriptRef.current.markerOf.has(messageId) ||
-      document.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+      transcriptRef.current.messages.some((message) => message.id === messageId);
     if (inTranscript) {
       // Cancel any in-flight around-fetch so it cannot overwrite this scroll.
       jumpGeneration.current += 1;

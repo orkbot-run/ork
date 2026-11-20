@@ -274,10 +274,11 @@ export function useThreadSync({
       return;
     pinnedAroundRef.current = null;
     const scrollElement = messageScroll.current;
+    const managedAnchor = scrollElement?.querySelector("[data-chat-window]");
     // Hold the first visible row steady: a plain height delta would also count
     // content appended at the bottom while the older page was loading.
     const anchorRow = firstVisibleTranscriptRow(scrollElement);
-    const anchorTop = anchorRow?.offsetTop ?? null;
+    const anchorTop = anchorRow?.getBoundingClientRect().top;
     const previousHeight = scrollElement?.scrollHeight ?? 0;
     const epoch = historyEpoch.current;
     const before = snapshot.olderCursor;
@@ -295,13 +296,15 @@ export function useThreadSync({
         return;
       expandedHistoryThread.current = page.threadId;
       updateSnapshot((prev) => prependThreadMessagePage(prev, page));
+      if (managedAnchor) return;
       window.requestAnimationFrame(() => {
         const element = messageScroll.current;
-        if (!element) return;
-        element.scrollTop +=
-          anchorRow?.isConnected && anchorTop !== null
-            ? anchorRow.offsetTop - anchorTop
-            : element.scrollHeight - previousHeight;
+        if (!element || element !== scrollElement) return;
+        if (anchorRow?.isConnected && anchorTop !== undefined) {
+          element.scrollTop += anchorRow.getBoundingClientRect().top - anchorTop;
+        } else {
+          element.scrollTop += element.scrollHeight - previousHeight;
+        }
       });
     } finally {
       setLoadingOlder(false);

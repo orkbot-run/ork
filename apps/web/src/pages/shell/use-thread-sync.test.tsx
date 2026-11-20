@@ -218,13 +218,22 @@ it("anchors Load earlier on the first visible row, not the whole height delta", 
   // A fake scroller whose height can grow while the older page loads, the way
   // a streaming reply appends content at the bottom during the fetch.
   const height = { now: 1000 };
-  const rowBelow = { offsetTop: 600, offsetHeight: 200, isConnected: true };
+  const rowBelow = {
+    offsetTop: 600,
+    isConnected: true,
+    getBoundingClientRect() {
+      const top = this.offsetTop - scroller.scrollTop;
+      return { top, bottom: top + 200 };
+    },
+  };
   const scroller = {
     scrollTop: 500,
     get scrollHeight() {
       return height.now;
     },
+    querySelector: () => null,
     querySelectorAll: (selector: string) => (selector === "[data-message-id]" ? [rowBelow] : []),
+    getBoundingClientRect: () => ({ top: 0 }),
   };
   const page = { threadId: "thread-1", messages: [], olderCursor: null };
   const messages = vi.fn(async () => {

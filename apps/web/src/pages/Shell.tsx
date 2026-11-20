@@ -1303,6 +1303,7 @@ function SpaceShell() {
               artifactTarget={transcriptArtifactTarget}
               markedUnreadMessageId={read.markedUnreadMessageId}
               transcript={transcript}
+              findOpen={findOpen}
               loadingChat={activeSnapshot ? undefined : (activeGroup?.id ?? active?.id)}
               outgoingMessages={composer.activeOutgoingMessages}
               showToolActivity={showToolActivity}
