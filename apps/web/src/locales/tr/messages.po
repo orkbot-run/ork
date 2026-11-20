@@ -4944,6 +4944,10 @@ msgstr "Tam pencerede aç"
 msgid "Open navigation"
 msgstr "Gezinmeyi aç"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Open Ork Accounts"
+msgstr ""
+
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Open sign-in page"
 msgstr "Giriş sayfasını aç"

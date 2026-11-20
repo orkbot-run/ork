@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "Open Ork Accounts": "Ork Accounts openen",
+  "Could not open Ork Accounts. Try again.":
+    "Ork Accounts kon niet worden geopend. Probeer het opnieuw.",
   Checklist: "Controlelijst",
   "Computer screen preview": "Voorbeeld van computerscherm",
   "Computer screen preview unavailable": "Voorbeeld van computerscherm niet beschikbaar",

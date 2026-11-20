@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Open Ork Accounts": "Ork Accountsを開く",
+  "Could not open Ork Accounts. Try again.":
+    "Ork Accountsを開けませんでした。もう一度お試しください。",
   Checklist: "チェックリスト",
   "Computer screen preview": "コンピューター画面のプレビュー",
   "Computer screen preview unavailable": "コンピューター画面をプレビューできません",

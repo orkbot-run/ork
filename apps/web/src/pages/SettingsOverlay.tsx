@@ -4,6 +4,7 @@
 
 import { useLingui } from "@lingui/react/macro";
 import type { ComputerCapabilities, Me, SpaceMemoryConfig, UsageSummary } from "@orkbot/contracts";
+import { organizationDashboardUrl } from "@orkbot/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, XIcon } from "lucide-react";
@@ -99,6 +100,23 @@ export function SettingsOverlay({
   const { t, i18n } = useLingui();
   const queries = useSpaceQueries();
   const modelPolicy = useQuery(queries.models.workspacePolicy.queryOptions());
+  const [accountsUrl, setAccountsUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!modelPolicy.data?.managed) return;
+    let current = true;
+    setAccountsUrl(null);
+    void Promise.resolve()
+      .then(() => desktopBridge()?.accounts?.workspaceTarget?.())
+      .then((target) => {
+        if (current) setAccountsUrl(organizationDashboardUrl(target?.organizationId));
+      })
+      .catch(() => {
+        if (current) setAccountsUrl(organizationDashboardUrl());
+      });
+    return () => {
+      current = false;
+    };
+  }, [modelPolicy.data?.managed, space?.id]);
   const panelRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const [navOverflow, setNavOverflow] = useState({ previous: false, next: false });
@@ -446,6 +464,15 @@ export function SettingsOverlay({
                     ) : modelPolicy.data?.managed ? (
                       <div className="grid gap-4">
                         <p className="text-sm text-muted-foreground">{t`Manage your organization, servers and people in Ork Accounts.`}</p>
+                        <Button
+                          variant="outline"
+                          className="w-fit"
+                          disabled={!accountsUrl}
+                          onClick={() => {
+                            if (accountsUrl)
+                              window.open(accountsUrl, "_blank", "noopener,noreferrer");
+                          }}
+                        >{t`Open Ork Accounts`}</Button>
                         <Button
                           variant="outline"
                           className="w-fit"

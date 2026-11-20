@@ -15,6 +15,12 @@ export const WorkspaceTargetSchema = z
   .strict();
 export type WorkspaceTarget = z.infer<typeof WorkspaceTargetSchema>;
 
+/** Accounts uses its central organization id, not the installation's local organization id. */
+export function organizationDashboardUrl(organizationId?: string | null): string {
+  const id = z.uuid().safeParse(organizationId);
+  return id.success ? `https://app.ork.run/workspace/${id.data}/overview` : "https://app.ork.run/";
+}
+
 /** Explicit links never fall back to another organization or an unrelated workspace. */
 export function catalogWorkspace(
   catalog: IdentityCatalog,

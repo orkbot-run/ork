@@ -4944,6 +4944,10 @@ msgstr "フルウィンドウで開く"
 msgid "Open navigation"
 msgstr "ナビゲーションを開く"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Open Ork Accounts"
+msgstr ""
+
 #: src/pages/model-settings/server-ai-account-form.tsx
 msgid "Open sign-in page"
 msgstr "ログインページを開く"

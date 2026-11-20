@@ -53,6 +53,9 @@ test("managed organization settings are separate and explain model key ownership
   const settings = page.getByTestId("user-settings");
   await expect(settings.getByTestId("settings-nav-organization-models")).toBeVisible();
   await expect(settings.getByTestId("settings-nav-models")).toHaveCount(0);
+  await settings.getByTestId("settings-nav-organization").click();
+  await expect(settings.getByRole("button", { name: "Open Ork Accounts" })).toBeEnabled();
+  await captureScreenshot(page, testInfo, "organization-accounts-link");
   await settings.getByTestId("settings-nav-organization-models").click();
   await expect(settings.getByText(/Model keys are managed by this server/)).toBeVisible();
   await captureScreenshot(page, testInfo, "organization-settings-models");

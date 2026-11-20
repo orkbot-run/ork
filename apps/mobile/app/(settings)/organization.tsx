@@ -1,13 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited settings are preserved; the Accounts dashboard link is an Ork addition.
+
+import { organizationDashboardUrl } from "@orkbot/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text } from "react-native";
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadFailure } from "../../components/load-failure";
 import { SettingsGroup, SettingsInputRow, SettingsRow } from "../../components/settings-group";
-import { rpc } from "../../lib/api";
+import { currentApiBase, rpc } from "../../lib/api";
 import { mobileTokens } from "../../lib/appearance";
 import { useI18n } from "../../lib/i18n";
+import { installationRevocationScope } from "../../lib/installation-transport";
 import { native, useThemedStyles } from "../../lib/native";
 import {
   activeOrganization,
@@ -52,13 +59,29 @@ export default function OrganizationSettings() {
   }
 
   if (modelPolicy.data?.managed) {
+    const target = installationRevocationScope(currentApiBase())?.target;
     return (
       <SafeAreaView edges={["bottom"]} style={styles.screen}>
         <ScrollView style={sideInsets} contentContainerStyle={styles.content}>
           <Text style={{ color: native.secondaryLabel }}>
             {t("Manage your organization, servers and people in Ork Accounts.")}
           </Text>
+          {error ? (
+            <Text accessibilityRole="alert" style={{ color: native.secondaryLabel }}>
+              {error}
+            </Text>
+          ) : null}
           <SettingsGroup>
+            <SettingsRow
+              title={t("Open Ork Accounts")}
+              chevron="right"
+              onPress={() => {
+                setError(null);
+                void Linking.openURL(organizationDashboardUrl(target?.organizationId)).catch(() =>
+                  setError(t("Could not open Ork Accounts. Try again.")),
+                );
+              }}
+            />
             <SettingsRow
               title={t("Organization models")}
               chevron="right"
