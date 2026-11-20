@@ -5,12 +5,14 @@
 import dns from "node:dns";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import sharp from "sharp";
 import { fetch as undiciFetch } from "undici";
 import { describe, expect, it, vi } from "vitest";
 import { MAX_MCP_RESPONSE_BYTES } from "./mcp-response-limit.js";
 import {
   assertSafeRemoteUrl,
   ConnectorRedirectError,
+  callRemoteMcpConnectorTool,
   callRemoteMcpTool,
   createPrivateNetworkFetch,
   createSafeLookup,
@@ -685,6 +687,39 @@ describe("remote MCP tool result", () => {
       `{"jsonrpc":"2.0","id":$ID,"result":{"content":[{"type":"text","text":"${"x".repeat(MAX_MCP_RESPONSE_BYTES)}"}]}}`,
     );
     await expect(callTool(fetch)).rejects.toThrow("MCP server response exceeds 16 MB");
+  });
+
+  it("keeps valid connector images when the remote text result reaches its byte cap", async () => {
+    const data = (
+      await sharp({ create: { width: 1, height: 1, channels: 3, background: "white" } })
+        .jpeg()
+        .toBuffer()
+    ).toString("base64");
+    const secret = "fake-secret-that-must-be-redacted";
+    const fetch = toolResultFetch({
+      content: [
+        { type: "text", text: `${secret} ${"x".repeat(1_010_000)}` },
+        { type: "image", mimeType: "image/png", data },
+      ],
+    });
+    const result = await callRemoteMcpConnectorTool(
+      {
+        endpoint: "https://mcp.example.test/mcp",
+        fetch: fetch as unknown as typeof globalThis.fetch,
+        resolveHostname: publicResolver,
+      },
+      "capture",
+      {},
+      [secret],
+    );
+    expect(result).toMatchObject({
+      kind: "agent_tool_result",
+      content: [{ type: "image", mimeType: "image/jpeg", data }],
+      details: { truncated: true, content: expect.stringContaining("[redacted]") },
+    });
+    const details = JSON.stringify((result as { details: unknown }).details);
+    expect(details).not.toContain(data);
+    expect(details).not.toContain(secret);
   });
 
   const memory = { results: [{ text: "first memory" }, { text: "second memory" }] };

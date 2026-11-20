@@ -15,11 +15,7 @@ import { getLogger } from "@orkbot/logging";
 import { catalogToolPrefix } from "./approval-effect.js";
 import { collectPages, filterCatalog } from "./composio-connector.js";
 import { resolveAccountToolCall, scopeConnectorTools } from "./connector-accounts.js";
-import {
-  combineSignals,
-  redactConnectorPayload,
-  sanitizeConnectorError,
-} from "./connector-safety.js";
+import { combineSignals, sanitizeConnectorError } from "./connector-safety.js";
 import {
   CATALOG_EXECUTE,
   catalogEntries,
@@ -31,7 +27,7 @@ import {
 } from "./lazy-tool-catalog.js";
 import type { McpDiscoveryLimits } from "./mcp-discovery.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
-import { callRemoteMcpTool, listRemoteMcpTools } from "./remote-mcp.js";
+import { callRemoteMcpConnectorTool, listRemoteMcpTools } from "./remote-mcp.js";
 import { isVitestRuntime } from "./test-runtime.js";
 import { readBodyCapped, withAbort } from "./web-ssrf.js";
 
@@ -284,7 +280,7 @@ export class PipedreamConnector implements ManagedConnectorProvider {
         return;
       }
       token = await this.token();
-      const result = await callRemoteMcpTool(
+      const result = await callRemoteMcpConnectorTool(
         {
           endpoint: MCP_ENDPOINT,
           headers: this.mcpHeaders(context, app, account.id, token),
@@ -294,10 +290,11 @@ export class PipedreamConnector implements ManagedConnectorProvider {
         },
         call.route?.toolName ?? call.tool,
         call.args,
+        [token, this.config.clientSecret],
       );
       yield {
         type: "result",
-        data: redactConnectorPayload(result, [token, this.config.clientSecret]),
+        data: result,
       };
     } catch (error) {
       yield {

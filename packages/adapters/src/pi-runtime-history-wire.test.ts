@@ -1,5 +1,7 @@
 import type { AgentRunRequest } from "@orkbot/adapter-kit";
-import { describe, expect, it } from "vitest";
+import sharp from "sharp";
+import { describe, expect, it, vi } from "vitest";
+import { prepareMcpImageResult } from "./mcp-result-images.js";
 import { PiAgentRuntime } from "./pi-runtime.js";
 
 type WireMessage = { role: string; content: unknown };
@@ -134,6 +136,76 @@ const texts = (messages: WireMessage[]) =>
         ? message.content
         : (message.content as Array<{ text?: string }>).map((part) => part.text ?? "").join(""),
   }));
+
+describe("MCP images on the model wire", () => {
+  it.each([true, false])("handles a model with acceptsImages=%s", async (acceptsImages) => {
+    const name = "mcp__fixture__capture";
+    const png = (
+      await sharp({ create: { width: 2, height: 2, channels: 3, background: "red" } })
+        .png()
+        .toBuffer()
+    ).toString("base64");
+    const result = prepareMcpImageResult({
+      content: [
+        { type: "text", text: "Latest chart" },
+        { type: "image", mimeType: "image/jpeg", data: png },
+        { type: "image", mimeType: "image/png", data: "invalid-image-bytes" },
+      ],
+    });
+    const executeTool = vi.fn(async () => result);
+    const toolCall = {
+      id: "fixture",
+      choices: [
+        {
+          index: 0,
+          delta: {
+            role: "assistant",
+            tool_calls: [
+              { index: 0, id: "call_chart", type: "function", function: { name, arguments: "{}" } },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+    };
+    let calls = 0;
+    const wire = await wireBody(
+      { ...compatible, acceptsImages },
+      () =>
+        calls++ === 0
+          ? new Response(`data: ${JSON.stringify(toolCall)}\n\ndata: [DONE]\n\n`, {
+              headers: { "content-type": "text/event-stream" },
+            })
+          : completionsReply(),
+      {
+        tools: [
+          {
+            name,
+            description: "Capture chart",
+            inputSchema: { type: "object" },
+            route: { connectorId: "mcp", resourceId: "fixture", toolName: "capture" },
+          },
+        ],
+        executeTool,
+      },
+    );
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(calls).toBe(2);
+    const textResult = JSON.stringify(wire.messages.find((message) => message.role === "tool"));
+    expect(textResult).toContain("Latest chart");
+    expect(textResult).toContain("MCP image 2: omitted");
+    expect(textResult).not.toContain(png);
+    expect(JSON.stringify(wire)).not.toContain("invalid-image-bytes");
+    if (acceptsImages) {
+      expect(textResult).toContain("MCP image 1: attached as image 1");
+      expect(JSON.stringify(wire)).toContain(`data:image/png;base64,${png}`);
+      expect(JSON.stringify(wire)).toContain('"type":"image_url"');
+    } else {
+      expect(textResult).toContain("active model cannot receive images");
+      expect(JSON.stringify(wire)).not.toContain(png);
+    }
+  });
+});
 
 describe("history on the wire", () => {
   it("sends a direct chat to a chat-completions provider as separate alternating turns", async () => {

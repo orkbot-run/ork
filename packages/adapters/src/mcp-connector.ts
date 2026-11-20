@@ -73,6 +73,7 @@ import {
   isNpxCommand,
   parseNpxLaunch,
 } from "./mcp-package-installer.js";
+import { prepareMcpImageResult } from "./mcp-result-images.js";
 import type { McpServerHealthUpdate } from "./mcp-server-health.js";
 import { needsMcpOAuthClient, recordMcpServerHealth } from "./mcp-server-health.js";
 import { isBrokenMcpCall } from "./mcp-tool-call.js";
@@ -723,7 +724,8 @@ export class McpConnector implements ConnectorProvider {
         return session.callTool(toolName, call.args, { signal: context.signal });
       });
       const secrets = [...(material ? oauthMaterialSecrets(material) : []), ...launchSecrets];
-      yield { type: "result", data: redactConnectorPayload(result, secrets) };
+      const redacted = redactConnectorPayload(result, secrets);
+      yield { type: "result", data: prepareMcpImageResult(redacted) ?? redacted };
     } catch (error) {
       // Only a broken transport/auth or silence deadline retires the session.
       const secrets = [...(material ? oauthMaterialSecrets(material) : []), ...launchSecrets];

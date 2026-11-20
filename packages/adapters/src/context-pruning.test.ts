@@ -301,6 +301,18 @@ describe("context pruning on rebuild", () => {
     content: [{ type: "image", data: name, mimeType: "image/png" }],
     timestamp: 1,
   });
+  const mcpImages = (id: string, ...names: string[]): Message => ({
+    role: "toolResult",
+    toolCallId: id,
+    toolName: "connectors_execute_tool",
+    content: [
+      { type: "text", text: `MCP result ${id}` },
+      ...names.map((data) => ({ type: "image" as const, data, mimeType: "image/png" })),
+    ],
+    details: { orkbotMcpImages: true },
+    isError: false,
+    timestamp: 1,
+  });
   const kept = (messages: Message[]) =>
     messages.map((message) =>
       Array.isArray(message.content)
@@ -329,6 +341,36 @@ describe("context pruning on rebuild", () => {
       false,
       true,
       true,
+    ]);
+  });
+
+  it("shares the retention budget between MCP images and computer screenshots", () => {
+    const messages = [
+      mcpImages("old", "old-mcp"),
+      screenshot("frame"),
+      mcpImages("new", "new-mcp"),
+    ];
+    const pruned = pruneForRebuild(messages);
+    expect(kept(pruned)).toEqual([false, true, true]);
+    expect(pruned[0]?.content).toEqual([
+      { type: "text", text: "MCP result old" },
+      { type: "text", text: expect.stringContaining("MCP images removed") },
+    ]);
+    expect(kept(messages)).toEqual([true, true, true]);
+  });
+
+  it("keeps the first image of a newer MCP result when a user image uses the other slot", () => {
+    const messages = [
+      userImage("user"),
+      screenshot("old"),
+      mcpImages("new", "one", "two", "three"),
+    ];
+    const pruned = pruneForRebuild(messages, 2);
+    expect(kept(pruned)).toEqual([true, false, true]);
+    expect(pruned[2]?.content).toEqual([
+      { type: "text", text: "MCP result new" },
+      { type: "image", data: "one", mimeType: "image/png" },
+      { type: "text", text: expect.stringContaining("MCP images removed") },
     ]);
   });
 

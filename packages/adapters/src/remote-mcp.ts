@@ -31,6 +31,7 @@ import type { Dispatcher } from "undici";
 import { createCheckedProxyDispatcher } from "./checked-proxy-dispatcher.js";
 import { composioToolBatch } from "./composio-batch.js";
 import { sensitiveQueryParameter } from "./connector-http.js";
+import { redactConnectorPayload } from "./connector-safety.js";
 import { credentialDigest } from "./credential-digest.js";
 import type {
   McpDiscoveryDiagnostic,
@@ -40,6 +41,7 @@ import type {
 import { mcpDiscoveryLimits } from "./mcp-discovery.js";
 import { createMcpClient } from "./mcp-output-schema.js";
 import { limitMcpResponseBody } from "./mcp-response-limit.js";
+import { prepareMcpImageResult } from "./mcp-result-images.js";
 import { callMcpToolWithDeadline, isBrokenMcpCall } from "./mcp-tool-call.js";
 import type { ResolvedAddress, ResolveHostname } from "./network-address.js";
 import {
@@ -177,7 +179,26 @@ export async function callRemoteMcpTool(
   projectResult?: (result: unknown) => unknown,
 ): Promise<unknown> {
   return withScopedMcpClient(options, (client, signal) =>
-    callMcpTool(client, signal, toolName, args, projectResult),
+    callMcpTool(client, signal, toolName, args, (result) =>
+      limitRemoteMcpPayload(projectResult ? projectResult(result) : result),
+    ),
+  );
+}
+
+/** Connector results may carry images, with their own budget separate from the text limit. */
+export async function callRemoteMcpConnectorTool(
+  options: RemoteMcpOptions,
+  toolName: string,
+  args: Record<string, unknown>,
+  secrets: string[],
+): Promise<unknown> {
+  return withScopedMcpClient(options, (client, signal) =>
+    callMcpTool(client, signal, toolName, args, (result) => {
+      const redacted = redactConnectorPayload(result, secrets);
+      return (
+        prepareMcpImageResult(redacted, limitRemoteMcpPayload) ?? limitRemoteMcpPayload(redacted)
+      );
+    }),
   );
 }
 
@@ -186,7 +207,7 @@ async function callMcpTool(
   signal: AbortSignal | undefined,
   toolName: string,
   args: Record<string, unknown>,
-  projectResult?: (result: unknown) => unknown,
+  shapeResult: (result: unknown) => unknown,
 ): Promise<unknown> {
   const result = await callMcpToolWithDeadline(client, toolName, args, signal);
   const isError = result.isError === true;
@@ -196,9 +217,7 @@ async function callMcpTool(
     isError,
     _meta: result._meta,
   };
-  // Providers may extract a bounded domain result before the MCP envelope
-  // consumes the budget. The final limit still applies.
-  return limitRemoteMcpPayload(projectResult ? projectResult(envelope) : envelope);
+  return shapeResult(envelope);
 }
 
 /** FastMCP-style servers serialize `structuredContent` into a text block too,
@@ -901,7 +920,7 @@ function assertPublicAddresses(addresses: ResolvedAddress[]): void {
   }
 }
 
-export function limitRemoteMcpPayload(value: unknown): unknown {
+export function limitRemoteMcpPayload<T>(value: T): T | { truncated: true; content: string } {
   const serialized = JSON.stringify(value);
   if (serialized === undefined) return value;
   if (Buffer.byteLength(serialized, "utf8") <= MAX_RESULT_BYTES) return value;
