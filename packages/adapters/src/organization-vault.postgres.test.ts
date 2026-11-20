@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { asSystem, createDb, runAsTenant } from "@orkbot/db";
+import { asSystem, createDb, itemSecretSpace, runAsSystem, runAsTenant } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { loadBotCommandEnvironment, revealBotSecret, storeBotSecret } from "./bot-secrets.js";
 import { McpOAuthBroker } from "./mcp-oauth.js";
@@ -212,6 +212,24 @@ postgres("organization vault on the installation", () => {
         app.prisma.secret.findMany({ where: { id: stored.secretId! } }),
       ),
     ).resolves.toEqual([]);
+  });
+
+  it("does not promote workspace secrets to account scope without a tenant context", async () => {
+    const result = await runAsSystem("background secret scope test", () =>
+      app.prisma.$transaction((tx) => itemSecretSpace(tx, space, true)),
+    );
+    expect(result).toBe(space);
+  });
+
+  it("retains account sharing for an unmanaged workspace in a system job", async () => {
+    const unmanaged = `unmanaged-${suffix}`;
+    await asSystem(owner.prisma).space.create({
+      data: { id: unmanaged, organizationId: org, name: "Unmanaged" },
+    });
+    const result = await runAsSystem("background secret scope test", () =>
+      app.prisma.$transaction((tx) => itemSecretSpace(tx, unmanaged, true)),
+    );
+    expect(result).toBeNull();
   });
 
   it("requires organization administration, stores encrypted, and respects workspace grants", async () => {

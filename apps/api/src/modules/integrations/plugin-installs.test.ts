@@ -44,7 +44,9 @@ const fetcher = async () => ({
 function setup() {
   const prisma = {
     $executeRaw: vi.fn(),
-    $queryRaw: vi.fn().mockResolvedValue([{ bypass: null, managed: false }]),
+    $queryRaw: vi
+      .fn()
+      .mockResolvedValue([{ bypass: null, managed: false, currentSpace: "space-test" }]),
     capabilityInstall: {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn(async ({ data }) => ({ ...data, id: "install-test", createdAt: new Date(0) })),
@@ -105,7 +107,9 @@ async function input() {
 describe("confirmed plugin installation", () => {
   it("keeps a managed workspace's integration credentials in that workspace", async () => {
     const { deps, prisma } = setup();
-    prisma.$queryRaw.mockResolvedValue([{ bypass: null, managed: true }]);
+    prisma.$queryRaw.mockResolvedValue([
+      { bypass: null, managed: true, currentSpace: "space-test" },
+    ]);
     await installPlugin(deps, actor, await input());
     expect(prisma.secret.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ spaceId: actor.spaceId, userId: actor.userId }),

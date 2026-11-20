@@ -1,4 +1,5 @@
 import type { Prisma } from "./client.js";
+import { currentDbContext } from "./row-security.js";
 
 /**
  * Skills, MCP servers and plugin or tool-source installs belong to the account that added them.
@@ -29,10 +30,20 @@ export async function itemSecretSpace(
   shared: boolean,
 ): Promise<string | null> {
   if (!shared) return spaceId;
-  const [scope] = await tx.$queryRaw<Array<{ managed: boolean }>>`
-    SELECT public.app_central_scope_is_managed() AS managed
+  const [scope] = await tx.$queryRaw<Array<{ managed: boolean; currentSpace: string | null }>>`
+    SELECT public.app_central_scope_is_managed() AS managed,
+      NULLIF(current_setting('app.space_id', true), '') AS "currentSpace"
   `;
-  return scope?.managed === false ? null : spaceId;
+  if (scope?.currentSpace) return scope.managed === false ? null : spaceId;
+  // System jobs can inspect the target directly; an unverified or missing space stays isolated.
+  if (currentDbContext()?.kind === "system") {
+    const space = await tx.space.findUnique({
+      where: { id: spaceId },
+      select: { admissionWorkspaceId: true, centralBinding: { select: { id: true } } },
+    });
+    if (space && !space.admissionWorkspaceId && !space.centralBinding) return null;
+  }
+  return spaceId;
 }
 
 /** Select alongside a row so `spaceAvailability` can describe it. */
