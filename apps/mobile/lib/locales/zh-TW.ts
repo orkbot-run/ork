@@ -3,6 +3,8 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  "Open Ork Accounts": "開啟 Ork Accounts",
+  "Could not open Ork Accounts. Try again.": "無法開啟 Ork Accounts，請再試一次。",
   Checklist: "檢查清單",
   "Computer screen preview": "電腦螢幕預覽",
   "Computer screen preview unavailable": "無法預覽電腦螢幕",

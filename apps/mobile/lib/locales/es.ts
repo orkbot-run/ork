@@ -3,6 +3,8 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ES_MESSAGES: Record<string, string> = {
+  "Open Ork Accounts": "Abrir Ork Accounts",
+  "Could not open Ork Accounts. Try again.": "No se pudo abrir Ork Accounts. Inténtalo de nuevo.",
   Checklist: "Lista de tareas",
   "Computer screen preview": "Vista previa de la pantalla del ordenador",
   "Computer screen preview unavailable":
