@@ -57,6 +57,8 @@ pub enum Command {
     AccountsWorkspaceTarget,
     #[serde(rename = "accounts.workspaceAccess")]
     AccountsWorkspaceAccess,
+    #[serde(rename = "accounts.createWorkspace")]
+    AccountsCreateWorkspace { name: String, operation_id: String },
     #[serde(rename = "accounts.logout")]
     AccountsLogout,
     #[serde(rename = "accounts.retryRevocations")]

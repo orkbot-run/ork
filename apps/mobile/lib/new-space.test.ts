@@ -12,6 +12,8 @@ const state = vi.hoisted(() => ({
   rpc: vi.fn(),
   capture: vi.fn(),
   select: vi.fn(),
+  managed: null as null | { account: string; target: object },
+  createAccount: vi.fn(),
 }));
 
 vi.mock("./api", () => ({
@@ -26,6 +28,9 @@ vi.mock("./api", () => ({
   spaceSelectionSeq: () => state.selection,
 }));
 vi.mock("./session", () => ({ currentSessionGeneration: () => state.generation }));
+vi.mock("./installation-transport", () => ({ installationRevocationScope: () => state.managed }));
+vi.mock("./account-servers", () => ({ createAccountWorkspace: state.createAccount }));
+vi.mock("expo-crypto", () => ({ randomUUID: () => "00000000-0000-4000-8000-000000000001" }));
 
 const originalContext = {
   apiBase: "https://app.example.test",
@@ -46,6 +51,7 @@ beforeEach(() => {
   state.generation = 1;
   state.selection = 1;
   state.spaceId = "personal";
+  state.managed = null;
   state.capture.mockResolvedValue(originalContext);
   state.rpc.mockImplementation(async (procedure: string) =>
     procedure === "spaces/create" ? { id: "clients" } : { id: "ordinary-chief" },
@@ -57,6 +63,45 @@ beforeEach(() => {
 });
 
 describe("explicit new Space onboarding", () => {
+  it("registers a company workspace in Accounts instead of creating a local-only space", async () => {
+    state.managed = { account: "owner", target: { workspaceId: "existing" } };
+    state.createAccount.mockResolvedValue("central-id");
+    expect(await newSpaceCreation()("Clients", () => true)).toBe("directory");
+    expect(state.createAccount).toHaveBeenCalledWith(
+      "owner",
+      state.managed.target,
+      "Clients",
+      "00000000-0000-4000-8000-000000000001",
+      expect.any(Function),
+    );
+    expect(state.rpc).not.toHaveBeenCalled();
+  });
+
+  it("continues to create a local space for the Personal organization", async () => {
+    state.managed = { account: "owner", target: { workspaceId: "personal" } };
+    state.createAccount.mockResolvedValue(null);
+    expect(await newSpaceCreation()("Clients", () => true)).toBe("ready");
+    expect(state.rpc).toHaveBeenCalledWith(
+      "spaces/create",
+      { name: "Clients" },
+      { requestContext: originalContext },
+    );
+  });
+
+  it("reuses the same operation if an Accounts creation response is lost", async () => {
+    state.managed = { account: "owner", target: { workspaceId: "existing" } };
+    state.createAccount
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockResolvedValueOnce("central-id");
+    const create = newSpaceCreation();
+    await expect(create("Clients", () => true)).rejects.toThrow("timeout");
+    await expect(create("Clients", () => true)).resolves.toBe("directory");
+    expect(state.createAccount.mock.calls.map((call) => call[3])).toEqual([
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000001",
+    ]);
+    expect(state.rpc).not.toHaveBeenCalled();
+  });
   it("provisions its bot in the new Space using the creation's server and session before switching", async () => {
     state.rpc.mockImplementation(async (procedure: string) => {
       expect(state.spaceId).toBe("personal");
