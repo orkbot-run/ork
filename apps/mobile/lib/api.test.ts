@@ -66,6 +66,7 @@ import {
   updateAccountName,
 } from "./api.js";
 import { artifactCacheSession } from "./artifact-cache-session";
+import * as installationTransport from "./installation-transport";
 import { resumeLiveNotifications } from "./live-notifications.js";
 import { clearNetworkCache } from "./network-cache.js";
 import { queueSessionRevocation, retryPendingRevocations } from "./pending-revocations";
@@ -2686,6 +2687,47 @@ describe("mobile API authentication", () => {
       stop();
     }
   });
+
+  it.each(["available", "unknown", "removed"] as const)(
+    "recovers a managed workspace after a 401 only when its status is %s",
+    async (status) => {
+      const storage = new Map<string, string>([["orkbot.space_id", "peer-space"]]);
+      vi.mocked(SecureStore.getItemAsync).mockImplementation(
+        async (key) => storage.get(key) ?? null,
+      );
+      vi.mocked(SecureStore.deleteItemAsync).mockImplementation(async (key) => {
+        storage.delete(key);
+      });
+      vi.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => {
+        storage.set(key, value);
+      });
+      await loadApiBase();
+      vi.spyOn(installationTransport, "installationRevocationScope").mockReturnValue({} as never);
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"))
+        .mockResolvedValueOnce(jsonResponse({ json: status }))
+        .mockResolvedValueOnce(jsonResponse({ json: { spaces: [] } }));
+      vi.stubGlobal("fetch", fetchMock);
+      const listener = vi.fn();
+      const stop = subscribeUnavailableSpace(listener);
+      try {
+        if (status === "removed") {
+          await expect(rpc("spaces/list")).resolves.toEqual({ spaces: [] });
+          expect(selectedSpaceId()).toBeNull();
+          expect(listener).toHaveBeenCalledOnce();
+        } else {
+          await expect(rpc("spaces/list")).rejects.toThrow("Unauthorized");
+          expect(selectedSpaceId()).toBe("peer-space");
+          expect(listener).not.toHaveBeenCalled();
+        }
+        expect(String(fetchMock.mock.calls[1]![0])).toContain("/rpc/spaces/accessStatus");
+        expect(fetchMock.mock.calls[1]![1].headers["x-orkbot-space-id"]).toBeUndefined();
+      } finally {
+        stop();
+      }
+    },
+  );
 
   it("does not clear a newer workspace selection when leaving an unavailable space", async () => {
     const storage = new Map<string, string>([["orkbot.space_id", "space-old"]]);
