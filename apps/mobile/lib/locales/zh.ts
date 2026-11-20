@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "Choose which workspaces can use this secret.": "选择可以使用此密钥的工作区。",
   "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":
     "选择此服务器上可以使用这些密钥的工作区。新工作区在获得许可前没有访问权限。",
   "Could not change workspace access.": "无法更改工作区访问权限。",

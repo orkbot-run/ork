@@ -3,6 +3,8 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Choose which workspaces can use this secret.":
+    "このシークレットを使用できるワークスペースを選択してください。",
   "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":
     "このサーバーでシークレットを使用できるワークスペースを選択します。新しいワークスペースには許可するまでアクセス権がありません。",
   "Could not change workspace access.": "ワークスペースのアクセス権を変更できませんでした。",

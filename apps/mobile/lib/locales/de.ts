@@ -3,6 +3,8 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  "Choose which workspaces can use this secret.":
+    "Wähle die Arbeitsbereiche aus, die dieses Geheimnis verwenden dürfen.",
   "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":
     "Wähle die Arbeitsbereiche auf diesem Server, die diese Geheimnisse verwenden dürfen. Neue Arbeitsbereiche haben erst nach Freigabe Zugriff.",
   "Could not change workspace access.": "Der Arbeitsbereichszugriff konnte nicht geändert werden.",
