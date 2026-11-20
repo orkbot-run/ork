@@ -8,6 +8,7 @@ import type { MessagingIdentity, MessagingOutbound, PrismaClient } from "@orkbot
 import { lockSpaceForWork, Prisma } from "@orkbot/db";
 
 export const DIRECT_DELIVERY_VERSION = 1;
+export const OWNER_PROMPT_DELIVERY_VERSION = 2;
 export const MESSAGING_ROW_IN_FLIGHT_MS = 2 * 60_000;
 
 export class MessagingOutboundReviewError extends Error {
@@ -18,7 +19,7 @@ export class MessagingOutboundReviewError extends Error {
 }
 
 export async function declareDirectDelivery(tx: Pick<Prisma.TransactionClient, "$queryRaw">) {
-  await tx.$queryRaw`SELECT set_config('app.messaging_delivery_version', ${String(DIRECT_DELIVERY_VERSION)}, true)`;
+  await tx.$queryRaw`SELECT set_config('app.messaging_delivery_version', ${String(OWNER_PROMPT_DELIVERY_VERSION)}, true)`;
 }
 
 /** A failed send is retryable only when its producer proved rejection or never began sending. */

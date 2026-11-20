@@ -9,6 +9,8 @@ import type { PrismaClient } from "@orkbot/db";
 import {
   asSystem,
   createDb,
+  declareRunReaderVersion,
+  finalizeRun,
   provisionMessagingIdentity,
   runAsSystem,
   runAsTenant,
@@ -365,7 +367,7 @@ describePostgres("messaging outbound drain order (PostgreSQL)", () => {
       data: {
         ...identity,
         taskId: task.id,
-        status: "completed",
+        status: trigger === "bot_message" ? "failed" : "completed",
         trigger,
         ...(source ? { sourceMessageId: source.id } : {}),
       },
@@ -420,6 +422,174 @@ describePostgres("messaging outbound drain order (PostgreSQL)", () => {
     const later = rows.filter((row) => owner(row) === (firstOf(1) < firstOf(2) ? 2 : 1));
     expect(later[0]!.createdAt.getTime()).toBeGreaterThan(earlier.at(-1)!.createdAt.getTime());
     // Later tests drain every pending row in the database.
+    await system.messagingOutbound.deleteMany({ where: { identityId } });
+  });
+
+  it("delivers a failure notice for a linked bot that failed before writing anything", async () => {
+    const task = await system.task.create({
+      data: { ...identity, prompt: "A delegated task", status: "running" },
+    });
+    const run = await system.run.create({
+      data: {
+        ...identity,
+        taskId: task.id,
+        trigger: "bot_message",
+        status: "running",
+        leaseOwner: "worker",
+        leaseFence: 1,
+      },
+    });
+    const attempt = await system.attempt.create({
+      data: { runId: run.id, status: "running", fence: 1 },
+    });
+    await system.thread.update({
+      where: { id: identity.threadId },
+      data: { nextMessageSeq: 700 },
+    });
+    const { messaging, sendToThread } = fakeSurface();
+    const deps = makeDeps(system, messaging);
+
+    await expect(
+      finalizeRun(system, {
+        spaceId: identity.spaceId,
+        threadId: identity.threadId,
+        botId: identity.botId,
+        runId: run.id,
+        taskId: task.id,
+        attemptId: attempt.id,
+        leaseOwner: "worker",
+        leaseFence: 1,
+        outcome: "failed",
+        error: "Private diagnostics remain in the app.",
+      }),
+    ).resolves.toEqual({ continuationRunId: null });
+    await deliverMessagingOutbound(deps, { runId: run.id }, context);
+    await deliverMessagingOutbound(deps, { runId: run.id }, context);
+    expect(sendToThread).toHaveBeenCalledExactlyOnceWith(
+      {
+        threadId: expect.any(String),
+        body: "The bot run failed. Open the app for details.",
+      },
+      context,
+    );
+    const notice = await system.message.findFirstOrThrow({ where: { runId: run.id, role: "bot" } });
+    await system.messagingOutbound.deleteMany({
+      where: { identityId, sourceMessageId: notice.id },
+    });
+  });
+
+  async function quietWaitingQuestion(seq: number) {
+    const task = await system.task.create({
+      data: { ...identity, prompt: "Quiet delegated work", status: "running" },
+    });
+    const run = await system.run.create({
+      data: {
+        ...identity,
+        taskId: task.id,
+        trigger: "bot_message",
+        status: "waiting_input",
+      },
+    });
+    const question = { kind: "ask", text: "Which route?", status: "pending" };
+    const message = await system.message.create({
+      data: {
+        threadId: identity.threadId,
+        botId: identity.botId,
+        runId: run.id,
+        role: "bot",
+        seq,
+        blocks: [{ kind: "text", text: "This delegated update stays quiet." }, question],
+      },
+    });
+    return { run, message, question, key: `msg:${message.id}:owner-prompt:1` };
+  }
+
+  it("queues only the owner question from quiet delegated work, deduplicating version 2 rows", async () => {
+    const { run, message, key } = await quietWaitingQuestion(601);
+    const { messaging, sendToThread } = fakeSurface();
+    const deps = makeDeps(system, messaging);
+    await Promise.all([
+      mirrorMessagingOutbound(deps, run.id),
+      mirrorMessagingOutbound(deps, run.id),
+      mirrorMessagingProgress(deps, run.id),
+    ]);
+    const rows = await system.messagingOutbound.findMany({ where: { identityId } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      idempotencyKey: key,
+      sourceMessageId: message.id,
+      requiredDeliveryVersion: 2,
+      status: "pending",
+      body: "Which route?\n\n(Reply in the app.)",
+    });
+    await deliverMessagingOutbound(deps, {}, context);
+    expect(sendToThread.mock.calls.map(([request]) => request.body)).toEqual([
+      "Which route?\n\n(Reply in the app.)",
+    ]);
+    await mirrorMessagingOutbound(deps, run.id);
+    await deliverMessagingOutbound(deps, {}, context);
+    expect(sendToThread).toHaveBeenCalledTimes(1);
+    await system.messagingOutbound.deleteMany({ where: { identityId } });
+  });
+
+  it.each(["answered", "resumed"] as const)(
+    "retires an obsolete queued question before sending when %s",
+    async (resolution) => {
+      const { run, message, question, key } = await quietWaitingQuestion(
+        resolution === "answered" ? 602 : 603,
+      );
+      const { messaging, sendToThread } = fakeSurface();
+      const deps = makeDeps(system, messaging);
+      await mirrorMessagingOutbound(deps, run.id);
+      expect(await system.messagingOutbound.count({ where: { idempotencyKey: key } })).toBe(1);
+      if (resolution === "answered") {
+        await system.message.update({
+          where: { id: message.id },
+          data: { blocks: [{ ...question, status: "answered", answer: "private-answer" }] },
+        });
+      } else {
+        await system.$transaction(async (tx) => {
+          await declareRunReaderVersion(tx);
+          await tx.run.update({ where: { id: run.id }, data: { status: "running" } });
+        });
+      }
+      await deliverMessagingOutbound(deps, {}, context);
+      expect(sendToThread).not.toHaveBeenCalled();
+      expect(
+        await system.messagingOutbound.findUnique({ where: { idempotencyKey: key } }),
+      ).toMatchObject({ status: "retired", providerHandle: null });
+      await system.messagingOutbound.deleteMany({ where: { identityId } });
+    },
+  );
+
+  it("holds owner prompts for an old drain while the current drain sends pending prompts", async () => {
+    const { run, key } = await quietWaitingQuestion(604);
+    const { messaging, sendToThread } = fakeSurface();
+    const deps = makeDeps(system, messaging);
+    await mirrorMessagingOutbound(deps, run.id);
+    const queued = await system.messagingOutbound.findUniqueOrThrow({
+      where: { idempotencyKey: key },
+    });
+    const oldClaim = await system.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT set_config('app.messaging_delivery_version', '1', true)`;
+      return tx.messagingOutbound.updateMany({
+        where: { id: queued.id, status: "pending" },
+        data: { status: "sent" },
+      });
+    });
+    expect(oldClaim.count).toBe(0);
+    expect(await system.messagingOutbound.findUnique({ where: { id: queued.id } })).toMatchObject({
+      status: "pending",
+      requiredDeliveryVersion: 2,
+    });
+    await deliverMessagingOutbound(deps, {}, context);
+    expect(sendToThread).toHaveBeenCalledTimes(1);
+    expect(sendToThread.mock.calls[0]?.[0].body).toBe("Which route?\n\n(Reply in the app.)");
+    expect(await system.messagingOutbound.findUnique({ where: { id: queued.id } })).toMatchObject({
+      status: "sent",
+      requiredDeliveryVersion: 2,
+      providerHandle: "handle-out-1",
+    });
     await system.messagingOutbound.deleteMany({ where: { identityId } });
   });
 

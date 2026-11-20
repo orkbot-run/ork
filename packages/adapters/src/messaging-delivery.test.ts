@@ -45,6 +45,8 @@ const messagingRun = {
   threadId: "thread-1",
   botId: "bot-1",
   trigger: "messaging",
+  status: "completed",
+  updatedAt: new Date("2026-11-20T00:00:00Z"),
   sourceMessage: { blocks: [{ kind: "text", text: "hi" }] },
 };
 
@@ -152,6 +154,8 @@ function createDeps(overrides: {
   connectionStatus?: string | null;
   blockedBot?: string;
   artifacts?: Array<Record<string, unknown>>;
+  sourceMessage?: unknown;
+  locale?: string;
 }) {
   const rows = [...(overrides.outboundRows ?? [])] as Array<Record<string, unknown>>;
   const { messaging, sendToThread, openDirectThread } = createFakeSurface(overrides.sendError);
@@ -164,6 +168,13 @@ function createDeps(overrides: {
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     message: {
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => {
+        if (where.id === "bot-source") return overrides.sourceMessage ?? null;
+        const message = (overrides.messages as Array<{ id: string }> | undefined)?.find(
+          (message) => message.id === where.id,
+        );
+        return message ? { ...message, runId: "run-1" } : null;
+      }),
       findMany: vi.fn(
         async () =>
           overrides.messages ?? [
@@ -171,6 +182,7 @@ function createDeps(overrides: {
           ],
       ),
     },
+    user: { findUnique: vi.fn(async () => ({ locale: overrides.locale ?? null })) },
     messagingIdentity: {
       findUnique: vi.fn(async () => identityRow),
       update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
@@ -419,7 +431,12 @@ describe("deliverMessagingOutbound", () => {
       expect.objectContaining({ data: { outboundSinceInbound: { increment: 1 } } }),
     );
     expect(deps.prisma.run.updateMany).toHaveBeenCalledWith({
-      where: { id: "run-1", trigger: "messaging" },
+      where: {
+        id: "run-1",
+        trigger: "messaging",
+        status: "completed",
+        updatedAt: messagingRun.updatedAt,
+      },
       data: { messagingMirroredAt: expect.any(Date) },
     });
   });
@@ -541,13 +558,134 @@ describe("deliverMessagingOutbound", () => {
     expect(noIdentity.sendToThread).not.toHaveBeenCalled();
   });
 
-  it("mirrors delegated bot_message replies to the linked DM", async () => {
-    const deps = createDeps({ run: { ...messagingRun, trigger: "bot_message" } });
+  it("mirrors failures from bot_message runs to the linked DM", async () => {
+    const deps = createDeps({ run: { ...messagingRun, trigger: "bot_message", status: "failed" } });
     await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
     expect(deps.sendToThread).toHaveBeenCalledWith(
       { threadId: "sendblue:dm-1", body: "Hello from your bot" },
       context,
     );
+  });
+
+  it.each(["running", "completed"])(
+    "keeps quiet bot-to-bot work in the app (%s)",
+    async (status) => {
+      const deps = createDeps({
+        run: { ...messagingRun, trigger: "bot_message", status, sourceMessageId: "bot-source" },
+        sourceMessage: { blocks: [{ kind: "bot_message_received", intent: "request" }] },
+      });
+      expect(await mirrorMessagingProgress(deps, "run-1")).toBe(false);
+      await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
+      expect(deps.rows).toEqual([]);
+      expect(deps.sendToThread).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["result", "status", "fyi"])(
+    "mirrors a %s replied to the bot's own request",
+    async (intent) => {
+      const deps = createDeps({
+        run: { ...messagingRun, trigger: "bot_message", sourceMessageId: "bot-source" },
+        identity: { provider: "telegram" },
+        sourceMessage: {
+          blocks: [{ kind: "bot_message_received", intent, fromBotId: "peer" }],
+          replyTo: { blocks: [{ kind: "bot_message_sent", intent: "request", toBotId: "peer" }] },
+        },
+        messages: [
+          {
+            id: "result",
+            blocks: [
+              { kind: "text", text: "Result" },
+              { kind: "file", artifactId: "output" },
+            ],
+          },
+        ],
+      });
+      await mirrorMessagingOutbound(deps, "run-1");
+      expect(deps.rows.map((row) => row.idempotencyKey)).toEqual([
+        "msg:result",
+        "msg:result:file:output",
+      ]);
+    },
+  );
+
+  it.each(["messaging", "bot_message"])(
+    "delivers a pending question once (%s)",
+    async (trigger) => {
+      const deps = createDeps({
+        run: { ...messagingRun, trigger, status: "waiting_input" },
+        locale: "pl-PL",
+        messages: [
+          {
+            id: "ask",
+            blocks: [
+              {
+                kind: "ask",
+                status: "pending",
+                text: "Który?",
+                detail: "Wybierz termin",
+                actions: [
+                  { id: "internal-mon", label: "Poniedziałek" },
+                  { id: "internal-tue", label: "Wtorek" },
+                ],
+              },
+              { kind: "ask", text: { malformed: true } },
+              {
+                kind: "ask",
+                status: "answered",
+                text: "Stare pytanie",
+                answer: "Prywatna odpowiedź",
+              },
+            ],
+          },
+        ],
+      });
+      await mirrorMessagingProgress(deps, "run-1");
+      await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
+      await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
+      expect(deps.rows).toHaveLength(1);
+      expect(deps.rows[0]?.idempotencyKey).toBe("msg:ask:owner-prompt:1");
+      expect(deps.sendToThread).toHaveBeenCalledExactlyOnceWith(
+        {
+          threadId: "sendblue:dm-1",
+          body: expect.stringMatching(
+            /Który\?[\s\S]*Wybierz termin[\s\S]*1\. Poniedziałek[\s\S]*2\. Wtorek[\s\S]*\(Odpowiedz w aplikacji\.\)/,
+          ),
+        },
+        context,
+      );
+      expect(JSON.stringify(deps.rows)).not.toMatch(/internal-|Stare pytanie|Prywatna odpowiedź/);
+    },
+  );
+
+  it("mirrors only the takeover request from quiet bot-to-bot work", async () => {
+    const deps = createDeps({
+      run: { ...messagingRun, trigger: "bot_message", status: "waiting_takeover" },
+      identity: { provider: "telegram" },
+      messages: [
+        {
+          id: "work",
+          blocks: [
+            { kind: "text", text: "Private work" },
+            { kind: "file", artifactId: "private" },
+          ],
+        },
+        {
+          id: "screen",
+          blocks: [{ kind: "computer", state: "Needs you", text: "Sign in to continue." }],
+        },
+      ],
+    });
+    await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
+    expect(deps.rows).toHaveLength(1);
+    expect(deps.sendToThread).toHaveBeenCalledExactlyOnceWith(
+      {
+        threadId: "sendblue:dm-1",
+        body: expect.stringContaining("Sign in to continue."),
+      },
+      context,
+    );
+    expect(JSON.stringify(deps.rows)).not.toMatch(/Private work|file:private/);
   });
 
   it("holds sendblue DM sends at the consecutive-outbound cap", async () => {

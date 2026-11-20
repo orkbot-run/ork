@@ -268,7 +268,16 @@ export function createJobReconciler(
           select: { id: true },
         }),
         deps.prisma.run.findMany({
-          where: { trigger: "messaging", status: "completed", messagingMirroredAt: null },
+          where: {
+            messagingMirroredAt: null,
+            OR: [
+              { trigger: "messaging", status: "completed" },
+              {
+                trigger: { in: ["messaging", "bot_message"] },
+                status: { in: ["waiting_input", "waiting_takeover"] },
+              },
+            ],
+          },
           orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
           take: batchSize,
           select: { id: true },

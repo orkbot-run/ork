@@ -1435,6 +1435,7 @@ export async function pauseRunForInput(
         status: "waiting_input",
         leaseOwner: null,
         leaseExpiresAt: null,
+        messagingMirroredAt: null,
         ...(input.offeredActions?.length
           ? { checkpoint: choiceAskCheckpoint(input.offeredActions) }
           : {}),
@@ -1533,6 +1534,7 @@ export async function pauseRunForTakeover(
         status: released ? "queued" : "waiting_takeover",
         leaseOwner: null,
         leaseExpiresAt: null,
+        messagingMirroredAt: null,
         checkpoint: released ? run.checkpoint : null,
       },
     });
@@ -2024,6 +2026,7 @@ async function finalizeRunOnce(
         completedAt: now,
         leaseOwner: null,
         leaseExpiresAt: null,
+        messagingMirroredAt: null,
       },
     });
     if (terminal.count !== 1) return null;
@@ -2061,13 +2064,14 @@ async function finalizeRunOnce(
     });
     if (task.count !== 1) throw new Error("Run task was not available to finalize");
 
+    let failureNotice: MessageBlock | undefined;
     if (input.outcome === "failed") {
       // Before the partial reply below is saved: a reply the failure cut short answers no
       // steering, so the steering it was answering still gets a run of its own.
       await discardAnsweredSteering(tx, input);
-      const { sourceMessage } = await tx.run.findUniqueOrThrow({
+      const { sourceMessage, trigger, userId } = await tx.run.findUniqueOrThrow({
         where: { id: input.runId },
-        select: { sourceMessage: { select: { seq: true } } },
+        select: { sourceMessage: { select: { seq: true } }, trigger: true, userId: true },
       });
       // A continuation's source is the newest steering it was created for. Only newer
       // messages justify another run after failure, even if setup failed before claiming.
@@ -2078,12 +2082,27 @@ async function finalizeRunOnce(
         },
         data: { runId: null },
       });
+      if (trigger === "bot_message") {
+        const identity = await tx.messagingIdentity.findFirst({
+          where: {
+            botId: input.botId,
+            spaceId: input.spaceId,
+            userId,
+            space: { threads: { some: { id: input.threadId, botId: input.botId, userId } } },
+          },
+          select: { id: true },
+        });
+        // The mirror needs a durable bot message even when setup failed before the first reply.
+        // Keep the actual error details in the app's run failure event.
+        if (identity)
+          failureNotice = { kind: "text", text: "The bot run failed. Open the app for details." };
+      }
     }
     let firstResponse = false;
     const replyBlocks =
       input.outcome === "completed"
         ? completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now)
-        : (input.partialReply ?? []);
+        : [...(input.partialReply ?? []), ...(failureNotice ? [failureNotice] : [])];
     if (replyBlocks.length > 0) {
       const message = await createThreadMessageInTransaction(tx, {
         threadId: input.threadId,

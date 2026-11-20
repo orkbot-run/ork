@@ -47,7 +47,7 @@ export function botMessageHopExhausted(hop: number): boolean {
 export type BotMessageContext = Extract<MessageBlock, { kind: "bot_message_received" }>;
 
 export function botMessageContext(blocks: readonly MessageBlock[]): BotMessageContext | undefined {
-  return blocks.find((block): block is BotMessageContext => block.kind === "bot_message_received");
+  return blocks.find((block): block is BotMessageContext => block?.kind === "bot_message_received");
 }
 
 export function botMessageAllowsSilence(
