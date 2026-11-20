@@ -60,6 +60,11 @@ export const AUDITED_PROCEDURES: Record<string, AuditedProcedure> = {
     kind: "organization_vault",
     fields: ["spaceId", "allowed"],
   },
+  "organizationVault.setCredentialWorkspaceAccess": {
+    type: "approval.policy.changed",
+    kind: "organization_vault",
+    fields: ["name", "spaceId", "allowed"],
+  },
   "botSecrets.put": {
     type: "credential.changed",
     kind: "bot_secret",

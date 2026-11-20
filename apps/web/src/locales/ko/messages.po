@@ -643,10 +643,6 @@ msgstr "서비스 추가"
 msgid "Add rule"
 msgstr "규칙 추가"
 
-#: src/pages/OrganizationVaultSettings.tsx
-msgid "Add secret"
-msgstr ""
-
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
 msgstr "서버 추가"
@@ -729,6 +725,7 @@ msgid "Agent from another app"
 msgstr ""
 
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "All"
 msgstr ""
@@ -768,7 +765,7 @@ msgstr "허용"
 
 #. placeholder {0}: space.name
 #: src/pages/OrganizationVaultSettings.tsx
-msgid "Allow {0} to use the organization vault"
+msgid "Allow {0} to use this secret"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -898,7 +895,6 @@ msgstr ""
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
@@ -1343,7 +1339,6 @@ msgstr "이미지를 읽을 수 없음"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/shell/create-bot-dialog.tsx
@@ -1385,7 +1380,6 @@ msgid "Cancelled"
 msgstr "취소됨"
 
 #: src/components/vault/kinds.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Card"
 msgstr ""
 
@@ -1588,7 +1582,7 @@ msgid "Choose how to use Ork"
 msgstr ""
 
 #: src/pages/OrganizationVaultSettings.tsx
-msgid "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it."
+msgid "Choose which workspaces can use this secret."
 msgstr ""
 
 #: src/components/WorkspaceAccessGuard.tsx
@@ -1873,7 +1867,6 @@ msgid "Confirm password"
 msgstr "비밀번호 확인"
 
 #: src/components/integrations/plugin-marketplace.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Confirm removal"
 msgstr ""
 
@@ -2016,7 +2009,6 @@ msgid "Connector ID"
 msgstr ""
 
 #: src/components/vault/kinds.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Contact"
 msgstr ""
 
@@ -2383,6 +2375,7 @@ msgid "Could not load computer settings"
 msgstr ""
 
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Could not load credentials."
 msgstr ""
 
@@ -2426,10 +2419,6 @@ msgstr "스킬을 불러오지 못했습니다"
 msgid "Could not load the desktop."
 msgstr "데스크톱을 불러올 수 없습니다."
 
-#: src/pages/OrganizationVaultSettings.tsx
-msgid "Could not load the organization vault. Check your access and try again."
-msgstr ""
-
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
 msgstr ""
@@ -2453,6 +2442,10 @@ msgstr "음성 설정을 불러오지 못했습니다."
 #: src/pages/shell/use-routine-editor.ts
 msgid "Could not load webhook key"
 msgstr "Could not load webhook key"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Could not load workspace access."
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not load workspace model settings."
@@ -3307,7 +3300,6 @@ msgstr "각 이름은 한 번만 사용할 수 있습니다."
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Edit"
 msgstr "편집"
 
@@ -4364,7 +4356,6 @@ msgid "Log out"
 msgstr "로그아웃"
 
 #: src/components/vault/kinds.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Login"
 msgstr ""
 
@@ -4392,10 +4383,6 @@ msgstr "기본 모델"
 
 #: src/pages/ServerAISettings.tsx
 msgid "Make available to organization"
-msgstr ""
-
-#: src/pages/OrganizationVaultSettings.tsx
-msgid "Make credentials available to approved workspaces."
 msgstr ""
 
 #: src/pages/BillingSettingsPanel.tsx
@@ -4878,6 +4865,7 @@ msgid "Never ask"
 msgstr "묻지 않기"
 
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/shell/chat-context.tsx
 #: src/pages/shell/keyboard-shortcuts-dialog.tsx
 msgid "New"
@@ -5018,6 +5006,7 @@ msgid "No managed app catalog is configured on this deployment."
 msgstr "이 서버에는 관리형 앱 목록이 설정되지 않았습니다."
 
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "No matches"
 msgstr ""
 
@@ -5089,10 +5078,6 @@ msgstr ""
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr "아직 실행 기록이 없습니다"
-
-#: src/pages/OrganizationVaultSettings.tsx
-msgid "No secrets added yet."
-msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -5181,6 +5166,10 @@ msgstr "작동하지 않음"
 #: src/pages/KnowledgeSection.tsx
 msgid "Nothing remembered yet"
 msgstr "아직 기억한 내용이 없습니다"
+
+#: src/pages/OrganizationVaultSettings.tsx
+msgid "Nothing saved yet."
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Notifications"
@@ -5955,7 +5944,6 @@ msgstr "새로고침"
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/ModelRoleSettings.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
@@ -6508,6 +6496,7 @@ msgstr "화면을 사용할 수 없습니다"
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/providers-section.tsx
 #: src/pages/model-settings/role-model-picker.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/bot-picker.tsx
 #: src/pages/shell/chat-model-picker.tsx
@@ -6562,6 +6551,7 @@ msgid "Search tools"
 msgstr "도구 검색"
 
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Search Vault"
 msgstr ""
 
@@ -6574,10 +6564,6 @@ msgstr ""
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "검색 중…"
-
-#: src/pages/OrganizationVaultSettings.tsx
-msgid "Secrets"
-msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Security"
@@ -6741,6 +6727,7 @@ msgstr "공유 기억"
 
 #: src/components/vault/VaultItemDetail.tsx
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "Show"
 msgstr "보기"
 
@@ -7342,6 +7329,7 @@ msgstr "파일이나 선택이 더 이상 맞지 않습니다. 파일을 다시 
 
 #: src/components/vault/VaultItemDetail.tsx
 #: src/components/VaultSettings.tsx
+#: src/pages/OrganizationVaultSettings.tsx
 msgid "These saved settings can't be read. Remove it and add it again."
 msgstr ""
 
@@ -7954,7 +7942,6 @@ msgstr "값"
 
 #: src/components/vault/kinds.tsx
 #: src/components/vault/VaultItemDetail.tsx
-#: src/pages/OrganizationVaultSettings.tsx
 msgid "Variable"
 msgstr ""
 

@@ -86,10 +86,15 @@ export class OrganizationVault {
     };
   }
 
-  async workspaces(actor: AIActor) {
+  async workspaces(actor: AIActor, name: string) {
     return runAsSystem("list organization vault workspace access", () =>
       this.prisma.$transaction(async (tx) => {
         const admin = await this.administrator(tx, actor);
+        const credential = await tx.organizationVaultCredential.findUnique({
+          where: { organizationId_name: { organizationId: admin.organizationId, name } },
+          select: { id: true },
+        });
+        if (!credential) return forbidden();
         const spaces = await tx.space.findMany({
           where: { organizationId: admin.organizationId, deletingAt: null },
           select: { id: true, name: true },
@@ -104,8 +109,8 @@ export class OrganizationVault {
             binding.bindingVersion !== admin.bindingVersion
           )
             continue;
-          const grant = await tx.organizationVaultGrant.findUnique({
-            where: { spaceId: space.id },
+          const grant = await tx.organizationVaultCredentialGrant.findUnique({
+            where: { credentialId_spaceId: { credentialId: credential.id, spaceId: space.id } },
           });
           result.push({
             id: space.id,
@@ -121,10 +126,15 @@ export class OrganizationVault {
     );
   }
 
-  async setWorkspaceAccess(actor: AIActor, spaceId: string, allowed: boolean) {
+  async setWorkspaceAccess(actor: AIActor, name: string, spaceId: string, allowed: boolean) {
     await runAsSystem("change organization vault workspace access", () =>
       this.prisma.$transaction(async (tx) => {
         const admin = await this.administrator(tx, actor);
+        const credential = await tx.organizationVaultCredential.findUnique({
+          where: { organizationId_name: { organizationId: admin.organizationId, name } },
+          select: { id: true },
+        });
+        if (!credential) return forbidden();
         const space = await tx.space.findUnique({ where: { id: spaceId } });
         const binding = space && (await workspaceAdmissionBinding(tx, spaceId));
         if (
@@ -137,7 +147,7 @@ export class OrganizationVault {
           !["ready", "archived"].includes(binding.state)
         )
           return forbidden();
-        if (allowed)
+        if (allowed) {
           await tx.organizationVaultGrant.upsert({
             where: { spaceId },
             create: {
@@ -147,10 +157,32 @@ export class OrganizationVault {
             },
             update: { organizationId: admin.organizationId, bindingVersion: admin.bindingVersion },
           });
-        else
-          await tx.organizationVaultGrant.deleteMany({
-            where: { spaceId, organizationId: admin.organizationId },
+          await tx.organizationVaultCredentialGrant.upsert({
+            where: { credentialId_spaceId: { credentialId: credential.id, spaceId } },
+            create: {
+              credentialId: credential.id,
+              spaceId,
+              organizationId: admin.organizationId,
+              bindingVersion: admin.bindingVersion,
+            },
+            update: { bindingVersion: admin.bindingVersion },
           });
+        } else {
+          await tx.organizationVaultCredentialGrant.deleteMany({
+            where: { credentialId: credential.id, spaceId, organizationId: admin.organizationId },
+          });
+          const remaining = await tx.organizationVaultCredentialGrant.count({
+            where: {
+              spaceId,
+              organizationId: admin.organizationId,
+              bindingVersion: admin.bindingVersion,
+            },
+          });
+          if (!remaining)
+            await tx.organizationVaultGrant.deleteMany({
+              where: { spaceId, organizationId: admin.organizationId },
+            });
+        }
       }),
     );
   }

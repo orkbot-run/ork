@@ -34,7 +34,7 @@ test("organization vault shows secrets and server-specific workspace access", as
     }),
   );
   let allowed = false;
-  await page.route("**/rpc/organizationVault/workspaces", (route) =>
+  await page.route("**/rpc/organizationVault/credentialWorkspaces", (route) =>
     route.fulfill({
       json: {
         json: [
@@ -44,7 +44,7 @@ test("organization vault shows secrets and server-specific workspace access", as
       },
     }),
   );
-  await page.route("**/rpc/organizationVault/setWorkspaceAccess", (route) => {
+  await page.route("**/rpc/organizationVault/setCredentialWorkspaceAccess", (route) => {
     allowed = true;
     return route.fulfill({ json: { json: { ok: true } } });
   });
@@ -53,7 +53,8 @@ test("organization vault shows secrets and server-specific workspace access", as
   await settings.getByTestId("settings-nav-organization-vault").click();
   const vault = settings.getByTestId("organization-vault");
   await expect(vault.getByText("Deployment key")).toBeVisible();
-  await expect(vault.getByText("Production")).toBeVisible();
+  await vault.getByRole("button", { name: /Deployment key/ }).click();
+  await expect(vault.getByText("Production", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "organization-vault");
   await vault.getByRole("switch").first().click();
   await expect(vault.getByRole("switch").first()).toBeChecked();

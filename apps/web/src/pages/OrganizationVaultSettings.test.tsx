@@ -11,8 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   context: vi.fn(),
   list: vi.fn(),
-  workspaces: vi.fn(),
-  setWorkspaceAccess: vi.fn(),
+  credentialWorkspaces: vi.fn(),
+  setCredentialWorkspaceAccess: vi.fn(),
   put: vi.fn(),
   remove: vi.fn(),
 }));
@@ -30,12 +30,12 @@ vi.mock("../lib/rpc", () => ({
 vi.mock("../lib/query", () => ({
   useSpaceQueries: () => ({
     organizationVault: Object.fromEntries(
-      ["context", "list", "workspaces"].map((name) => [
+      ["context", "list", "credentialWorkspaces"].map((name) => [
         name,
         {
           queryOptions: () => ({
             queryKey: [name],
-            queryFn: api[name as "context" | "list" | "workspaces"],
+            queryFn: api[name as "context" | "list" | "credentialWorkspaces"],
           }),
         },
       ]),
@@ -66,6 +66,7 @@ vi.mock("@orkbot/ui-web", () => ({
   ),
   DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   DropdownMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DropdownMenuSeparator: () => null,
   DropdownMenuItem: ({ children, ...props }: React.ComponentProps<"button">) => (
     <button type="button" {...props}>
       {children}
@@ -75,6 +76,14 @@ vi.mock("@orkbot/ui-web", () => ({
 }));
 vi.mock("../components/vault/VaultItemEditor", () => ({
   VaultItemEditorPage: () => <div>Editor</div>,
+}));
+vi.mock("../components/vault/kinds", () => ({
+  VaultTile: () => <span>icon</span>,
+  useVaultSubtitle: () => () => "",
+  useVaultKindLabels: () => ({ one: {} }),
+}));
+vi.mock("../components/vault/VaultItemDetail", () => ({
+  VaultItemDetail: ({ item }: { item: { title: string } }) => <div>{item.title}</div>,
 }));
 vi.mock("../components/ConfirmIdentityDialog", () => ({
   useIdentityConfirmation: () => ({
@@ -98,11 +107,14 @@ describe("organization vault settings", () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
-    api.list.mockResolvedValue([]);
-    api.workspaces.mockResolvedValue([
+    api.list.mockResolvedValue([
+      { name: "secret-a", title: "Secret A", origin: "", auth: { type: "command" } },
+      { name: "secret-b", title: "Secret B", origin: "", auth: { type: "command" } },
+    ]);
+    api.credentialWorkspaces.mockResolvedValue([
       { id: "space", name: "Team", state: "ready", granted: false },
     ]);
-    api.setWorkspaceAccess.mockResolvedValue({ ok: true });
+    api.setCredentialWorkspaceAccess.mockResolvedValue({ ok: true });
   });
   afterEach(async () => {
     await act(async () => root.unmount());
@@ -125,16 +137,28 @@ describe("organization vault settings", () => {
     await render();
     expect(container.textContent).toContain("Personal organizations use your personal vault");
     expect(api.list).not.toHaveBeenCalled();
-    expect(api.workspaces).not.toHaveBeenCalled();
+    expect(api.credentialWorkspaces).not.toHaveBeenCalled();
   });
   it("shows workspace access and applies an administrator's grant", async () => {
     api.context.mockResolvedValue({ kind: "shared" });
     await render();
+    expect(api.credentialWorkspaces).not.toHaveBeenCalled();
+    const row = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Secret A"),
+    );
+    expect(row).toBeTruthy();
+    await act(async () => row!.click());
+    await flush();
     expect(container.textContent).toContain("Team");
+    expect(api.credentialWorkspaces).toHaveBeenCalledWith({ name: "secret-a" });
     const toggle = container.querySelector<HTMLButtonElement>('[role="switch"]');
     expect(toggle?.getAttribute("aria-checked")).toBe("false");
     await act(async () => toggle?.click());
     await flush();
-    expect(api.setWorkspaceAccess).toHaveBeenCalledWith({ spaceId: "space", allowed: true });
+    expect(api.setCredentialWorkspaceAccess).toHaveBeenCalledWith({
+      name: "secret-a",
+      spaceId: "space",
+      allowed: true,
+    });
   });
 });

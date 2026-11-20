@@ -731,6 +731,8 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["organizationVault/context"],
       ["organizationVault/list"],
       ["organizationVault/reveal"],
+      ["organizationVault/credentialWorkspaces"],
+      ["organizationVault/setCredentialWorkspaceAccess"],
       ["organizationVault/workspaces"],
       ["organizationVault/setWorkspaceAccess"],
       ["organizationVault/put"],

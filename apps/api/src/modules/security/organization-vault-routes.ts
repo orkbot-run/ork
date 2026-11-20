@@ -28,6 +28,22 @@ export function organizationVaultRoutes({ deps, authed }: RouterContext) {
   };
   return {
     organizationVault: {
+      credentialWorkspaces: authed.organizationVault.credentialWorkspaces.handler(
+        ({ context, input }) =>
+          guarded(async () => vault.workspaces(await actorOf(context.actor), input.name)),
+      ),
+      setCredentialWorkspaceAccess: authed.organizationVault.setCredentialWorkspaceAccess.handler(
+        ({ context, input }) =>
+          guarded(async () => {
+            await vault.setWorkspaceAccess(
+              await actorOf(context.actor),
+              input.name,
+              input.spaceId,
+              input.allowed,
+            );
+            return { ok: true as const };
+          }),
+      ),
       context: authed.organizationVault.context.handler(({ context }) =>
         guarded(async () => {
           const policy = await organizationVaultPolicy(deps.prisma, context.actor);
@@ -63,20 +79,13 @@ export function organizationVaultRoutes({ deps, authed }: RouterContext) {
           return revealed;
         }),
       ),
-      workspaces: authed.organizationVault.workspaces.handler(({ context }) =>
-        guarded(async () => vault.workspaces(await actorOf(context.actor))),
-      ),
-      setWorkspaceAccess: authed.organizationVault.setWorkspaceAccess.handler(
-        ({ context, input }) =>
-          guarded(async () => {
-            await vault.setWorkspaceAccess(
-              await actorOf(context.actor),
-              input.spaceId,
-              input.allowed,
-            );
-            return { ok: true as const };
-          }),
-      ),
+      // Older clients cannot express per-secret access; refuse their global controls.
+      workspaces: authed.organizationVault.workspaces.handler(() => {
+        throw new ORPCError("NOT_IMPLEMENTED");
+      }),
+      setWorkspaceAccess: authed.organizationVault.setWorkspaceAccess.handler(() => {
+        throw new ORPCError("NOT_IMPLEMENTED");
+      }),
       put: authed.organizationVault.put.handler(({ context, input }) =>
         guarded(async () => {
           const actor = await actorOf(context.actor);

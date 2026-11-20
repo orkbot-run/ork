@@ -279,9 +279,9 @@ postgres("organization vault on the installation", () => {
         ],
       },
     });
-    await expect(vault.setWorkspaceAccess(member, space, true)).rejects.toThrow(
-      "Organization vault access denied",
-    );
+    await expect(
+      vault.setWorkspaceAccess(member, item.destination.name, space, true),
+    ).rejects.toThrow("Organization vault access denied");
     const scope = { userId: memberId, spaceId: space };
     const foreign = await secrets.put(
       "other-company-value",
@@ -375,12 +375,29 @@ postgres("organization vault on the installation", () => {
       where: { id: binding },
       data: { organizationType: "shared" },
     });
-    await vault.setWorkspaceAccess(admin, space, true);
+    await vault.put(admin, {
+      destination: { name: "second-key", origin: "", auth: { type: "command" } },
+      plaintext: "second-private-value",
+      createOnly: true,
+    });
+    await vault.setWorkspaceAccess(admin, item.destination.name, space, true);
     expect(await load()).toEqual({ COMPANY_KEY: item.plaintext });
     expect(await loadAsOwner()).toEqual({ COMPANY_KEY: item.plaintext });
     expect(await loadOther()).toEqual({});
-    await vault.setWorkspaceAccess(admin, space2, true);
-    expect(await loadOther()).toEqual({ COMPANY_KEY: item.plaintext });
+    await vault.setWorkspaceAccess(admin, "second-key", space2, true);
+    expect(await loadOther()).toEqual({ SECOND_KEY: "second-private-value" });
+    expect(await load()).toEqual({ COMPANY_KEY: item.plaintext });
+    await vault.setWorkspaceAccess(admin, item.destination.name, space2, true);
+    expect(await loadOther()).toEqual({
+      COMPANY_KEY: item.plaintext,
+      SECOND_KEY: "second-private-value",
+    });
+    // A legacy server may remove the old workspace-wide grant during a rolling upgrade.
+    // Re-granting a different secret must not resurrect the old secret's access.
+    await asSystem(owner.prisma).organizationVaultGrant.delete({ where: { spaceId: space2 } });
+    await vault.setWorkspaceAccess(admin, "second-key", space2, true);
+    expect(await loadOther()).toEqual({ SECOND_KEY: "second-private-value" });
+    await vault.setWorkspaceAccess(admin, item.destination.name, space2, true);
     await asSystem(owner.prisma).centralWorkspaceBinding.update({
       where: { id: binding },
       data: { state: "archived" },
@@ -392,16 +409,23 @@ postgres("organization vault on the installation", () => {
       data: { state: "ready" },
     });
     expect(await load()).toEqual({ COMPANY_KEY: item.plaintext });
-    await vault.setWorkspaceAccess(admin, space, false);
+    await vault.setWorkspaceAccess(admin, "second-key", space, true);
+    await vault.setWorkspaceAccess(admin, item.destination.name, space, false);
+    expect(await load()).toEqual({ SECOND_KEY: "second-private-value" });
+    expect(await loadAsOwner()).toEqual({ SECOND_KEY: "second-private-value" });
+    await vault.setWorkspaceAccess(admin, "second-key", space, false);
     expect(await load()).toEqual({});
     expect(await loadAsOwner()).toEqual({});
-    expect(await loadOther()).toEqual({ COMPANY_KEY: item.plaintext });
+    expect(await loadOther()).toEqual({
+      COMPANY_KEY: item.plaintext,
+      SECOND_KEY: "second-private-value",
+    });
     await asSystem(owner.prisma).user.delete({ where: { id: adminId } });
     expect(
       await asSystem(owner.prisma).organizationVaultCredential.count({
         where: { organizationId: org },
       }),
-    ).toBe(1);
+    ).toBe(2);
     await asSystem(owner.prisma).centralWorkspaceAccess.deleteMany({
       where: { workspaceId: binding },
     });
@@ -411,6 +435,6 @@ postgres("organization vault on the installation", () => {
       await asSystem(owner.prisma).organizationVaultCredential.count({
         where: { organizationId: org },
       }),
-    ).toBe(1);
+    ).toBe(2);
   });
 });

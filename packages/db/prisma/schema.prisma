@@ -304,6 +304,7 @@ model Organization {
   serverAIConnections ServerAIConnection[]
   organizationVaultCredentials OrganizationVaultCredential[]
   organizationVaultGrants OrganizationVaultGrant[]
+  organizationVaultCredentialGrants OrganizationVaultCredentialGrant[]
 
   @@unique([slug])
   @@map("organization")
@@ -529,6 +530,7 @@ model Space {
   botSecrets                  BotSecret[]
   vaultCredentials            VaultCredential[]
   organizationVaultGrant      OrganizationVaultGrant?
+  organizationVaultCredentialGrants OrganizationVaultCredentialGrant[]
   externalConversations       ExternalConversation[]
   agentSecrets                AgentSecret[]
   board                       Board?
@@ -2182,9 +2184,27 @@ model OrganizationVaultCredential {
   ciphertext     String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  grants         OrganizationVaultCredentialGrant[]
 
   @@unique([organizationId, name])
+  @@unique([id, organizationId])
   @@map("organization_vault_credentials")
+}
+
+model OrganizationVaultCredentialGrant {
+  credentialId  String
+  spaceId       String
+  organizationId String
+  bindingVersion Int
+  createdAt     DateTime @default(now())
+  credential OrganizationVaultCredential @relation(fields: [credentialId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  space Space @relation(fields: [spaceId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspaceGrant OrganizationVaultGrant @relation(fields: [spaceId, organizationId], references: [spaceId, organizationId], onDelete: Cascade, map: "organization_vault_credential_workspace_grant_fkey")
+
+  @@id([credentialId, spaceId])
+  @@index([spaceId, organizationId])
+  @@map("organization_vault_credential_grants")
 }
 
 /// A grant is specific to one workspace and one installation binding version.
@@ -2195,6 +2215,7 @@ model OrganizationVaultGrant {
   space          Space @relation(fields: [spaceId, organizationId], references: [id, organizationId], onDelete: Cascade)
   bindingVersion Int
   createdAt      DateTime @default(now())
+  credentials    OrganizationVaultCredentialGrant[]
 
   @@unique([spaceId, organizationId])
   @@index([organizationId])

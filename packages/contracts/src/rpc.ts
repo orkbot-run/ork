@@ -1744,6 +1744,14 @@ export const appContract = {
       z.object({ kind: z.enum(["personal", "shared", "unverified", "unmanaged"]) }),
     ),
     list: oc.output(z.array(BotSecretMetadata)),
+    credentialWorkspaces: oc
+      .input(z.object({ name: StoredBotSecretName }))
+      .output(
+        z.array(z.object({ id: Id, name: z.string(), state: z.string(), granted: z.boolean() })),
+      ),
+    setCredentialWorkspaceAccess: oc
+      .input(z.object({ name: StoredBotSecretName, spaceId: Id, allowed: z.boolean() }))
+      .output(z.object({ ok: z.literal(true) })),
     reveal: oc.input(z.object({ name: StoredBotSecretName })).output(VaultRevealed),
     workspaces: oc.output(
       z.array(z.object({ id: Id, name: z.string(), state: z.string(), granted: z.boolean() })),
