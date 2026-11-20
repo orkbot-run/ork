@@ -1311,6 +1311,20 @@ async function request(
           skipSpaceAuthRecovery: true,
         };
         try {
+          if (installationRevocationScope(requestApiBase)) {
+            // A managed session's unscoped lists only its entry workspace. A peer
+            // missing from that list may still be accessible; require fresh proof.
+            const context = await captureApiRequestContext(null);
+            const status = await request(
+              "spaces/accessStatus",
+              { spaceId: previousSpaceId },
+              {
+                ...recoveryOptions,
+                requestContext: context,
+              },
+            );
+            if (status !== "removed") throw failure;
+          }
           if (retrySameProc) {
             const result = await request(proc, body, recoveryOptions);
             // A Space selected while the retry was in flight already owns both

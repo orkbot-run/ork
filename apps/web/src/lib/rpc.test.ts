@@ -211,6 +211,20 @@ describe("unavailable space", () => {
     expect(items.has("orkbot:space-id")).toBe(false);
   });
 
+  it.each(["available", "unknown"])(
+    "does not leave a managed peer workspace on a transient 401 when status is %s",
+    async (status) => {
+      const { items, reload } = browser("peer-space", ["entry-space"]);
+      Object.assign(window, {
+        orkbotDesktop: { accounts: { workspaceTarget: async () => ({ workspaceId: "entry" }) } },
+      });
+      vi.mocked(globalThis.fetch).mockImplementation(async () => Response.json({ json: status }));
+      await leaveUnavailableSpace("peer-space");
+      expect(items.get("orkbot:space-id")).toBe("peer-space");
+      expect(reload).not.toHaveBeenCalled();
+    },
+  );
+
   it("keeps a space the user still has, and keeps it when signed out", async () => {
     for (const spaces of [["home", "space-a"], null]) {
       const { items, reload } = browser("space-a", spaces);

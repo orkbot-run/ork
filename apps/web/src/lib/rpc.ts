@@ -199,20 +199,29 @@ let leavingSpace: Promise<void> | null = null;
 
 /**
  * The server answers 401 when the selected space is no longer one of the user's, for instance
- * after they are removed from it, and every request would keep failing. Ask without a space which
- * spaces the user has in any organization; if the selected one is not among them, reload into
- * their default space.
+ * after they are removed from it, and every request would keep failing. Managed sessions require
+ * explicit proof of removal: their unscoped organization list omits other authorized workspaces.
  */
 export function leaveUnavailableSpace(spaceId: string, isCurrent?: () => boolean): Promise<void> {
   if (isCurrent && !isCurrent()) return Promise.resolve();
+  const generation = spaceSelectionGeneration;
   leavingSpace ??= (async () => {
     try {
-      const { organizations } = await rpc.organizations.list(undefined, {
-        context: { spaceId: null, ...(isCurrent ? { isCurrent } : {}) },
-      });
+      const context = { spaceId: null, ...(isCurrent ? { isCurrent } : {}) };
+      const desktop = desktopBridge();
+      if (desktop && !desktop.accounts?.workspaceTarget) return;
+      const target = await desktop?.accounts?.workspaceTarget?.();
+      if (target) {
+        // Managed organization lists only cover the session's admission, not its peers.
+        // Missing from that list is not evidence that a selected peer lost access.
+        if ((await rpc.spaces.accessStatus({ spaceId }, { context })) !== "removed") return;
+      } else {
+        const { organizations } = await rpc.organizations.list(undefined, { context });
+        if (organizations.some((organization) => organization.spaceIds.includes(spaceId))) return;
+      }
       if (
         (isCurrent && !isCurrent()) ||
-        organizations.some((organization) => organization.spaceIds.includes(spaceId)) ||
+        generation !== spaceSelectionGeneration ||
         selectedSpaceId() !== spaceId
       )
         return;

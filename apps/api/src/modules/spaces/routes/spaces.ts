@@ -77,6 +77,14 @@ export function spacesRoutes(ctx: RouterContext) {
       list: authed.spaces.list.handler(async ({ context }) =>
         spaceNavigationDto(deps, context.actor, repos, groupRepos, context.sessionId),
       ),
+      accessStatus: authed.spaces.accessStatus.handler(({ context, input }) => {
+        if (!context.sessionId || !deps.workspaceAuthority?.spaceAccessStatus) return "unknown";
+        return deps.workspaceAuthority.spaceAccessStatus(
+          context.sessionId,
+          context.actor.userId,
+          input.spaceId,
+        );
+      }),
       // Seeds a Space whose id does not exist yet; the member limit is checked inside.
       create: authed.spaces.create.handler(({ context, input }) =>
         runAsSystem("create a Space for its member", async () => {
