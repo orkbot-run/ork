@@ -14,7 +14,7 @@ import {
 import type { Actor, McpServer, McpServerConfigInput } from "@orkbot/contracts";
 import { mcpOAuthEnvReferences } from "@orkbot/contracts";
 import type { McpServer as McpServerRow, Prisma } from "@orkbot/db";
-import { itemSecretIn, spaceAvailability } from "@orkbot/db";
+import { itemSecretIn, itemSecretSpace, spaceAvailability } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { isAdmin } from "#modules/accounts/admins";
@@ -326,7 +326,7 @@ export function createMcpServers(
         data: {
           id: stored.id,
           userId: actor.userId,
-          spaceId: options.everywhere ? null : actor.spaceId,
+          spaceId: await itemSecretSpace(tx, actor.spaceId, Boolean(options.everywhere)),
           kind: "mcp",
           ciphertext: stored.ciphertext,
         },

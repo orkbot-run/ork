@@ -9,6 +9,7 @@ import {
   AVAILABILITY_SELECT,
   availableInSpace,
   isUniqueViolation,
+  itemSecretSpace,
   runAsSystem,
   runAsSystemInTransaction,
   spaceAvailability,
@@ -96,7 +97,11 @@ async function settleSecret(
   availability: SpaceAvailability,
 ): Promise<void> {
   if (!secretId) return;
-  const spaceId = availability.allSpaces || availability.spaceIds.length > 1 ? null : home;
+  const spaceId = await itemSecretSpace(
+    tx,
+    home,
+    availability.allSpaces || availability.spaceIds.length > 1,
+  );
   await runAsSystemInTransaction(tx, "move an item's secret with its availability", () =>
     tx.secret.updateMany({ where: { id: secretId, userId: actor.userId }, data: { spaceId } }),
   );
