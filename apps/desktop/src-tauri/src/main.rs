@@ -641,6 +641,53 @@ async fn native_command(
             serde_json::to_value(document_workspace(&state, &document, &authorization)?)
                 .map_err(|_| "Could not continue".into())
         }
+        Command::AccountsCreateWorkspace { name, operation_id } => {
+            if installation_login::personal_credential(&app, &state, &document)
+                .await?
+                .is_some()
+            {
+                return Ok(unit);
+            }
+            let authorization = state
+                .accounts
+                .authorization(&server_directory::origin())
+                .await?;
+            if !current_server_account(&app, &state, &document, &authorization) {
+                return Err("Could not continue".into());
+            }
+            let Some(target) = document_workspace(&state, &document, &authorization)? else {
+                return Ok(unit);
+            };
+            let directory = server_directory::Directory::new()?;
+            let catalog = directory
+                .catalog_for_device(
+                    authorization.directory_bearer()?,
+                    &server_directory::device_id(&state.directory)?,
+                )
+                .await?;
+            if !current_server_account(&app, &state, &document, &authorization)
+                || document_workspace(&state, &document, &authorization)?.as_ref() != Some(&target)
+            {
+                return Err("Could not continue".into());
+            }
+            if catalog.is_personal(&target)? {
+                return Ok(unit);
+            }
+            let id = directory
+                .create_workspace(
+                    authorization.directory_bearer()?,
+                    &target,
+                    &operation_id,
+                    &name,
+                )
+                .await?;
+            if !current_server_account(&app, &state, &document, &authorization)
+                || document_workspace(&state, &document, &authorization)?.as_ref() != Some(&target)
+            {
+                return Err("Could not continue".into());
+            }
+            Ok(serde_json::json!(id))
+        }
         Command::AccountsWorkspaceAccess => {
             if installation_login::personal_credential(&app, &state, &document)
                 .await?

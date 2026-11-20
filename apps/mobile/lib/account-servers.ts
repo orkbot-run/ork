@@ -14,6 +14,7 @@ import {
   installationRelayRouteSchema,
   installationVirtualOrigin,
   isLoopbackHost,
+  WorkspaceTargetSchema,
 } from "@orkbot/contracts";
 import { readBoundedJsonResponse } from "@orkbot/core";
 import { accountsAuthorization, accountsConfiguration, accountsVersion } from "./accounts";
@@ -54,7 +55,12 @@ async function request(
   method: "GET" | "POST" | "PATCH",
   body?: unknown,
   expectedOwner?: string,
-  path: "servers" | "identity/v2/catalog" | "organizations/preferences" = "servers",
+  path:
+    | "servers"
+    | "identity/v2/catalog"
+    | "organizations/preferences"
+    | `identity/v2/organizations/${string}/workspaces` = "servers",
+  isCurrent?: () => boolean,
 ) {
   const version = accountsVersion();
   const authorization = await accountsAuthorization();
@@ -62,6 +68,7 @@ async function request(
   if (
     authorization?.issuer !== configuration.issuer ||
     version !== accountsVersion() ||
+    (isCurrent && !isCurrent()) ||
     (expectedOwner &&
       expectedOwner !== JSON.stringify([authorization.issuer, authorization.subject]))
   )
@@ -82,8 +89,44 @@ async function request(
     response,
     path === "identity/v2/catalog" ? 4 * 1024 * 1024 : 64 * 1024,
   );
-  if (version !== accountsVersion()) throw new Error("Sign in to Accounts to continue.");
+  if (version !== accountsVersion() || (isCurrent && !isCurrent()))
+    throw new Error("Sign in to Accounts to continue.");
   return value;
+}
+
+/** The native Accounts credential stays on the device; the server only receives its projection. */
+export async function createAccountWorkspace(
+  owner: string,
+  target: WorkspaceTarget,
+  name: string,
+  operationId: string,
+  isCurrent: () => boolean = () => true,
+): Promise<string | null> {
+  const selected = WorkspaceTargetSchema.parse(target);
+  const { catalog } = await accountDirectory(owner);
+  const current = catalogWorkspace(catalog, selected);
+  if (!isCurrent() || !current || JSON.stringify(current.target) !== JSON.stringify(selected))
+    throw new Error("Could not continue");
+  if (current.organization.type === "personal") return null;
+  const result = await request(
+    "POST",
+    {
+      name,
+      serverId: selected.serverId,
+      operationId,
+    },
+    owner,
+    `identity/v2/organizations/${selected.organizationId}/workspaces`,
+    isCurrent,
+  );
+  const workspace = (result as { workspace?: { id?: unknown } })?.workspace;
+  if (
+    !workspace ||
+    typeof workspace.id !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(workspace.id)
+  )
+    throw new Error("Could not continue");
+  return workspace.id;
 }
 
 export async function accountDirectory(

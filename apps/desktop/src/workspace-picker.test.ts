@@ -91,21 +91,32 @@ it("keeps organizations without servers in the chooser and waits for a choice", 
   container.querySelector<HTMLButtonElement>('[role="option"]')!.click();
   expect(chooseOrganization).toHaveBeenCalledWith(id(1));
   const personal = render(catalog(), id(1));
-  expect(personal.container.textContent).toContain("No servers connected");
+  expect(personal.container.textContent).toContain("No workspaces available");
   expect(personal.entries).toEqual([]);
 });
 
-it("lists each server once and leaves workspace names inside the server", () => {
-  const { container, entries, open, setDefaultOrganization } = render(catalog(), id(2));
-  expect(container.textContent).toContain("Research server");
-  expect(entries.map((row) => row.id)).toEqual([id(5)]);
+it("lists each authorized workspace on a server and shows one being prepared", () => {
+  const value = catalog();
+  value.organizations[1]!.servers[0]!.workspaces.push({
+    id: id(8),
+    name: "Operations",
+    state: "ready",
+    role: "admin",
+    canOpen: true,
+  });
+  const { container, entries, open, setDefaultOrganization } = render(value, id(2));
+  expect(container.textContent).toContain("Research");
+  expect(container.textContent).toContain("Operations");
+  expect(entries.map((row) => row.id)).toEqual([id(5), id(8)]);
   const buttons = [...container.querySelectorAll<HTMLButtonElement>(".workspace-choice")];
-  expect(buttons.map((button) => button.disabled)).toEqual([false]);
+  expect(buttons.map((button) => button.disabled)).toEqual([false, true, false]);
   expect(container.textContent).not.toContain("Restricted");
-  expect(container.textContent).not.toContain("Preparing");
+  expect(container.textContent).toContain("Preparing workspace");
   expect(open).not.toHaveBeenCalled();
   buttons[0]!.click();
   expect(open).toHaveBeenCalledWith(id(5));
+  buttons[2]!.click();
+  expect(open).toHaveBeenCalledWith(id(8));
   container.querySelector<HTMLButtonElement>(".link")!.click();
   expect(setDefaultOrganization).toHaveBeenCalledWith(id(2));
 });

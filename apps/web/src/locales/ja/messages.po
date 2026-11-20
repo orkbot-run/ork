@@ -2228,6 +2228,7 @@ msgstr "コンピューターの画面に接続できませんでした"
 #: src/lib/user-error.ts
 #: src/pages/Auth.tsx
 #: src/pages/shell/computer-card.tsx
+#: src/pages/shell/shell-dialogs.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "続行できませんでした"
