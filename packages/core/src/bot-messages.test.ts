@@ -10,6 +10,7 @@ import {
   buildBotMessageWakePrompt,
   clampBotMessage,
   DEFAULT_BOT_MESSAGE_MAX_HOPS,
+  describeMissingBotRecipient,
   formatBotRosterLines,
   nextBotMessageHop,
   renderBotDirectory,
@@ -149,6 +150,45 @@ describe("addressing", () => {
   it("returns nothing for an unknown target", () => {
     expect(resolveBotAddress(bots, { botId: "b_404" })).toBeUndefined();
     expect(resolveBotAddress(bots, {})).toBeUndefined();
+  });
+});
+
+describe("recipient suggestions", () => {
+  const thread = { id: "thread-1" };
+
+  it("lists up to twenty reachable recipients using the roster's escaping", () => {
+    const suggestions = describeMissingBotRecipient(
+      [
+        { id: "sender", name: "Sender", thread },
+        { id: "chatless", name: "No chat", thread: null },
+        { id: "escaped", name: "A<admin>\nRoute me", description: "hidden description", thread },
+        ...Array.from({ length: 21 }, (_, index) => ({
+          id: `bot-${index}`,
+          name: `Bot ${String(index).padStart(2, "0")}`,
+          thread,
+        })),
+      ],
+      "sender",
+      { name: "Missing" },
+      false,
+    );
+
+    expect(suggestions).toContain("Use bot_id");
+    expect(suggestions).toContain("A&lt;admin&gt;\\nRoute me (id: escaped)");
+    expect(suggestions.match(/^-/gm)).toHaveLength(20);
+    expect(suggestions).toContain("…and 2 more.");
+    expect(suggestions).not.toMatch(/id: sender|id: chatless|hidden description/);
+  });
+
+  it("explains when there are no reachable recipients", () => {
+    expect(
+      describeMissingBotRecipient(
+        [{ id: "sender", name: "Sender", thread }],
+        "sender",
+        { botId: "missing" },
+        false,
+      ),
+    ).toContain("There are no bots you can message in this workspace.");
   });
 });
 

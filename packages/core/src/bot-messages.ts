@@ -28,6 +28,8 @@ export interface BotAddress {
   description?: string;
 }
 
+const BOT_RECIPIENT_SUGGESTION_LIMIT = 20;
+
 export function clampBotMessage(text: string): string {
   const trimmed = text.trim();
   return trimmed.length <= BOT_MESSAGE_MAX_LENGTH
@@ -71,6 +73,40 @@ export function resolveBotAddress<T extends BotAddress>(
   const lower = name.toLowerCase();
   const matches = bots.filter((bot) => bot.name.toLowerCase() === lower);
   return matches.length === 1 ? matches[0] : undefined;
+}
+
+export function describeMissingBotRecipient(
+  candidates: readonly (BotAddress & { thread: { id: string } | null })[],
+  senderId: string,
+  input: { botId?: string; name?: string },
+  hasFiles: boolean,
+): string {
+  const reachable = candidates.filter((bot) => bot.id !== senderId && bot.thread !== null);
+  const name = input.botId?.trim() ? undefined : input.name?.trim().toLowerCase();
+  const matches = name ? reachable.filter((bot) => bot.name.toLowerCase() === name) : [];
+  const ambiguous = matches.length > 1;
+  const suggestions = (ambiguous ? matches : reachable).sort(
+    (first, second) => first.name.localeCompare(second.name) || first.id.localeCompare(second.id),
+  );
+  const lines = [
+    ambiguous
+      ? "More than one reachable bot matches that name."
+      : "No bot found with that id or name.",
+  ];
+  if (suggestions.length === 0) {
+    lines.push("There are no bots you can message in this workspace.");
+  } else {
+    lines.push(
+      "Use bot_id to address a bot. Display names are escaped and may differ from stored names.",
+      ...formatBotRosterLines(
+        suggestions.slice(0, BOT_RECIPIENT_SUGGESTION_LIMIT).map(({ id, name }) => ({ id, name })),
+      ),
+    );
+    const remaining = suggestions.length - BOT_RECIPIENT_SUGGESTION_LIMIT;
+    if (remaining > 0) lines.push(`…and ${remaining} more.`);
+  }
+  if (hasFiles) lines.push("Nothing was sent.");
+  return lines.join("\n");
 }
 
 /**
