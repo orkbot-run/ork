@@ -422,6 +422,7 @@ describe("Tauri native bridge", () => {
     await bridge.accounts?.signIn();
     await bridge.accounts?.session();
     await bridge.accounts?.workspaceAccess?.();
+    await bridge.accounts?.createWorkspace?.("Team", "10000000-0000-4000-8000-000000000001");
     await bridge.accounts?.logout();
     await bridge.accounts?.retryRevocations?.();
     await bridge.pairing?.sync();
@@ -451,6 +452,11 @@ describe("Tauri native bridge", () => {
       { type: "accounts.signIn" },
       { type: "accounts.session" },
       { type: "accounts.workspaceAccess" },
+      {
+        type: "accounts.createWorkspace",
+        name: "Team",
+        operation_id: "10000000-0000-4000-8000-000000000001",
+      },
       { type: "accounts.logout" },
       { type: "accounts.retryRevocations" },
       { type: "pairing.sync" },

@@ -14,6 +14,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Settings, Trash2 } from "lucide-react";
 import type { ComponentProps, RefObject } from "react";
 import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
+import { desktopBridge } from "../../lib/desktop";
 import { PAGE_PARAM } from "../../lib/pages";
 import { useSpaceQueries } from "../../lib/query";
 import type { Panel } from "../../lib/right-panel-state";
@@ -138,6 +139,7 @@ export function ShellDialogs({
   paletteActions: CommandPaletteAction[];
 }) {
   const { t } = useLingui();
+  const workspaceOperation = useRef<{ name: string; id: string } | null>(null);
   const {
     deleteTarget,
     setDeleteTarget,
@@ -354,7 +356,24 @@ export function ShellDialogs({
       {newSpaceOpen ? (
         <NewSpaceDialog
           onCancel={() => setNewSpaceOpen(false)}
-          onCreate={async (name) => (await rpc.spaces.create({ name })).id}
+          onCreate={async (name) => {
+            if (managedWorkspace) {
+              const desktop = desktopBridge();
+              if (!desktop?.accounts?.createWorkspace || !desktop.server?.change)
+                throw new Error(t`Could not continue`);
+              if (workspaceOperation.current?.name !== name)
+                workspaceOperation.current = { name, id: crypto.randomUUID() };
+              const centralId = await desktop.accounts.createWorkspace(
+                name,
+                workspaceOperation.current.id,
+              );
+              if (centralId) {
+                await desktop.server.change();
+                return `central:${centralId}`;
+              }
+            }
+            return (await rpc.spaces.create({ name })).id;
+          }}
           loadItems={() => (managedWorkspace ? Promise.resolve([]) : rpc.availability.items())}
           chooseItems={async (spaceId, items) => {
             await rpc.availability.chooseForSpace({
@@ -364,6 +383,11 @@ export function ShellDialogs({
           }}
           onDone={(spaceId) => {
             if (!alive.current) return;
+            if (spaceId.startsWith("central:")) {
+              workspaceOperation.current = null;
+              setNewSpaceOpen(false);
+              return;
+            }
             if (managedWorkspace) {
               setNewSpaceOpen(false);
               openSpaceChat(spaceId, "/app");

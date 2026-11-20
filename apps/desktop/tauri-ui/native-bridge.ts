@@ -75,6 +75,8 @@ if (
       session: () => call("accounts.session"),
       workspaceTarget: () => call("accounts.workspaceTarget"),
       workspaceAccess: () => call("accounts.workspaceAccess"),
+      createWorkspace: (name, operationId) =>
+        call("accounts.createWorkspace", { name, operation_id: operationId }),
       logout: () => call("accounts.logout"),
       retryRevocations: () => call("accounts.retryRevocations"),
       ...(config.transport

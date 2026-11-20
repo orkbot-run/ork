@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors
 
+import { createAccountWorkspace } from "./account-servers";
 import type { ApiRequestContext, RpcOptions } from "./api";
 import {
   captureApiRequestContext,
@@ -10,6 +11,7 @@ import {
   selectSpace,
   spaceSelectionSeq,
 } from "./api";
+import { installationRevocationScope } from "./installation-transport";
 import { currentSessionGeneration } from "./session";
 
 /** A creation sheet retains its Space across onboarding retries and never follows a new session. */
@@ -20,17 +22,38 @@ export function newSpaceCreation() {
   const selection = spaceSelectionSeq();
   let context: ApiRequestContext | undefined;
   let createdSpaceId: string | undefined;
+  let operation: { name: string; id: string } | undefined;
 
   return async (
     name: string,
     isActive: () => boolean,
-  ): Promise<"ready" | "selection_failed" | "stale"> => {
+  ): Promise<"ready" | "directory" | "selection_failed" | "stale"> => {
     const sameSession = () =>
       isActive() && apiBase === currentApiBase() && generation === currentSessionGeneration();
     const current = () =>
       sameSession() && sourceSpaceId === selectedSpaceId() && selection === spaceSelectionSeq();
     if (!current()) return "stale";
     try {
+      const managed = installationRevocationScope(apiBase);
+      if (managed) {
+        const scope = JSON.stringify(managed);
+        const managedCurrent = () =>
+          current() && JSON.stringify(installationRevocationScope(apiBase)) === scope;
+        if (operation?.name !== name) {
+          const { randomUUID } = await import("expo-crypto");
+          operation = { name, id: randomUUID() };
+        }
+        if (!managedCurrent()) return "stale";
+        const created = await createAccountWorkspace(
+          managed.account,
+          managed.target,
+          name,
+          operation.id,
+          managedCurrent,
+        );
+        if (!managedCurrent()) return "stale";
+        if (created) return "directory";
+      }
       context ??= await captureApiRequestContext(sourceSpaceId);
       if (!current()) return "stale";
       if (!createdSpaceId) {

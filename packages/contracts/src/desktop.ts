@@ -109,6 +109,8 @@ export interface OrkDesktop {
     workspaceTarget?: () => Promise<WorkspaceTarget | null>;
     /** Checks the current managed session against a fresh Accounts directory. */
     workspaceAccess?: () => Promise<boolean | null>;
+    /** Creates a managed organization workspace; null means the current organization is personal. */
+    createWorkspace?: (name: string, operationId: string) => Promise<string | null>;
     logout: () => Promise<void>;
     /** Retry only captured retired credentials; live credentials remain native. */
     retryRevocations?: () => Promise<void>;

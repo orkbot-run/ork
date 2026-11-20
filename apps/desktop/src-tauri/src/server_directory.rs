@@ -950,6 +950,38 @@ impl Directory {
         json(self.send(method, endpoint, token, Some(body)).await?).await
     }
 
+    /// Create an organization workspace in Accounts so its lifecycle is centrally managed.
+    pub async fn create_workspace(
+        &self,
+        token: &str,
+        target: &WorkspaceTarget,
+        operation_id: &str,
+        name: &str,
+    ) -> Result<String, String> {
+        target.validate()?;
+        let name = name.trim();
+        if !uuid(operation_id)
+            || name.is_empty()
+            || name.chars().count() > 60
+            || name.chars().any(char::is_control)
+        {
+            return Err(ERROR.into());
+        }
+        let value: serde_json::Value = self.identity_request(
+            token,
+            Method::POST,
+            &format!("/api/identity/v2/organizations/{}/workspaces", target.organization_id),
+            serde_json::json!({"serverId": target.server_id, "operationId": operation_id, "name": name}),
+        ).await?;
+        let id = value
+            .get("workspace")
+            .and_then(|row| row.get("id"))
+            .and_then(|id| id.as_str())
+            .filter(|id| uuid(id))
+            .ok_or(ERROR)?;
+        Ok(id.to_owned())
+    }
+
     pub async fn set_default_organization(
         &self,
         token: &str,
@@ -1737,6 +1769,35 @@ mod tests {
             .discovery_servers()
             .unwrap()
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn creates_workspace_in_accounts_using_the_selected_server_and_operation() {
+        let catalog: WorkspaceCatalog = serde_json::from_value(workspace_catalog()).unwrap();
+        let target = catalog.workspaces().unwrap().remove(0).target.unwrap();
+        let (directory, wire) = response(
+            "201 Created",
+            serde_json::json!({"workspace":{"id": DEVICE}}).to_string(),
+            "",
+        )
+        .await;
+        assert_eq!(
+            directory
+                .create_workspace(CENTRAL_BEARER, &target, DEVICE, " New ")
+                .await
+                .unwrap(),
+            DEVICE
+        );
+        let request = wire.await.unwrap();
+        assert!(request.starts_with(&format!(
+            "POST /api/identity/v2/organizations/{}/workspaces HTTP/1.1\r\n",
+            target.organization_id
+        )));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(request.split_once("\r\n\r\n").unwrap().1)
+                .unwrap(),
+            serde_json::json!({"serverId":target.server_id,"operationId":DEVICE,"name":"New"})
+        );
     }
 
     #[tokio::test]

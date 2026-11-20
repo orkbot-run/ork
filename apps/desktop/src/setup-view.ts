@@ -1174,9 +1174,17 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       void connect(failedServer.command, { id: failedServer.id }, failedServer.local);
   });
   on("organization-next", "click", () => {
-    if (!selectedOrganization() || operation) return;
+    const organization = selectedOrganization();
+    if (!organization || operation) return;
     directoryStage = "servers";
-    if (workspaceEntries.length === 1) {
+    const visible = organization.servers
+      .filter((server) => server.state !== "disconnected")
+      .flatMap((server) =>
+        server.workspaces.filter(
+          (workspace) => workspace.role !== null && workspace.state !== "disabled",
+        ),
+      );
+    if (workspaceEntries.length === 1 && visible.length === 1) {
       void connect("connect_workspace", { id: workspaceEntries[0]!.id });
       return;
     }

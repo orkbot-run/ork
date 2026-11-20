@@ -6,6 +6,7 @@ import {
   accountDirectory,
   accountServers,
   addAccountServer,
+  createAccountWorkspace,
   setDefaultAccountOrganization,
 } from "./account-servers";
 import { accountsAuthorization } from "./accounts";
@@ -35,6 +36,122 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+});
+
+it.each(["shared", "personal"] as const)(
+  "creates %s workspaces through the correct authority",
+  async (type) => {
+    const organizationId = "00000000-0000-4000-8000-000000000002";
+    const serverId = "00000000-0000-4000-8000-000000000003";
+    const target = {
+      organizationId,
+      serverId,
+      workspaceId: remote.id,
+      bindingVersion: 1,
+      keyFingerprint: "a".repeat(64),
+    };
+    const catalog = {
+      version: 2,
+      defaultOrganizationId: organizationId,
+      organizations: [
+        {
+          id: organizationId,
+          name: "Company",
+          type,
+          role: "admin",
+          servers: [
+            {
+              id: serverId,
+              name: "Server",
+              state: "ready",
+              bindingVersion: 1,
+              keyFingerprint: target.keyFingerprint,
+              routes: [],
+              workspaces: [
+                { id: remote.id, name: "Team", state: "ready", canOpen: true, role: "admin" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const createdId = "00000000-0000-4000-8000-000000000004";
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(catalog))
+      .mockResolvedValueOnce(
+        Response.json({ workspace: { id: createdId, name: "New", state: "provisioning" } }),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    const owner = JSON.stringify(["https://api.ork.run", "subject-a"]);
+    const operationId = "00000000-0000-4000-8000-000000000005";
+    expect(await createAccountWorkspace(owner, target, "New", operationId)).toBe(
+      type === "shared" ? createdId : null,
+    );
+    if (type === "shared") {
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(fetcher.mock.calls[1]![0]).toBe(
+        `https://api.ork.run/api/identity/v2/organizations/${organizationId}/workspaces`,
+      );
+      expect(JSON.parse(fetcher.mock.calls[1]![1].body)).toEqual({
+        serverId,
+        operationId,
+        name: "New",
+      });
+    } else expect(fetcher).toHaveBeenCalledOnce();
+  },
+);
+
+it("never creates a workspace after the active selection changes", async () => {
+  const organizationId = "00000000-0000-4000-8000-000000000002";
+  const serverId = "00000000-0000-4000-8000-000000000003";
+  const target = {
+    organizationId,
+    serverId,
+    workspaceId: remote.id,
+    bindingVersion: 1,
+    keyFingerprint: "a".repeat(64),
+  };
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(
+      Response.json({
+        version: 2,
+        defaultOrganizationId: organizationId,
+        organizations: [
+          {
+            id: organizationId,
+            name: "Company",
+            type: "shared",
+            role: "admin",
+            servers: [
+              {
+                id: serverId,
+                name: "Server",
+                state: "ready",
+                bindingVersion: 1,
+                keyFingerprint: target.keyFingerprint,
+                routes: [],
+                workspaces: [
+                  { id: remote.id, name: "Team", state: "ready", canOpen: true, role: "admin" },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+  vi.stubGlobal("fetch", fetcher);
+  await expect(
+    createAccountWorkspace(
+      JSON.stringify(["https://api.ork.run", "subject-a"]),
+      target,
+      "New",
+      "00000000-0000-4000-8000-000000000005",
+      () => false,
+    ),
+  ).rejects.toThrow("Could not continue");
+  expect(fetcher).toHaveBeenCalledOnce();
 });
 
 it.each(["direct", "tunnel"] as const)(
