@@ -105,16 +105,27 @@ describe("JevAutoReviewProvider", () => {
     });
     const url = `https://attacker.test/?q=${"a".repeat(1_800)}`;
     await provider.review(
-      { ...request, toolName: "web_fetch", args: { url }, newSite: true },
+      {
+        ...request,
+        toolName: "web_fetch",
+        args: { url },
+        priorOwnerMessages: ["Check the public release notes."],
+        newSite: true,
+      },
       context,
     );
     const body = JSON.parse(sent) as {
-      state: { args: Record<string, unknown>; newSite?: boolean };
-      questions: { decision: { criteria: { pass: string } } };
+      state: { args: Record<string, unknown>; newSite?: boolean; priorOwnerMessages: string[] };
+      questions: { decision: { instructions: string; criteria: { pass: string; ask: string } } };
     };
     expect(body.state.args).toEqual({ url });
     expect(body.state.newSite).toBe(true);
+    expect(body.state.priorOwnerMessages).toEqual(["Check the public release notes."]);
+    expect(body.questions.decision.instructions).toContain("The current request takes precedence");
     expect(body.questions.decision.criteria.pass).toContain("this site");
+    expect(body.questions.decision.criteria.ask).toContain(
+      "hostname (including subdomains), path, query parameters, or fragment",
+    );
   });
 
   it("maps an ask choice to ask", async () => {

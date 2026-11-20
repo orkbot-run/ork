@@ -227,7 +227,9 @@ async function handleDirectEvent(
     botId: ids.botId,
     userId: ids.userId,
     blocks: [
-      ...(body ? [{ kind: "text" as const, text: body }] : []),
+      ...(body
+        ? [{ kind: "text" as const, text: body, ownerText: event.content.slice(0, 2_000) }]
+        : []),
       ...stored.artifacts.map((artifact) => messageBlockForArtifact(artifact)),
     ],
     prompt: promptTextForAttachments(body, stored.artifacts),

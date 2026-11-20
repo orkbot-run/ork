@@ -53,6 +53,7 @@ import { redactToolArgsForReview } from "./auto-review.js";
 import { reviewWithBackups } from "./auto-review-backups.js";
 import type { AutoReviewFailureCode } from "./auto-review-failures.js";
 import { autoReviewFailure, logAutoReviewFailure } from "./auto-review-failures.js";
+import { newSiteUrlNeedsOwner } from "./auto-review-url.js";
 import { ORKBOT_DOCS_URLS } from "./builtin-skills.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { CATALOG_LOAD, CATALOG_SEARCH } from "./lazy-tool-catalog.js";
@@ -141,6 +142,12 @@ type ToolReview = {
   applied: AppliedEffect | undefined;
   injectedReview: ExecutorDeps["autoReview"];
   candidates: ReturnType<typeof selectAutoReviewCandidates>;
+};
+
+const PRIVATE_URL_REVIEW: AutoReviewResult = {
+  decision: "ask",
+  model: "local-url-policy",
+  reason: "This address may disclose credentials or private data. Review it before sending.",
 };
 
 /**
@@ -504,10 +511,16 @@ export async function gateToolCall(
   };
 
   if (applied && plan === "judge" && checkerConfigured) {
-    if (!applied.duplicate) {
+    const priorDecision = applied.effect.reviewDecision;
+    if (
+      !applied.duplicate ||
+      (priorDecision === "pass" &&
+        siteGate === "new" &&
+        fetchUrl &&
+        newSiteUrlNeedsOwner(fetchUrl, ctx.secrets))
+    ) {
       await runAutoReview();
     } else {
-      const priorDecision = applied.effect.reviewDecision;
       if (priorDecision === "ask" || priorDecision === "error") {
         reviewReason =
           typeof applied.effect.reviewReason === "string" ? applied.effect.reviewReason : undefined;
@@ -820,58 +833,15 @@ async function reviewToolCall(
   ctx: RunContext,
   review: ToolReview,
 ): Promise<{ reason: string | undefined; decision: "ask" | "allow" } | undefined> {
-  const { deps, run, runId, bot, thread, context } = ctx;
-  const { name, args, connectorKind, fetchUrl, gated, applied } = review;
-  const { injectedReview, candidates } = review;
+  const { deps, runId, context } = ctx;
+  const { name, fetchUrl, gated, applied, candidates } = review;
   if (context.signal.aborted) return;
   let judge: (AutoReviewResult & { failureCode?: AutoReviewFailureCode }) | undefined;
   try {
-    const botDescription = redactSecrets(`${bot.name}\n${bot.description}`, ctx.secrets);
-    // A new site is judged on the full URL and the owner's own words only: the task
-    // prompt of a webhook or bot-started run carries text someone else wrote.
-    const reviewRequest: AutoReviewRequest =
-      review.newSite && fetchUrl
-        ? {
-            toolName: name,
-            connectorKind,
-            args: { url: redactSecrets(fetchUrl, ctx.secrets) },
-            userTask: redactSecrets(await ctx.trust.loadOwnerWords(), ctx.secrets),
-            botDescription,
-            matchingRules: review.matchingRules,
-            newSite: true,
-          }
-        : {
-            toolName: name,
-            connectorKind,
-            args: redactToolArgsForReview(args, ctx.secrets),
-            userTask: redactSecrets(ctx.task.prompt, ctx.secrets),
-            botDescription,
-            matchingRules: review.matchingRules,
-          };
-    const reviewContext: AdapterContext = {
-      operationId: `auto-review:${runId}`,
-      traceId: `auto-review:${runId}`,
-      spaceId: run.spaceId,
-      userId: run.userId,
-      botId: bot.id,
-      runId,
-      signal: context.signal,
-    };
-    const prepared = await prepareAutoReviewCheckers(
-      deps,
-      { runId, spaceId: run.spaceId, userId: run.userId, botId: bot.id, threadId: thread.id },
-      { injectedReview, registerSecrets: (values) => ctx.secrets.push(...values) },
-      candidates,
-    );
-    judge = await reviewWithBackups(
-      prepared.candidates,
-      async (checker) => {
-        const provider = await prepared.providerFor(checker);
-        context.signal.throwIfAborted();
-        return provider.review(reviewRequest, reviewContext);
-      },
-      context.signal,
-    );
+    judge =
+      review.newSite && fetchUrl && newSiteUrlNeedsOwner(fetchUrl, ctx.secrets)
+        ? PRIVATE_URL_REVIEW
+        : await reviewWithRunCheckers(ctx, review);
   } catch (error) {
     if (context.signal.aborted) return;
     const attempted = candidates[0] ?? {
@@ -907,6 +877,63 @@ async function reviewToolCall(
     reason: judge.reason,
     decision: applyJudgeDecision({ decision: judge.decision, consequential: gated }),
   };
+}
+
+async function reviewWithRunCheckers(ctx: RunContext, review: ToolReview) {
+  const { deps, run, runId, bot, thread, context, secrets } = ctx;
+  const { name, args, connectorKind, fetchUrl, injectedReview, candidates } = review;
+  const newSite = review.newSite && fetchUrl !== undefined;
+  // A webhook or bot-started prompt may contain someone else's text. Only verified
+  // owner words can justify sending data to a new site.
+  const [task, priorOwnerMessages] = await Promise.all([
+    newSite ? ctx.trust.loadReviewOwnerWords() : ctx.task.prompt,
+    ctx.trust.loadPriorOwnerMessages(),
+  ]);
+  const reviewContext: AdapterContext = {
+    operationId: `auto-review:${runId}`,
+    traceId: `auto-review:${runId}`,
+    spaceId: run.spaceId,
+    userId: run.userId,
+    botId: bot.id,
+    runId,
+    signal: context.signal,
+  };
+  context.signal.throwIfAborted();
+  const prepared = await prepareAutoReviewCheckers(
+    deps,
+    { runId, spaceId: run.spaceId, userId: run.userId, botId: bot.id, threadId: thread.id },
+    { injectedReview, registerSecrets: (values) => secrets.push(...values) },
+    candidates,
+  );
+  return reviewWithBackups(
+    prepared.candidates,
+    async (checker) => {
+      const provider = await prepared.providerFor(checker);
+      context.signal.throwIfAborted();
+      // Resolving this reviewer can add its own credentials to the redaction set.
+      if (newSite && newSiteUrlNeedsOwner(fetchUrl, secrets)) return PRIVATE_URL_REVIEW;
+      const reviewRequest: AutoReviewRequest = {
+        toolName: name,
+        connectorKind,
+        args: newSite
+          ? { url: redactSecrets(fetchUrl, secrets) }
+          : redactToolArgsForReview(args, secrets),
+        userTask: redactSecrets(task, secrets),
+        ...(priorOwnerMessages.length > 0
+          ? {
+              priorOwnerMessages: priorOwnerMessages.map((message) =>
+                redactSecrets(message, secrets),
+              ),
+            }
+          : {}),
+        botDescription: redactSecrets(`${bot.name}\n${bot.description}`, secrets),
+        matchingRules: review.matchingRules,
+        ...(newSite ? { newSite: true } : {}),
+      };
+      return provider.review(reviewRequest, reviewContext);
+    },
+    context.signal,
+  );
 }
 
 function auditAutoReview(

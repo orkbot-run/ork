@@ -1380,12 +1380,13 @@ export interface AutoReviewRequest {
   /** Caller must already redact secrets and sensitive keys. */
   args: Record<string, unknown>;
   userTask: string;
+  /** Redacted owner-authored text from before the current request, oldest first. */
+  priorOwnerMessages?: readonly string[];
   botDescription: string;
   matchingRules: AutoReviewMatchingRule[];
   /**
-   * A web_fetch to a site the run was not given. `args` is then only the full URL, and
-   * `userTask` only the owner's own words (their message or the routine's instructions), never
-   * tool results or inbound messages, so injected text cannot argue for the site.
+   * An outbound request to a site the run was not given. `args` is then only the full URL.
+   * The task and earlier owner messages contain no outside messages or tool results.
    */
   newSite?: boolean;
 }

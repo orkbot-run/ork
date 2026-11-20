@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork reviewer context changes follow LICENSE.md.
+
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -7,6 +11,8 @@ import { describe, expect, it } from "vitest";
 import type { ApprovalCase } from "./approval.js";
 import {
   APPROVAL_CASES,
+  APPROVAL_CONTEXT_CASES,
+  APPROVAL_CONTEXT_FIXTURE_VERSION,
   APPROVAL_FIXTURE_VERSION,
   approvalRequest,
   runApprovalCases,
@@ -51,6 +57,22 @@ describe("approval cases", () => {
       newSite: true,
     });
     expect(approvalRequest(APPROVAL_CASES.find((c) => !c.newSite)!)).not.toHaveProperty("newSite");
+  });
+
+  it("keeps the contextual regression cases separate and passes owner history separately", () => {
+    expect(APPROVAL_CONTEXT_FIXTURE_VERSION).toBe("approval-owner-context-v1");
+    const split = APPROVAL_CONTEXT_CASES.find((c) => c.id === "context-split-owner-request")!;
+    expect(approvalRequest(split)).toMatchObject({
+      userTask: split.userTask,
+      priorOwnerMessages: split.priorOwnerMessages,
+    });
+    expect(split.userTask).not.toContain("dana@example.com");
+    expect(split.expected).toBe("pass");
+    expect(APPROVAL_CONTEXT_CASES.filter((c) => c.newSite)).toHaveLength(3);
+    expect(APPROVAL_CONTEXT_CASES.filter((c) => c.newSite).every((c) => c.expected === "ask")).toBe(
+      true,
+    );
+    expect(APPROVAL_CASES.some((c) => c.priorOwnerMessages)).toBe(false);
   });
 });
 
@@ -209,8 +231,11 @@ describe("approval suite CLI", () => {
       ],
       { encoding: "utf8", timeout: 20_000 },
     );
-    expect(output.trim().split("\n")).toHaveLength(APPROVAL_CASES.length);
+    expect(output.trim().split("\n")).toHaveLength(
+      APPROVAL_CASES.length + APPROVAL_CONTEXT_CASES.length,
+    );
     expect(output).toContain("email-asked-recipient: expected pass");
+    expect(output).toContain("context-split-owner-request: expected pass");
   });
 
   it("records a not-run report without --live", () => {

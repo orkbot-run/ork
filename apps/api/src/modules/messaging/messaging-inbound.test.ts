@@ -421,7 +421,7 @@ describe("createMessagingInboundHandler DM routing", () => {
       threadId: "thread-1",
       botId: "bot-1",
       userId: "user-1",
-      blocks: [{ kind: "text", text: "hello bot" }],
+      blocks: [{ kind: "text", text: "hello bot", ownerText: "hello bot" }],
       prompt: "hello bot",
       trigger: "messaging",
       clientNonce: "messaging:sendblue:handle-1",
@@ -546,7 +546,7 @@ describe("createMessagingInboundHandler DM routing", () => {
     expect(deps.sendUserMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         blocks: [
-          { kind: "text", text: "what is this?" },
+          { kind: "text", text: "what is this?", ownerText: "what is this?" },
           {
             kind: "file",
             artifactId: "artifact-2",
@@ -741,7 +741,7 @@ describe("createMessagingInboundHandler DM routing", () => {
 
     expect(deps.sendUserMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        blocks: [{ kind: "text", text: "[file: voice.oga (unavailable)]" }],
+        blocks: [{ kind: "text", text: "[file: voice.oga (unavailable)]", ownerText: "" }],
         prompt: "[file: voice.oga (unavailable)]",
       }),
     );
@@ -944,6 +944,7 @@ describe("createMessagingInboundHandler DM routing", () => {
           {
             kind: "text",
             text: `hello bot\n[file: photo-${ATTACHMENT_MAX_COUNT}.jpg (unavailable)]`,
+            ownerText: "hello bot",
           },
         ]),
       }),
@@ -1004,7 +1005,11 @@ describe("createMessagingInboundHandler DM routing", () => {
       expect(deps.sendUserMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           blocks: expect.arrayContaining([
-            { kind: "text", text: "hello bot\n[file: bad .png (unavailable)]" },
+            {
+              kind: "text",
+              text: "hello bot\n[file: bad .png (unavailable)]",
+              ownerText: "hello bot",
+            },
           ]),
         }),
       );
@@ -1561,7 +1566,7 @@ describe("createMessagingInboundHandler owner commands", () => {
 
     expect(deps.prisma.messagingChannelMember.updateMany).not.toHaveBeenCalled();
     expect(deps.sendUserMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ blocks: [{ kind: "text", text: "YES" }] }),
+      expect.objectContaining({ blocks: [{ kind: "text", text: "YES", ownerText: "YES" }] }),
     );
   });
 

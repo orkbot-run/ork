@@ -120,7 +120,12 @@ const DelegatedWorkspaceFiles = z.object({
 });
 
 export const MessageBlock = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("text"), text: z.string() }),
+  z.object({
+    kind: z.literal("text"),
+    text: z.string(),
+    /** Original text on a server-routed direct message, before media or service notes were added. */
+    ownerText: z.string().max(2_000).optional(),
+  }),
   z.object({
     kind: z.literal("card"),
     lines: z.array(z.object({ k: z.string(), v: z.string() })),
