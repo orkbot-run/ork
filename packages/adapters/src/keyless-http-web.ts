@@ -119,10 +119,14 @@ export class KeylessHttpWebProvider implements WebProvider {
     });
     if (!body.trim()) throw new Error(`Failed to fetch content from ${url}`);
     const mediaType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
-    const extracted =
-      mediaType === "text/plain" || mediaType === "text/markdown"
-        ? { title: "Untitled", text: body }
-        : extractReadableText(body, url);
+    const preserveBody =
+      mediaType === "text/plain" ||
+      mediaType === "text/markdown" ||
+      mediaType === "application/json" ||
+      (mediaType?.includes("/") && mediaType.endsWith("+json"));
+    const extracted = preserveBody
+      ? { title: "Untitled", text: body }
+      : extractReadableText(body, url);
     return {
       url,
       title: extracted.title,
