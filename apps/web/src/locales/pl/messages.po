@@ -7878,3 +7878,54 @@ msgstr "Zero retencji danych"
 
 msgid "Route requests only to endpoints marked as eligible for zero data retention."
 msgstr "Wysyłaj żądania tylko do endpointów oznaczonych jako nieprzechowujące danych."
+
+msgid "Organization options"
+msgstr "Opcje organizacji"
+
+msgid "Activity log"
+msgstr "Dziennik aktywności"
+
+msgid "Exporting…"
+msgstr "Eksportowanie…"
+
+msgid "Could not export activity log. Try again."
+msgstr "Nie udało się wyeksportować dziennika. Spróbuj ponownie."
+
+msgid "Could not load activity log"
+msgstr "Nie udało się wczytać dziennika"
+
+msgid "Loading activity log…"
+msgstr "Wczytywanie dziennika aktywności…"
+
+msgid "No activity yet"
+msgstr "Brak zdarzeń w dzienniku"
+
+msgid "Audit events"
+msgstr "Zdarzenia audytu"
+
+msgid "Actor"
+msgstr "Wykonawca"
+
+msgid "Action"
+msgstr "Działanie"
+
+msgid "Outcome"
+msgstr "Wynik"
+
+msgid "Time"
+msgstr "Czas"
+
+msgid "Connector ID"
+msgstr "Identyfikator konektora"
+
+msgid "Connection ID"
+msgstr "Identyfikator połączenia"
+
+msgid "User"
+msgstr "Użytkownik"
+
+msgid "Success"
+msgstr "Powodzenie"
+
+msgid "Failure"
+msgstr "Błąd"

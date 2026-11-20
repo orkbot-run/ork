@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited artifact downloads remain Apache-2.0. Shared export support follows LICENSE.md.
+
 import { rpc } from "./rpc";
 
 export type ArtifactTarget = { botId: string } | { groupId: string };
@@ -20,7 +24,10 @@ export async function fetchArtifactBytes(
 }
 
 export function downloadArtifactBytes(name: string, mimeType: string, bytes: Uint8Array): void {
-  const blob = new Blob([new Uint8Array(bytes)], { type: mimeType });
+  downloadBlob(name, new Blob([new Uint8Array(bytes)], { type: mimeType }));
+}
+
+export function downloadBlob(name: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;

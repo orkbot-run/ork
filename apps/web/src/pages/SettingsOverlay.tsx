@@ -6,16 +6,20 @@ import { useLingui } from "@lingui/react/macro";
 import type { ComputerCapabilities, Me, SpaceMemoryConfig, UsageSummary } from "@orkbot/contracts";
 import { organizationDashboardUrl } from "@orkbot/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web";
-import { useQuery } from "@tanstack/react-query";
+import { ORPCError } from "@orpc/client";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, XIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalRulesSettings } from "../components/ApprovalRulesSettings";
+import { AuditLog } from "../components/AuditLog";
 import { computersAreUnavailable } from "../components/ComputersUnavailableHint";
 import { SETTINGS_CONTENT_WIDTH, SettingsGroup, SettingsRow } from "../components/SettingsRows";
 import { VaultSettings } from "../components/VaultSettings";
 
+import { exportOrganizationAudit } from "../lib/audit-export";
 import { desktopBridge } from "../lib/desktop";
-import { useSpaceQueries } from "../lib/query";
+import { useQueryUserId, useSpaceQueries } from "../lib/query";
+import { selectedSpaceId } from "../lib/rpc";
 import { useServerUpdates } from "../lib/server-updates";
 import { SpaceRpcProvider } from "../lib/space-rpc";
 import {
@@ -28,7 +32,10 @@ import { BillingSettingsPanel } from "./BillingSettingsPanel";
 import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
 import { MessagingSettingsPanel } from "./MessagingSettingsPanel";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
-import { OrganizationSettingsPanel } from "./OrganizationSettingsPanel";
+import {
+  OrganizationSettingsActions,
+  OrganizationSettingsPanel,
+} from "./OrganizationSettingsPanel";
 import { PaymentWalletSettingsPanel } from "./PaymentWalletSettingsPanel";
 import { ServerAISettings } from "./ServerAISettings";
 import { SpaceSettingsPanel } from "./SpaceSettingsPanel";
@@ -98,7 +105,9 @@ export function SettingsOverlay({
   onVoiceStatusMaybeChanged?: () => void | Promise<void>;
 }) {
   const { t, i18n } = useLingui();
+  const userId = useQueryUserId();
   const queries = useSpaceQueries();
+  const auditSpaceId = selectedSpaceId();
   const modelPolicy = useQuery(queries.models.workspacePolicy.queryOptions());
   const [accountsUrl, setAccountsUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -117,6 +126,18 @@ export function SettingsOverlay({
       current = false;
     };
   }, [modelPolicy.data?.managed, space?.id]);
+  const audit = useInfiniteQuery(
+    queries.audit.events.infiniteOptions({
+      input: (cursor: string | null) => ({ limit: 25, cursor: cursor ?? undefined }),
+      initialPageParam: null as string | null,
+      getNextPageParam: (page) => page.nextCursor,
+      enabled: requestedSection === "organization" || requestedSection === "organization-activity",
+      staleTime: 0,
+      gcTime: 0,
+    }),
+  );
+  const auditForbidden = audit.error instanceof ORPCError && audit.error.code === "FORBIDDEN";
+  const canReadAudit = audit.data !== undefined && !auditForbidden;
   const panelRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const [navOverflow, setNavOverflow] = useState({ previous: false, next: false });
@@ -134,14 +155,22 @@ export function SettingsOverlay({
   const showUpdates =
     Boolean(desktopBridge()?.update) || serverUpdates.state.status?.available === true;
   // A section that isn't available yet (billing before its flag loads) shows General until it is.
-  const section =
+  const unavailable =
     (requestedSection === "computer" && !showComputer) ||
     (requestedSection === "billing" && !billingEnabled) ||
     (requestedSection === "messaging" && !messagingEnabled) ||
     (requestedSection === "wallet" && !paymentWalletProvider) ||
-    (requestedSection === "updates" && !showUpdates)
-      ? "general"
-      : requestedSection;
+    (requestedSection === "updates" && !showUpdates);
+  const section =
+    requestedSection === "organization-activity" && auditForbidden
+      ? "organization"
+      : unavailable
+        ? "general"
+        : requestedSection;
+  useEffect(() => {
+    if (requestedSection === "organization-activity" && auditForbidden)
+      onSectionChange("organization");
+  }, [auditForbidden, onSectionChange, requestedSection]);
   const panelBusy = memoryBusy || voiceBusy;
   // Only a space's own page binds to it; every other section, memory included, acts on the
   // space the app is showing.
@@ -182,7 +211,9 @@ export function SettingsOverlay({
   });
   const organizationScope =
     modelPolicy.data?.managed === true &&
-    (section === "organization" || section === "organization-models");
+    (section === "organization" ||
+      section === "organization-models" ||
+      section === "organization-activity");
   const navItems = modelPolicy.data?.managed
     ? allNavItems.filter((item) =>
         organizationScope
@@ -239,8 +270,10 @@ export function SettingsOverlay({
   const sectionTitle =
     section === "space"
       ? (space?.name ?? t`Space`)
-      : (navItems.find((item) => item.id === section)?.label ??
-        (section === "general" ? t`General` : t`Settings`));
+      : section === "organization-activity"
+        ? t`Activity log`
+        : (navItems.find((item) => item.id === section)?.label ??
+          (section === "general" ? t`General` : t`Settings`));
 
   const closeLabel =
     section === "models"
@@ -264,6 +297,16 @@ export function SettingsOverlay({
 
   function requestClose() {
     leaveSettings(onClose);
+  }
+
+  async function exportAudit(signal: AbortSignal) {
+    try {
+      await exportOrganizationAudit(auditSpaceId, signal);
+    } catch (error) {
+      if (!signal.aborted && error instanceof ORPCError && error.code === "FORBIDDEN")
+        void audit.refetch();
+      throw error;
+    }
   }
 
   return (
@@ -309,8 +352,13 @@ export function SettingsOverlay({
             >
               {navItems.map((item) => {
                 const Icon = item.icon;
-                // A space's page is reached from General, so General stays marked.
-                const active = item.id === (section === "space" ? "general" : section);
+                const active =
+                  item.id ===
+                  (section === "space"
+                    ? "general"
+                    : section === "organization-activity"
+                      ? "organization"
+                      : section);
                 return (
                   <button
                     key={item.id}
@@ -361,14 +409,16 @@ export function SettingsOverlay({
               className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-6 pb-5 pt-6 sm:px-8 sm:pt-7"
             >
               <div className="flex min-w-0 items-center gap-2">
-                {section === "space" ? (
+                {section === "space" || section === "organization-activity" ? (
                   <Button
                     variant="ghost"
                     size="icon-sm"
                     className="-ms-2 shrink-0"
                     aria-label={t`Back`}
                     disabled={panelBusy}
-                    onClick={() => onSectionChange("general")}
+                    onClick={() =>
+                      onSectionChange(section === "space" ? "general" : "organization")
+                    }
                   >
                     <ChevronLeft className="rtl:rotate-180" />
                   </Button>
@@ -377,13 +427,24 @@ export function SettingsOverlay({
                   {sectionTitle}
                 </DialogTitle>
               </div>
-              <DialogClose
-                aria-label={closeLabel}
-                disabled={panelBusy}
-                render={<Button variant="ghost" size="icon-sm" />}
-              >
-                <XIcon />
-              </DialogClose>
+              <div className="flex shrink-0 items-center gap-1">
+                {section === "organization" ? (
+                  <OrganizationSettingsActions
+                    allowDelete={modelPolicy.isSuccess && modelPolicy.data?.managed !== true}
+                    disabled={panelBusy}
+                    onOpenAudit={
+                      canReadAudit ? () => onSectionChange("organization-activity") : undefined
+                    }
+                  />
+                ) : null}
+                <DialogClose
+                  aria-label={closeLabel}
+                  disabled={panelBusy}
+                  render={<Button variant="ghost" size="icon-sm" />}
+                >
+                  <XIcon />
+                </DialogClose>
+              </div>
             </div>
 
             <SpaceRpcProvider spaceId={spaceId}>
@@ -396,10 +457,11 @@ export function SettingsOverlay({
                     : "rk-scroll overflow-y-auto overscroll-contain px-6 pb-6 pt-6 sm:px-8 sm:pb-8"
                 }`}
               >
-                {/* Memory scrolls its own body and applies the same width there; Usage's table needs the room. */}
                 <div
                   className={
-                    section === "memory" || section === "usage"
+                    section === "memory" ||
+                    section === "usage" ||
+                    section === "organization-activity"
                       ? "contents"
                       : SETTINGS_CONTENT_WIDTH
                   }
@@ -485,6 +547,23 @@ export function SettingsOverlay({
                   ) : null}
                   {section === "organization-models" && modelPolicy.data?.managed ? (
                     <ServerAISettings embedded onClose={requestClose} />
+                  ) : null}
+                  {section === "organization-activity" && !auditForbidden ? (
+                    <AuditLog
+                      key={JSON.stringify([userId, auditSpaceId])}
+                      events={audit.data?.pages.flatMap((page) => page.events) ?? []}
+                      loading={audit.isPending}
+                      loadFailed={audit.isError}
+                      loadingMore={audit.isFetchingNextPage}
+                      hasMore={audit.hasNextPage}
+                      onRetry={() => {
+                        if (audit.isFetchNextPageError) void audit.fetchNextPage();
+                        else void audit.refetch();
+                      }}
+                      onLoadMore={() => void audit.fetchNextPage({ cancelRefetch: false })}
+                      onExport={exportAudit}
+                      timezone={timezone}
+                    />
                   ) : null}
                   {section === "confirmations" ? <ApprovalRulesSettings scope="account" /> : null}
                   {section === "vault" ? <VaultSettings scope="account" /> : null}
