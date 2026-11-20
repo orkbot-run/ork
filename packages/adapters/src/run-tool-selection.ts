@@ -20,6 +20,7 @@ import {
   SCHEDULE_TOOL_NAMES,
 } from "./schedule-tools.js";
 import { SKILL_TOOL_NAMES } from "./skill-tools.js";
+import { USER_COMPUTER_LIST_TOOL } from "./user-computer-tools.js";
 
 /** Offered only to a user who connected a wallet. */
 const PURCHASE_TOOL_NAMES = new Set(["request_purchase", "purchase_status", "paid_request"]);
@@ -76,6 +77,7 @@ export function selectBuiltinToolsForRun(options: {
   followUpFromUser?: boolean;
   /** The person who started this run has their desktop connected (see userComputerOwner). */
   userComputer?: boolean;
+  userComputerList?: boolean;
   /** That desktop can look at and drive its apps. */
   userComputerScreen?: boolean;
 }) {
@@ -120,6 +122,7 @@ export function selectBuiltinToolsForRun(options: {
           "generate_video",
         ].includes(tool.name)) &&
       (options.voiceCall || tool.name !== "end_call") &&
+      (options.userComputerList || tool.name !== USER_COMPUTER_LIST_TOOL) &&
       (options.userComputer || tool.name !== "user_computer_shell") &&
       ((options.userComputer && options.userComputerScreen) ||
         !USER_COMPUTER_SCREEN_TOOLS.has(tool.name)) &&

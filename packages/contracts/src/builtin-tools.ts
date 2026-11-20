@@ -7,6 +7,7 @@ import * as z from "zod";
 /** Tools whose ordinary execution does not create an approval effect. */
 export const READ_ONLY_AGENT_TOOLS: ReadonlySet<string> = new Set([
   "computer_observe",
+  "user_computer_list",
   "list_files",
   "list_fleet",
   "read_file",
@@ -60,6 +61,7 @@ export const BUILTIN_TOOL_NAMES = [
   "write_file",
   "attach_file",
   "shell",
+  "user_computer_list",
   "user_computer_shell",
   "user_computer_observe",
   "user_computer_act",

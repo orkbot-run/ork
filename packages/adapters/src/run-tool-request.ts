@@ -51,7 +51,13 @@ import { fleetPrepareDeps } from "./run-model.js";
 import { BUILTIN_AGENT_TOOL_NAMES, FLEET_WRITE_TOOL_NAMES_SET } from "./run-tool-selection.js";
 import { preparePageSaveRequest } from "./run-tools-pages.js";
 import { scheduleCreateRefusal } from "./run-tools-tasks.js";
-import { USER_COMPUTER_SCREEN_TOOLS, USER_COMPUTER_TOOLS } from "./run-tools-user-computer.js";
+import {
+  USER_COMPUTER_LIST_TOOL,
+  USER_COMPUTER_SCREEN_TOOLS,
+  USER_COMPUTER_TOOLS,
+  USER_COMPUTER_UNAVAILABLE,
+  validUserComputerId,
+} from "./run-tools-user-computer.js";
 import { SCHEDULE_TOOL_NAMES } from "./schedule-tools.js";
 import { SKILL_TOOL_NAMES } from "./skill-tools.js";
 import {
@@ -59,6 +65,7 @@ import {
   normalizeOwnBotTarget,
   ownBotInstructionsOffset,
 } from "./update-bot-patch.js";
+import { userDeviceScreenAvailable } from "./user-device-capabilities.js";
 import type { VaultCardUse } from "./vault-card-use.js";
 import { cardUseSummary, requestedCardUse, vaultCardUseOf } from "./vault-card-use.js";
 
@@ -80,6 +87,7 @@ export interface ToolRequest {
   fleetSummary: FleetCardSummary | undefined;
   /** Gated like a consequential action, even when the tool alone is not. */
   heldForApproval: boolean;
+  userComputerName?: string;
   /** This resolved operation always needs a person, regardless of rules or reviewer. */
   mandatoryApproval?: boolean;
   /** This page tool call completes a purchase, which a person approves each time. */
@@ -198,14 +206,55 @@ export async function resolveToolRequest(
   const nextApprovedTool = approvedReplays.nextToolName();
   let approvedEffectKey: string | undefined;
   const nextApprovedRequest = approvedReplays.nextRequest();
-  if (USER_COMPUTER_SCREEN_TOOLS.has(name)) {
-    const deviceId = ctx.source.userComputerScreenDevice;
-    if (!deviceId) return { error: "Screen control is unavailable on the connected computer." };
-    const approvedDeviceId = (nextApprovedRequest as { deviceId?: unknown } | null)?.deviceId;
-    if (nextApprovedTool === name && approvedDeviceId !== deviceId) {
-      return { error: "The approved computer has changed. Ask the user to start a new request." };
+  let userComputerTarget: { id: string; name: string } | undefined;
+  const usesUserComputer = USER_COMPUTER_TOOLS.has(name);
+  if (usesUserComputer || name === USER_COMPUTER_LIST_TOOL) {
+    const owner = ctx.source.userComputerOwner;
+    const devices = deps.userDevices;
+    if (!owner || !devices || ctx.run.centralWorkspaceId)
+      return { error: "The user's computer is not available in this run." };
+    if (isSubagentToolExecution(executionId))
+      return { error: "Helpers cannot use the user's computer." };
+    if (usesUserComputer) {
+      const screen = USER_COMPUTER_SCREEN_TOOLS.has(name);
+      const requested = args.computerId;
+      if (requested !== undefined && !validUserComputerId(requested)) {
+        return { error: "computerId must name a computer returned by user_computer_list." };
+      }
+      const saved = nextApprovedRequest as { computerId?: unknown; deviceId?: unknown } | null;
+      const isReplay = nextApprovedTool === name;
+      const approved = saved?.computerId ?? (screen ? saved?.deviceId : undefined);
+      if (
+        isReplay &&
+        (!validUserComputerId(approved) || (requested !== undefined && requested !== approved))
+      ) {
+        return {
+          error:
+            "The approved computer has changed or was not specified. Ask the user to start a new request.",
+        };
+      }
+      const id = isReplay ? approved : (requested ?? ctx.source.userComputerDevice);
+      if (!validUserComputerId(id)) return { error: USER_COMPUTER_UNAVAILABLE };
+      const device = await devices.connected(owner, id).catch(() => null);
+      if (device?.deviceId !== id) {
+        return {
+          error: isReplay
+            ? "The approved computer is offline. Ask the user to reconnect it."
+            : requested !== undefined
+              ? "The selected computer is offline or unavailable. Check user_computer_list."
+              : USER_COMPUTER_UNAVAILABLE,
+        };
+      }
+      if (
+        screen &&
+        ctx.source.userComputerScreenDevice !== id &&
+        !(await userDeviceScreenAvailable(devices, owner, id, ctx.bot.id, context.signal))
+      ) {
+        return { error: "Screen control is unavailable on the selected computer." };
+      }
+      userComputerTarget = { id, name: device.name };
+      effectRequest = args = { ...args, computerId: id };
     }
-    effectRequest = { ...args, deviceId };
   }
   const liveRoute =
     connectorCall.route?.resourceId &&
@@ -302,6 +351,7 @@ export async function resolveToolRequest(
     args = normalizeOwnBotTarget(args, ctx.bot.id);
     connectorCall = { ...connectorCall, args };
   }
+  if (userComputerTarget) args = { ...args, computerId: userComputerTarget.id };
   return {
     name,
     args,
@@ -315,6 +365,7 @@ export async function resolveToolRequest(
     replayEffectToolName,
     fleetSummary: undefined,
     heldForApproval: false,
+    userComputerName: userComputerTarget?.name,
     purchase: undefined,
     cardUse: undefined,
   };
@@ -361,13 +412,6 @@ export async function prepareToolRequest(
       })))
   ) {
     return { error: "This tool is unavailable after a shared-channel message." };
-  }
-  // Before the gate, so a run that may never reach the user's computer shows no approval card.
-  if (USER_COMPUTER_TOOLS.has(name)) {
-    if (!ctx.source.userComputerOwner || !deps.userDevices)
-      return { error: "The user's computer is not available in this run." };
-    if (isSubagentToolExecution(executionId))
-      return { error: "Helpers cannot use the user's computer." };
   }
   // Before the gate, so a routine that cannot be saved shows no approval card. An approved
   // replay goes on to the handler, which checks again.

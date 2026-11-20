@@ -84,7 +84,11 @@ import { resolveCompletedSecretLeftover } from "./run-secret.js";
 import type { ToolRequest } from "./run-tool-request.js";
 import { BUILTIN_AGENT_TOOL_NAMES } from "./run-tool-selection.js";
 import { callMediaTool } from "./run-tools-files.js";
-import { USER_COMPUTER_TOOLS, userComputerGate } from "./run-tools-user-computer.js";
+import {
+  USER_COMPUTER_LIST_TOOL,
+  USER_COMPUTER_TOOLS,
+  userComputerGate,
+} from "./run-tools-user-computer.js";
 import { connectorTrustKeys } from "./run-trust.js";
 import { watchFromTool } from "./schedule-tools.js";
 
@@ -95,6 +99,7 @@ type ApprovalCard = {
   reviewReason: string | undefined;
   summary: FleetCardSummary | undefined;
   batch: ToolBatch | undefined;
+  userComputerName?: string;
 };
 
 /** A tool call that passed its approval gate, as tool handlers receive it. */
@@ -360,22 +365,26 @@ export async function gateToolCall(
     ? approvalResolved.decision === "deny"
       ? "deny"
       : "ask"
-    : USER_COMPUTER_TOOLS.has(name)
-      ? await userComputerGate(ctx, approvalResolved.decision === "deny", name, args)
-      : planActionGate({
-          resolved: approvalResolved,
-          mode,
-          mandatory: requiresMandatoryApproval,
-          steerable:
-            guardedInNeverAsk && mode === "never"
-              ? !ctx.source.ownerStartedRun || (await isRunTainted(ctx))
-              : undefined,
-          consequential: requiresApprovalByDefault,
-          reviewOnly: connectorReadGated,
-          checkerConfigured,
-          newDestination: siteGate === "new",
-          purchase: paying,
-        });
+    : name === USER_COMPUTER_LIST_TOOL
+      ? approvalResolved.decision === "deny"
+        ? "deny"
+        : "allow"
+      : USER_COMPUTER_TOOLS.has(name)
+        ? await userComputerGate(ctx, approvalResolved.decision === "deny", name, args)
+        : planActionGate({
+            resolved: approvalResolved,
+            mode,
+            mandatory: requiresMandatoryApproval,
+            steerable:
+              guardedInNeverAsk && mode === "never"
+                ? !ctx.source.ownerStartedRun || (await isRunTainted(ctx))
+                : undefined,
+            consequential: requiresApprovalByDefault,
+            reviewOnly: connectorReadGated,
+            checkerConfigured,
+            newDestination: siteGate === "new",
+            purchase: paying,
+          });
   // Nobody is there to approve a purchase a webhook run reaches.
   if (paying && run.trigger === "webhook" && plan !== "deny") {
     await auditToolCall(ctx, name, "denied", { reason: "purchase_unattended" });
@@ -589,6 +598,7 @@ export async function gateToolCall(
     summary: request.fleetSummary,
     batch: connectorTool?.batch,
     mandatoryReason,
+    userComputerName: request.userComputerName,
   };
 
   if (applied?.duplicate) {

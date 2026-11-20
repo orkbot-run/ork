@@ -9,6 +9,7 @@ import {
   asSystem,
   createDb,
   declareRunReaderVersion,
+  PAIRED_COMPUTER_READER_VERSION,
   provisionMessagingIdentity,
   RunHistoryWriteError,
   runAsTenant,
@@ -117,6 +118,41 @@ postgres("immutable bot reply modes (PostgreSQL)", () => {
           return f.claim(tx, files.id);
         }),
       ).toEqual({ count: 1 });
+    });
+  });
+
+  it("keeps workers from a previous release from replaying a computer-bound request", async () => {
+    const f = await fixture("chat");
+    const run = await f.create();
+    await runAsTenant(f.actor, async () => {
+      expect(await f.claim(db.prisma, run.id)).toEqual({ count: 1 });
+      await db.prisma.run.update({ where: { id: run.id }, data: { status: "running" } });
+      const request = { command: "hostname", computerId: "device-b" };
+      const key = toolEffectIdempotencyKey(run.id, "user_computer_shell", request, 0);
+      const deps = { prisma: db.prisma, runLease: { runId: run.id, owner: "worker", fence: 1 } };
+      expect(
+        await recordEffect(deps as never, run, "user_computer_shell", key, request),
+      ).toMatchObject({
+        duplicate: false,
+        effect: { request },
+      });
+      const queued = await db.prisma.run.update({
+        where: { id: run.id },
+        data: { status: "queued" },
+      });
+      expect(queued.requiredReaderVersion).toBe(PAIRED_COMPUTER_READER_VERSION);
+      await expect(
+        db.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT set_config('app.run_reader_version', '6', true)`;
+          return f.claim(tx, run.id);
+        }),
+      ).resolves.toEqual({ count: 0 });
+      await expect(
+        db.prisma.$transaction(async (tx) => {
+          await declareRunReaderVersion(tx);
+          return f.claim(tx, run.id);
+        }),
+      ).resolves.toEqual({ count: 1 });
     });
   });
 

@@ -3974,6 +3974,10 @@ msgstr "DMを連携"
 msgid "Link SSO"
 msgstr "SSOを連携"
 
+#: src/components/ComputerDeviceSettings.tsx
+msgid "Linked to bots"
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "List view"
 msgstr "リスト表示"

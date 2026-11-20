@@ -23,6 +23,7 @@ import {
 } from "./shell-command-stream.js";
 import {
   USER_COMPUTER_ACT_TOOL,
+  USER_COMPUTER_LIST_TOOL,
   USER_COMPUTER_OBSERVE_TOOL,
   USER_COMPUTER_SCREEN_TOOLS,
   USER_COMPUTER_SHELL_TOOL,
@@ -32,6 +33,7 @@ import {
 
 export {
   USER_COMPUTER_ACT_TOOL,
+  USER_COMPUTER_LIST_TOOL,
   USER_COMPUTER_OBSERVE_TOOL,
   USER_COMPUTER_SCREEN_TOOLS,
   USER_COMPUTER_SHELL_TOOL,
@@ -42,8 +44,14 @@ export {
 /** Whether the run's owner has their desktop connected, or could connect one. */
 export type UserComputerState = "connected" | "offline" | undefined;
 
-const USER_COMPUTER_UNAVAILABLE =
+export const USER_COMPUTER_UNAVAILABLE =
   "The user's computer is not connected. Ask them to open the Ork desktop app.";
+
+export function validUserComputerId(value: unknown): value is string {
+  return (
+    typeof value === "string" && value.length > 0 && value.length <= 64 && value.trim() === value
+  );
+}
 
 /**
  * Whose own computer this run may reach: the person whose message started it, when they own the
@@ -64,9 +72,8 @@ export function userComputerOwner(input: {
 /**
  * The user's own computer always asks a person first, in every approval mode and whatever the
  * rules allow, until they choose "Allow in this space"; a block still refuses it. These tools run
- * only in the user's own runs (see userComputerOwner), so any effect of them past "intended" in
- * this space traces back to that approval. Removing every paired computer ends it, so pairing again
- * asks again. Screen control is approved per app.
+ * only in the user's own runs (see userComputerOwner). Approval is specific to the pairing
+ * and, for screen control, the app. Re-pairing the same machine asks again.
  */
 export async function userComputerGate(
   ctx: RunContext,
@@ -76,7 +83,9 @@ export async function userComputerGate(
 ): Promise<"deny" | "allow" | "ask"> {
   if (blocked || ctx.run.centralWorkspaceId) return "deny";
   const { deps, run } = ctx;
-  const pairedSince = await deps.userDevices?.pairedSince(run.userId);
+  const { computerId } = args;
+  if (!validUserComputerId(computerId)) return "deny";
+  const pairedSince = await deps.userDevices?.pairedSince(run.userId, computerId);
   if (!pairedSince) return "ask";
   const where = {
     spaceId: run.spaceId,
@@ -86,7 +95,11 @@ export async function userComputerGate(
   };
   if (!USER_COMPUTER_SCREEN_TOOLS.has(name)) {
     const allowed = await deps.prisma.externalEffect.findFirst({
-      where: { ...where, kind: USER_COMPUTER_SHELL_TOOL },
+      where: {
+        ...where,
+        kind: USER_COMPUTER_SHELL_TOOL,
+        request: { path: ["computerId"], equals: computerId },
+      },
       select: { id: true },
     });
     return allowed ? "allow" : "ask";
@@ -97,7 +110,14 @@ export async function userComputerGate(
   let cursor: string | undefined;
   for (;;) {
     const page = await deps.prisma.externalEffect.findMany({
-      where: { ...where, kind: { in: [...USER_COMPUTER_SCREEN_TOOLS] } },
+      where: {
+        ...where,
+        kind: { in: [...USER_COMPUTER_SCREEN_TOOLS] },
+        OR: [
+          { request: { path: ["computerId"], equals: computerId } },
+          { request: { path: ["deviceId"], equals: computerId } },
+        ],
+      },
       select: { id: true, request: true },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: SCREEN_APPROVAL_PAGE,
@@ -140,18 +160,40 @@ async function lastValue<T>(values: AsyncIterable<T>): Promise<T> {
   return result.value;
 }
 
-/** Checked again at execution: the desktop can disconnect or be revoked after the offer. */
-async function connectedUserComputer(ctx: RunContext) {
+/** Every request carries the validated target from the approval and still checks it on delivery. */
+function boundUserComputer(ctx: RunContext, computerId: unknown) {
   if (ctx.run.centralWorkspaceId) return undefined;
   const owner = ctx.source.userComputerOwner;
   const devices = ctx.deps.userDevices;
-  const device = owner && devices ? await devices.connected(owner).catch(() => null) : null;
-  return owner && devices && device ? { owner, devices, deviceId: device.deviceId } : undefined;
+  return owner && devices && validUserComputerId(computerId)
+    ? { owner, devices, deviceId: computerId }
+    : undefined;
+}
+
+export async function userComputerList(ctx: RunContext, call: ToolCall) {
+  const { userComputerOwner: owner } = ctx.source;
+  const devices = ctx.deps.userDevices;
+  if (ctx.run.centralWorkspaceId || !owner || !devices)
+    return call.finish({ error: "The user's computer is not available in this run." });
+  try {
+    const paired = await devices.list(owner);
+    return call.finish({
+      computers: paired.map((device) => ({
+        computerId: device.deviceId,
+        name: redactSecrets(device.name, ctx.secrets),
+        platform: device.platform ?? "unknown",
+        online: device.connected,
+        defaultForBots: device.defaultForBots === true,
+      })),
+    });
+  } catch {
+    return call.finish({ error: "Could not list the user's paired computers." });
+  }
 }
 
 export async function userComputerShell(ctx: RunContext, call: ToolCall) {
   const { bot, runId } = ctx;
-  const connected = await connectedUserComputer(ctx);
+  const connected = boundUserComputer(ctx, call.args.computerId);
   if (!connected) return call.finish({ error: USER_COMPUTER_UNAVAILABLE });
   const { owner, devices, deviceId } = connected;
   const { signal } = ctx.context;
@@ -234,10 +276,9 @@ type ScreenRequest =
 /** The device gets the app name the approval card showed, never the raw argument. */
 async function userComputerScreen(ctx: RunContext, call: ToolCall, request: ScreenRequest) {
   if (!request.app) return call.finish({ error: "app must name an app on the user's computer." });
-  const { userComputerOwner: owner, userComputerScreenDevice: deviceId } = ctx.source;
-  const devices = ctx.deps.userDevices;
-  if (ctx.run.centralWorkspaceId || !owner || !deviceId || !devices)
-    return call.finish({ error: USER_COMPUTER_UNAVAILABLE });
+  const connected = boundUserComputer(ctx, call.args.computerId);
+  if (!connected) return call.finish({ error: USER_COMPUTER_UNAVAILABLE });
+  const { owner, devices, deviceId } = connected;
   const { signal } = ctx.context;
   try {
     const value = await lastValue(

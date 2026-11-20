@@ -3974,6 +3974,10 @@ msgstr "निजी संदेश लिंक करें"
 msgid "Link SSO"
 msgstr "SSO लिंक करें"
 
+#: src/components/ComputerDeviceSettings.tsx
+msgid "Linked to bots"
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "List view"
 msgstr ""

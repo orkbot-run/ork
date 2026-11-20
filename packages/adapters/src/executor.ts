@@ -1617,7 +1617,9 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 botUserId: bot.userId,
               });
         let userComputer: UserComputerState;
+        let userComputerDevice: string | undefined;
         let userComputerScreenDevice: string | undefined;
+        let userComputerScreen = false;
         if (
           userComputerOwnerId &&
           deps.userDevices &&
@@ -1626,6 +1628,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           const device = await deps.userDevices.connected(userComputerOwnerId).catch(() => null);
           if (device) {
             userComputer = "connected";
+            userComputerDevice = device.deviceId;
             if (
               await userDeviceScreenAvailable(
                 deps.userDevices,
@@ -1636,6 +1639,13 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               )
             )
               userComputerScreenDevice = device.deviceId;
+            // Keep explicit screen tools available for other online devices. Probe their
+            // exact screen capability on use, outside the model's startup path.
+            userComputerScreen =
+              Boolean(userComputerScreenDevice) ||
+              (await deps.userDevices.list(userComputerOwnerId).catch(() => [])).some(
+                (other) => other.connected && other.deviceId !== device.deviceId,
+              );
           } else userComputer = "offline";
         }
         const builtins = [
@@ -1662,7 +1672,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             fleetManagement: bot.fleetManagement,
             followUpFromUser: sourceMessage?.role === "user",
             userComputer: userComputer === "connected",
-            userComputerScreen: userComputerScreenDevice !== undefined,
+            userComputerList: Boolean(userComputerOwnerId && deps.userDevices),
+            userComputerScreen,
           }),
           // Cross-owner agent connections only exist for chat-linked bots.
           ...(hasMessagingIdentity &&
@@ -1852,6 +1863,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             callClientNonce: callClientNonceForRun,
             peerMessage,
             userComputerOwner: userComputerOwnerId,
+            userComputerDevice,
             userComputerScreenDevice,
           },
           computer: {
@@ -2264,7 +2276,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 offeredFleetTools: offeredFleetTools(strategicBuiltins),
                 followUpsOffered: followUpsOffered(strategicBuiltins, ownerStartedRun),
                 userComputer,
-                userComputerScreenAvailable: userComputerScreenDevice !== undefined,
+                userComputerScreenAvailable: userComputerScreen,
               })
                 .filter((instruction): instruction is string => Boolean(instruction))
                 .join("\n\n"),

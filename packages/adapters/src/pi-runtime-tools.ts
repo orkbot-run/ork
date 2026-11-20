@@ -530,6 +530,9 @@ function toAgentTool(
           command: String(raw.command ?? ""),
           // The executor chooses the default: the bot's folder, or the user's home.
           ...(raw.cwd ? { cwd: String(raw.cwd) } : {}),
+          ...(tool.name === "user_computer_shell" && raw.computerId !== undefined
+            ? { computerId: raw.computerId }
+            : {}),
         };
       }
       if (tool.name === "run_subagent") {

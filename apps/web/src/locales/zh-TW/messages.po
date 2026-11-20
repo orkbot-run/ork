@@ -3975,6 +3975,10 @@ msgstr "連結私訊"
 msgid "Link SSO"
 msgstr "關聯 SSO"
 
+#: src/components/ComputerDeviceSettings.tsx
+msgid "Linked to bots"
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "List view"
 msgstr "清單檢視"

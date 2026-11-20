@@ -1,6 +1,7 @@
 // Tool names and the app label the approval card shows. Kept free of Node imports: the web
 // approval-card fixture loads approval-ask.ts in the browser.
 export const USER_COMPUTER_SHELL_TOOL = "user_computer_shell";
+export const USER_COMPUTER_LIST_TOOL = "user_computer_list";
 export const USER_COMPUTER_OBSERVE_TOOL = "user_computer_observe";
 export const USER_COMPUTER_ACT_TOOL = "user_computer_act";
 /** Both look at or drive one app, so one approval covers that app for the chat. */

@@ -212,17 +212,26 @@ function fixture({
     leaseFence: 0,
   };
   const createdAt = new Map<string, Date>();
+  type EffectRequestFilter = { path: string[]; equals: string };
+  const requestMatches = (effect: Effect, filter: EffectRequestFilter) =>
+    (effect.request as Record<string, unknown>)?.[filter.path[0]!] === filter.equals;
   const externalEffect = {
     findFirst: vi.fn(
       async ({
         where,
       }: {
-        where: { kind: string; status: { in: string[] }; createdAt?: { gte: Date } };
+        where: {
+          kind: string;
+          status: { in: string[] };
+          createdAt?: { gte: Date };
+          request?: EffectRequestFilter;
+        };
       }) =>
         effects.find(
           (effect) =>
             effect.kind === where.kind &&
             where.status.in.includes(effect.status) &&
+            (!where.request || requestMatches(effect, where.request)) &&
             !(where.createdAt && createdAt.get(effect.id)! < where.createdAt.gte),
         ) ?? null,
     ),
@@ -237,6 +246,7 @@ function fixture({
           idempotencyKey?: string;
           status?: string | { in: string[] };
           kind?: string | { in: string[] };
+          OR?: Array<{ request: EffectRequestFilter }>;
         };
       } = {}) => {
         if (where?.kind === "runtime_checkpoint")
@@ -253,6 +263,8 @@ function fixture({
           if (where?.kind && !matches(effect.kind, where.kind)) return false;
           if (where?.runId && effect.runId && effect.runId !== where.runId) return false;
           if (where?.id && effect.id !== where.id) return false;
+          if (where?.OR && !where.OR.some(({ request }) => requestMatches(effect, request)))
+            return false;
           return true;
         });
       },
@@ -3665,17 +3677,29 @@ describe("retry of an action a person denied in the same run", () => {
 
 describe("user_computer_shell", () => {
   const device = { deviceId: "device-1", name: "Laptop", platform: "darwin" };
+  const second = { deviceId: "device-2", name: "Workstation", platform: "win32" };
   function devices(connected = true, paired = connected, pairedAt = new Date(0)) {
-    const requests: Array<{ userId: string; request: HostComputerRequest }> = [];
+    const requests: Array<{ userId: string; request: HostComputerRequest; computerId?: string }> =
+      [];
     const gateway = {
-      connected: vi.fn(async (_userId: string) => (connected ? device : null)),
+      connected: vi.fn(async (_userId: string, computerId?: string) =>
+        connected && (!computerId || computerId === device.deviceId) ? device : null,
+      ),
       pairedSince: vi.fn(async (_userId: string) => (paired ? pairedAt : null)),
-      async *request<T>(userId: string, request: HostComputerRequest) {
+      list: vi.fn(async (_userId: string) =>
+        paired ? [{ ...device, connected, defaultForBots: connected }] : [],
+      ),
+      async *request<T>(
+        userId: string,
+        request: HostComputerRequest,
+        _signal: AbortSignal,
+        computerId?: string,
+      ) {
         if (request.method === "capabilities") {
           yield { screen: false, control: false } as T;
           return;
         }
-        requests.push({ userId, request });
+        requests.push({ userId, request, computerId });
         if (request.method === "environment") {
           yield { platform: "darwin", home: "/Users/fake", shell: "/bin/zsh" } as T;
           return;
@@ -3798,7 +3822,7 @@ describe("user_computer_shell", () => {
         blocks: [
           expect.objectContaining({
             kind: "ask",
-            text: "Run on your computer?",
+            text: "Run on Laptop?",
             detail: "ssh pi.local hostname",
             actions: [
               { id: "allow", label: "Allow in this space" },
@@ -3834,6 +3858,7 @@ describe("user_computer_shell", () => {
         createdAt: { gte: new Date(0) },
         run: { userId: "user-1" },
         kind: "user_computer_shell",
+        request: { path: ["computerId"], equals: "device-1" },
       },
       select: { id: true },
     });
@@ -3889,6 +3914,79 @@ describe("user_computer_shell", () => {
     ]);
     expect(requests).toEqual([]);
   });
+
+  it("lists both paired computers without approval or device execution", async () => {
+    const { gateway, requests } = devices();
+    gateway.list.mockResolvedValue([
+      { ...device, connected: true, defaultForBots: true },
+      { ...second, connected: true, defaultForBots: false },
+    ]);
+    const f = fixture({ ...ownRun, userDevices: gateway });
+    f.setCalls([{ name: "user_computer_list", args: {}, executionId: "list" }]);
+    await f.run();
+    expect(f.offeredTools()).toContain("user_computer_list");
+    expect(f.results).toEqual([
+      {
+        computers: [
+          {
+            computerId: device.deviceId,
+            name: device.name,
+            platform: device.platform,
+            online: true,
+            defaultForBots: true,
+          },
+          {
+            computerId: second.deviceId,
+            name: second.name,
+            platform: second.platform,
+            online: true,
+            defaultForBots: false,
+          },
+        ],
+      },
+    ]);
+    expect(f.effects).toEqual([]);
+    expect(requests).toEqual([]);
+  });
+
+  it("requires separate approval and keeps shell requests on the selected non-default computer", async () => {
+    const { gateway, requests } = devices();
+    gateway.connected.mockImplementation(async (_owner, id) =>
+      id === second.deviceId ? second : device,
+    );
+    const f = fixture({ ...ownRun, userDevices: gateway });
+    f.setCalls([call("hostname")]);
+    await f.run();
+    f.effects[0]!.status = "approved";
+    await f.run();
+    f.setCalls([
+      { ...call("uptime", "explicit"), args: { command: "uptime", computerId: second.deviceId } },
+    ]);
+    await f.run();
+    expect(isApprovalPausedResult(f.results.at(-1))).toBe(true);
+    expect(requests.map((request) => request.computerId)).toEqual(Array(3).fill(device.deviceId));
+    expect(f.effects[1]?.request).toMatchObject({ computerId: second.deviceId });
+    f.effects[1]!.status = "approved";
+    await f.run();
+    expect(requests.slice(3).map((request) => request.computerId)).toEqual(
+      Array(3).fill(second.deviceId),
+    );
+    expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { requiredReaderVersion: 7 } }),
+    );
+  });
+
+  it("fails an explicit offline target while the default is online", async () => {
+    const { gateway, requests } = devices();
+    const f = fixture({ ...ownRun, userDevices: gateway });
+    f.setCalls([{ ...call("hostname"), args: { command: "hostname", computerId: "device-2" } }]);
+    await f.run();
+    expect(f.results.at(-1)).toEqual({
+      error: expect.stringContaining("selected computer is offline"),
+    });
+    expect(f.effects).toEqual([]);
+    expect(requests).toEqual([]);
+  });
 });
 
 describe("user computer screen control", () => {
@@ -3900,19 +3998,30 @@ describe("user computer screen control", () => {
   };
   function devices(platform = "darwin", screen = true) {
     const requests: HostComputerRequest[] = [];
+    const targets: Array<string | undefined> = [];
     const gateway = {
-      connected: vi.fn(async (_userId: string) => ({
+      connected: vi.fn(async (_userId: string, _computerId?: string) => ({
         deviceId: "device-1",
         name: "Laptop",
         platform,
       })),
       pairedSince: vi.fn(async (_userId: string) => new Date(0)),
-      async *request<T>(_userId: string, request: HostComputerRequest) {
+      list: vi.fn(async (_userId: string) => [
+        { deviceId: "device-1", name: "Laptop", platform, connected: true, defaultForBots: true },
+      ]),
+      async *request<T>(
+        _userId: string,
+        request: HostComputerRequest,
+        _signal: AbortSignal,
+        computerId?: string,
+      ) {
         if (request.method === "capabilities") {
-          yield { screen, control: screen } as T;
+          const available = screen || computerId === "device-2";
+          yield { screen: available, control: available } as T;
           return;
         }
         requests.push(request);
+        targets.push(computerId);
         yield (
           request.method === "screenAct"
             ? { completed: 1, error: "Nothing was sent.", observation }
@@ -3920,7 +4029,7 @@ describe("user computer screen control", () => {
         ) as T;
       },
     } satisfies UserDeviceGateway;
-    return { gateway, requests };
+    return { gateway, requests, targets };
   }
   const ownRun = { name: "user_computer_observe", builtin: true, sourceRole: "user" };
   const observe = (app: string, executionId = "call-1") => ({
@@ -3933,7 +4042,7 @@ describe("user computer screen control", () => {
       blocks: [
         expect.objectContaining({
           kind: "ask",
-          text: `Use ${app} on your computer?`,
+          text: `Use ${app} on Laptop?`,
           actions: [
             { id: "allow", label: "Allow in this space" },
             { id: "deny", label: "Deny" },
@@ -3982,7 +4091,7 @@ describe("user computer screen control", () => {
     const f = fixture({ ...ownRun, userDevices: gateway });
     f.setCalls([observe("TextEdit")]);
     await f.run();
-    expect(f.effects[0]?.request).toEqual({ app: "TextEdit", deviceId: "device-1" });
+    expect(f.effects[0]?.request).toEqual({ app: "TextEdit", computerId: "device-1" });
     f.effects[0]!.status = "approved";
     gateway.connected.mockResolvedValue({
       deviceId: "device-2",
@@ -3991,9 +4100,48 @@ describe("user computer screen control", () => {
     });
     await f.run(true);
     expect(f.results.at(-1)).toEqual({
-      error: expect.stringContaining("approved computer has changed"),
+      error: expect.stringContaining("approved computer is offline"),
     });
     expect(requests).toEqual([]);
+  });
+
+  it("observes and acts on an explicitly selected screen even when the default has no screen driver", async () => {
+    const { gateway, requests, targets } = devices("linux", false);
+    const defaultDevice = { deviceId: "device-1", name: "Laptop", platform: "linux" };
+    const second = { deviceId: "device-2", name: "Desk", platform: "darwin" };
+    gateway.connected.mockImplementation(async (_owner, id) =>
+      id === second.deviceId ? second : defaultDevice,
+    );
+    gateway.list.mockResolvedValue([
+      { ...defaultDevice, connected: true, defaultForBots: true },
+      { ...second, connected: true, defaultForBots: false },
+    ]);
+    const f = fixture({ ...ownRun, userDevices: gateway });
+    f.setCalls([
+      { ...observe("TextEdit"), args: { app: "TextEdit", computerId: second.deviceId } },
+    ]);
+    await f.run();
+    expect(f.offeredTools()).toEqual(
+      expect.arrayContaining(["user_computer_observe", "user_computer_act"]),
+    );
+    expect(f.effects[0]?.request).toMatchObject({ computerId: second.deviceId });
+    f.effects[0]!.status = "approved";
+    await f.run();
+    f.setCalls([
+      {
+        name: "user_computer_act",
+        args: {
+          app: "TextEdit",
+          computerId: second.deviceId,
+          actions: [{ kind: "click", x: 10, y: 10 }],
+        },
+        executionId: "act",
+      },
+    ]);
+    await f.run();
+    expect(requests.map((request) => request.method)).toEqual(["screenObserve", "screenAct"]);
+    expect(targets).toEqual([second.deviceId, second.deviceId]);
+    expect(f.pauseRunForInput).toHaveBeenCalledOnce();
   });
 
   it("asks per app, then uses an allowed app across this space", async () => {
@@ -4052,7 +4200,7 @@ describe("user computer screen control", () => {
       kind: "user_computer_observe",
       idempotencyKey: "earlier-key",
       status: "completed",
-      request: { app: "TextEdit" },
+      request: { app: "TextEdit", computerId: "device-1" },
     });
     f.setCalls([
       {

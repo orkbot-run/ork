@@ -3974,6 +3974,10 @@ msgstr "Привязать ЛС"
 msgid "Link SSO"
 msgstr "Привязать SSO"
 
+#: src/components/ComputerDeviceSettings.tsx
+msgid "Linked to bots"
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "List view"
 msgstr ""

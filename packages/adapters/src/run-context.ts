@@ -244,6 +244,8 @@ export interface RunSource {
   peerMessage: Awaited<ReturnType<typeof loadBotMessageContext>>;
   /** Whose own computer user_computer_shell may reach (see userComputerOwner). */
   userComputerOwner: string | undefined;
+  /** Default device selected at the start of this attempt. */
+  userComputerDevice?: string;
   /** The exact paired device that reported screen readiness for this run. */
   userComputerScreenDevice?: string;
 }

@@ -5,6 +5,7 @@ import {
   TICKET_TITLE_MAX_LENGTH,
 } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
+import { findTools, isDeferredTool } from "./builtin-tool-bridge.js";
 import { builtinAgentTools } from "./builtin-tools.js";
 import { lazyCatalogTools, parseConnectorToolArgs } from "./lazy-tool-catalog.js";
 import {
@@ -12,8 +13,32 @@ import {
   parametersFor,
   prepareFleetArguments,
 } from "./pi-runtime-tool-parameters.js";
+import type { ToolHost } from "./pi-runtime-tools.js";
+import { toAgentTools } from "./pi-runtime-tools.js";
 
 describe("jsonSchemaParameters", () => {
+  it.each(["user_computer_shell", "user_computer_observe", "user_computer_act"])(
+    "keeps an optional computerId in %s on the model wire",
+    (name) => {
+      const definition = builtinAgentTools.find((entry) => entry.name === name)!;
+      const tool = toAgentTools([definition], {} as ToolHost).find((entry) => entry.name === name);
+      const schema = isDeferredTool(name)
+        ? findTools([definition], { names: [name] }).tools[0]?.inputSchema
+        : tool?.parameters;
+      const wire = JSON.parse(JSON.stringify(schema));
+      expect(wire.properties.computerId).toMatchObject({
+        type: "string",
+        minLength: 1,
+        maxLength: 64,
+      });
+      expect(wire.required).not.toContain("computerId");
+      if (tool) {
+        expect(
+          tool.prepareArguments?.({ command: "hostname", computerId: "device-b" }),
+        ).toHaveProperty("computerId", "device-b");
+      }
+    },
+  );
   it("uses a connected delete_bot schema instead of local archival parameters", () => {
     const schema = JSON.parse(
       JSON.stringify(

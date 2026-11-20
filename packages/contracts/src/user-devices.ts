@@ -27,6 +27,9 @@ export const userDeviceListSchema = z.object({
       deviceId: z.string(),
       name: z.string(),
       connected: z.boolean(),
+      // Optional for responses from older servers; current servers always return both fields.
+      platform: z.string().optional(),
+      defaultForBots: z.boolean().optional(),
     }),
   ),
 });

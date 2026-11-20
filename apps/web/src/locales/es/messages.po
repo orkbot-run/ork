@@ -3974,6 +3974,10 @@ msgstr "Vincular mensajes privados"
 msgid "Link SSO"
 msgstr "Vincular SSO"
 
+#: src/components/ComputerDeviceSettings.tsx
+msgid "Linked to bots"
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "List view"
 msgstr "Vista de lista"

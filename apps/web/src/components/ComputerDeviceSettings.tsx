@@ -89,10 +89,16 @@ export function ComputerDeviceSettings() {
         <SettingsRow
           key={device.deviceId}
           label={
-            <p className="flex min-w-0 items-baseline gap-2">
-              <span className="truncate">{device.name}</span>
+            <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="min-w-0 max-w-full truncate">{device.name}</span>
               <span className="shrink-0 text-[12.5px] text-muted-foreground">
-                {device.connected ? <Trans>Connected</Trans> : <Trans>Offline</Trans>}
+                {!device.connected ? (
+                  <Trans>Offline</Trans>
+                ) : device.defaultForBots ? (
+                  <Trans>Linked to bots</Trans>
+                ) : (
+                  <Trans>Connected</Trans>
+                )}
               </span>
             </p>
           }

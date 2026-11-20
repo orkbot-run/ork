@@ -485,6 +485,12 @@ export const builtinAgentTools: ConnectorTool[] = [
     },
   },
   {
+    name: "user_computer_list",
+    description:
+      "List the user's paired computers, their computerId, whether each is online, and which one is the default. This only reads connection information.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
     name: "user_computer_shell",
     description:
       "Run a command on the user's own computer. Use only when the task needs their local files, credentials, or network. cwd defaults to their home folder and must stay inside it.",
@@ -493,6 +499,12 @@ export const builtinAgentTools: ConnectorTool[] = [
       properties: {
         command: { type: "string" },
         cwd: { type: "string" },
+        computerId: {
+          type: "string",
+          minLength: 1,
+          maxLength: 64,
+          description: "Target a computerId from user_computer_list. Omit to use the default.",
+        },
       },
       required: ["command"],
     },
@@ -506,6 +518,12 @@ export const builtinAgentTools: ConnectorTool[] = [
       properties: {
         app: { type: "string", minLength: 1, maxLength: 200 },
         query: { type: "string", maxLength: 200 },
+        computerId: {
+          type: "string",
+          minLength: 1,
+          maxLength: 64,
+          description: "Target a computerId from user_computer_list. Omit to use the default.",
+        },
       },
       required: ["app"],
     },
@@ -518,6 +536,12 @@ export const builtinAgentTools: ConnectorTool[] = [
       type: "object",
       properties: {
         app: { type: "string", minLength: 1, maxLength: 200 },
+        computerId: {
+          type: "string",
+          minLength: 1,
+          maxLength: 64,
+          description: "Use the same computerId as user_computer_observe. Omit to use the default.",
+        },
         actions: {
           type: "array",
           minItems: 1,

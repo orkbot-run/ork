@@ -42,6 +42,7 @@ type ApprovalAskOptions = {
   summary?: FleetCardSummary;
   batch?: ToolBatch;
   mandatoryReason?: ApprovalReason;
+  userComputerName?: string;
 };
 
 export function buildApprovalAskBlock(
@@ -144,6 +145,13 @@ function approvalAskBlock(
       ],
     };
   }
+  const userComputerLabel = options?.userComputerName
+    ? redactSecrets(options.userComputerName, secrets)
+        .replaceAll(/\s+/g, " ")
+        .trim()
+        .slice(0, 80)
+        .replace(new RegExp(CARD_TITLE_ESCAPED_CHARACTERS, "g"), "\\$&")
+    : undefined;
   if (USER_COMPUTER_SCREEN_TOOLS.has(toolName)) {
     const app = userComputerAppName(args.app).replace(
       new RegExp(CARD_TITLE_ESCAPED_CHARACTERS, "g"),
@@ -153,7 +161,7 @@ function approvalAskBlock(
     return {
       kind: "ask",
       approvalEffectId: effectId,
-      text: `Use ${app || "an app"} on your computer?`,
+      text: `Use ${app || "an app"} on ${userComputerLabel || "your computer"}?`,
       ...(steps.length
         ? {
             detail: truncate(redactSecrets(steps.join("\n"), secrets), MAX_APPROVAL_DETAIL_LENGTH),
@@ -172,7 +180,7 @@ function approvalAskBlock(
     return {
       kind: "ask",
       approvalEffectId: effectId,
-      text: "Run on your computer?",
+      text: `Run on ${userComputerLabel || "your computer"}?`,
       detail: truncate(
         redactSecrets(`${cwd}${String(args.command ?? "")}`, secrets),
         MAX_APPROVAL_DETAIL_LENGTH,

@@ -3974,6 +3974,10 @@ msgstr "DMs verknüpfen"
 msgid "Link SSO"
 msgstr "SSO verknüpfen"
 
+#: src/components/ComputerDeviceSettings.tsx
+msgid "Linked to bots"
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "List view"
 msgstr ""

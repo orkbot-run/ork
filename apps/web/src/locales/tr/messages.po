@@ -3974,6 +3974,10 @@ msgstr "Özel mesajları bağla"
 msgid "Link SSO"
 msgstr "SSO bağla"
 
+#: src/components/ComputerDeviceSettings.tsx
+msgid "Linked to bots"
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "List view"
 msgstr "Liste görünümü"
