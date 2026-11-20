@@ -24,6 +24,7 @@ type Account = {
   billing: {
     status: string | null;
     firstPaidInvoiceAt: Date | null;
+    paidAt: Date | null;
     endedAt: Date | null;
     currentPeriodEndsAt: Date | null;
     updatedAt: Date;
@@ -51,11 +52,15 @@ export function homeDeletionDue(account: Account, lastUsedAt: Date, now = new Da
   const { billing, modelCredits } = account;
   const credited = modelCredits?.lots[0]?.createdAt;
   const since = credited ? latest(credited, lastUsedAt) : lastUsedAt;
-  if (billing?.firstPaidInvoiceAt) {
+  const unusedAt = addDays(since, UNUSED_DAYS);
+  if (billing?.firstPaidInvoiceAt || billing?.paidAt) {
     const ended = billing.endedAt ?? billing.currentPeriodEndsAt ?? billing.updatedAt;
-    return { at: addDays(latest(ended, since), PLAN_ENDED_DAYS), reason: "plan-ended" };
+    const planEndedAt = addDays(latest(ended, since), PLAN_ENDED_DAYS);
+    if (billing.firstPaidInvoiceAt) return { at: planEndedAt, reason: "plan-ended" };
+    // Preserve the old grace period for legacy accounts whose payment hasn't been verified yet.
+    return { at: latest(unusedAt, planEndedAt), reason: "unused" };
   }
-  return { at: addDays(since, UNUSED_DAYS), reason: "unused" };
+  return { at: unusedAt, reason: "unused" };
 }
 
 function planIsLive({ billing, modelCredits }: Account, now: Date) {
@@ -154,6 +159,7 @@ async function dueDates(db: Db, where: Prisma.ComputerWhereInput, now: Date, cur
                 select: {
                   status: true,
                   firstPaidInvoiceAt: true,
+                  paidAt: true,
                   endedAt: true,
                   currentPeriodEndsAt: true,
                   updatedAt: true,

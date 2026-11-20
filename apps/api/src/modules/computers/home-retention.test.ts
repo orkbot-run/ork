@@ -11,6 +11,7 @@ const now = at(200);
 const billing = (fields: Record<string, unknown> = {}) => ({
   status: null,
   firstPaidInvoiceAt: null,
+  paidAt: null,
   endedAt: null,
   currentPeriodEndsAt: null,
   updatedAt: at(0),
@@ -61,6 +62,15 @@ describe("saved home deletion date", () => {
     };
     expect(homeDeletionDue(ended, at(50), now)).toEqual({ at: at(130), reason: "plan-ended" });
     expect(homeDeletionDue(ended, at(110), now)).toEqual({ at: at(140), reason: "plan-ended" });
+  });
+
+  it("keeps both grace periods for a legacy account awaiting payment verification", () => {
+    const legacy = {
+      billing: billing({ status: "canceled", paidAt: at(0), endedAt: at(190) }),
+      modelCredits: null,
+    };
+    expect(homeDeletionDue(legacy, at(50), now)).toEqual({ at: at(220), reason: "unused" });
+    expect(homeDeletionDue(legacy, at(150), now)).toEqual({ at: at(240), reason: "unused" });
   });
 
   it("moves the date out from the latest credit purchase, even once those credits are spent", () => {
