@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork review failure handling follows LICENSE.md.
+
 import type { AdapterContext, AutoReviewRequest } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { JevAutoReviewProvider } from "./jev-auto-review.js";
@@ -178,7 +182,7 @@ describe("JevAutoReviewProvider", () => {
   });
 
   it.each([
-    [401, "Checker could not authenticate."],
+    [401, "Checker could not authenticate. Reconnect it or update its credentials."],
     [422, "Checker request was invalid."],
     [429, "Checker is busy."],
     [529, "Checker is busy."],

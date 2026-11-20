@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork review failure handling follows LICENSE.md.
+
 import type {
   AdapterContext,
   AdapterDescriptor,
@@ -13,12 +17,13 @@ import type {
 import type { AutoReviewJudgeDecision } from "@orkbot/core";
 import { escapePromptData, redactSecrets } from "@orkbot/core";
 import { z } from "zod";
+import { autoReviewFailure } from "./auto-review-failures.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
 import { parseModelJson } from "./model-json.js";
+import { UnavailableModelForAuthError } from "./model-selection.js";
 import { LOCAL_PROVIDER_ID } from "./pi-local-provider.js";
 import { localModelIds } from "./pi-local-provider-id.js";
-import { secretValuesToRedact } from "./pi-oauth.js";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_TASK_CHARS = 400;
@@ -340,50 +345,28 @@ export async function runAutoReviewJudge(
         },
       )) {
         if (event.type === "usage" && !event.accounted) await input.onUsage?.(event);
-        if (
-          event.type === "text" &&
-          /^(?:I hit a problem:|Unknown model )/i.test(event.text.trim())
-        ) {
-          failed = true;
-        }
-        if (event.type === "done" && event.text) {
+        if ((event.type === "text" || event.type === "done") && event.text) {
           const body = event.text.trim();
-          if (/^(?:I hit a problem:|Unknown model )/i.test(body)) failed = true;
-          else text = body;
+          if (/^Unknown model /i.test(body))
+            return autoReviewFailure(new UnavailableModelForAuthError(), modelLabel);
+          if (/^I hit a problem:/i.test(body)) failed = true;
+          else if (event.type === "done") text = body;
         }
       }
     } catch (error) {
       const timedOut =
         timeoutSignal.aborted ||
+        (error instanceof Error && error.name === "TimeoutError") ||
         (input.signal?.aborted === true &&
           (input.signal.reason instanceof DOMException || input.signal.reason instanceof Error) &&
           input.signal.reason.name === "TimeoutError");
-      const secrets = secretValuesToRedact({
-        kind: "openai_compatible",
-        baseUrl: input.baseUrl ?? "",
-        apiKey: input.apiKey,
-        headers: input.headers,
-      });
-      const detail = timedOut
-        ? timeoutSignal.aborted
-          ? `timed out after ${timeoutMs}ms`
-          : "timed out (parent deadline)"
-        : `failed: ${truncateReviewText(
-            redactSecrets(
-              error instanceof Error ? `${error.name}: ${error.message}` : String(error),
-              secrets,
-            ),
-            200,
-          )}`;
-      // biome-ignore lint/suspicious/noConsole: Emit one sanitized checker diagnostic.
-      console.warn(`[auto-review] checker ${redactSecrets(modelLabel, secrets)} ${detail}`);
-      return {
-        decision: "error",
-        model: modelLabel,
-        reason: timedOut ? "Checker timed out." : "Checker failed.",
-      };
+      return timedOut
+        ? { decision: "error", model: modelLabel, reason: "Checker timed out." }
+        : autoReviewFailure(error, modelLabel);
     }
 
+    if (timeoutSignal.aborted)
+      return { decision: "error", model: modelLabel, reason: "Checker timed out." };
     if (failed || !text) {
       return { decision: "error", model: modelLabel, reason: "Checker returned no decision." };
     }

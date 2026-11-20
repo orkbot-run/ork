@@ -6,6 +6,7 @@ import type {
   AdapterContext,
   AgentToolExecutionObserver,
   AutoReviewRequest,
+  AutoReviewResult,
   ConnectorCall,
   ToolBatch,
 } from "@orkbot/adapter-kit";
@@ -48,13 +49,10 @@ import {
   settleUncertainEffect,
   uncertainEffectResult,
 } from "./approval-effect.js";
-import type { AutoReviewChecker } from "./auto-review.js";
-import {
-  isAutoReviewCheckerConfigured,
-  redactToolArgsForReview,
-  resolveAutoReviewChecker,
-} from "./auto-review.js";
+import { redactToolArgsForReview } from "./auto-review.js";
 import { reviewWithBackups } from "./auto-review-backups.js";
+import type { AutoReviewFailureCode } from "./auto-review-failures.js";
+import { autoReviewFailure, logAutoReviewFailure } from "./auto-review-failures.js";
 import { ORKBOT_DOCS_URLS } from "./builtin-skills.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { CATALOG_LOAD, CATALOG_SEARCH } from "./lazy-tool-catalog.js";
@@ -62,8 +60,8 @@ import { findConnectedModelCredential } from "./model-selection.js";
 import { paidRequestEffect } from "./paid-request.js";
 import { PURCHASE_CHECKED_TOOLS, purchaseApprovalOf } from "./purchase-gate.js";
 import { validateRoutineWatchHttpUrl } from "./routine-watch.js";
-import { autoReviewCheckerProvider } from "./run-auto-review.js";
-import type { RunContext, RunTrust } from "./run-context.js";
+import { prepareAutoReviewCheckers, selectAutoReviewCandidates } from "./run-auto-review.js";
+import type { RunContext } from "./run-context.js";
 import {
   isRunTainted,
   nextMutatingEffectOccurrence,
@@ -77,6 +75,7 @@ import {
   completeEffect,
   recordEffect,
   uncertainEffectError,
+  underRunLease,
 } from "./run-effects.js";
 import { renewRunLease } from "./run-lifecycle.js";
 import { notifyRun } from "./run-notifications.js";
@@ -141,9 +140,7 @@ type ToolReview = {
   gated: boolean;
   applied: AppliedEffect | undefined;
   injectedReview: ExecutorDeps["autoReview"];
-  checker: AutoReviewChecker | null | undefined;
-  reviewSettings: Awaited<ReturnType<RunTrust["loadApprovalModel"]>> | null;
-  memberChecker: boolean;
+  candidates: ReturnType<typeof selectAutoReviewCandidates>;
 };
 
 /**
@@ -331,36 +328,25 @@ export async function gateToolCall(
   const mode = approvalModeFromPreference(await ctx.trust.loadAutoReviewPreference());
   const reviewable = mode === "auto" && !requiresMandatoryApproval;
   const injectedReview = reviewable ? deps.autoReview : undefined;
-  const reviewSettings = !reviewable || injectedReview ? null : await ctx.trust.loadApprovalModel();
-  const memberChecker = reviewSettings?.primarySource === "member";
-  const checker = !reviewable
-    ? undefined
-    : reviewSettings
-      ? reviewSettings.primary
-        ? {
-            provider: reviewSettings.primary.provider,
-            model: reviewSettings.primary.modelId,
-            thinkingLevel: reviewSettings.primary.thinkingLevel,
-            credentialId: reviewSettings.primary.credentialId,
-          }
-        : null
-      : resolveAutoReviewChecker();
+  const reviewSettings = reviewable && !injectedReview ? await ctx.trust.loadApprovalModel() : null;
+  const candidates =
+    reviewable && !context.signal.aborted
+      ? selectAutoReviewCandidates(reviewSettings, Boolean(injectedReview))
+      : [];
+  const primary = candidates[0];
   const checkerConfigured =
     reviewable &&
-    (Boolean(injectedReview) ||
-      memberChecker ||
-      Boolean(reviewSettings?.backups.length) ||
-      (checker
-        ? isAutoReviewCheckerConfigured({}) ||
-          Boolean(
-            await findConnectedModelCredential(
-              deps.prisma,
-              deps.secretStore,
-              { userId: run.userId, spaceId: run.spaceId },
-              checker.provider,
-            ),
-          )
-        : false));
+    (Boolean(injectedReview || run.centralWorkspaceId) ||
+      candidates.some((candidate) => candidate.role !== "default" || candidate.instance) ||
+      Boolean(
+        primary &&
+          (await findConnectedModelCredential(
+            deps.prisma,
+            deps.secretStore,
+            { userId: run.userId, spaceId: run.spaceId },
+            primary.provider,
+          )),
+      ));
   const plan = request.mandatoryApproval
     ? approvalResolved.decision === "deny"
       ? "deny"
@@ -510,16 +496,14 @@ export async function gateToolCall(
       gated,
       applied,
       injectedReview,
-      checker,
-      reviewSettings,
-      memberChecker,
+      candidates,
     });
     if (!judged) return;
     reviewReason = judged.reason;
     gateDecision = judged.decision;
   };
 
-  if (applied && plan === "judge" && (injectedReview || checker)) {
+  if (applied && plan === "judge" && checkerConfigured) {
     if (!applied.duplicate) {
       await runAutoReview();
     } else {
@@ -838,8 +822,9 @@ async function reviewToolCall(
 ): Promise<{ reason: string | undefined; decision: "ask" | "allow" } | undefined> {
   const { deps, run, runId, bot, thread, context } = ctx;
   const { name, args, connectorKind, fetchUrl, gated, applied } = review;
-  const { injectedReview, checker, reviewSettings, memberChecker } = review;
-  if (!injectedReview && !checker && !reviewSettings?.backups.length) return;
+  const { injectedReview, candidates } = review;
+  if (context.signal.aborted) return;
+  let judge: (AutoReviewResult & { failureCode?: AutoReviewFailureCode }) | undefined;
   try {
     const botDescription = redactSecrets(`${bot.name}\n${bot.description}`, ctx.secrets);
     // A new site is judged on the full URL and the owner's own words only: the task
@@ -872,96 +857,76 @@ async function reviewToolCall(
       runId,
       signal: context.signal,
     };
-    const checkerProvider = (checker: AutoReviewChecker) =>
-      autoReviewCheckerProvider(
-        deps,
-        {
-          runId,
-          spaceId: run.spaceId,
-          userId: run.userId,
-          botId: bot.id,
-          threadId: thread.id,
-        },
-        {
-          injectedReview,
-          memberChecker,
-          backups: reviewSettings?.backups,
-          registerSecrets: (values) => ctx.secrets.push(...values),
-        },
-        checker,
-      );
-    const judge = await reviewWithBackups(
-      [
-        ...(checker
-          ? [checker]
-          : injectedReview
-            ? [{ provider: "injected", model: "injected" }]
-            : []),
-        ...(reviewSettings?.backups.map((choice) => ({
-          provider: choice.provider,
-          model: choice.modelId,
-          thinkingLevel: choice.thinkingLevel,
-          credentialId: choice.credentialId,
-        })) ?? []),
-      ],
+    const prepared = await prepareAutoReviewCheckers(
+      deps,
+      { runId, spaceId: run.spaceId, userId: run.userId, botId: bot.id, threadId: thread.id },
+      { injectedReview, registerSecrets: (values) => ctx.secrets.push(...values) },
+      candidates,
+    );
+    judge = await reviewWithBackups(
+      prepared.candidates,
       async (checker) => {
-        const provider = await checkerProvider(checker);
+        const provider = await prepared.providerFor(checker);
+        context.signal.throwIfAborted();
         return provider.review(reviewRequest, reviewContext);
       },
       context.signal,
     );
+  } catch (error) {
     if (context.signal.aborted) return;
-    const verdict = {
-      reason: judge.reason,
-      decision: applyJudgeDecision({ decision: judge.decision, consequential: gated }),
+    const attempted = candidates[0] ?? {
+      provider: "unavailable",
+      model: "unavailable",
+      role: "default" as const,
     };
-    if (applied) {
-      await deps.prisma.externalEffect.update({
-        where: { id: applied.effect.id },
-        data: {
-          reviewDecision: judge.decision,
-          reviewReason: judge.reason,
-          reviewModel: judge.model,
-        },
-      });
-    }
-    await auditAutoReview(ctx, name, applied, judge.decision, judge.model);
-    return verdict;
-  } catch {
-    // Cancellation must not write a review the next attempt would reuse.
-    if (context.signal.aborted) return;
-    // Auth/refresh failures must fail closed like a checker error, not fail the run.
-    const reviewReason = "Checker could not authenticate.";
-    const verdict = {
-      reason: reviewReason,
-      decision: applyJudgeDecision({ decision: "error", consequential: gated }),
-    };
-    const reviewModel = checker
-      ? `${checker.provider}/${checker.model}`
-      : (injectedReview?.describe().id ?? "auto-review");
-    if (applied) {
-      await deps.prisma.externalEffect.update({
-        where: { id: applied.effect.id },
-        data: { reviewDecision: "error", reviewReason, reviewModel },
-      });
-    }
-    await auditAutoReview(ctx, name, applied, "error", reviewModel);
-    return verdict;
+    const failure = autoReviewFailure(error, `${attempted.provider}/${attempted.model}`);
+    logAutoReviewFailure(attempted, failure.failureCode);
+    judge = failure;
   }
+  if (!judge || context.signal.aborted) return;
+  if (applied) {
+    // A canceled worker must not leave a verdict for the next attempt to reuse.
+    const { decision, reason, model } = judge;
+    try {
+      await underRunLease(deps, runId, async (tx) => {
+        context.signal.throwIfAborted();
+        await tx.externalEffect.update({
+          where: { id: applied.effect.id },
+          data: { reviewDecision: decision, reviewReason: reason, reviewModel: model },
+        });
+        context.signal.throwIfAborted();
+      });
+    } catch (error) {
+      if (context.signal.aborted) return;
+      throw error;
+    }
+  }
+  if (context.signal.aborted) return;
+  await auditAutoReview(ctx, name, applied, judge);
+  return {
+    reason: judge.reason,
+    decision: applyJudgeDecision({ decision: judge.decision, consequential: gated }),
+  };
 }
 
 function auditAutoReview(
   ctx: RunContext,
   tool: string,
   applied: AppliedEffect | undefined,
-  decision: string,
-  model: string | undefined,
+  judge: AutoReviewResult & { failureCode?: AutoReviewFailureCode },
 ): Promise<void> {
+  const { decision, model } = judge;
   return auditToolCall(
     ctx,
     tool,
     decision === "error" ? "failure" : "success",
-    { effectId: applied?.effect.id, decision },
+    {
+      effectId: applied?.effect.id,
+      decision,
+      ...(judge.failureCode
+        ? { reasonCategory: judge.failureCode, reviewFailure: judge.reason }
+        : {}),
+    },
     { action: "approval.auto_reviewed", actor: { type: "system", label: model } },
   );
 }

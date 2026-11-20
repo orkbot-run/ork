@@ -228,7 +228,10 @@ async function resolveModelKeyMaterial(
   provider: string,
   modelId: string,
   registerSecrets?: (values: string[]) => void,
-  { requireStoredSecret = false }: { requireStoredSecret?: boolean } = {},
+  {
+    requireStoredSecret = false,
+    deploymentApiKey,
+  }: { requireStoredSecret?: boolean; deploymentApiKey?: string } = {},
 ): Promise<{
   apiKey?: string;
   routing?: AgentRunRequest["model"]["routing"];
@@ -442,7 +445,7 @@ async function resolveModelKeyMaterial(
   }
   if (requireStoredSecret) throw new Error("Backup model credential is no longer available");
   cloudflareProviderEnv({ provider });
-  return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
+  return { apiKey: deploymentApiKey ?? deploymentKeyFor(deps, provider), redact: [] };
 }
 
 /** Translate resolved credentials and capabilities consistently for every run path. */

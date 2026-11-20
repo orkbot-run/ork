@@ -3,6 +3,7 @@
 
 import type {
   AgentRunRequest,
+  AgentRuntimeEvent,
   AutoReviewProvider,
   BrowserProvider,
   ConnectorCall,
@@ -14,7 +15,7 @@ import type { ActionApprovalRule } from "@orkbot/core";
 import { inboundRoutineBlock } from "@orkbot/core";
 import { approvalEffectKey, toolEffectIdempotencyKey } from "@orkbot/core/node/approval-effect-key";
 import type { PrismaClient } from "@orkbot/db";
-import { createPendingSteeringRun, sendUserMessage } from "@orkbot/db";
+import { createPendingSteeringRun, installAuditEventStore, sendUserMessage } from "@orkbot/db";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DENIED_ACTION_ERROR, isApprovalPausedResult } from "./approval-effect.js";
 import { MAX_SHARED_MEMORY_CHARS } from "./builtin-tools.js";
@@ -29,6 +30,7 @@ import {
   lazyCatalogTools,
   resolveCatalogCall,
 } from "./lazy-tool-catalog.js";
+import { HostedModelCreditsRequiredError } from "./model-credit-observer.js";
 import { OWN_INSTRUCTIONS_BASELINE_UNKNOWN_ERROR } from "./run-context.js";
 import type { TurnCheckpoint } from "./turn-checkpoint.js";
 import { serializeTurnCheckpoint } from "./turn-checkpoint.js";
@@ -87,6 +89,7 @@ function fixture({
   savedPreference = true,
   approvalRole,
   nativeReview = false,
+  reviewModel,
   checkerConnected = true,
   skipApprovals = false,
   trigger = "user",
@@ -152,6 +155,7 @@ function fixture({
   savedPreference?: boolean;
   approvalRole?: ModelRoleSettings;
   nativeReview?: boolean;
+  reviewModel?: (request: AgentRunRequest) => AsyncIterable<AgentRuntimeEvent>;
   checkerConnected?: boolean;
   skipApprovals?: boolean;
   trigger?: string;
@@ -526,6 +530,10 @@ function fixture({
     return fakeFetch(request, context);
   };
   const runtimeRun = vi.fn(async function* (request: AgentRunRequest) {
+    if (reviewModel && request.runId.endsWith(":auto-review")) {
+      yield* reviewModel(request);
+      return;
+    }
     offeredTools = request.tools.map((tool) => tool.name);
     instructions = request.instructions ?? "";
     if (checkpointCapture) {
@@ -3538,6 +3546,87 @@ it("asks instead of using deployment credentials after a selected approval conne
     vi.unstubAllGlobals();
   }
 });
+
+it.each([true, false])(
+  "tries the server checker after member failures and keeps the member diagnosis on exhaustion (success %s)",
+  async (fallbackSucceeds) => {
+    vi.stubEnv("ORKBOT_AUTO_REVIEW_PROVIDER", "anthropic");
+    vi.stubEnv("ORKBOT_AUTO_REVIEW_MODEL", "instance-checker");
+    vi.stubEnv("ANTHROPIC_API_KEY", "fake-instance-key");
+    vi.stubEnv("PI_DEFAULT_PROVIDER", "openrouter");
+    const createAudit = vi.fn(async () => ({ count: 1 }));
+    installAuditEventStore({
+      auditEvent: { createMany: createAudit },
+      space: { findUnique: async () => ({ id: "space-1", organizationId: "org-1" }) },
+    } as never);
+    try {
+      const attempts: string[] = [];
+      const f = fixture({
+        name: "demo_send_message",
+        readOnly: false,
+        autoReview: true,
+        nativeReview: true,
+        approvalRole: {
+          primary: { provider: "openrouter", modelId: "member-checker" },
+          backups: [{ provider: "openrouter", modelId: "backup-checker" }],
+        },
+        async *reviewModel(request) {
+          attempts.push(request.model.id);
+          if (request.model.id === "member-checker")
+            throw new HostedModelCreditsRequiredError("sensitive provider response");
+          if (request.model.id === "backup-checker" || !fallbackSucceeds)
+            throw new Error("unrelated private arguments");
+          expect(request.model.apiKey).toBe("fake-instance-key");
+          yield { type: "done", text: '{"decision":"pass"}' };
+        },
+      });
+      await f.run();
+      expect(attempts).toEqual(["member-checker", "backup-checker", "instance-checker"]);
+      if (fallbackSucceeds) {
+        expect(f.execute).toHaveBeenCalledOnce();
+        expect(f.pauseRunForInput).not.toHaveBeenCalled();
+        expect(f.effects).toContainEqual(
+          expect.objectContaining({
+            reviewDecision: "pass",
+            reviewModel: "anthropic/instance-checker",
+          }),
+        );
+      } else {
+        expect(f.execute).not.toHaveBeenCalled();
+        expect(f.pauseRunForInput).toHaveBeenCalledWith(
+          expect.objectContaining({
+            blocks: [
+              expect.objectContaining({ detail: expect.stringContaining("no model credits") }),
+            ],
+          }),
+        );
+        expect(f.effects).toContainEqual(
+          expect.objectContaining({
+            reviewDecision: "error",
+            reviewModel: "openrouter/member-checker",
+            reviewReason: expect.stringContaining("no model credits"),
+          }),
+        );
+        expect(createAudit).toHaveBeenCalledWith({
+          data: [
+            expect.objectContaining({
+              action: "approval.auto_reviewed",
+              outcome: "failure",
+              metadata: expect.objectContaining({
+                reasonCategory: "credits_required",
+                reviewFailure: expect.stringContaining("no model credits"),
+              }),
+            }),
+          ],
+        });
+        expect(JSON.stringify(createAudit.mock.calls)).not.toContain("private arguments");
+      }
+    } finally {
+      installAuditEventStore(undefined);
+      vi.unstubAllEnvs();
+    }
+  },
+);
 
 it("uses the OpenRouter environment key for a decision checker on another deployment provider", async () => {
   vi.stubEnv("PI_DEFAULT_PROVIDER", "anthropic");

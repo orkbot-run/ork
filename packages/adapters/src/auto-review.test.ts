@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork review failure handling follows LICENSE.md.
+
 import type { AgentRunModel } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -473,13 +477,11 @@ describe("runAutoReviewJudge timeout", () => {
           signal: deadline === "parent" ? AbortSignal.timeout(50) : undefined,
         }),
       ).resolves.toMatchObject({ decision: "error", reason: "Checker timed out." });
-      expect(warn).toHaveBeenCalledExactlyOnceWith(
-        `[auto-review] checker openrouter/x ${deadline === "local" ? "timed out after 50ms" : "timed out (parent deadline)"}`,
-      );
+      expect(warn).not.toHaveBeenCalled();
     },
   );
 
-  it("reports a runtime TimeoutError without an aborted signal as a failure", async () => {
+  it("reports a runtime TimeoutError as a deadline without logging its text", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const runtime = {
       run: () => {
@@ -499,13 +501,11 @@ describe("runAutoReviewJudge timeout", () => {
         botId: "bot",
         threadId: "thread",
       }),
-    ).resolves.toMatchObject({ decision: "error", reason: "Checker failed." });
-    expect(warn).toHaveBeenCalledExactlyOnceWith(
-      "[auto-review] checker openrouter/x failed: TimeoutError: Runtime timed out",
-    );
+    ).resolves.toMatchObject({ decision: "error", reason: "Checker timed out." });
+    expect(warn).not.toHaveBeenCalled();
   });
 
-  it("reports normal errors with a redacted, truncated diagnostic", async () => {
+  it("returns a fixed reason without logging text echoed by the model provider", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const runtime = {
       run: () => {
@@ -525,13 +525,15 @@ describe("runAutoReviewJudge timeout", () => {
         botId: "bot",
         threadId: "thread",
       }),
-    ).resolves.toMatchObject({ decision: "error", reason: "Checker failed." });
-    expect(warn).toHaveBeenCalledExactlyOnceWith(
-      `[auto-review] checker openrouter/x failed: Error: [redacted] [redacted] us ${"x".repeat(167)}…`,
-    );
+    ).resolves.toMatchObject({
+      decision: "error",
+      failureCode: "unexpected",
+      reason: "Checker could not complete the review.",
+    });
+    expect(warn).not.toHaveBeenCalled();
   });
 
-  it("redacts header-only credentials from asynchronous checker failures", async () => {
+  it("returns a fixed reason for asynchronous checker errors that echo credentials", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const runtime = {
       run: () => ({
@@ -557,10 +559,12 @@ describe("runAutoReviewJudge timeout", () => {
         botId: "bot",
         threadId: "thread",
       }),
-    ).resolves.toMatchObject({ decision: "error", reason: "Checker failed." });
-    expect(warn).toHaveBeenCalledExactlyOnceWith(
-      "[auto-review] checker openai-compatible/fixture failed: Error: status failed: [redacted] [redacted] us",
-    );
+    ).resolves.toMatchObject({
+      decision: "error",
+      failureCode: "unexpected",
+      reason: "Checker could not complete the review.",
+    });
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("aborts the judge when the parent signal cancels", async () => {
@@ -608,7 +612,10 @@ describe("runAutoReviewJudge timeout", () => {
         timeoutMs: 5_000,
         signal: parent.signal,
       }),
-    ).resolves.toMatchObject({ decision: "error", reason: "Checker failed." });
+    ).resolves.toMatchObject({
+      decision: "error",
+      reason: "Checker could not complete the review.",
+    });
     expect(seen?.aborted).toBe(true);
   });
 });

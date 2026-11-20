@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork review failure handling follows LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import type {
   AdapterContext,
@@ -83,6 +87,10 @@ export class HttpDecisionProvider implements DecisionProvider {
         if (response.status >= 400 && response.status < 500)
           usage = { inputTokens: 0, outputTokens: 0, costUsd: 0, usageSource: "provider-rejected" };
         void response.body?.cancel().catch(() => undefined);
+        if (this.provider === "openrouter" && response.status === 402)
+          throw new DecisionProviderError("credits_required");
+        if (this.provider === "openrouter" && response.status === 404)
+          throw new DecisionProviderError("model_unavailable");
         throw new DecisionProviderError(
           response.status === 401 || response.status === 403
             ? "authentication"

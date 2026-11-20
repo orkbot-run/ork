@@ -339,7 +339,7 @@ export function claimEffect(
 }
 
 /** Writes that let a tool's side effect go ahead check the attempt's lease in the same transaction. */
-function underRunLease<T>(
+export function underRunLease<T>(
   deps: ExecutorDeps,
   runId: string,
   write: (tx: Prisma.TransactionClient) => Promise<T>,

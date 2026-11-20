@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork review failure handling follows LICENSE.md.
+
 import type {
   AdapterContext,
   AdapterDescriptor,
@@ -15,10 +19,10 @@ import {
   autoReviewTimeoutMs,
   MAX_OWNER_WORDS_CHARS,
   reviewArgsTooLong,
-  sanitizeAutoReviewReason,
   TOO_LONG_TO_REVIEW,
   truncateReviewText,
 } from "./auto-review.js";
+import { autoReviewFailure } from "./auto-review-failures.js";
 
 const MAX_TASK_CHARS = 400;
 const MAX_BOT_CHARS = 240;
@@ -103,17 +107,17 @@ export class DecisionAutoReviewProvider implements AutoReviewProvider {
         return { decision: "ask", model, reason: "Checker is unsure." };
       return { decision: "pass", model };
     } catch (error) {
-      const reason =
-        error instanceof DecisionProviderError
-          ? {
-              authentication: "Checker could not authenticate.",
-              invalid_response: "Checker returned no decision.",
-              invalid: "Checker request was invalid.",
-              busy: "Checker is busy.",
-              unavailable: "Checker timed out or failed.",
-            }[error.kind]
-          : "Checker returned no decision.";
-      return { decision: "error", model: modelLabel, reason: sanitizeAutoReviewReason(reason) };
+      if (error instanceof DecisionProviderError) {
+        const reasons: Partial<Record<DecisionProviderError["kind"], string>> = {
+          invalid_response: "Checker returned no decision.",
+          invalid: "Checker request was invalid.",
+          busy: "Checker is busy.",
+          unavailable: "Checker timed out or failed.",
+        };
+        const reason = reasons[error.kind];
+        if (reason) return { decision: "error", model: modelLabel, reason };
+      }
+      return autoReviewFailure(error, modelLabel);
     }
   }
 }

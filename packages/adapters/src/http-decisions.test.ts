@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; Ork review failure handling follows LICENSE.md.
+
 import type { AdapterContext, DecisionRequest } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { HttpDecisionProvider } from "./http-decisions.js";
@@ -117,6 +121,24 @@ describe.each(["openrouter", "typesafe"] as const)("%s decision conformance", (p
 });
 
 describe("decision provider failures", () => {
+  it.each([
+    [402, "credits_required"],
+    [404, "model_unavailable"],
+  ] as const)(
+    "classifies OpenRouter HTTP %i without exposing the provider response",
+    async (status, kind) => {
+      await expect(
+        new HttpDecisionProvider("openrouter", {
+          apiKey: "fake-key",
+          fetch: async () => new Response("sensitive provider response", { status }),
+        }).decide(request, context),
+      ).rejects.toMatchObject({
+        kind,
+        message: "Decision provider could not complete the request",
+      });
+    },
+  );
+
   it("refuses a blank API key before any request", () => {
     expect(() => new HttpDecisionProvider("typesafe", { apiKey: " " })).toThrow(
       expect.objectContaining({ kind: "authentication" }),
