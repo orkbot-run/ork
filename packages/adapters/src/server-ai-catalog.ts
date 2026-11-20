@@ -7,6 +7,7 @@ import { AIBudgetSchema, AIModelsSchema } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "@orkbot/db";
 import { runAsSystem, workspaceAdmissionBinding } from "@orkbot/db";
 import { z } from "zod";
+import { modelSupportsZeroDataRetention } from "./model-connection-metadata.js";
 import {
   assertModelEndpointAllowed,
   assertModelProviderAllowed,
@@ -15,7 +16,7 @@ import {
   ModelProviderBlockedError,
 } from "./model-provider-policy.js";
 import { withOAuthRefreshLock } from "./oauth-refresh-lock.js";
-import { oauthCredentialAccountId, parseModelSecret } from "./pi-oauth.js";
+import { oauthCredentialAccountId, parseModelSecret, serializeModelSecret } from "./pi-oauth.js";
 
 const modelsSchema = AIModelsSchema;
 const microsSchema = AIBudgetSchema;
@@ -217,21 +218,25 @@ export class ServerAICatalog {
     ].sort((a, b) => a.spaceId.localeCompare(b.spaceId));
   }
 
-  private metadata(connection: {
-    id: string;
-    provider: string;
-    label: string;
-    state: string;
-    models: unknown;
-    revision: number;
-    concurrencyLimit: number;
-    monthlyBudgetMicros: bigint | null;
-    isDefault?: boolean;
-    defaultModelId?: string | null;
-  }) {
+  private metadata(
+    connection: {
+      id: string;
+      provider: string;
+      label: string;
+      state: string;
+      models: unknown;
+      revision: number;
+      concurrencyLimit: number;
+      monthlyBudgetMicros: bigint | null;
+      isDefault?: boolean;
+      defaultModelId?: string | null;
+    },
+    zeroDataRetention?: boolean,
+  ) {
     return {
       id: connection.id,
       provider: connection.provider,
+      ...(zeroDataRetention !== undefined ? { zeroDataRetention } : {}),
       label: connection.label,
       state: z.enum(["active", "disabled", "reconnect-required"]).parse(connection.state),
       models: modelsSchema.parse(connection.models),
@@ -243,6 +248,22 @@ export class ServerAICatalog {
       monthlyBudgetMicros:
         connection.monthlyBudgetMicros === null ? null : Number(connection.monthlyBudgetMicros),
     };
+  }
+
+  private async privacySetting(connection: {
+    provider: string;
+    secretId: string;
+    secretRef: string;
+  }) {
+    if (!modelSupportsZeroDataRetention(connection.provider)) return undefined;
+    try {
+      const secret = parseModelSecret(
+        await this.deps.secrets.load(connection.secretRef, connection.secretId),
+      );
+      return secret.kind === "api_key" ? secret.zeroDataRetention : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   private async blockedByPolicy(connection: {
@@ -320,10 +341,11 @@ export class ServerAICatalog {
           orderBy: { createdAt: "asc" },
         });
         return Promise.all(
-          rows.map(async (row) => ({
-            ...this.metadata(row),
-            ...((await this.blockedByPolicy(row)) ? { blockedByPolicy: true } : {}),
-          })),
+          rows.map(async (row) => {
+            if (await this.blockedByPolicy(row))
+              return { ...this.metadata(row), blockedByPolicy: true };
+            return this.metadata(row, await this.privacySetting(row));
+          }),
         );
       },
     );
@@ -439,26 +461,76 @@ export class ServerAICatalog {
       models: string[];
       concurrencyLimit: number;
       monthlyBudgetMicros: number | null;
+      zeroDataRetention?: boolean;
     },
   ) {
-    const data = accountSettingsSchema.parse(input);
+    const { zeroDataRetention, ...settings } = input;
+    const data = accountSettingsSchema.parse(settings);
+    let replacement: Awaited<ReturnType<SecretStore["put"]>> | undefined;
+    let retired: { secretId: string; secretRef: string } | undefined;
     const result = await runAsSystem("update installation AI account limits", async () => {
       const admin = await this.serverAdmin(actor);
-      return this.deps.prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM server_ai_connections WHERE id = ${connectionId} FOR UPDATE`;
-        return this.metadata(
-          await tx.serverAIConnection.update({
-            where: { id: connectionId, localOrganizationId: admin.organizationId },
-            data: {
-              ...data,
-              monthlyBudgetMicros:
-                data.monthlyBudgetMicros === null ? null : BigInt(data.monthlyBudgetMicros),
-              revision: { increment: 1 },
-            },
-          }),
-        );
-      });
+      return withOAuthRefreshLock(
+        this.deps.prisma,
+        "server-ai-oauth-v2",
+        connectionId,
+        async (tx) => {
+          await tx.$queryRaw`SELECT id FROM server_ai_connections WHERE id = ${connectionId} FOR UPDATE`;
+          let effectivePrivacy: boolean | undefined;
+          if (zeroDataRetention !== undefined) {
+            const account = await tx.serverAIConnection.findUniqueOrThrow({
+              where: { id: connectionId, localOrganizationId: admin.organizationId },
+            });
+            if (modelSupportsZeroDataRetention(account.provider)) {
+              assertModelProviderAllowed(account.provider);
+              const current = parseModelSecret(
+                await this.deps.secrets.load(account.secretRef, account.secretId),
+              );
+              if (current.kind !== "api_key") return deny("invalid");
+              effectivePrivacy = zeroDataRetention;
+              if ((current.zeroDataRetention ?? false) !== zeroDataRetention) {
+                replacement = await this.deps.secrets.put(
+                  serializeModelSecret({ ...current, zeroDataRetention }),
+                  {
+                    ...actor,
+                    operationId: `ai-zdr:${connectionId}`,
+                    traceId: `ai-zdr:${connectionId}`,
+                    signal: AbortSignal.timeout(15_000),
+                  },
+                  { recordId: randomUUID() },
+                );
+                retired = account;
+              }
+            } else if (zeroDataRetention) return deny("invalid");
+          }
+          return this.metadata(
+            await tx.serverAIConnection.update({
+              where: { id: connectionId, localOrganizationId: admin.organizationId },
+              data: {
+                ...data,
+                monthlyBudgetMicros:
+                  data.monthlyBudgetMicros === null ? null : BigInt(data.monthlyBudgetMicros),
+                revision: { increment: 1 },
+                ...(replacement
+                  ? {
+                      secretId: replacement.id,
+                      secretRef: replacement.ref,
+                      credentialVersion: { increment: 1 },
+                    }
+                  : {}),
+              },
+            }),
+            effectivePrivacy,
+          );
+        },
+      );
+    }).catch(async (error) => {
+      if (replacement)
+        await this.deps.secrets.delete(replacement.ref, replacement.id).catch(() => undefined);
+      throw error;
     });
+    if (retired)
+      await this.deps.secrets.delete(retired.secretRef, retired.secretId).catch(() => undefined);
     await this.notifyAccount(connectionId);
     return result;
   }
@@ -498,6 +570,25 @@ export class ServerAICatalog {
           const current = parseModelSecret(
             await this.deps.secrets.load(account.secretRef, account.secretId),
           );
+          if (
+            next.kind === "api_key" &&
+            next.zeroDataRetention === true &&
+            !modelSupportsZeroDataRetention(account.provider)
+          )
+            return deny("invalid");
+          const nextSecret =
+            next.kind === "api_key" &&
+            current.kind === "api_key" &&
+            next.zeroDataRetention === undefined &&
+            current.zeroDataRetention !== undefined
+              ? { ...next, zeroDataRetention: current.zeroDataRetention }
+              : next;
+          if (
+            current.kind === "api_key" &&
+            current.zeroDataRetention === true &&
+            nextSecret.kind !== "api_key"
+          )
+            return deny("invalid");
           if ((account.provider === "openai-compatible") !== (next.kind === "openai_compatible"))
             return deny("invalid");
           if (current.kind === "oauth" && !current.reconnectRequired && next.kind === "oauth") {
@@ -506,7 +597,7 @@ export class ServerAICatalog {
             if (before && after && before !== after) return deny("invalid");
           }
           const stored = await this.deps.secrets.put(
-            plaintext,
+            nextSecret === next ? plaintext : serializeModelSecret(nextSecret),
             {
               ...actor,
               operationId: `ai-reconnect:${connectionId}`,
@@ -535,6 +626,7 @@ export class ServerAICatalog {
                 revision: { increment: 1 },
               },
             }),
+            nextSecret.kind === "api_key" ? nextSecret.zeroDataRetention : undefined,
           );
         },
       );
@@ -578,6 +670,12 @@ export class ServerAICatalog {
       data.provider,
       secret.kind === "openai_compatible" ? secret.baseUrl : undefined,
     );
+    if (
+      secret.kind === "api_key" &&
+      secret.zeroDataRetention === true &&
+      !modelSupportsZeroDataRetention(data.provider)
+    )
+      return deny("invalid");
     const id = randomUUID();
     return runAsSystem("create an installation-owned AI account", async () => {
       const admin = await this.serverAdmin(actor);
@@ -651,7 +749,7 @@ export class ServerAICatalog {
             });
           return account;
         });
-        return this.metadata(row);
+        return this.metadata(row, secret.kind === "api_key" ? secret.zeroDataRetention : undefined);
       } catch (error) {
         await this.deps.secrets.delete(stored.ref, stored.id).catch(() => undefined);
         throw error;

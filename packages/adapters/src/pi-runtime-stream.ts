@@ -15,6 +15,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import { getLogger } from "@orkbot/logging";
+import { openRouterZdrFetch } from "./openrouter-zdr.js";
 import { codexComputeResidency } from "./pi-oauth.js";
 import {
   modelStreamIdleTimeoutMs,
@@ -220,6 +221,7 @@ function modelResponseBody(
 function modelRequestFetch(
   fetchImpl: ModelsSimpleStreamOptions["fetch"],
   idleTimeoutMs: number,
+  zeroDataRetention = false,
 ): NonNullable<ModelsSimpleStreamOptions["fetch"]> {
   return async (input, init) => {
     // Local and compatible providers attach a package undici dispatcher after this wrapper is
@@ -228,7 +230,10 @@ function modelRequestFetch(
     const transport = usesDispatcher
       ? fetchPairedWithDispatcher(fetchImpl)
       : (fetchImpl ?? globalThis.fetch);
-    const response = await transport(input, init);
+    const response = await (zeroDataRetention ? openRouterZdrFetch(transport) : transport)(
+      input,
+      init,
+    );
     return modelResponseBody(response, idleTimeoutMs, usesDispatcher);
   };
 }
@@ -258,7 +263,11 @@ export function reliableModelStream(
         signal: watchdog.signal,
         fetch: APIS_WITHOUT_CUSTOM_FETCH.has(model.api)
           ? options?.fetch
-          : modelRequestFetch(options?.fetch, modelStreamIdleTimeoutMs()),
+          : modelRequestFetch(
+              options?.fetch,
+              modelStreamIdleTimeoutMs(),
+              (model as Model<Api> & { zeroDataRetention?: boolean }).zeroDataRetention === true,
+            ),
         // Only a 2xx arms the shared watchdog. Error bodies are bounded by
         // the fetch wrapper where supported; caller hooks still see every status.
         onResponse: (response, requestModel) => {

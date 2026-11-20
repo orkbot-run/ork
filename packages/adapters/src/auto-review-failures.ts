@@ -13,6 +13,7 @@ import { ContentDecryptionError } from "@orkbot/db";
 import type { AutoReviewCandidate } from "./auto-review-backups.js";
 import { HostedModelCreditsRequiredError } from "./model-credit-observer.js";
 import { UnavailableModelForAuthError } from "./model-selection.js";
+import { isOpenRouterZdrPolicyFailure } from "./openrouter-zdr.js";
 import { RetiredModelCredentialError } from "./pi-oauth.js";
 import { AIConnectionError } from "./server-ai-catalog.js";
 
@@ -27,6 +28,7 @@ export type AutoReviewFailureCode =
 export type AutoReviewFailureResult = AutoReviewResult & {
   decision: "error";
   failureCode: AutoReviewFailureCode;
+  policyBlocked?: true;
 };
 
 export class AutoReviewConnectionUnavailableError extends Error {}
@@ -50,6 +52,8 @@ function failure(code: AutoReviewFailureCode, model: string): AutoReviewFailureR
 
 /** Match known failure signatures, but never copy an exception's text into the result. */
 export function autoReviewFailure(error: unknown, model: string): AutoReviewFailureResult {
+  if (isOpenRouterZdrPolicyFailure(error))
+    return { ...failure("model_unavailable", model), policyBlocked: true };
   if (
     error instanceof HostedModelCreditsRequiredError ||
     (error instanceof DecisionProviderError && error.kind === "credits_required") ||
@@ -131,7 +135,13 @@ const safeReturnedReasons = new Set([
 /** Returned error text is untrusted too: retain only fixed, provider-neutral diagnostics. */
 export function normalizeAutoReviewFailure(result: AutoReviewResult): AutoReviewFailureResult {
   const code = (result as Partial<AutoReviewFailureResult>).failureCode;
-  if (code && Object.hasOwn(reasons, code)) return failure(code, result.model);
+  if (code && Object.hasOwn(reasons, code))
+    return {
+      ...failure(code, result.model),
+      ...((result as Partial<AutoReviewFailureResult>).policyBlocked
+        ? { policyBlocked: true }
+        : {}),
+    };
   if (result.reason === "Checker could not authenticate.")
     return failure("decision_auth", result.model);
   return {

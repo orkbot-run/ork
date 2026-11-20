@@ -53,6 +53,9 @@ const { push, back, params, rpcCalls, saved, authScope } = vi.hoisted(() => ({
     failBotUpdates: {} as Record<string, "kept" | "changed elsewhere">,
     needsModel: false,
     offerSignIn: false,
+    retentionCatalog: false,
+    supportsZeroDataRetention: false,
+    zeroDataRetention: false,
   },
 }));
 
@@ -112,6 +115,7 @@ vi.mock("./api", () => ({
         {
           provider: "openai-compatible",
           connection: {
+            supportsZeroDataRetention: saved.supportsZeroDataRetention,
             presets: [
               { label: "Ollama Cloud", baseUrl: "https://ollama.com/v1", apiKeyRequired: true },
             ],
@@ -122,6 +126,7 @@ vi.mock("./api", () => ({
         {
           provider: "anthropic",
           providerName: "Anthropic",
+          connection: { supportsZeroDataRetention: saved.supportsZeroDataRetention },
           id: "claude-fixture",
           label: "Claude",
           ...(saved.offerSignIn ? { auth: "both", signIn: "device-code" } : {}),
@@ -139,11 +144,12 @@ vi.mock("./api", () => ({
       return [
         {
           id: "credential-fixture",
-          provider: "openai-compatible",
-          modelId: "model-fixture",
+          provider: saved.retentionCatalog ? "anthropic" : "openai-compatible",
+          modelId: saved.retentionCatalog ? "claude-fixture" : "model-fixture",
           baseUrl: saved.baseUrl,
           hasKey: saved.hasKey,
           headerNames: ["x-session"],
+          zeroDataRetention: saved.zeroDataRetention,
           label: saved.label,
           ...(saved.apiProtocol ? { apiProtocol: saved.apiProtocol } : {}),
           ...(saved.reasoning ? { reasoning: true } : {}),
@@ -931,6 +937,62 @@ it.each([false, true])(
       saved.held = null;
       saved.offerSignIn = false;
       release?.();
+    }
+  },
+);
+
+it.each([true, false])(
+  "initializes and changes the mobile retention opt-in from %s",
+  async (initial) => {
+    saved.supportsZeroDataRetention = true;
+    saved.zeroDataRetention = initial;
+    try {
+      await remount(() => renderConnection());
+      const toggle = field("Zero data retention")!;
+      expect(toggle.checked).toBe(initial);
+      expect(container.textContent).toContain(
+        "Route requests only to endpoints marked as eligible for zero data retention.",
+      );
+      await act(async () => toggle.click());
+      await saveConnection();
+      expect(rpcCalls.find(([procedure]) => procedure === "models/connect")?.[1]).toMatchObject({
+        zeroDataRetention: !initial,
+      });
+    } finally {
+      saved.supportsZeroDataRetention = false;
+      saved.zeroDataRetention = false;
+    }
+  },
+);
+
+it("hides mobile retention controls when support is not advertised", () => {
+  expect(field("Zero data retention")).toBeNull();
+});
+
+it.each([true, false])(
+  "saves a mobile catalog retention change from %s without a replacement key",
+  async (initial) => {
+    saved.retentionCatalog = true;
+    saved.supportsZeroDataRetention = true;
+    saved.zeroDataRetention = initial;
+    try {
+      await remount(() => renderConnection({ provider: "anthropic" }));
+      const toggle = field("Zero data retention")!;
+      expect(toggle.checked).toBe(initial);
+      await act(async () => toggle.click());
+      const save = [...container.querySelectorAll("button")].find(
+        (button) => button.textContent === "Save",
+      )!;
+      expect(save.disabled).toBe(false);
+      await act(async () => save.click());
+      expect(rpcCalls.find(([procedure]) => procedure === "models/connect")?.[1]).toMatchObject({
+        provider: "anthropic",
+        zeroDataRetention: !initial,
+      });
+    } finally {
+      saved.retentionCatalog = false;
+      saved.supportsZeroDataRetention = false;
+      saved.zeroDataRetention = false;
     }
   },
 );

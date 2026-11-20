@@ -53,6 +53,35 @@ describe("stored OpenAI-compatible probe key", () => {
   });
 });
 
+describe("connection Zero Data Retention", () => {
+  const provider = "openrouter";
+  const stub = { id: "connection", provider, label: "OpenRouter" };
+
+  it("preserves explicit ZDR through settings changes and key rotation", () => {
+    const initial = connectAsOwner({ provider, apiKey: "fixture-key", zeroDataRetention: true });
+    const edited = connectAsOwner({ provider, maxTokens: 800 }, initial);
+    const rotated = connectAsOwner({ provider, apiKey: "fixture-replacement-key" }, edited);
+    expect(parseModelSecret(rotated)).toEqual({
+      kind: "api_key",
+      key: "fixture-replacement-key",
+      maxTokens: 800,
+      zeroDataRetention: true,
+    });
+    expect(modelCredentialDto(stub, rotated)).toMatchObject({ zeroDataRetention: true });
+    const cleared = connectAsOwner({ provider, zeroDataRetention: false }, rotated);
+    expect(modelCredentialDto(stub, cleared)).toMatchObject({ zeroDataRetention: false });
+  });
+
+  it("refuses unsupported providers and corrupt persisted flags", () => {
+    expect(() =>
+      connectAsOwner({ provider: "anthropic", apiKey: "fixture-key", zeroDataRetention: true }),
+    ).toThrow("does not support Zero Data Retention");
+    expect(() =>
+      parseModelSecret('{"kind":"api_key","key":"fixture-key","zeroDataRetention":"true"}'),
+    ).toThrow("credential is corrupt");
+  });
+});
+
 describe("built-in provider output limits", () => {
   const row = {
     id: "cred-builtin",

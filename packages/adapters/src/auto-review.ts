@@ -345,6 +345,7 @@ export async function runAutoReviewJudge(
             id: input.checker.model,
             apiKey: input.oauth ? undefined : input.apiKey,
             routing: input.routing,
+            zeroDataRetention: input.zeroDataRetention,
             accountId: input.accountId,
             gatewayId: input.gatewayId,
             baseUrl: input.baseUrl,
@@ -390,9 +391,17 @@ export async function runAutoReviewJudge(
     }
 
     if (timeoutSignal.aborted)
-      return { decision: "error", model: modelLabel, reason: "Checker timed out." };
+      return {
+        decision: "error",
+        model: modelLabel,
+        reason: "Checker timed out.",
+      };
     if (failed || !text) {
-      return { decision: "error", model: modelLabel, reason: "Checker returned no decision." };
+      return {
+        decision: "error",
+        model: modelLabel,
+        reason: "Checker returned no decision.",
+      };
     }
     const parsed = parseAutoReviewJudgeText(text);
     // An unreadable verdict gets one more try before the owner is asked.
@@ -410,6 +419,7 @@ export type LlmAutoReviewOptions = {
   runtime: AgentRuntime;
   checker: AutoReviewChecker;
   apiKey?: string;
+  zeroDataRetention?: boolean;
   routing?: AgentRunModel["routing"];
   accountId?: string;
   gatewayId?: string;

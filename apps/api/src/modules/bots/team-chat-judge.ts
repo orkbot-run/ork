@@ -13,6 +13,7 @@ import {
   hostedModelCreditObserver,
   isModelEndpointAllowed,
   isModelProviderAllowed,
+  modelSupportsZeroDataRetention,
   parseModelSecret,
   resolveMemberMainModel,
   resolveStoredModelAuth,
@@ -278,12 +279,33 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
       (await hasHostedModelCredits(this.deps.prisma, scope, provider));
     if (!credential || hosted) {
       if (!isModelEndpointAllowed(provider)) return null;
+      let zeroDataRetention: boolean | undefined;
+      if (hosted && modelSupportsZeroDataRetention(provider)) {
+        const policyCredential =
+          credential ?? (await findModelCredential(this.deps.prisma, scope, provider, modelId));
+        if (policyCredential) {
+          const saved = await this.deps.prisma.secret.findFirst({
+            where: { id: policyCredential.secretId, userId: bot.userId, spaceId: null },
+          });
+          if (!saved) return null;
+          const secret = parseModelSecret(await this.deps.secrets.load(saved.ciphertext, saved.id));
+          if (secret.kind === "api_key") zeroDataRetention = secret.zeroDataRetention;
+        }
+      }
       const apiKey =
         provider === this.deps.deploymentProvider ? this.deps.deploymentModelKey : undefined;
       const callObserver = settings?.modelCreditsEnabled
         ? await hostedModelCreditObserver(this.deps.prisma, scope)
         : undefined;
-      return { model: { provider, id: modelId, ...(apiKey ? { apiKey } : {}), callObserver } };
+      return {
+        model: {
+          provider,
+          id: modelId,
+          ...(apiKey ? { apiKey } : {}),
+          ...(zeroDataRetention !== undefined ? { zeroDataRetention } : {}),
+          callObserver,
+        },
+      };
     }
 
     const secret = await this.deps.prisma.secret.findFirst({
@@ -375,6 +397,9 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
         provider,
         id: modelId,
         apiKey: auth.apiKey,
+        ...(parsed.zeroDataRetention !== undefined
+          ? { zeroDataRetention: parsed.zeroDataRetention }
+          : {}),
         ...limit,
         ...context,
       },

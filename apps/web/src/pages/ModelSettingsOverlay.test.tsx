@@ -1942,3 +1942,63 @@ it("changes the managed default with one captured-server request and preserves t
     await view.unmount();
   }
 });
+
+it.each([true, false])(
+  "shows the advertised retention opt-in and saves a change from %s without replacing the key",
+  async (initial) => {
+    const entry = { ...deepseekEntry, connection: { supportsZeroDataRetention: true } };
+    models.list.mockResolvedValue([entry]);
+    models.credentials.mockResolvedValue([
+      {
+        id: "retention-credential",
+        provider: entry.provider,
+        modelId: entry.id,
+        label: "Fixture",
+        hasKey: true,
+        isDefault: true,
+        zeroDataRetention: initial,
+      },
+    ]);
+    const view = await renderSettings();
+    try {
+      await manage();
+      const toggle = view.container.querySelector<HTMLButtonElement>(
+        '[role="switch"][aria-label="Zero data retention"]',
+      );
+      expect(toggle?.getAttribute("aria-checked")).toBe(String(initial));
+      expect(document.getElementById(toggle!.getAttribute("aria-describedby")!)?.textContent).toBe(
+        "Route requests only to endpoints marked as eligible for zero data retention.",
+      );
+      await click(toggle!);
+      await click(buttons(view.container, "Save")[0]);
+      expect(models.connect).toHaveBeenCalledWith(
+        expect.objectContaining({
+          credentialId: "retention-credential",
+          zeroDataRetention: !initial,
+        }),
+      );
+    } finally {
+      await view.unmount();
+    }
+  },
+);
+
+it("hides the retention opt-in when the provider does not advertise support", async () => {
+  models.credentials.mockResolvedValue([
+    {
+      id: "retention-credential",
+      provider: deepseekEntry.provider,
+      modelId: deepseekEntry.id,
+      label: "Fixture",
+      hasKey: true,
+      isDefault: true,
+    },
+  ]);
+  const view = await renderSettings();
+  try {
+    await manage();
+    expect(view.container.querySelector('[aria-label="Zero data retention"]')).toBeNull();
+  } finally {
+    await view.unmount();
+  }
+});

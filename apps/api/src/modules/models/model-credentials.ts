@@ -14,11 +14,13 @@ import {
   defaultCatalogModelId,
   ModelProviderBlockedError,
   modelCredentialDto,
+  modelSupportsZeroDataRetention,
   parseModelSecret,
   prepareAllowedThinkingLevels as prepareModelThinkingLevels,
   providerCatalogCache,
   releaseUserRoutineAccountBackoffs,
   resolveCodexOAuthDefaultModel,
+  UNSUPPORTED_ZERO_DATA_RETENTION,
   validateModelAuthAvailability,
   verifyCatalogProviderApiKey,
   verifyOpenAiCompatibleApiKey,
@@ -136,6 +138,8 @@ type ModelCredentialInput = {
   provider: string;
   /** The connection to update, or null to add one. */
   credentialId: string | null;
+  /** Secret snapshot used to preserve settings omitted by the client. */
+  expectedSecretId?: string;
   plaintext: string;
   label?: string;
   modelId?: string;
@@ -159,6 +163,12 @@ export async function prepareModelCredential(
   assertAllowedModelSecret(input.provider, input.plaintext);
   throwIfAborted(input.signal);
   const parsedSecret = parseModelSecret(input.plaintext);
+  if (
+    parsedSecret.kind === "api_key" &&
+    parsedSecret.zeroDataRetention === true &&
+    !modelSupportsZeroDataRetention(input.provider)
+  )
+    throw new ORPCError("BAD_REQUEST", { message: UNSUPPORTED_ZERO_DATA_RETENTION });
   const requestedModelId = usableModelId(input.modelId);
   const resolvedCodexModelId =
     canonicalPiProviderId(input.provider) === CHATGPT_OAUTH_PROVIDER &&
@@ -241,6 +251,10 @@ async function writeModelCredential(
   // A connection removed while this save was in flight stays removed.
   if (input.credentialId && !existing)
     throw new ORPCError("NOT_FOUND", { message: "Connection not found" });
+  if (input.expectedSecretId !== undefined && existing?.secretId !== input.expectedSecretId)
+    throw new ORPCError("CONFLICT", {
+      message: "Connection changed while this edit was in progress. Reopen it and try again.",
+    });
   throwIfAborted(input.signal);
   const secret = await tx.secret.create({
     data: {
@@ -352,6 +366,8 @@ export function createModelConnector(deps: RouterDeps, codexCatalog: CodexLiveCa
     signal: AbortSignal | undefined,
   ) => {
     assertAllowedModelProvider(input.provider);
+    if (input.zeroDataRetention === true && !modelSupportsZeroDataRetention(input.provider))
+      throw new ORPCError("BAD_REQUEST", { message: UNSUPPORTED_ZERO_DATA_RETENTION });
     if (input.baseUrl !== undefined) assertAllowedModelEndpoint(input.provider, input.baseUrl);
     const credential = await modelConnectionTarget(deps, actor, input.provider, input.credentialId);
     let plaintext: string;
@@ -374,11 +390,20 @@ export function createModelConnector(deps: RouterDeps, codexCatalog: CodexLiveCa
             // wiping other enabled models.
             if (error instanceof ORPCError && error.code === "FORBIDDEN") throw error;
             if (input.apiKey === undefined) throw error;
+            previousPlaintext = undefined;
             if (input.provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
               omitVisionModelIds = true;
             }
           }
         }
+        if (
+          modelSupportsZeroDataRetention(input.provider) &&
+          input.zeroDataRetention === undefined &&
+          previousPlaintext === undefined
+        )
+          throw new Error(
+            "Choose whether to require Zero Data Retention before replacing this key.",
+          );
       }
       plaintext = buildModelConnectPlaintext(input, previousPlaintext, {
         omitVisionModelIds,
@@ -449,6 +474,10 @@ export function createModelConnector(deps: RouterDeps, codexCatalog: CodexLiveCa
       {
         provider: input.provider,
         credentialId: credential?.id ?? null,
+        expectedSecretId:
+          input.zeroDataRetention === undefined && modelSupportsZeroDataRetention(input.provider)
+            ? credential?.secretId
+            : undefined,
         plaintext,
         label: input.label,
         modelId: input.modelId,

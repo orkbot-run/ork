@@ -48,6 +48,16 @@ the preset at `ollama.com`. Existing blocked connections appear in model setting
 with an explanation and cannot be used for runs. The compatible endpoint network
 settings also apply to custom URLs.
 
+## Zero Data Retention
+
+OpenRouter connections can require Zero Data Retention in model settings. Ork
+requests routing only to endpoints that OpenRouter marks as eligible and reports
+an unavailable model when none can serve the request. The connection's API key
+can be verified independently of the model's endpoint availability.
+
+The setting applies to provider routing. Ork's chat and workspace storage follow
+the installation's data settings. See [OpenRouter's routing documentation](https://openrouter.ai/docs/guides/routing/provider-selection).
+
 ## Approvals
 
 Approvals have three modes in **Settings → Approvals**: Never ask runs every action, Auto lets an

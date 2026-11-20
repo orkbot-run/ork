@@ -266,6 +266,31 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
     }
   });
 
+  it("stores a managed OpenRouter ZDR toggle across unrelated updates and key rotation", async () => {
+    const initial = { ...input(), provider: "openrouter" };
+    const account = await catalog.create(admin, initial);
+    const settings = {
+      label: "Renamed",
+      models: initial.models,
+      concurrencyLimit: 4,
+      monthlyBudgetMicros: null,
+    };
+    await catalog.update(admin, account.id, { ...settings, zeroDataRetention: true });
+    await catalog.update(admin, account.id, settings);
+    await catalog.reconnect(admin, account.id, "fixture-rotated-api-key");
+    expect(await catalog.accounts(admin)).toEqual([
+      expect.objectContaining({ zeroDataRetention: true }),
+    ]);
+    const models = new ServerAIModels({ prisma: prisma!, secrets, catalog });
+    const resolved = await models.resolve(member);
+    expect(resolved).toMatchObject({ model: { zeroDataRetention: true } });
+    await resolved?.dispose();
+    await catalog.update(admin, account.id, { ...settings, zeroDataRetention: false });
+    expect(await catalog.accounts(admin)).toEqual([
+      expect.objectContaining({ zeroDataRetention: false }),
+    ]);
+  });
+
   it("makes the first verified connection the server default without client assignment calls", async () => {
     await system(() =>
       prisma!.installationIdentity.update({

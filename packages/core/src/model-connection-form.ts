@@ -126,6 +126,7 @@ export type ConnectionFormFields = {
   supportsImages: boolean;
   maxImagesPerPrompt: string;
   routing: Record<string, string>;
+  zeroDataRetention?: boolean;
 };
 
 /**
@@ -174,6 +175,7 @@ export function connectionFormFields(input: {
     | "supportsImages"
     | "maxImagesPerPrompt"
     | "routing"
+    | "zeroDataRetention"
   >;
   /** Prefills a new compatible connection from catalog metadata. */
   presetBaseUrl?: string;
@@ -200,6 +202,7 @@ export function connectionFormFields(input: {
     supportsImages: credential?.supportsImages ?? false,
     maxImagesPerPrompt: String(credential?.maxImagesPerPrompt ?? ""),
     routing: credential?.routing ?? {},
+    zeroDataRetention: credential?.zeroDataRetention ?? false,
   };
 }
 
@@ -262,7 +265,10 @@ export function modelConnectRequest(input: {
     ModelCatalogEntry,
     "provider" | "providerName" | "id" | "thinkingLevels" | "connection"
   >;
-  credential?: Pick<ModelCredential, "modelId" | "thinkingLevel" | "hasKey" | "baseUrl">;
+  credential?: Pick<
+    ModelCredential,
+    "modelId" | "thinkingLevel" | "hasKey" | "baseUrl" | "zeroDataRetention"
+  >;
   credentialId: string | null;
   settingsOnly?: boolean;
   makeDefault?: { makeDefault: boolean; scope: SettingsScope };
@@ -317,6 +323,12 @@ export function modelConnectRequest(input: {
         : []
       : selected.thinkingLevels,
   ) as ThinkingLevel | null;
+  const zeroDataRetention =
+    selected.connection?.supportsZeroDataRetention &&
+    form.zeroDataRetention !== undefined &&
+    form.zeroDataRetention !== (credential?.zeroDataRetention ?? false)
+      ? { zeroDataRetention: form.zeroDataRetention }
+      : {};
   const label = selected.providerName ?? selected.provider;
   if (compatible) {
     return {
@@ -338,6 +350,7 @@ export function modelConnectRequest(input: {
         supportsImages: form.supportsImages,
         maxImagesPerPrompt:
           form.supportsImages && !form.maxImagesPerPrompt.trim() ? null : maxImagesPerPrompt,
+        ...zeroDataRetention,
         ...makeDefault,
         apiKey: form.apiKey.trim() || undefined,
         label,
@@ -364,6 +377,7 @@ export function modelConnectRequest(input: {
       ...(!savingLimitOnly || modelChanged || (form.thinkingLevel ?? null) !== storedThinking
         ? { thinkingLevel }
         : {}),
+      ...zeroDataRetention,
       ...makeDefault,
       maxTokens: maxTokens ?? null,
       label,

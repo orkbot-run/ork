@@ -114,6 +114,28 @@ postgres("workspace model API with PostgreSQL", () => {
       code: "FORBIDDEN",
     });
   });
+  it("preserves workspace ZDR through an older client's key edit until explicitly cleared", async () => {
+    const connection = {
+      provider: "openrouter",
+      modelId: "example/model",
+      apiKey: secret,
+      credentialId: null,
+    };
+    await owner.models.setWorkspacePolicy({ ...connection, zeroDataRetention: true });
+    await owner.models.setWorkspacePolicy(connection);
+    expect(await member.models.workspacePolicy()).toMatchObject({
+      policy: { zeroDataRetention: true },
+    });
+    const resolved = await runAsTenant({ userId: memberId, spaceId }, () =>
+      resolveWorkspaceModel({ prisma: runtimeDb.prisma, secretStore }, spaceId),
+    );
+    expect(resolved?.model.zeroDataRetention).toBe(true);
+    await owner.models.setWorkspacePolicy({ ...connection, zeroDataRetention: false });
+    expect(await owner.models.workspacePolicy()).toMatchObject({
+      policy: { zeroDataRetention: false },
+    });
+  });
+
   it("keeps the shared credential when its owner is removed", async () => {
     await ownerDb.prisma.user.delete({ where: { id: ownerId } });
     const resolved = await runAsTenant({ userId: memberId, spaceId }, () =>

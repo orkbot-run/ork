@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { serializeModelSecret } from "@orkbot/adapters";
+import { parseModelSecret, serializeModelSecret } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import { createRouterClient } from "@orpc/server";
 import { afterEach, expect, it, vi } from "vitest";
@@ -62,6 +62,40 @@ it("rejects a blocked connection before reading a saved key or probing the provi
   expect(deps.prisma.userModelCredential.findFirst).not.toHaveBeenCalled();
   expect(deps.secrets.load).not.toHaveBeenCalled();
   expect(deps.modelConnectionFetch).not.toHaveBeenCalled();
+});
+
+it("stores the OpenRouter ZDR choice separately from standard key verification", async () => {
+  vi.stubEnv("ORKBOT_MODEL_PROVIDER_ALLOWLIST", "openrouter");
+  const { deps, connector } = setup();
+  vi.mocked(deps.modelConnectionFetch!).mockResolvedValue(new Response("{}"));
+  const { plaintext } = await connector.verifyModelConnection(
+    actor,
+    {
+      provider: "openrouter",
+      apiKey: "fixture-key",
+      modelId: "fixture/model",
+      zeroDataRetention: true,
+    },
+    undefined,
+  );
+  expect(parseModelSecret(plaintext)).toMatchObject({ zeroDataRetention: true });
+  const probe = vi.mocked(deps.modelConnectionCheck!);
+  expect(probe).toHaveBeenCalledOnce();
+  expect(probe.mock.calls[0]?.[0]).not.toHaveProperty("zeroDataRetention");
+});
+
+it("rejects ZDR for unsupported credentials before probing the provider", async () => {
+  vi.stubEnv("ORKBOT_MODEL_PROVIDER_ALLOWLIST", "openai");
+  const { deps, connector } = setup();
+  await expect(
+    connector.verifyModelConnection(
+      actor,
+      { provider: "openai", apiKey: "fixture-key", zeroDataRetention: true },
+      undefined,
+    ),
+  ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  expect(deps.modelConnectionFetch).not.toHaveBeenCalled();
+  expect(deps.modelConnectionCheck).not.toHaveBeenCalled();
 });
 
 it("rejects custom compatible endpoints before reading credentials under a preset-only policy", async () => {

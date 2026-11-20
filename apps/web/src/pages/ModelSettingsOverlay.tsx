@@ -27,6 +27,7 @@ import {
   DialogTitle,
   ModelThinkingOptions,
   Spinner,
+  Switch,
 } from "@orkbot/ui-web";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
@@ -298,6 +299,35 @@ function LegacyModelSettingsOverlay({
             // A rename touches only the label; keep any unsaved form fields.
             onRenamed={() => void refresh({ keepForm: true })}
           />
+        ) : null}
+        {selected?.connection?.supportsZeroDataRetention && !credential?.blockedByPolicy ? (
+          <>
+            <label
+              htmlFor={"model-zero-data-retention"}
+              className="my-4 flex items-center justify-between gap-3 text-sm"
+            >
+              <Trans>Zero data retention</Trans>
+              <Switch
+                id={"model-zero-data-retention"}
+                aria-label={t`Zero data retention`}
+                aria-describedby={"model-zero-data-retention-description"}
+                checked={model.zeroDataRetention}
+                disabled={busy}
+                onCheckedChange={(value) => {
+                  model.setZeroDataRetention(value);
+                  model.invalidatePreflight();
+                }}
+              />
+            </label>
+            <p
+              id={"model-zero-data-retention-description"}
+              className="text-sm text-muted-foreground"
+            >
+              <Trans>
+                Route requests only to endpoints marked as eligible for zero data retention.
+              </Trans>
+            </p>
+          </>
         ) : null}
         {connection}
       </fieldset>

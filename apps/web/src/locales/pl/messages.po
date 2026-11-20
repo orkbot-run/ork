@@ -7872,3 +7872,9 @@ msgstr "Obserwowanie adresu HTTPS wymaga zatwierdzenia."
 #: src/pages/model-settings/providers-section.tsx
 msgid "Blocked by the server administrator"
 msgstr "Zablokowane przez administratora serwera"
+
+msgid "Zero data retention"
+msgstr "Zero retencji danych"
+
+msgid "Route requests only to endpoints marked as eligible for zero data retention."
+msgstr "Wysyłaj żądania tylko do endpointów oznaczonych jako nieprzechowujące danych."

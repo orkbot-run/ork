@@ -495,6 +495,7 @@ export interface AgentRunModel {
   callObserver?: ModelCallObserver;
   cacheCapabilities?: CacheCapabilities;
   provider: string;
+  zeroDataRetention?: boolean;
   id: string;
   /** Opaque id of the stored connection serving it, so a model can fall back to another account. */
   connectionId?: string;

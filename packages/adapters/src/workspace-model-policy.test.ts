@@ -21,6 +21,36 @@ const context = {
 };
 
 describe("workspace model policy", () => {
+  it("keeps the workspace ZDR requirement through main and connected model resolution", async () => {
+    const secretStore = new EncryptedSecretStore("test-only-encryption-key-not-used-outside-tests");
+    const record = await secretStore.put(
+      serializeModelSecret({
+        kind: "api_key",
+        key: "private-test-api-key",
+        zeroDataRetention: true,
+      }),
+      context,
+    );
+    const prisma = {
+      workspaceModelPolicy: {
+        findFirst: vi.fn().mockResolvedValue({
+          provider: "openrouter",
+          modelId: "company-model",
+          secretId: record.id,
+          secretRef: record.ref,
+        }),
+      },
+    };
+    const deps = { prisma, secretStore } as unknown as ExecutorDeps;
+    await expect(resolveRunModel(deps, context)).resolves.toMatchObject({
+      provider: "openrouter",
+      id: "company-model",
+      zeroDataRetention: true,
+    });
+    await expect(
+      resolveConnectedRunModel(deps, context, "openrouter", "company-model"),
+    ).resolves.toMatchObject({ zeroDataRetention: true });
+  });
   it("restores a paused computer turn only when both saved models match the workspace", async () => {
     const secretStore = new EncryptedSecretStore("test-only-encryption-key-not-used-outside-tests");
     const record = await secretStore.put("private-test-api-key", context);

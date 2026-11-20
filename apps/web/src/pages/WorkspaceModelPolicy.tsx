@@ -19,6 +19,7 @@ import {
   Label,
   NativeSelect,
   NativeSelectOption,
+  Switch,
 } from "@orkbot/ui-web";
 import { useEffect, useId, useRef, useState } from "react";
 import type { RpcClient } from "../lib/rpc";
@@ -33,7 +34,12 @@ export function WorkspaceModelPolicy({
 }: {
   value: {
     canManage: boolean;
-    policy: { provider: string; modelId: string; blockedByPolicy?: boolean } | null;
+    policy: {
+      provider: string;
+      modelId: string;
+      blockedByPolicy?: boolean;
+      zeroDataRetention?: boolean;
+    } | null;
   };
   catalog: ModelCatalogEntry[];
   client: RpcClient;
@@ -51,6 +57,7 @@ export function WorkspaceModelPolicy({
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [routing, setRouting] = useState<Record<string, string>>({});
+  const [zeroDataRetention, setZeroDataRetention] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const operation = useRef<AbortController | null>(null);
@@ -81,6 +88,7 @@ export function WorkspaceModelPolicy({
     setBaseUrl(option?.baseUrl ?? "");
     setApiProtocol(option?.apiProtocol ?? "chat-completions");
     setRouting({});
+    setZeroDataRetention(policy?.zeroDataRetention ?? false);
     setError(null);
     setEditing(true);
   }
@@ -101,6 +109,7 @@ export function WorkspaceModelPolicy({
             credentialId: null,
             ...(compatible ? { baseUrl: baseUrl.trim(), apiProtocol } : {}),
             ...(fields.length ? { routing } : {}),
+            ...(selected?.connection?.supportsZeroDataRetention ? { zeroDataRetention } : {}),
           },
           { signal: controller.signal },
         );
@@ -175,6 +184,7 @@ export function WorkspaceModelPolicy({
                 setModelId("");
                 setApiKey("");
                 setRouting({});
+                setZeroDataRetention(false);
               }}
             >
               <NativeSelectOption value="" disabled>{t`Choose a provider`}</NativeSelectOption>
@@ -217,6 +227,32 @@ export function WorkspaceModelPolicy({
                   readOnly={selected?.connection?.customEndpointAllowed === false}
                   required
                 />
+              </>
+            ) : null}
+            {selected?.connection?.supportsZeroDataRetention ? (
+              <>
+                <label
+                  htmlFor={`${id}-zero-data-retention`}
+                  className="flex items-center justify-between gap-3 text-sm"
+                >
+                  <Trans>Zero data retention</Trans>
+                  <Switch
+                    id={`${id}-zero-data-retention`}
+                    aria-label={t`Zero data retention`}
+                    aria-describedby={`${id}-zero-data-retention-description`}
+                    checked={zeroDataRetention}
+                    disabled={busy}
+                    onCheckedChange={setZeroDataRetention}
+                  />
+                </label>
+                <p
+                  id={`${id}-zero-data-retention-description`}
+                  className="text-sm text-muted-foreground"
+                >
+                  <Trans>
+                    Route requests only to endpoints marked as eligible for zero data retention.
+                  </Trans>
+                </p>
               </>
             ) : null}
             {fields.map((field) => (

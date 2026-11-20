@@ -275,6 +275,7 @@ export type StoredModelSecret =
   | ({
       kind: "api_key";
       key: string;
+      zeroDataRetention?: boolean;
       maxTokens?: number;
       accountId?: string;
       gatewayId?: string;
@@ -520,6 +521,8 @@ export function parseModelSecret(plaintext: string): StoredModelSecret {
     if (typeof parsed.key !== "string" || !parsed.key) {
       throw new Error(CORRUPT_MODEL_SECRET_MESSAGE);
     }
+    if (parsed.zeroDataRetention !== undefined && typeof parsed.zeroDataRetention !== "boolean")
+      throw new Error(CORRUPT_MODEL_SECRET_MESSAGE);
     const maxTokens = parsedMaxTokens(parsed.maxTokens);
     const accountId = parsedRoutingId(parsed.accountId);
     const gatewayId = parsedRoutingId(parsed.gatewayId);
@@ -527,6 +530,9 @@ export function parseModelSecret(plaintext: string): StoredModelSecret {
     return {
       kind: "api_key",
       key: parsed.key,
+      ...(typeof parsed.zeroDataRetention === "boolean"
+        ? { zeroDataRetention: parsed.zeroDataRetention }
+        : {}),
       ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...(accountId ? { accountId } : {}),
       ...(gatewayId ? { gatewayId } : {}),
@@ -593,6 +599,7 @@ export function serializeModelSecret(secret: StoredModelSecret): string {
   }
   if (
     secret.maxTokens === undefined &&
+    secret.zeroDataRetention === undefined &&
     secret.accountId === undefined &&
     secret.gatewayId === undefined &&
     secret.routing === undefined &&
@@ -604,6 +611,9 @@ export function serializeModelSecret(secret: StoredModelSecret): string {
   return JSON.stringify({
     kind: "api_key",
     key: secret.key,
+    ...(secret.zeroDataRetention !== undefined
+      ? { zeroDataRetention: secret.zeroDataRetention }
+      : {}),
     ...(secret.maxTokens !== undefined ? { maxTokens: secret.maxTokens } : {}),
     ...(secret.accountId ? { accountId: secret.accountId } : {}),
     ...(secret.gatewayId ? { gatewayId: secret.gatewayId } : {}),

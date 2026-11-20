@@ -128,6 +128,7 @@ export function useModelSettings(onClose: () => void, scope: SettingsScope) {
   const [enabledModelIds, setEnabledModelIds] = useState<string[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [routing, setRouting] = useState<Record<string, string>>({});
+  const [zeroDataRetention, setZeroDataRetention] = useState(false);
   const [baseUrl, setBaseUrl] = useState("");
   const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>("chat-completions");
   const [headerRows, setHeaderRows] = useState<ModelHeaderRow[] | null>(null);
@@ -267,6 +268,7 @@ export function useModelSettings(onClose: () => void, scope: SettingsScope) {
     setSupportsImages(fields.supportsImages);
     setMaxImagesPerPrompt(fields.maxImagesPerPrompt);
     setRouting(fields.routing);
+    setZeroDataRetention(fields.zeroDataRetention ?? false);
   }
 
   useLayoutEffect(() => {
@@ -378,7 +380,9 @@ export function useModelSettings(onClose: () => void, scope: SettingsScope) {
   const settingsDirty =
     !isOpenAiCompatible &&
     Boolean(credential) &&
-    (maxTokens.trim() !== connectionMaxTokensField(provider, credential?.maxTokens) ||
+    ((selected?.connection?.supportsZeroDataRetention &&
+      zeroDataRetention !== (credential?.zeroDataRetention ?? false)) ||
+      maxTokens.trim() !== connectionMaxTokensField(provider, credential?.maxTokens) ||
       (routingFields.length > 0 &&
         routingFields.some(
           (field) => (routing[field.key] ?? "").trim() !== (credential?.routing?.[field.key] ?? ""),
@@ -607,6 +611,7 @@ export function useModelSettings(onClose: () => void, scope: SettingsScope) {
         supportsImages,
         maxImagesPerPrompt,
         routing,
+        zeroDataRetention,
       },
       selected,
       credential,
@@ -738,6 +743,8 @@ export function useModelSettings(onClose: () => void, scope: SettingsScope) {
     savedHeaderEndpointMatches,
     acceptsKey,
     routing,
+    zeroDataRetention,
+    setZeroDataRetention,
     routingFields,
     setRouting: (value: Parameters<typeof setRouting>[0]) => {
       invalidatePreflight();

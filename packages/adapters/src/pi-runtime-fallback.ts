@@ -34,6 +34,7 @@ import { estimateModelContextTokens } from "./model-context.js";
 import { assertModelEndpointAllowed, assertModelProviderAllowed } from "./model-provider-policy.js";
 import { IMAGE_RETURNING_COMPUTER_TOOLS } from "./model-vision.js";
 import { affordableOpenRouterOutput } from "./openrouter-output-budget.js";
+import { isOpenRouterZdrUnavailable } from "./openrouter-zdr.js";
 import { estimatePiImageTokens } from "./pi-image-context.js";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "./pi-openai-compatible-provider.js";
 import { assistantText, messageHasToolCall, sanitizeProviderError } from "./pi-runtime-errors.js";
@@ -368,7 +369,11 @@ export function fallbackAwareModelStream(
       if (!hasBufferedToolCall()) throw error;
       failure = thrownFailure(target, error);
     }
-    yield { type: "error", reason: failure.stopReason as "error" | "aborted", error: failure };
+    yield {
+      type: "error",
+      reason: failure.stopReason as "error" | "aborted",
+      error: failure,
+    };
   };
   const failIfAborted = (target: RuntimeModelTarget) => {
     if (!signalAborted()) return false;
@@ -395,7 +400,7 @@ export function fallbackAwareModelStream(
         });
       try {
         assertModelProviderAllowed(choice.provider);
-        const config = state.request.resolveFallbackModel
+        let config = state.request.resolveFallbackModel
           ? await state.request.resolveFallbackModel(
               choice.provider,
               choice.id,
@@ -412,6 +417,16 @@ export function fallbackAwareModelStream(
         if (!config.apiKey && !config.oauth && config.provider !== OPENAI_COMPATIBLE_PROVIDER_ID) {
           skip("No credential is available for the backup model.");
           continue;
+        }
+        if (
+          state.request.model.zeroDataRetention === true ||
+          current.config.zeroDataRetention === true
+        ) {
+          if (config.provider !== "openrouter") {
+            skip("The backup cannot enforce OpenRouter Zero Data Retention.");
+            continue;
+          }
+          config = { ...config, zeroDataRetention: true };
         }
         const resolved = resolveRuntimeModel(config);
         if (
@@ -546,6 +561,11 @@ export function fallbackAwareModelStream(
         )) {
           if (event.type === "error") {
             recordFailure(target, event.error.errorMessage ?? "Model request failed.");
+            if (isOpenRouterZdrUnavailable(event.error.errorMessage)) {
+              output.push(event);
+              output.end(event.error);
+              return;
+            }
             let terminalEvent = event;
             if (
               bufferedToolCall &&
@@ -650,7 +670,10 @@ export function fallbackAwareModelStream(
                     requestWindow === undefined
                       ? MODEL_CONTEXT_TOO_SMALL_ERROR
                       : MODEL_REQUEST_LIMIT_ERROR;
-                  terminalEvent = { ...event, error: { ...event.error, errorMessage: limitError } };
+                  terminalEvent = {
+                    ...event,
+                    error: { ...event.error, errorMessage: limitError },
+                  };
                   recordFailure(target, limitError);
                 } else {
                   state.onContextLimit(contextWindow);
@@ -806,7 +829,10 @@ export function fallbackAwareModelStream(
             buffered = [];
             const terminal =
               sawVisibleOutput && event.error.content.length === 0 && lastPartial
-                ? { ...event, error: { ...event.error, content: lastPartial.content } }
+                ? {
+                    ...event,
+                    error: { ...event.error, content: lastPartial.content },
+                  }
                 : terminalEvent;
             output.push(terminal);
             output.end(terminal.error);
@@ -913,7 +939,11 @@ export function fallbackAwareModelStream(
               };
               const message: AssistantMessage =
                 state.selfRecoveries >= MAX_SELF_RECOVERIES_PER_RUN
-                  ? { ...ended, stopReason: "error", errorMessage: MODEL_OUTPUT_CUT_ERROR }
+                  ? {
+                      ...ended,
+                      stopReason: "error",
+                      errorMessage: MODEL_OUTPUT_CUT_ERROR,
+                    }
                   : { ...ended, stopReason: "stop" };
               if (message.stopReason === "stop") {
                 state.selfRecoveries += 1;

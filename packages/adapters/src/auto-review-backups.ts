@@ -52,6 +52,7 @@ export async function reviewWithBackups(
       model: `${candidate.provider}/${candidate.model}`,
     });
     logAutoReviewFailure(candidate, failed.failureCode);
+    if (failed.policyBlocked) return failed;
     firstFailure ??= failed;
     if (candidate.role === "member") memberFailure ??= failed;
   }

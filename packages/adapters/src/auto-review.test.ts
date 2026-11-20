@@ -415,6 +415,7 @@ describe("runAutoReviewJudge instructions", () => {
     await runAutoReviewJudge({
       runtime: runtime as never,
       checker: { provider: "openrouter", model: "x", thinkingLevel: "low" },
+      zeroDataRetention: true,
       prompt: "test",
       runId: "run",
       spaceId: "ws",
@@ -423,6 +424,7 @@ describe("runAutoReviewJudge instructions", () => {
       threadId: "thread",
     });
     expect(captured?.model?.thinkingLevel).toBe("low");
+    expect(captured?.model?.zeroDataRetention).toBe(true);
   });
 });
 

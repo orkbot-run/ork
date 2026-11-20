@@ -55,6 +55,7 @@ export function modelFromAIConnection(
       const routing = modelConnectionRouting({ provider: choice.provider }, secret);
       cloudflareProviderEnv({ provider: choice.provider, ...routing });
       Object.assign(model, {
+        zeroDataRetention: secret.zeroDataRetention,
         routing: routing?.routing,
         accountId: routing?.accountId,
         gatewayId: routing?.gatewayId,

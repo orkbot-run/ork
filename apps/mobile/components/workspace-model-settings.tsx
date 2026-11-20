@@ -11,7 +11,7 @@ import { useI18n } from "../lib/i18n";
 import { native } from "../lib/native";
 import { MenuPickerMenu } from "./menu-picker";
 import { NativeActionButton } from "./native-action-button";
-import { SettingsGroup, SettingsInputRow, SettingsRow } from "./settings-group";
+import { SettingsGroup, SettingsInputRow, SettingsRow, SettingsSwitch } from "./settings-group";
 
 /** The captured RPC context keeps edits bound to the originating server and workspace. */
 export function WorkspaceModelSettings({
@@ -23,7 +23,12 @@ export function WorkspaceModelSettings({
 }: {
   value: {
     canManage: boolean;
-    policy: { provider: string; modelId: string; blockedByPolicy?: boolean } | null;
+    policy: {
+      provider: string;
+      modelId: string;
+      blockedByPolicy?: boolean;
+      zeroDataRetention?: boolean;
+    } | null;
   };
   catalog: ModelCatalogEntry[];
   send: typeof rpc;
@@ -39,6 +44,7 @@ export function WorkspaceModelSettings({
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [routing, setRouting] = useState<Record<string, string>>({});
+  const [zeroDataRetention, setZeroDataRetention] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const operation = useRef<AbortController | null>(null);
@@ -69,6 +75,7 @@ export function WorkspaceModelSettings({
     setBaseUrl(option?.baseUrl ?? "");
     setApiProtocol(option?.apiProtocol ?? "chat-completions");
     setRouting({});
+    setZeroDataRetention(policy?.zeroDataRetention ?? false);
     setError(null);
     setEditing(true);
   }
@@ -91,6 +98,7 @@ export function WorkspaceModelSettings({
             credentialId: null,
             ...(compatible ? { baseUrl: baseUrl.trim(), apiProtocol } : {}),
             ...(fields.length ? { routing } : {}),
+            ...(selected?.connection?.supportsZeroDataRetention ? { zeroDataRetention } : {}),
           },
           { signal: controller.signal },
         );
@@ -145,6 +153,7 @@ export function WorkspaceModelSettings({
               setModelId("");
               setApiKey("");
               setRouting({});
+              setZeroDataRetention(false);
             }}
           >
             <View>
@@ -174,6 +183,17 @@ export function WorkspaceModelSettings({
               autoCapitalize="none"
               autoCorrect={false}
               editable={!busy && selected?.connection?.customEndpointAllowed !== false}
+            />
+          ) : null}
+          {selected?.connection?.supportsZeroDataRetention ? (
+            <SettingsSwitch
+              label={t("Zero data retention")}
+              detail={t(
+                "Route requests only to endpoints marked as eligible for zero data retention.",
+              )}
+              value={zeroDataRetention}
+              disabled={busy}
+              onChange={setZeroDataRetention}
             />
           ) : null}
           {fields.map((field) => (

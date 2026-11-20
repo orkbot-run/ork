@@ -538,6 +538,7 @@ export const appContract = {
       .input(
         z.object({
           connectionId: Id,
+          zeroDataRetention: z.boolean().optional(),
           label: z.string().trim().min(1).max(100),
           models: AIModelsSchema,
           concurrencyLimit: z.number().int().min(1).max(128),
@@ -577,6 +578,7 @@ export const appContract = {
             provider: z.string(),
             modelId: z.string(),
             blockedByPolicy: z.boolean().optional(),
+            zeroDataRetention: z.boolean().optional(),
           })
           .nullable(),
       }),

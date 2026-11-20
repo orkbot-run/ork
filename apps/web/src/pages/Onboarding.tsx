@@ -39,6 +39,7 @@ import {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
+  Switch,
 } from "@orkbot/ui-web";
 import { Check, Copy, LoaderCircle } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -107,6 +108,7 @@ export function OnboardingPage() {
   modelIdRef.current = modelId;
   const [apiKey, setApiKey] = useState("");
   const [routing, setRouting] = useState<Record<string, string>>({});
+  const [zeroDataRetention, setZeroDataRetention] = useState(false);
   const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>("chat-completions");
   const [baseUrl, setBaseUrl] = useState("");
   const [headerRows, setHeaderRows] = useState<ModelHeaderRow[] | null>(null);
@@ -228,6 +230,7 @@ export function OnboardingPage() {
           supportsImages,
           maxImagesPerPrompt,
           routing,
+          zeroDataRetention,
         },
         selected,
         credentialId: null,
@@ -324,6 +327,7 @@ export function OnboardingPage() {
     });
     setModelId(nextModel);
     setRouting(fields.routing);
+    setZeroDataRetention(fields.zeroDataRetention ?? false);
     setApiProtocol(fields.apiProtocol);
     setBaseUrl(fields.baseUrl);
     setReasoning(fields.reasoning);
@@ -891,6 +895,35 @@ export function OnboardingPage() {
                       </Button>
                     )}
                   </div>
+                ) : null}
+                {selected?.connection?.supportsZeroDataRetention ? (
+                  <>
+                    <label
+                      htmlFor={`${fieldId}-zero-data-retention`}
+                      className="mt-4 flex items-center justify-between gap-3 text-sm"
+                    >
+                      <Trans>Zero data retention</Trans>
+                      <Switch
+                        id={`${fieldId}-zero-data-retention`}
+                        aria-label={t`Zero data retention`}
+                        aria-describedby={`${fieldId}-zero-data-retention-description`}
+                        checked={zeroDataRetention}
+                        disabled={oauthPending}
+                        onCheckedChange={(value) => {
+                          setZeroDataRetention(value);
+                          invalidatePreflight();
+                        }}
+                      />
+                    </label>
+                    <p
+                      id={`${fieldId}-zero-data-retention-description`}
+                      className="text-sm text-muted-foreground"
+                    >
+                      <Trans>
+                        Route requests only to endpoints marked as eligible for zero data retention.
+                      </Trans>
+                    </p>
+                  </>
                 ) : null}
                 {acceptsKey
                   ? routingFields.map((field) => (

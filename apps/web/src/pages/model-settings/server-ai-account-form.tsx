@@ -17,6 +17,7 @@ import {
   NativeSelect,
   NativeSelectOption,
   Spinner,
+  Switch,
   Textarea,
 } from "@orkbot/ui-web";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -97,6 +98,7 @@ export function ServerAIAccountForm({
   const [budget, setBudget] = useState(formatAIBudget(account?.monthlyBudgetMicros ?? null));
   const [concurrency, setConcurrency] = useState(String(account?.concurrencyLimit ?? 8));
   const [routing, setRouting] = useState<Record<string, string>>({});
+  const [zeroDataRetention, setZeroDataRetention] = useState(account?.zeroDataRetention ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef<AbortController | null>(null);
@@ -211,6 +213,11 @@ export function ServerAIAccountForm({
         throw new Error("Invalid concurrency limit");
       const settings = {
         label: label.trim(),
+        ...(selected?.connection?.supportsZeroDataRetention &&
+        account &&
+        zeroDataRetention !== (account.zeroDataRetention ?? false)
+          ? { zeroDataRetention }
+          : {}),
         models: allowed,
         concurrencyLimit: limit,
         monthlyBudgetMicros: hideBudget
@@ -226,6 +233,7 @@ export function ServerAIAccountForm({
           ? { baseUrl: url.trim(), enabledModelIds: allowed, apiProtocol }
           : {}),
         ...(fields.length ? { routing } : {}),
+        ...(selected?.connection?.supportsZeroDataRetention ? { zeroDataRetention } : {}),
       };
       let connectionId: string;
       if (account) {
@@ -322,6 +330,7 @@ export function ServerAIAccountForm({
               setLabel(preset?.name ?? next?.providerName ?? event.target.value);
             setKey("");
             setRouting({});
+            setZeroDataRetention(false);
             if (setup && next) {
               setLabel(preset?.name ?? next.providerName ?? next.provider);
               if (auth === "sign-in")
@@ -467,6 +476,32 @@ export function ServerAIAccountForm({
                 disabled={locked}
               />
             </div>
+          ) : null}
+          {selected?.connection?.supportsZeroDataRetention ? (
+            <>
+              <label
+                htmlFor={`${id}-zero-data-retention`}
+                className="flex items-center justify-between gap-3 text-sm"
+              >
+                <Trans>Zero data retention</Trans>
+                <Switch
+                  id={`${id}-zero-data-retention`}
+                  aria-label={t`Zero data retention`}
+                  aria-describedby={`${id}-zero-data-retention-description`}
+                  checked={zeroDataRetention}
+                  disabled={locked}
+                  onCheckedChange={setZeroDataRetention}
+                />
+              </label>
+              <p
+                id={`${id}-zero-data-retention-description`}
+                className="text-sm text-muted-foreground"
+              >
+                <Trans>
+                  Route requests only to endpoints marked as eligible for zero data retention.
+                </Trans>
+              </p>
+            </>
           ) : null}
           {(acceptsKey ? fields : []).map((field) => (
             <div className="grid gap-2" key={field.key}>

@@ -16,7 +16,7 @@ import { useI18n } from "../lib/i18n";
 import { native } from "../lib/native";
 import { MenuPickerMenu } from "./menu-picker";
 import { NativeActionButton } from "./native-action-button";
-import { SettingsGroup, SettingsInputRow, SettingsRow } from "./settings-group";
+import { SettingsGroup, SettingsInputRow, SettingsRow, SettingsSwitch } from "./settings-group";
 
 export function ServerAIAccountForm({
   account,
@@ -63,6 +63,7 @@ export function ServerAIAccountForm({
   const [budget, setBudget] = useState(formatAIBudget(account?.monthlyBudgetMicros ?? null));
   const [concurrency, setConcurrency] = useState(String(account?.concurrencyLimit ?? 8));
   const [routing, setRouting] = useState<Record<string, string>>({});
+  const [zeroDataRetention, setZeroDataRetention] = useState(account?.zeroDataRetention ?? false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef<AbortController | null>(null);
@@ -157,6 +158,11 @@ export function ServerAIAccountForm({
         throw new Error("Invalid concurrency limit");
       const settings = {
         label: label.trim(),
+        ...(selected?.connection?.supportsZeroDataRetention &&
+        account &&
+        zeroDataRetention !== (account.zeroDataRetention ?? false)
+          ? { zeroDataRetention }
+          : {}),
         models: allowed,
         concurrencyLimit: limit,
         monthlyBudgetMicros: hideBudget
@@ -172,6 +178,7 @@ export function ServerAIAccountForm({
           ? { baseUrl: url.trim(), enabledModelIds: allowed, apiProtocol }
           : {}),
         ...(fields.length ? { routing } : {}),
+        ...(selected?.connection?.supportsZeroDataRetention ? { zeroDataRetention } : {}),
       };
       if (account) {
         if (key.trim() || (provider === OPENAI_COMPATIBLE_PROVIDER_ID && url.trim()))
@@ -224,6 +231,7 @@ export function ServerAIAccountForm({
             setModels("");
             setKey("");
             setRouting({});
+            setZeroDataRetention(false);
           }}
         >
           <View>
@@ -261,6 +269,17 @@ export function ServerAIAccountForm({
             editable={
               !locked && (!!account || selected?.connection?.customEndpointAllowed !== false)
             }
+          />
+        ) : null}
+        {selected?.connection?.supportsZeroDataRetention ? (
+          <SettingsSwitch
+            label={t("Zero data retention")}
+            detail={t(
+              "Route requests only to endpoints marked as eligible for zero data retention.",
+            )}
+            value={zeroDataRetention}
+            disabled={locked}
+            onChange={setZeroDataRetention}
           />
         ) : null}
         {fields.map((field) => (

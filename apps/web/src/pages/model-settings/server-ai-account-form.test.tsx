@@ -264,3 +264,49 @@ it("preserves catalog endpoint presets and protocols in the compact provider cho
     { signal: expect.any(AbortSignal) },
   );
 });
+
+it("only offers the retention setting for providers advertising it", async () => {
+  await render();
+  expect(host.querySelector('[aria-label="Zero data retention"]')).toBeNull();
+  await render([{ ...xai, connection: { supportsZeroDataRetention: true } }]);
+  expect(host.querySelector('[role="switch"][aria-label="Zero data retention"]')).not.toBeNull();
+});
+
+it.each([true, false])(
+  "updates managed retention from %s without a replacement key",
+  async (initial) => {
+    await act(async () =>
+      root.render(
+        <ServerAIAccountForm
+          account={
+            {
+              id: "account",
+              provider: "xai",
+              label: "Fixture",
+              models: ["grok-fixture"],
+              concurrencyLimit: 8,
+              monthlyBudgetMicros: null,
+              zeroDataRetention: initial,
+            } as NonNullable<Parameters<typeof ServerAIAccountForm>[0]["account"]>
+          }
+          catalog={[{ ...xai, connection: { supportsZeroDataRetention: true } }]}
+          client={{ serverAI } as unknown as RpcClient}
+          isCurrent={() => current}
+          onSaved={saved}
+          onCancel={cancel}
+        />,
+      ),
+    );
+    const toggle = host.querySelector<HTMLButtonElement>(
+      '[role="switch"][aria-label="Zero data retention"]',
+    )!;
+    expect(toggle.getAttribute("aria-checked")).toBe(String(initial));
+    await act(async () => toggle.click());
+    await click("Save");
+    expect(serverAI.update).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionId: "account", zeroDataRetention: !initial }),
+      expect.anything(),
+    );
+    expect(serverAI.reconnect).not.toHaveBeenCalled();
+  },
+);

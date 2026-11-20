@@ -14,6 +14,8 @@ import {
   assertCompatiblePresetApiKey,
   modelConnectionRouting,
   modelCredentialRoutingFields,
+  modelSupportsZeroDataRetention,
+  UNSUPPORTED_ZERO_DATA_RETENTION,
 } from "./model-connection-metadata.js";
 import { enabledOpenAiCompatibleModelIds } from "./model-selection.js";
 import {
@@ -77,6 +79,13 @@ export function buildModelConnectPlaintext(
     previous?.kind === "api_key" ? previous : undefined,
   );
   const inherited = previous?.kind === "api_key" ? previous : undefined;
+  const supportsZeroDataRetention = modelSupportsZeroDataRetention(input.provider);
+  if (input.zeroDataRetention === true && !supportsZeroDataRetention)
+    throw new Error(UNSUPPORTED_ZERO_DATA_RETENTION);
+  const zeroDataRetention = supportsZeroDataRetention
+    ? (input.zeroDataRetention ?? inherited?.zeroDataRetention)
+    : undefined;
+  const privacy = zeroDataRetention === undefined ? {} : { zeroDataRetention };
   const cacheCapabilities = input.cacheCapabilities ?? inherited?.cacheCapabilities;
   const contextWindow = input.contextWindow ?? inherited?.contextWindow;
   const limits = {
@@ -200,6 +209,7 @@ export function buildModelConnectPlaintext(
       ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...limits,
       ...routing,
+      ...privacy,
     });
   }
   if (previous?.kind === "api_key" && previous.key.trim().length >= 8) {
@@ -212,9 +222,11 @@ export function buildModelConnectPlaintext(
       ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...limits,
       ...routing,
+      ...privacy,
     });
   }
   if (previous?.kind === "oauth") {
+    if (zeroDataRetention === true) throw new Error("Zero Data Retention requires an API key.");
     const limit = maxTokens !== undefined ? { maxTokens } : {};
     return serializeModelSecret(
       previous.reconnectRequired
@@ -303,6 +315,9 @@ export function modelCredentialDto(
           }
         : {}),
       ...(parsed.kind === "api_key" ? modelCredentialRoutingFields(row.provider, parsed) : {}),
+      ...(parsed.kind === "api_key" && parsed.zeroDataRetention !== undefined
+        ? { zeroDataRetention: parsed.zeroDataRetention }
+        : {}),
     };
   }
   const compatibleCredential = {

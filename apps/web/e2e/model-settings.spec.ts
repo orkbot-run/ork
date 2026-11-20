@@ -279,6 +279,8 @@ test("model settings cleanup frames", { tag: "@nightly" }, async ({ page }, test
   await expect(mainList.getByTestId("model-role-default")).toContainText("Choose a model");
   const dialog = await openModelConnection(page, "OpenRouter");
   await expect(dialog.getByLabel("API key")).toBeVisible();
+  const retention = dialog.getByRole("switch", { name: "Zero data retention" });
+  await expect(retention).not.toBeChecked();
   await captureScreenshot(page, testInfo, "model-settings-cleanup-1-not-connected");
 
   await dialog.getByLabel("API key").fill("rejected-fixture-key");
@@ -292,12 +294,20 @@ test("model settings cleanup frames", { tag: "@nightly" }, async ({ page }, test
 
   // Connecting from the empty first slot makes the provider's model the main model.
   await dialog.getByLabel("API key").fill("fake-cleanup-api-key");
+  await retention.click();
+  await expect(retention).toBeChecked();
+  await captureScreenshot(page, testInfo, "model-zero-data-retention");
   providerConnected = true;
   await dialog.getByRole("button", { name: "Connect API key", exact: true }).click();
   await expect(dialog).toBeHidden();
   await pickReopenedModel(page);
   const primary = mainList.getByTestId("model-role-row-1");
   await expect(primary).toContainText("OpenRouter");
+  expect(await rpc(page, "models/credentials", {})).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ provider: "openrouter", zeroDataRetention: true }),
+    ]),
+  );
   const addFallback = mainList.getByRole("button", { name: "Add fallback", exact: true });
   await expect(addFallback).toBeVisible();
   await captureScreenshot(page, testInfo, "model-settings-cleanup-2-connected");

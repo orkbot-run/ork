@@ -3169,3 +3169,73 @@ describe("Pi runtime reasoning efforts an endpoint refuses", () => {
     },
   );
 });
+
+describe("OpenRouter Zero Data Retention fallback", () => {
+  it("stops on no eligible private endpoint without trying any backup", async () => {
+    const privatePrimary = model("openrouter", "private-primary", 32_768);
+    providerState.models.set(
+      "openrouter/private-primary",
+      privatePrimary as unknown as Record<string, unknown>,
+    );
+    providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
+      stream(
+        target,
+        message(
+          target,
+          [],
+          "error",
+          "404: Model unavailable: no eligible Zero Data Retention endpoint (openrouter_zdr_unavailable).",
+        ),
+      ),
+    );
+    const input = request([{ provider: backupA.provider, id: backupA.id, apiKey: "backup-key" }]);
+    input.model = {
+      provider: "openrouter",
+      id: "private-primary",
+      apiKey: "private-key",
+      zeroDataRetention: true,
+    };
+    await expect(run(input)).rejects.toThrow("openrouter_zdr_unavailable");
+    expect(providerState.stream).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the policy on a lazily resolved backup and skips providers that cannot enforce it", async () => {
+    const privatePrimary = model("openrouter", "private-primary", 32_768);
+    const privateBackup = model("openrouter", "private-backup", 32_768);
+    for (const target of [privatePrimary, privateBackup])
+      providerState.models.set(
+        `openrouter/${target.id}`,
+        target as unknown as Record<string, unknown>,
+      );
+    providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
+      stream(
+        target,
+        target.id === privatePrimary.id
+          ? message(target, [], "error", "503 provider unavailable")
+          : message(target, [{ type: "text", text: "Private backup." }], "stop"),
+      ),
+    );
+    const input = request([
+      { provider: backupA.provider, id: backupA.id, apiKey: "backup-key" },
+      { provider: "openrouter", id: privateBackup.id },
+    ]);
+    input.model = {
+      provider: "openrouter",
+      id: privatePrimary.id,
+      apiKey: "private-key",
+      zeroDataRetention: true,
+    };
+    input.resolveFallbackModel = async (provider, id) => ({
+      provider,
+      id,
+      apiKey: "resolved-backup-key",
+    });
+    const events = await run(input);
+    expect(events).toContainEqual({ type: "text", text: "Private backup." });
+    expect(providerState.stream).toHaveBeenCalledTimes(2);
+    expect(providerState.stream.mock.calls[1]?.[0]).toMatchObject({
+      provider: "openrouter",
+      zeroDataRetention: true,
+    });
+  });
+});

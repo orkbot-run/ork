@@ -1623,6 +1623,7 @@ export const ModelConnectionPresetSchema = z.object({
 });
 export type ModelConnectionPreset = z.infer<typeof ModelConnectionPresetSchema>;
 export const ModelConnectionMetadataSchema = z.object({
+  supportsZeroDataRetention: z.boolean().optional(),
   routingFields: z
     .array(ModelRoutingFieldSchema)
     .max(8)
@@ -1636,6 +1637,7 @@ export type ModelConnectionMetadata = z.infer<typeof ModelConnectionMetadataSche
 export const ModelCredentialSchema = z.object({
   managed: z.boolean().optional(),
   blockedByPolicy: z.boolean().optional(),
+  zeroDataRetention: z.boolean().optional(),
   /** Computed space preference order; credentials themselves remain newest first. */
   preferenceRank: z.number().int().nonnegative().optional(),
   ...ModelContextLimitsSchema.shape,
@@ -1717,6 +1719,7 @@ export const ModelConnectInputSchema = z
   .object({
     ...ModelContextLimitsSchema.shape,
     provider: z.string(),
+    zeroDataRetention: z.boolean().optional(),
     apiKey: z.string().optional(),
     accountId: z.string().optional(),
     gatewayId: z.string().optional(),

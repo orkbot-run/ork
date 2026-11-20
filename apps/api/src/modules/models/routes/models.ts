@@ -12,6 +12,7 @@ import {
   ModelSignInError,
   modelConnectionMetadata,
   modelCredentialDto,
+  modelSupportsZeroDataRetention,
   oauthCredentialEmail,
   parseModelSecret,
   prepareStoredModelAuth,
@@ -144,7 +145,9 @@ export function modelsRoutes(ctx: RouterContext) {
         if (!policy) return { canManage: owner, policy: null };
         const { provider, modelId } = policy;
         let blocked = !isModelProviderAllowed(provider);
-        if (!blocked && !isModelEndpointAllowed(provider)) {
+        const checkEndpoint = !isModelEndpointAllowed(provider);
+        let zeroDataRetention: boolean | undefined;
+        if (!blocked && (checkEndpoint || modelSupportsZeroDataRetention(provider))) {
           try {
             const secret = parseModelSecret(
               await deps.secrets.load(policy.secretRef, policy.secretId),
@@ -153,13 +156,19 @@ export function modelsRoutes(ctx: RouterContext) {
               provider,
               secret.kind === "openai_compatible" ? secret.baseUrl : undefined,
             );
+            if (secret.kind === "api_key") zeroDataRetention = secret.zeroDataRetention;
           } catch {
-            blocked = true;
+            blocked = checkEndpoint;
           }
         }
         return {
           canManage: owner,
-          policy: { provider, modelId, ...(blocked ? { blockedByPolicy: true } : {}) },
+          policy: {
+            provider,
+            modelId,
+            ...(blocked ? { blockedByPolicy: true } : {}),
+            ...(zeroDataRetention !== undefined ? { zeroDataRetention } : {}),
+          },
         };
       }),
       setWorkspacePolicy: authed.models.setWorkspacePolicy.handler(async ({ context, input }) => {
@@ -173,12 +182,34 @@ export function modelsRoutes(ctx: RouterContext) {
           throw new ORPCError("BAD_REQUEST", {
             message: "A model and a new API key are required.",
           });
-        // Always create a new connection: never read or reuse a member's personal key.
+        // A workspace policy owns its credential independently of the member's personal key.
+        const preservePrivacy =
+          modelSupportsZeroDataRetention(input.provider) && input.zeroDataRetention === undefined;
+        const priorPolicy = preservePrivacy
+          ? await deps.prisma.workspaceModelPolicy.findUnique({
+              where: { organizationId },
+              select: { provider: true, secretId: true, secretRef: true },
+            })
+          : null;
+        let zeroDataRetention = input.zeroDataRetention;
+        if (priorPolicy?.provider === input.provider) {
+          try {
+            const prior = parseModelSecret(
+              await deps.secrets.load(priorPolicy.secretRef, priorPolicy.secretId),
+            );
+            if (prior.kind !== "api_key") throw new Error("Invalid workspace key");
+            zeroDataRetention = prior.zeroDataRetention;
+          } catch {
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Choose whether to require Zero Data Retention before replacing this key.",
+            });
+          }
+        }
         let plaintext: string;
         try {
           ({ plaintext } = await ctx.verifyModelConnection(
             context.actor,
-            { ...input, credentialId: null },
+            { ...input, zeroDataRetention, credentialId: null },
             context.signal,
           ));
         } catch (error) {
@@ -210,6 +241,14 @@ export function modelsRoutes(ctx: RouterContext) {
                   where: { organizationId },
                   select: { secretId: true, secretRef: true },
                 });
+                if (
+                  preservePrivacy &&
+                  (old?.secretId !== priorPolicy?.secretId ||
+                    old?.secretRef !== priorPolicy?.secretRef)
+                )
+                  throw new ORPCError("CONFLICT", {
+                    message: "The workspace model changed. Refresh and try again.",
+                  });
                 const data = {
                   provider: input.provider,
                   modelId: input.modelId!.trim(),

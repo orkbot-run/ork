@@ -124,6 +124,7 @@ describe("connectionFormFields", () => {
       supportsImages: false,
       maxImagesPerPrompt: "",
       routing: {},
+      zeroDataRetention: false,
     });
   });
 
@@ -540,4 +541,53 @@ it("renders required-key policy entirely from catalog metadata and only reuses a
     }),
   ).toBe(false);
   expect(compatibleConnectionReady({ ...input, baseUrl: "http://127.0.0.1:8080/v1" })).toBe(true);
+});
+
+describe("connection zero data retention", () => {
+  const selected = {
+    provider: "catalog",
+    id: "model",
+    connection: { supportsZeroDataRetention: true },
+  };
+  it("initializes the opt-in from a saved connection", () => {
+    expect(
+      connectionFormFields({
+        catalog: [],
+        provider: "catalog",
+        modelId: "model",
+        credential: credential({ zeroDataRetention: true }),
+      }).zeroDataRetention,
+    ).toBe(true);
+  });
+  it.each([true, false])("sends an explicit change to %s without a replacement key", (value) => {
+    const request = modelConnectRequest({
+      selected,
+      credential: credential({ modelId: "model", zeroDataRetention: !value }),
+      credentialId: "saved",
+      form: draft({ zeroDataRetention: value }),
+      settingsOnly: true,
+    });
+    expect(request).toMatchObject({ status: "ready", input: { zeroDataRetention: value } });
+  });
+  it("omits the setting on unrelated edits and unsupported providers", () => {
+    for (const connection of [selected.connection, undefined]) {
+      const request = modelConnectRequest({
+        selected: { ...selected, connection },
+        credential: credential({ modelId: "model", zeroDataRetention: true }),
+        credentialId: "saved",
+        form: draft({ zeroDataRetention: true, maxTokens: "1000" }),
+      });
+      expect(request.status).toBe("ready");
+      if (request.status === "ready") expect(request.input).not.toHaveProperty("zeroDataRetention");
+    }
+  });
+  it("sends the opt-in when creating an advertised connection", () => {
+    expect(
+      modelConnectRequest({
+        selected,
+        credentialId: null,
+        form: draft({ apiKey: "test-key-123", zeroDataRetention: true }),
+      }),
+    ).toMatchObject({ status: "ready", input: { zeroDataRetention: true } });
+  });
 });

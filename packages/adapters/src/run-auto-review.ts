@@ -78,7 +78,13 @@ export function selectAutoReviewCandidates(
 /** An organization-owned model is resolved once and owns the entire review. */
 export async function prepareAutoReviewCheckers(
   deps: ExecutorDeps,
-  scope: { runId: string; spaceId: string; userId: string; botId: string; threadId: string },
+  scope: {
+    runId: string;
+    spaceId: string;
+    userId: string;
+    botId: string;
+    threadId: string;
+  },
   options: {
     injectedReview?: AutoReviewProvider;
     registerSecrets: (values: string[]) => void;
@@ -112,6 +118,7 @@ export async function prepareAutoReviewCheckers(
         runtime: deps.runtime,
         checker,
         apiKey: model.apiKey,
+        zeroDataRetention: model.zeroDataRetention,
         routing: model.routing,
         accountId: model.accountId,
         gatewayId: model.gatewayId,
@@ -143,12 +150,17 @@ export async function prepareAutoReviewCheckers(
       (personalModels !== true || !checker.instance),
   );
   if (eligible.length === 0) throw new AutoReviewConnectionUnavailableError();
+  let requireZeroDataRetention = false;
   const providerFor = async (checker: AutoReviewCandidate): Promise<AutoReviewProvider> => {
     if (injectedReview) return injectedReview;
     assertModelProviderAllowed(checker.provider);
+    if (requireZeroDataRetention && checker.provider !== "openrouter")
+      throw new AutoReviewConnectionUnavailableError();
     if (checker.instance && (checker.provider === "jev" || checker.provider === "scripted")) {
       try {
-        return createAutoReviewProvider(checker.provider, { model: checker.model });
+        return createAutoReviewProvider(checker.provider, {
+          model: checker.model,
+        });
       } catch (error) {
         throw new AutoReviewProviderConstructionError("Unable to configure the checker", {
           cause: error,
@@ -188,11 +200,14 @@ export async function prepareAutoReviewCheckers(
             : undefined,
       },
     );
+    requireZeroDataRetention ||= judgeKey.zeroDataRetention === true;
+    if (requireZeroDataRetention) judgeKey.zeroDataRetention = true;
     try {
       return decisionModel(checker.provider, checker.model)
         ? new DecisionAutoReviewProvider({
             provider: new HttpDecisionProvider("openrouter", {
               apiKey: judgeKey.apiKey ?? "",
+              zeroDataRetention: judgeKey.zeroDataRetention,
               callObserver: judgeKey.callObserver,
               onUsage,
             }),
@@ -206,6 +221,7 @@ export async function prepareAutoReviewCheckers(
               checker,
               apiKey: judgeKey.oauth ? undefined : judgeKey.apiKey,
               routing: judgeKey.routing,
+              zeroDataRetention: judgeKey.zeroDataRetention,
               callObserver: judgeKey.callObserver,
               accountId: judgeKey.accountId,
               gatewayId: judgeKey.gatewayId,
