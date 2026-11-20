@@ -31,6 +31,12 @@ servers. Anonymous access is rate limited per IP address; set `KEENABLE_API_KEY`
 worker to send a key and lift those limits. Errors, per-bot disabled tools and the way back to
 the default work as described for Parallel.
 
+Set `WEB_PROVIDER=keyless-http+keenable` to use the existing hosted reader for Reddit post
+links while keeping keyless search and direct fetch for other pages. The hosted reader receives
+the thread URL with known tracking parameters removed. URLs with other query parameters stay
+on direct fetch, which also serves as a fallback if the hosted reader cannot return that thread.
+Restart the API and worker after changing the setting.
+
 ## Self-hosted memory
 
 Supermemory and Honcho can run on your own network. In **Settings → Memory**, choose **Local**

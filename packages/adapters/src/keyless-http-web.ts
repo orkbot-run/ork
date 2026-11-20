@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited web fetching is preserved. Bounded article parsing follows LICENSE.md.
+// Inherited web fetching is preserved. Bounded article parsing and discussion routing follow LICENSE.md.
 
 import { Readability } from "@mozilla/readability";
 import type {
   AdapterContext,
+  WebFetchProvider,
   WebFetchRequest,
   WebFetchResult,
   WebProvider,
@@ -41,6 +42,7 @@ export type KeylessHttpWebOptions = {
   fetch?: typeof globalThis.fetch;
   resolveHostname?: ResolveHostname;
   searchBackend?: KeylessHtmlSearchBackend;
+  discussionFetch?: WebFetchProvider;
   searchTimeoutMs?: number;
   fetchTimeoutMs?: number;
   maxBufferBytes?: number;
@@ -59,6 +61,7 @@ export class KeylessHttpWebProvider implements WebProvider {
   private readonly fetchImpl?: typeof globalThis.fetch;
   private readonly resolveHostname?: ResolveHostname;
   private readonly searchBackend: KeylessHtmlSearchBackend;
+  private readonly discussionFetch?: WebFetchProvider;
   private readonly searchTimeoutMs: number;
   private readonly fetchTimeoutMs: number;
   private readonly maxBufferBytes: number;
@@ -68,6 +71,7 @@ export class KeylessHttpWebProvider implements WebProvider {
     this.fetchImpl = options.fetch;
     this.resolveHostname = options.resolveHostname;
     this.searchBackend = options.searchBackend ?? duckDuckGoHtmlSearchBackend;
+    this.discussionFetch = options.discussionFetch;
     this.searchTimeoutMs = options.searchTimeoutMs ?? 15_000;
     this.fetchTimeoutMs = options.fetchTimeoutMs ?? 15_000;
     this.maxBufferBytes = options.maxBufferBytes ?? 5 * 1024 * 1024;
@@ -107,6 +111,20 @@ export class KeylessHttpWebProvider implements WebProvider {
   }
 
   async fetch(request: WebFetchRequest, context: AdapterContext): Promise<WebFetchResult> {
+    if (this.discussionFetch) {
+      const thread = redditThread(request.url);
+      if (thread) {
+        try {
+          const result = await this.discussionFetch.fetch({ ...request, url: thread.url }, context);
+          if (redditThread(result.url)?.identity === thread.identity)
+            return { ...result, url: thread.url };
+        } catch {
+          context.signal.throwIfAborted();
+          request.signal?.throwIfAborted();
+        }
+      }
+    }
+
     const maxChars = clampMaxChars(request.maxChars);
     const offset = clampOffset(request.offset);
     const { url, body, contentType } = await fetchSafeWebText(request.url, {
@@ -133,6 +151,34 @@ export class KeylessHttpWebProvider implements WebProvider {
       ...pageWindow(extracted.text.slice(offset), maxChars, offset),
     };
   }
+}
+
+function redditThread(value: string): { url: string; identity: string } | undefined {
+  if (!URL.canParse(value)) return undefined;
+  const url = new URL(value);
+  if (
+    url.protocol !== "https:" ||
+    url.port ||
+    url.username ||
+    url.password ||
+    !["reddit.com", "www.reddit.com", "old.reddit.com"].includes(url.hostname)
+  )
+    return undefined;
+  const path = /^\/r\/([a-z0-9_]+)\/comments\/([a-z0-9]+)(?:\/[a-z0-9_-]+)?\/?$/i.exec(
+    url.pathname,
+  );
+  if (!path) return undefined;
+
+  // Only known share parameters can be dropped. Other queries may carry private access or
+  // change which content the caller requested, and must stay with direct fetch.
+  for (const key of url.searchParams.keys()) {
+    if (!["share_id", "ref", "ref_source", "rdt"].includes(key) && !key.startsWith("utm_"))
+      return undefined;
+  }
+  url.hostname = "www.reddit.com";
+  url.search = "";
+  url.hash = "";
+  return { url: url.href, identity: `${path[1]}/${path[2]}`.toLowerCase() };
 }
 
 export function parseDuckDuckGoResults(html: string, maxResults: number): WebSearchHit[] {

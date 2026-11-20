@@ -21,6 +21,97 @@ function textResult(data: unknown) {
 
 afterEach(() => vi.unstubAllEnvs());
 
+describe("keyless web with an optional discussion reader", () => {
+  const url = "https://www.reddit.com/r/example/comments/abc123/fixture_thread/";
+
+  it("reads an exact thread through the configured adapter without forwarding share parameters", async () => {
+    vi.stubEnv("KEENABLE_API_KEY", "");
+    const content = "# Fixture thread\n\nOriginal post\n\nFirst comment\n\nSecond comment";
+    const peer = keenableMcpFixture({
+      result: textResult({
+        url: "https://reddit.com/r/example/comments/abc123/",
+        title: "Fixture thread",
+        content,
+      }),
+    });
+    const provider = createWebProvider(
+      resolveWebProviderKind({ WEB_PROVIDER: "keyless-http+keenable" }),
+      peer.network,
+    );
+
+    await expect(
+      webFetchFromTool(provider, context, {
+        url: "https://old.reddit.com/r/example/comments/abc123/fixture_thread/?utm_source=share#top",
+      }),
+    ).resolves.toEqual({ url, title: "Fixture thread", text: content, truncated: false });
+    expect(peer.calls).toMatchObject([
+      {
+        name: "fetch_page_content",
+        arguments: { url, max_chars: 8001, output_format: "json" },
+      },
+    ]);
+    expect(peer.requests.every((request) => !request.headers.has("x-api-key"))).toBe(true);
+  });
+
+  it.each([
+    [
+      "a different thread",
+      textResult({
+        url: "https://www.reddit.com/r/example/comments/abc456/",
+        content: "Wrong thread",
+      }),
+    ],
+    ["an unavailable reader", { isError: true, content: [{ type: "text", text: "Rate limited" }] }],
+  ])("uses direct fetch when the hosted response is %s", async (_case, result) => {
+    const peer = keenableMcpFixture({ result });
+    const direct = vi.fn(
+      () => new Response("Direct page", { headers: { "content-type": "text/plain" } }),
+    );
+    const provider = createWebProvider("keyless-http+keenable", {
+      ...peer.network,
+      fetch: async (input, init) =>
+        new URL(String(input)).hostname === "api.keenable.ai" ? peer.fetch(input, init) : direct(),
+    });
+
+    await expect(webFetchFromTool(provider, context, { url })).resolves.toMatchObject({
+      url,
+      text: "Direct page",
+    });
+    expect(peer.calls).toHaveLength(1);
+    expect(direct).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves default fetch, searches and non-thread or private-query URLs on direct HTTP", async () => {
+    const direct = vi.fn<typeof globalThis.fetch>(
+      async () => new Response("Direct response", { headers: { "content-type": "text/plain" } }),
+    );
+    const network = {
+      fetch: direct,
+      resolveHostname: keenableMcpFixture().network.resolveHostname,
+    };
+    const defaultProvider = createWebProvider("keyless-http", network);
+    const optedIn = createWebProvider("keyless-http+keenable", network);
+    const directOnly = [
+      `${url}?token=private`,
+      `${url}one_comment/`,
+      "https://www.reddit.com.example.test/r/example/comments/abc123/",
+      "https://example.test/doc",
+    ];
+
+    await webFetchFromTool(defaultProvider, context, { url });
+    for (const target of directOnly) {
+      await webFetchFromTool(optedIn, context, { url: target });
+    }
+    await webSearchFromTool(optedIn, context, { query: "public discussion" });
+
+    expect(direct.mock.calls.map(([input]) => String(input))).toEqual([
+      url,
+      ...directOnly,
+      "https://html.duckduckgo.com/html/?q=public+discussion",
+    ]);
+  });
+});
+
 describe("optional Keenable web provider", () => {
   it("maps MCP results through the selected web tool without a key", async () => {
     vi.stubEnv("KEENABLE_API_KEY", "");

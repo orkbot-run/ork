@@ -25,6 +25,11 @@ export function createWebProvider(
       return new ParallelWebProvider(options);
     case "keenable":
       return new KeenableWebProvider(options);
+    case "keyless-http+keenable":
+      return new KeylessHttpWebProvider({
+        ...options,
+        discussionFetch: new KeenableWebProvider(options),
+      });
     case "fake":
       return new FakeWebProvider();
     case "keyless-http":
