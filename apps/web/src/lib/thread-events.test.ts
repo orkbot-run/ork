@@ -542,7 +542,7 @@ describe("thread event reduction", () => {
         type: "run.started",
         seq: 4,
         runId: "run-1",
-        payload: { trigger: "user" },
+        payload: { trigger: "user", sourceMessageId: "source-message" },
       }),
     );
 
@@ -551,6 +551,7 @@ describe("thread event reduction", () => {
       botId: "bot-1",
       status: "running",
       trigger: "user",
+      sourceMessageId: "source-message",
     });
     expect(started?.activeRuns).toEqual([started?.run]);
 

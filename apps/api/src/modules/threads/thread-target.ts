@@ -215,7 +215,7 @@ async function replayExistingSend(
     orderBy: { seq: "desc" },
     select: { payload: true },
   });
-  const receiptRunIds = sendEventRunIds(receiptEvent?.payload);
+  const receiptRunIds = sendEventRunIds(receiptEvent?.payload, "runIds") ?? [];
   const receiptRuns = receiptRunIds.length
     ? await deps.prisma.run.findMany({ where: { id: { in: receiptRunIds } } })
     : [];
@@ -252,16 +252,20 @@ async function replayExistingSend(
       getLogger().error("thread send realtime notification", error);
     });
   }
-  return sendResult(message, runs);
+  return sendResult(message, runs, sendEventRunIds(receiptEvent?.payload, "replyRunIds"));
 }
 
-function sendEventRunIds(payload: Prisma.JsonValue | undefined): string[] {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
-  const runIds = (payload as { runIds?: unknown }).runIds;
-  return Array.isArray(runIds) ? runIds.filter((id): id is string => typeof id === "string") : [];
+function sendEventRunIds(payload: Prisma.JsonValue | undefined, key: "runIds" | "replyRunIds") {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return;
+  const ids = payload[key];
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : undefined;
 }
 
-function sendResult(message: { seq: number }, runs: Array<{ id: string; taskId: string }>) {
+function sendResult(
+  message: { seq: number },
+  runs: Array<{ id: string; taskId: string }>,
+  replyRunIds?: string[],
+) {
   const first = runs[0];
   if (!first) throw new IsolationError("Send did not create a run");
   return {
@@ -269,6 +273,7 @@ function sendResult(message: { seq: number }, runs: Array<{ id: string; taskId: 
     runId: first.id,
     seq: message.seq,
     runIds: runs.map((run) => run.id),
+    ...(replyRunIds ? { replyRunIds } : {}),
   };
 }
 
@@ -705,6 +710,7 @@ function messagesWithLiveEvents(
 function mapRun(
   run: {
     id: string;
+    sourceMessageId?: string | null;
     userId: string;
     spaceId: string;
     botId: string;
@@ -726,6 +732,7 @@ function mapRun(
 ) {
   return {
     id: run.id,
+    sourceMessageId: run.sourceMessageId ?? undefined,
     userId: run.userId,
     botId: run.botId,
     threadId: run.threadId,
@@ -1043,12 +1050,14 @@ export async function sendThreadMessage(
             );
         const active = holdingRuns.find(steersUserMessage) ?? holdingRuns[0];
         if (active) {
+          const assignedRunId = steersUserMessage(active) ? active.id : null;
+          const replyRunIds = !stopping && assignedRunId ? undefined : [];
           await tx.steeringMessage.create({
             data: {
               messageId: message.id,
               botId: target.botId,
               userId: actor.userId,
-              runId: steersUserMessage(active) ? active.id : null,
+              runId: assignedRunId,
             },
           });
           await tx.message.update({ where: { id: message.id }, data: { runId: active.id } });
@@ -1065,6 +1074,7 @@ export async function sendThreadMessage(
               blocks,
               callId,
               clientNonce: messageClientNonce,
+              replyRunIds,
               replyToMessageId,
               replyQuote,
               replyPreview,
@@ -1074,7 +1084,7 @@ export async function sendThreadMessage(
             const stop = await cancelThreadRuns(actor, target, { botId: target.botId })(tx);
             return { message, runs: [active], routineRuns, eventSeq: event.seq, stop };
           }
-          return { message, runs: [active], routineRuns, eventSeq: event.seq };
+          return { message, runs: [active], routineRuns, eventSeq: event.seq, replyRunIds };
         }
         const task = await tx.task.create({
           data: {
@@ -1248,6 +1258,7 @@ export async function sendThreadMessage(
         }
       }
       const runs: Array<{ id: string; taskId: string; botId: string; status: string }> = [];
+      const holdingRunIds = new Set<string>();
       for (const botId of targetBotIds) {
         const answered = answeredByBotId.get(botId);
         if (answered) {
@@ -1269,8 +1280,10 @@ export async function sendThreadMessage(
         }
         const active = activeByBotId.get(botId);
         if (active) {
+          const assignedRunId = steersUserMessage(active) ? active.id : null;
+          if (!assignedRunId) holdingRunIds.add(active.id);
           // Naming a member that is still working on an unnamed message makes its reply required.
-          if (!namesNobody && steersUserMessage(active)) {
+          if (!namesNobody && assignedRunId) {
             await tx.run.update({
               where: { id: active.id },
               data: { groupReplyOptional: false },
@@ -1281,7 +1294,7 @@ export async function sendThreadMessage(
               messageId: message.id,
               botId,
               userId: actor.userId,
-              runId: steersUserMessage(active) ? active.id : null,
+              runId: assignedRunId,
             },
           });
           runs.push(active);
@@ -1314,6 +1327,9 @@ export async function sendThreadMessage(
         runs.push(run);
       }
       const firstRun = runs[0];
+      const replyRunIds = holdingRunIds.size
+        ? runs.filter((run) => !holdingRunIds.has(run.id)).map((run) => run.id)
+        : undefined;
       const eventBotId = firstRun?.botId ?? targetBotIds[0];
       if (!eventBotId) throw new IsolationError("Group send did not resolve a target");
       if (firstRun) {
@@ -1344,12 +1360,13 @@ export async function sendThreadMessage(
           callId,
           clientNonce: messageClientNonce,
           runIds: runs.map((run) => run.id),
+          replyRunIds,
           replyToMessageId,
           replyQuote,
           replyPreview,
         },
       });
-      return { message, runs, routineRuns, eventSeq: event.seq };
+      return { message, runs, routineRuns, eventSeq: event.seq, replyRunIds };
     }, transactionOptions);
 
   const committed = await withSerializableRetry(commit).catch(async (error) => {
@@ -1370,7 +1387,7 @@ export async function sendThreadMessage(
   );
   if ("stop" in committed && committed.stop) {
     await finishThreadStop(deps, actor, target, committed.stop);
-    return sendResult(committed.message, committed.runs);
+    return sendResult(committed.message, committed.runs, []);
   }
   await deps.events.notify(target.threadId, committed.eventSeq).catch((error) => {
     // Subscribers catch up from the durable event cursor after a missed realtime wake.
@@ -1382,7 +1399,7 @@ export async function sendThreadMessage(
     }
   }
   await enqueueRunsNeedingContinue(deps.jobs, [...committed.routineRuns, ...committed.runs]);
-  return sendResult(committed.message, committed.runs);
+  return sendResult(committed.message, committed.runs, committed.replyRunIds);
 }
 
 const REACTION_TURN_COOLDOWN_MS = 30_000;
@@ -1792,6 +1809,7 @@ export function cancelThreadRuns(
               blocks,
               clientNonce: note.receipt.messageClientNonce,
               runIds: runs.map((run) => run.id),
+              replyRunIds: [],
             }
           : { messageId: message.id, role: "system", blocks },
       });

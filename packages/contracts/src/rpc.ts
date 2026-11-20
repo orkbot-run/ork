@@ -283,6 +283,7 @@ const threadSendOutput = z.object({
   runId: Id,
   seq: z.number().int(),
   runIds: z.array(Id).optional(),
+  replyRunIds: z.array(Id).optional(),
 });
 
 /** Without text or attachments, only the routines run and no message is saved. */

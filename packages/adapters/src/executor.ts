@@ -964,6 +964,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           runId,
           payload: {
             trigger: run.trigger === "background_helper" ? "tickets" : run.trigger,
+            sourceMessageId: run.sourceMessageId ?? undefined,
             routineId: current.routineId,
             routineName: projectRunRoutineName(current, current.routine, thread),
           },

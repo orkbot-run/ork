@@ -326,6 +326,7 @@ describe("following a newly sent reply", () => {
     ) {
       const id = this.dataset.messageId;
       if (id === "older-reply") return new DOMRect(0, -300, 300, 900);
+      if (id === "background-reply") return new DOMRect(0, 1_200 - scroller.scrollTop, 300, 900);
       if (id === "progress:run" || id === "final-reply")
         return new DOMRect(0, 1_100 - scroller.scrollTop, 300, replyHeight);
       return new DOMRect(0, 0, 700, 500);
@@ -352,10 +353,22 @@ describe("following a newly sent reply", () => {
     };
     return {
       scroller,
-      update: (height: number, messages: ThreadMessage[] = [progress], running = true) => {
+      update: (
+        height: number,
+        messages: ThreadMessage[] = [progress],
+        running = true,
+        overrides: Partial<ComponentProps<typeof Transcript>> = {},
+      ) => {
         replyHeight = height;
-        render({ ...baseProps([old, sent, ...messages]), followRequest: 1, running });
+        render({
+          ...baseProps([old, sent, ...messages]),
+          followRequest: 1,
+          sendReceipt: { seq: sent.seq, runIds: ["run"] },
+          running,
+          ...overrides,
+        });
       },
+      sent,
     };
   }
 
@@ -388,6 +401,44 @@ describe("following a newly sent reply", () => {
     expect(scroller.scrollTop).toBe(1_500);
     update(1_000, [reply, textMessage("other-reply", "bot", "Background reply")], false);
     expect(scroller.scrollTop).toBe(1_500);
+  });
+
+  it("waits for the send receipt and pins only a reply from an accepted run", () => {
+    const { scroller, update } = sendFixture();
+    const reply = { ...textMessage("final-reply", "bot", "My reply"), runId: "run" };
+    const background = {
+      ...textMessage("background-reply", "bot", "Unrelated routine output"),
+      runId: "background-run",
+    };
+    update(200, [reply, background], true, { sendReceipt: undefined });
+    expect(scroller.scrollTop).toBe(1_500);
+    update(200, [reply, background]);
+    expect(scroller.scrollTop).toBe(1_500);
+    update(700, [reply, background]);
+    expect(scroller.scrollTop).toBe(1_036);
+  });
+
+  it("follows a queued message once its own run starts", () => {
+    const { scroller, sent, update } = sendFixture();
+    const sendReceipt = { seq: sent.seq, runIds: [] };
+    const holder = { ...textMessage("background-reply", "bot", "Routine"), runId: "holder" };
+    update(900, [holder], true, { sendReceipt });
+    expect(scroller.scrollTop).toBe(1_500);
+
+    const currentRuns = [{ id: "continuation", sourceMessageId: sent.id }];
+    const progress: ThreadMessage = {
+      ...liveMessage("Queued reply"),
+      runId: "continuation",
+      blocks: [{ kind: "progress", text: "Queued reply", streaming: true }],
+    };
+    update(900, [holder, progress], true, {
+      sendReceipt,
+      currentRuns,
+    });
+    expect(scroller.scrollTop).toBe(1_036);
+    const final = { ...textMessage("final-reply", "bot", "Ready"), runId: "continuation" };
+    update(900, [holder, final], false, { sendReceipt, currentRuns: [] });
+    expect(scroller.scrollTop).toBe(1_036);
   });
 
   it("does not pull the viewport back after a reader scrolls away from the pinned text", () => {

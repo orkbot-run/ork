@@ -1452,6 +1452,7 @@ export type MessagingAgentConnection = z.infer<typeof MessagingAgentConnectionSc
 
 export const RunSchema = z.object({
   id: Id,
+  sourceMessageId: Id.optional(),
   userId: Id.optional(),
   botId: Id,
   threadId: Id,

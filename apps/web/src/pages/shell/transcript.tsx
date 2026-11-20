@@ -9,6 +9,7 @@ import type {
   BotAvatarSet,
   LoginFieldInput,
   MessageReaction,
+  Run,
   ThreadMessage,
 } from "@orkbot/contracts";
 import type { ChildBotBlock, FoldedTranscript } from "@orkbot/core";
@@ -61,7 +62,7 @@ import { TimeSeparator, UnreadDivider } from "./chat-context";
 import type { ImportSetupTarget } from "./import-setup-card";
 import { MessageView } from "./message-view";
 import { QuoteSelectionButton } from "./quote-selection-button";
-import type { OutgoingMessage } from "./use-composer-actions";
+import type { OutgoingMessage, TranscriptSendReceipt } from "./use-composer-actions";
 
 /** Bubbles stop at a readable line length instead of stretching with wide windows. */
 export function bubbleFrameWidth(role: ThreadMessage["role"]) {
@@ -99,6 +100,8 @@ export const Transcript = memo(function Transcript({
   scrollRequest,
   onScrollRequestHandled,
   followRequest,
+  sendReceipt,
+  currentRuns,
   artifactTarget,
   transcript,
   loadingChat,
@@ -141,6 +144,8 @@ export const Transcript = memo(function Transcript({
   onScrollRequestHandled: () => void;
   /** Changes when you send: the view moves to the end and follows the reply. */
   followRequest: number;
+  sendReceipt?: TranscriptSendReceipt;
+  currentRuns?: readonly Pick<Run, "id" | "sourceMessageId">[];
   artifactTarget: ArtifactTarget;
   transcript: FoldedTranscript<ThreadMessage>;
   /** A target without a local or freshly loaded snapshot. */
@@ -200,9 +205,8 @@ export const Transcript = memo(function Transcript({
   const autoScrollTimer = useRef<number | undefined>(undefined);
   const jumpButtonRef = useRef<HTMLButtonElement>(null);
   const replyFollow = useRef<{
-    nonce: string;
     existingLiveRows: Set<string>;
-    sentSeq?: number;
+    continuationIds: Set<string>;
     held?: { id: string; runId?: string; top: number };
   } | null>(null);
   const [expandedPeerMarkers, setExpandedPeerMarkers] = useState<ReadonlySet<string>>(
@@ -508,41 +512,46 @@ export const Transcript = memo(function Transcript({
   useLayoutEffect(() => {
     if (followedRequest.current === followRequest) return;
     followedRequest.current = followRequest;
-    const nonce = outgoingMessages.at(-1)?.clientNonce;
-    replyFollow.current = nonce
-      ? {
-          nonce,
-          existingLiveRows: new Set(
-            messages.filter((message) => message.id.startsWith("progress:")).map(({ id }) => id),
-          ),
-        }
-      : null;
+    replyFollow.current = {
+      existingLiveRows: new Set(
+        messages.filter((message) => message.id.startsWith("progress:")).map(({ id }) => id),
+      ),
+      continuationIds: new Set(),
+    };
     snapToEnd();
-  }, [followRequest, messages, outgoingMessages, snapToEnd]);
+  }, [followRequest, messages, snapToEnd]);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
     const follow = replyFollow.current;
-    if (element && follow && (following.current || follow.held)) {
-      follow.sentSeq ??= messages.find((message) => message.clientNonce === follow.nonce)?.seq;
-      const sentSeq = follow.sentSeq;
+    if (element && follow && sendReceipt && (following.current || follow.held)) {
+      const source = messages.find(
+        (message) => message.role === "user" && message.seq === sendReceipt.seq,
+      );
+      if (source) {
+        // A message queued behind ongoing work can start a separate run later.
+        for (const run of currentRuns ?? []) {
+          if (run.sourceMessageId === source.id) follow.continuationIds.add(run.id);
+        }
+      }
       const held = follow.held;
       const reply =
         (held && messageById.get(held.id)) ??
-        (sentSeq === undefined
-          ? undefined
-          : messages.findLast(
-              (message) =>
-                message.role === "bot" &&
-                message.seq > sentSeq &&
-                !follow.existingLiveRows.has(message.id) &&
-                (!held || (held.runId && message.runId === held.runId)) &&
-                message.blocks.some(
-                  (block) =>
-                    block.kind === "text" ||
-                    (block.kind === "progress" && block.streaming && !block.activity),
-                ),
-            ));
+        messages.findLast(
+          (message) =>
+            message.role === "bot" &&
+            message.seq > sendReceipt.seq &&
+            !!message.runId &&
+            (sendReceipt.runIds.includes(message.runId) ||
+              follow.continuationIds.has(message.runId)) &&
+            !follow.existingLiveRows.has(message.id) &&
+            (!held || message.runId === held.runId) &&
+            message.blocks.some(
+              (block) =>
+                block.kind === "text" ||
+                (block.kind === "progress" && block.streaming && !block.activity),
+            ),
+        );
       const row = reply && element.querySelector(`[data-message-id="${CSS.escape(reply.id)}"]`);
       if (row) {
         const top = longReplyScrollTop(
@@ -555,10 +564,10 @@ export const Transcript = memo(function Transcript({
           Number.parseFloat(getComputedStyle(element).scrollPaddingTop) || 0,
         );
         if (top !== undefined) {
-          follow.held = { id: reply.id, runId: reply.runId, top };
           following.current = false;
           autoScrolling.current = false;
           if (Math.abs(element.scrollTop - top) > 1) element.scrollTo({ top, behavior: "auto" });
+          follow.held = { id: reply.id, runId: reply.runId, top: element.scrollTop };
           setAtEnd(false);
           return;
         }
@@ -568,7 +577,7 @@ export const Transcript = memo(function Transcript({
     if (following.current) snapToEnd();
     // Content can grow below a reader who is not following without any scroll event.
     else if (element) setAtEnd(transcriptIsNearEnd(element));
-  }, [messageById, messages, running, scrollRef, snapToEnd]);
+  }, [currentRuns, messageById, messages, running, scrollRef, sendReceipt, snapToEnd]);
 
   useLayoutEffect(() => {
     const button = jumpButtonRef.current;

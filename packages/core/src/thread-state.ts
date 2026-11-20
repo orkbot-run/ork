@@ -100,6 +100,9 @@ function runFromStartedEvent(
     ...previous,
     ...routineName,
     id: event.runId ?? previous?.id ?? event.id ?? "",
+    ...(typeof event.payload?.sourceMessageId === "string"
+      ? { sourceMessageId: event.payload.sourceMessageId }
+      : {}),
     botId: event.botId ?? previous?.botId,
     threadId: event.threadId ?? snapshot.threadId,
     taskId: previous?.taskId ?? event.runId ?? event.id,

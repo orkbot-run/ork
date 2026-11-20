@@ -7,70 +7,130 @@ import { appendEventInTransaction, createDb, notifyRealtime } from "../../../pac
 import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
 
-test("a long streaming reply stays at its first line until Jump to latest", async ({
-  page,
-}, testInfo) => {
-  await page.setViewportSize({ width: 1280, height: 720 });
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await signup(page, `long-reply-${Date.now()}@orkbot.test`, "password12", "Reader");
-  await completeOnboarding(page);
-  const botId = activeBotId(page);
-  await rpc(page, "onboarding/dismissFocus", { botId });
-  const transcript = page.getByTestId("transcript");
-  const composer = page.getByRole("combobox", { name: /Message/ });
-  const jumpToLatest = page.getByRole("button", { name: "Jump to latest" });
-  const databaseUrl = process.env.DATABASE_URL!;
-  const { prisma, pool } = createDb(databaseUrl);
-  const realtime = new PostgresRealtimeFanout({ connectionString: databaseUrl, publisher: pool });
-  try {
-    await composer.fill("work for 45 seconds on the project notes");
-    await composer.press("Enter");
-    const activeRun = () => prisma.run.findFirst({ where: { botId, status: "running" } });
-    await expect.poll(async () => Boolean(await activeRun())).toBe(true);
-    const run = await activeRun();
-    if (!run) throw new Error("The fixture run has ended");
-    const { id: runId, spaceId, threadId } = run;
-    async function publish(text: string) {
-      const event = await prisma.$transaction((tx) =>
-        appendEventInTransaction(tx, {
+for (const release of ["Jump to latest", "wheel", "reply click", "message jump"] as const) {
+  test(`a long streaming reply stays at its first line until ${release}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await signup(page, `long-reply-${Date.now()}@orkbot.test`, "password12", "Reader");
+    await completeOnboarding(page);
+    const botId = activeBotId(page);
+    await rpc(page, "onboarding/dismissFocus", { botId });
+    const transcript = page.getByTestId("transcript");
+    const composer = page.getByRole("combobox", { name: /Message/ });
+    const jumpToLatest = page.getByRole("button", { name: "Jump to latest" });
+    const databaseUrl = process.env.DATABASE_URL!;
+    const { prisma, pool } = createDb(databaseUrl);
+    const realtime = new PostgresRealtimeFanout({ connectionString: databaseUrl, publisher: pool });
+    try {
+      // A running turn without an executor lets this test own the stream. The scripted
+      // runtime emits activity every 50 ms, which would overwrite injected reply text.
+      const run = await prisma.$transaction(async (tx) => {
+        const thread = await tx.thread.findUniqueOrThrow({ where: { botId } });
+        const identity = {
           botId,
-          spaceId,
-          threadId,
-          runId,
-          type: "thread.progress",
-          payload: { text, streaming: true, reset: true },
-        }),
-      );
-      await notifyRealtime(realtime, threadId, event.seq);
+          threadId: thread.id,
+          spaceId: thread.spaceId,
+          userId: thread.userId,
+        };
+        const task = await tx.task.create({
+          data: { ...identity, prompt: "Review the project notes", status: "running" },
+        });
+        return tx.run.create({
+          data: { ...identity, taskId: task.id, trigger: "user", status: "running" },
+        });
+      });
+      const sent = page.waitForResponse((response) => response.url().includes("/rpc/threads/send"));
+      await composer.fill("Review the project notes");
+      await composer.press("Enter");
+      const receipt = (await (await sent).json()).json;
+      expect(receipt.runIds ?? [receipt.runId]).toContain(run.id);
+      const { id: runId, spaceId, threadId } = run;
+      async function publish(text: string) {
+        const event = await prisma.$transaction((tx) =>
+          appendEventInTransaction(tx, {
+            botId,
+            spaceId,
+            threadId,
+            runId,
+            type: "thread.progress",
+            payload: { text, streaming: true, reset: true },
+          }),
+        );
+        await notifyRealtime(realtime, threadId, event.seq);
+      }
+      const opening = "Here is the project summary.";
+      const firstPart = [
+        opening,
+        ...Array.from({ length: 22 }, (_, i) => `Point ${i + 1} in the project notes.`),
+      ].join("\n\n");
+      await publish(firstPart);
+      const firstLine = page.getByText(opening, { exact: true });
+      await expect(firstLine).toBeInViewport();
+      await expect(jumpToLatest).toBeVisible();
+      const before = await transcript.evaluate((element) => element.scrollTop);
+      await publish(`${firstPart}\n\nAdditional project details are now available.`);
+      await expect(page.getByText("Additional project details are now available.")).toBeAttached();
+      await expect(firstLine).toBeInViewport();
+      await expect
+        .poll(() => transcript.evaluate((element) => element.scrollTop))
+        .toBeCloseTo(before, 0);
+      if (release === "Jump to latest") {
+        await captureScreenshot(page, testInfo, "long-answer-start");
+        await jumpToLatest.click();
+      } else if (release === "wheel") {
+        await transcript.hover();
+        await page.mouse.wheel(0, 20_000);
+      } else if (release === "reply click") {
+        await firstLine.click();
+      } else {
+        const sentRow = transcript
+          .locator("[data-message-id]")
+          .filter({
+            has: page.getByTestId("message-user-bubble"),
+          })
+          .last();
+        const messageId = await sentRow.getAttribute("data-message-id");
+        if (!messageId) throw new Error("Missing sent message");
+        const around = page.waitForResponse(
+          (response) =>
+            response.url().includes("/rpc/threads/messages") &&
+            (response.request().postData() ?? "").includes('"around"'),
+        );
+        await page.evaluate((id) => {
+          history.pushState({}, "", `?m=${id}`);
+          window.dispatchEvent(new PopStateEvent("popstate"));
+        }, messageId);
+        expect((await around).ok()).toBe(true);
+        await expect(page).not.toHaveURL(/[?&]m=/);
+        await expect(sentRow).toBeInViewport();
+        const jumpedTop = await transcript.evaluate((element) => element.scrollTop);
+        await publish(`${firstPart}\n\nGrowth after the message jump.`);
+        await expect(page.getByText("Growth after the message jump.")).toBeAttached();
+        await expect
+          .poll(() => transcript.evaluate((element) => element.scrollTop))
+          .toBeCloseTo(jumpedTop, 0);
+        // A subsequent wheel to the end resumes following without re-arming this reply.
+        await transcript.hover();
+        await page.mouse.wheel(0, 20_000);
+      }
+      const gapToEnd = () =>
+        transcript.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+      await expect.poll(gapToEnd).toBeLessThan(2);
+      await expect(jumpToLatest).toBeHidden();
+      await publish(`${firstPart}\n\nGrowth after releasing the reply.`);
+      await expect(page.getByText("Growth after releasing the reply.")).toBeInViewport();
+      await expect.poll(gapToEnd).toBeLessThan(2);
+      await expect(jumpToLatest).toBeHidden();
+    } finally {
+      await rpc(page, "threads/stop", { botId }).catch(() => {});
+      await realtime.close();
+      await prisma.$disconnect();
+      await pool.end();
     }
-    const opening = "Here is the project summary.";
-    const firstPart = [
-      opening,
-      ...Array.from({ length: 22 }, (_, i) => `Point ${i + 1} in the project notes.`),
-    ].join("\n\n");
-    await publish(firstPart);
-    const firstLine = page.getByText(opening, { exact: true });
-    await expect(firstLine).toBeInViewport();
-    await expect(jumpToLatest).toBeVisible();
-    const before = await transcript.evaluate((element) => element.scrollTop);
-    await publish(`${firstPart}\n\nAdditional project details are now available.`);
-    await expect(page.getByText("Additional project details are now available.")).toBeAttached();
-    await expect(firstLine).toBeInViewport();
-    await expect
-      .poll(() => transcript.evaluate((element) => element.scrollTop))
-      .toBeCloseTo(before, 0);
-    await captureScreenshot(page, testInfo, "long-answer-start");
-    await jumpToLatest.click();
-    await expect
-      .poll(() => transcript.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight))
-      .toBeLessThan(2);
-  } finally {
-    await rpc(page, "threads/stop", { botId }).catch(() => {});
-    await realtime.close();
-    await prisma.$disconnect();
-    await pool.end();
-  }
-});
+  });
+}
 
 test("a ?m= deep link jumps while the thread is streaming", async ({ page }, testInfo) => {
   const stamp = Date.now();
