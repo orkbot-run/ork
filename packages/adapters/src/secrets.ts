@@ -28,10 +28,6 @@ const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const DERIVATION_CACHE_ENTRIES = 64;
 
-function legacyKeyFrom(secret: string): Buffer {
-  return createHash("sha256").update(secret).digest();
-}
-
 const SCRYPT_OPTIONS: ScryptOptions = { N: 16_384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
 function keyFrom(secret: string, salt: Buffer): Buffer {
@@ -71,9 +67,13 @@ function openSealed(sealed: SealedSecret, key: Buffer, recordId: string): string
 export class EncryptedSecretStore extends SecretChanges implements SecretStore {
   private warnedRemoteRef = false;
   private derivedKeys: Map<string, Promise<Buffer>> | undefined = new Map();
+  private readonly legacyDecryptionKey: Buffer;
 
   constructor(private readonly encryptionKey: string) {
     super();
+    // Restore only the key for old ciphertexts from the installation's master key. Credential
+    // writes always use a per-record salt and scrypt, and never pass through this derivation.
+    this.legacyDecryptionKey = createHash("sha256").update(encryptionKey).digest();
   }
 
   describe() {
@@ -115,7 +115,7 @@ export class EncryptedSecretStore extends SecretChanges implements SecretStore {
     const iv = buf.subarray(0, IV_BYTES);
     const tag = buf.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
     const enc = buf.subarray(IV_BYTES + TAG_BYTES);
-    const decipher = createDecipheriv("aes-256-gcm", legacyKeyFrom(this.encryptionKey), iv);
+    const decipher = createDecipheriv("aes-256-gcm", this.legacyDecryptionKey, iv);
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
   }

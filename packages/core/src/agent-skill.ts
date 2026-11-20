@@ -31,7 +31,7 @@ export type SkillRecord = SkillCatalogEntry & {
   content: string;
 };
 
-const FORCE_SKILL_PREFIX = /^(?:\/|use\s+skill:\s*)(.+?)(?:\n|$)/i;
+const FORCE_SKILL_PREFIX = /^(\/|use\s+skill:)/i;
 const ROUTINE_SKILL_STOP = new Set([
   "then",
   "and",
@@ -159,13 +159,17 @@ export function formatForcedSkillPrompt(name: string, content: string, rest?: st
 /** Detect a composer-forced skill (`/Name` or `Use skill: Name`) at the start of a prompt. */
 export function extractForcedSkillName(prompt: string): { name: string; rest: string } | null {
   const text = prompt.trimStart();
-  const match = FORCE_SKILL_PREFIX.exec(text);
+  const prefix = FORCE_SKILL_PREFIX.exec(text);
+  if (!prefix) return null;
+  const remainder = text.slice(prefix[0].length);
+  const content = prefix[1] === "/" ? remainder : remainder.trimStart();
+  const match = /^(.+?)(?:\n|$)/.exec(content);
   if (!match) return null;
   const name = (match[1] ?? "").trim().replace(/^\/+/, "").trim();
   if (!name || name.length > 80) return null;
   // Avoid treating `/` settings actions as skills.
   if (/^(chat\s+settings|settings:)/i.test(name)) return null;
-  const rest = text.slice(match[0].length).trimStart();
+  const rest = content.slice(match[0].length).trimStart();
   return { name, rest };
 }
 
@@ -360,8 +364,10 @@ type YamlBlockScalarHeader = {
 };
 
 function parseYamlBlockScalarHeader(raw: string): YamlBlockScalarHeader | null {
-  const match = /^([>|])(?:([1-9]\d*)([+-]?)|([+-])([1-9]\d*)?)?(?:[ \t]+#.*)?[ \t]*$/.exec(raw);
+  const match = /^([>|])(?:([1-9]\d*)([+-]?)|([+-])([1-9]\d*)?)?/.exec(raw);
   if (!match) return null;
+  // The comment consumes its own trailing whitespace; the alternatives do not overlap.
+  if (!/^(?:[ \t]+#.*|[ \t]*)$/.test(raw.slice(match[0].length))) return null;
   const style = match[1] as "|" | ">";
   const indentToken = match[2] ?? match[5] ?? "";
   const chompToken = match[3] || match[4] || "";
@@ -373,6 +379,12 @@ function parseYamlBlockScalarHeader(raw: string): YamlBlockScalarHeader | null {
 function leadingSpaces(line: string): number {
   const match = /^( *)/.exec(line);
   return match?.[1]?.length ?? 0;
+}
+
+function trailingNewlinesStart(text: string): number {
+  let end = text.length;
+  while (end > 0 && text[end - 1] === "\n") end -= 1;
+  return end;
 }
 
 function decodeYamlBlockScalar(rawLines: string[], header: YamlBlockScalarHeader): string {
@@ -432,16 +444,25 @@ function decodeYamlBlockScalar(rawLines: string[], header: YamlBlockScalarHeader
   }
 
   if (header.chomp === "strip") {
-    return text.replace(/\n+$/, "");
+    return text.slice(0, trailingNewlinesStart(text));
   }
   if (header.chomp === "keep") {
     if (trailingBlanks === 0) return text.endsWith("\n") ? text : `${text}\n`;
-    const stripped = text.replace(/\n+$/, "");
+    const stripped = text.slice(0, trailingNewlinesStart(text));
     return `${stripped}\n${"\n".repeat(trailingBlanks)}`;
   }
   // clip: exactly one trailing newline when the block had content.
-  const stripped = text.replace(/\n+$/, "");
+  const stripped = text.slice(0, trailingNewlinesStart(text));
   return stripped === "" ? "" : `${stripped}\n`;
+}
+
+function yamlKeyValue(line: string): { key: string; raw: string } | null {
+  const colon = line.indexOf(":");
+  if (colon < 0) return null;
+  const key = line.slice(0, colon);
+  if (!/^[A-Za-z_][\w-]*$/.test(key)) return null;
+  const value = /^(.*)$/.exec(line.slice(colon + 1).trimStart());
+  return value ? { key, raw: value[1]! } : null;
 }
 
 /**
@@ -463,12 +484,11 @@ function parseSimpleYamlObject(text: string): Record<string, unknown> {
     if (/^\s/.test(line)) {
       throw new Error("Unexpected indented frontmatter line without a key.");
     }
-    const keyed = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
+    const keyed = yamlKeyValue(line);
     if (!keyed) {
       throw new Error(`Invalid frontmatter line: ${line}`);
     }
-    const key = keyed[1]!;
-    const raw = keyed[2] ?? "";
+    const { key, raw } = keyed;
     const blockHeader = parseYamlBlockScalarHeader(raw);
     if (blockHeader) {
       const blockLines: string[] = [];
@@ -489,17 +509,20 @@ function parseSimpleYamlObject(text: string): Record<string, unknown> {
       i += 1;
       while (i < lines.length && /^\s+/.test(lines[i] ?? "")) {
         const nestedLine = (lines[i] ?? "").replace(/^\s+/, "");
-        const listItem = /^-\s+(.*)$/.exec(nestedLine);
+        const listItem =
+          nestedLine.startsWith("-") && /\s/.test(nestedLine[1] ?? "")
+            ? /^(.*)$/.exec(nestedLine.slice(1).trimStart())
+            : null;
         if (listItem) {
           mode = "list";
           list.push(parseYamlScalar(listItem[1] ?? ""));
           i += 1;
           continue;
         }
-        const nestedKey = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(nestedLine);
+        const nestedKey = yamlKeyValue(nestedLine);
         if (nestedKey) {
           mode = "map";
-          nested[nestedKey[1]!] = parseYamlScalar(nestedKey[2] ?? "");
+          nested[nestedKey.key] = parseYamlScalar(nestedKey.raw);
           i += 1;
           continue;
         }
@@ -576,7 +599,7 @@ function parseYamlScalar(raw: string): string | number | boolean {
 function formatYamlBlockScalar(key: string, value: string): string {
   // Choose chomp so decodeYamlBlockScalar round-trips trailing newlines:
   // strip (0), clip (1), keep (2+). Folded (`>`) style is not preserved — only the string value.
-  const trailing = /\n*$/.exec(value)?.[0].length ?? 0;
+  const trailing = value.length - trailingNewlinesStart(value);
   let indicator = "|";
   let lines: string[];
   if (trailing === 0) {

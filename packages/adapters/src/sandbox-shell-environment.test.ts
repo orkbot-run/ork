@@ -66,6 +66,17 @@ describe("sourceEnvironmentCommand", () => {
     expect(existsSync(envFile)).toBe(false);
   });
 
+  it("treats shell syntax in the file name and environment value as literal data", () => {
+    directory = mkdtempSync(path.join(tmpdir(), "orkbot-env-"));
+    const envFile = path.join(directory, "env'; printf injected; # $(printf expanded) `id`");
+    const value = "literal $(printf expanded) `id` '$HOME'";
+    writeFileSync(envFile, shellExportScript({ FAKE_TOKEN: value }));
+    const result = run(envFile, "printenv FAKE_TOKEN");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(`${value}\n`);
+    expect(existsSync(envFile)).toBe(false);
+  });
+
   it("does not run argv when the file is missing or cannot apply", () => {
     directory = mkdtempSync(path.join(tmpdir(), "orkbot-env-"));
     const envFile = path.join(directory, "env");

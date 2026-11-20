@@ -456,6 +456,34 @@ describe("normalizeRunError", () => {
   });
 });
 
+it.each([
+  "reset 2026-10-21",
+  "resets at 2026-10-21",
+  "RESET ON: 2026-10-21",
+  "resets=2026-10-21",
+  `reset${" ".repeat(20_000)}invalid; resets on: 2026-10-21`,
+])("extracts reset dates with existing delimiters: %s", (message) => {
+  expect(
+    normalizeRunError(
+      `403: ${JSON.stringify({ message: `OpenRouter weekly key limit exceeded; ${message}` })}`,
+      undefined,
+      "en",
+      Date.parse("2026-10-20T00:00:00Z"),
+    ),
+  ).toMatchObject({ resetAt: Date.parse("2026-10-21T00:00:00Z") });
+});
+
+it("does not reinterpret a lowercase timestamp as a date-only reset", () => {
+  expect(
+    normalizeRunError(
+      '403: {"message":"OpenRouter weekly key limit exceeded; resets 2026-10-21t12:00:00z"}',
+      undefined,
+      "en",
+      Date.parse("2026-10-20T00:00:00Z"),
+    ).resetAt,
+  ).toBeUndefined();
+});
+
 it.each(["2026-10-19T00:00:00Z", "2026-10-20T00:00:00Z", "not-a-date"])(
   "does not promise a past or invalid reset: %s",
   (reset) => {

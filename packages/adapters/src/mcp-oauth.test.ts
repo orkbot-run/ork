@@ -3087,6 +3087,14 @@ describe("MCP OAuth", () => {
     expect(secrets).toEqual([key]);
   });
 
+  it("extracts the credential after an authorization scheme across long whitespace", () => {
+    const header = `bEaReR${"\t".repeat(20_000)}fixture-credential`;
+    expect(oauthMaterialSecrets({ headers: { Authorization: header } })).toEqual([
+      header,
+      "fixture-credential",
+    ]);
+  });
+
   it("does not start authorization for a server that neither challenges nor publishes OAuth metadata", async () => {
     const requested: string[] = [];
     vi.stubGlobal(

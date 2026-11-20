@@ -12,6 +12,32 @@ import {
 } from "@orkbot/contracts";
 import { stuckWorkStatusMessages } from "./stuck-work.js";
 
+/** Scan each reset marker and its delimiters once, without overlapping whitespace matches. */
+function resetDateFromMessage(message: string): string | undefined {
+  const markers = /\bresets?/gi;
+  const date = /\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z)?/iy;
+  for (const marker of message.matchAll(markers)) {
+    let index = marker.index + marker[0].length;
+    const start = index;
+    while (index < message.length && /\s/.test(message[index]!)) index += 1;
+    if (index > start) {
+      const preposition = message.slice(index, index + 2).toLowerCase();
+      if (preposition === "at" || preposition === "on") {
+        index += 2;
+        while (index < message.length && /\s/.test(message[index]!)) index += 1;
+      }
+    }
+    if (message[index] === ":" || message[index] === "=") {
+      index += 1;
+      while (index < message.length && /\s/.test(message[index]!)) index += 1;
+    }
+    date.lastIndex = index;
+    const match = date.exec(message);
+    if (match) return match[0];
+  }
+  return undefined;
+}
+
 export const MISSING_TOOL_FINAL_RESPONSE_ERROR =
   "The tools finished, but the model did not write a final answer. Rephrase the request and try again.";
 
@@ -410,12 +436,7 @@ export function normalizeRunError(
     // another model keeps the user going.
     recovery = kind === "key" ? "connection" : "model";
     summary = translate(RUN_ERROR_LIMIT_MESSAGES[kind][period], { provider });
-    const reset =
-      message.match(
-        /\bresets?(?:\s+at|\s+on)?\s*[:=]?\s*(\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z)?)/i,
-      )?.[1] ??
-      metadata.reset_at ??
-      metadata.reset;
+    const reset = resetDateFromMessage(message) ?? metadata.reset_at ?? metadata.reset;
     if (typeof reset === "string" && /^\d{4}-\d{2}-\d{2}(?:T[\d:.]+Z)?$/.test(reset)) {
       const date = new Date(reset);
       if (

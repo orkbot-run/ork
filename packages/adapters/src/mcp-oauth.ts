@@ -75,14 +75,23 @@ export type OAuthMaterial = {
   oauthGeneration?: number;
 };
 
+function authorizationPayload(value: string): string | undefined {
+  const separator = value.search(/\s/);
+  if (separator < 0) return undefined;
+  const scheme = value.slice(0, separator).toLowerCase();
+  if (scheme !== "basic" && scheme !== "bearer" && scheme !== "token") return undefined;
+  const payload = value.slice(separator).trimStart();
+  return payload && !/[\r\n\u2028\u2029]/u.test(payload) ? payload : undefined;
+}
+
 /** Values that must never appear in model-visible tool results or errors. */
 export function oauthMaterialSecrets(material: OAuthMaterial): string[] {
   const values: string[] = [];
   const add = (value: string | undefined) => {
     if (!value) return;
     values.push(value);
-    const authorization = value.match(/^(?:Basic|Bearer|Token)\s+(.+)$/i);
-    if (authorization?.[1]) values.push(authorization[1]);
+    const payload = authorizationPayload(value);
+    if (payload) values.push(payload);
   };
   add(material.secret);
   add(material.oauth?.tokens?.access_token);
@@ -156,11 +165,10 @@ function collectLaunchSecrets(args: readonly string[], add: (value: string) => v
     );
   };
   const credentialValue = (value: string) => {
-    if (!value.trim() || /^(?:Basic|Bearer|Token)$/i.test(value.trim())) return;
+    const trimmed = value.trim();
+    if (!trimmed || /^(?:Basic|Bearer|Token)$/i.test(trimmed)) return;
     add(value);
-    if (value.trim() !== value) add(value.trim());
-    const scheme = value.trim().match(/^(?:Basic|Bearer|Token)\s+(.+)$/i);
-    if (scheme?.[1]) add(scheme[1]);
+    if (trimmed !== value) add(trimmed);
   };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;

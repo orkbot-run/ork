@@ -9,8 +9,10 @@ export function parseModelJson<T extends z.ZodType>(
   text: string,
   schema: T,
 ): z.infer<T> | undefined {
-  const candidate = text.match(/\{[\s\S]*\}/)?.[0];
-  if (!candidate) return undefined;
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end < start) return undefined;
+  const candidate = text.slice(start, end + 1);
   try {
     const result = schema.safeParse(JSON.parse(jsonrepair(candidate)));
     return result.success ? result.data : undefined;
