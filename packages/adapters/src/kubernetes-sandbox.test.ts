@@ -1133,6 +1133,61 @@ describe("KubernetesSandboxProvider", () => {
     ).rejects.toMatchObject({ name: "SandboxNotFoundError" });
   });
 
+  it.each([
+    undefined,
+    { ...readyPod, status: { phase: "Failed" } },
+    { ...readyPod, status: { phase: "Succeeded" } },
+    { ...readyPod, metadata: { ...readyPod.metadata, deletionTimestamp: new Date() } },
+  ])("reports a missing or stopped pod after exec returns HTTP 404 (%j)", async (pod) => {
+    const error = new Error("Unexpected server response: 404");
+    const event = Object.defineProperty({}, "error", { get: () => error });
+    const read = vi.fn().mockResolvedValue(pod);
+    const provider = providerFor({ readNamespacedPod: read }, vi.fn().mockRejectedValue(event));
+    const events = provider.execute(computer, { argv: ["true"], timeoutMs: 1000 }, context);
+
+    await expect(events[Symbol.asyncIterator]().next()).rejects.toMatchObject({
+      name: "SandboxNotFoundError",
+      cause: error,
+    });
+    expect(read).toHaveBeenCalledExactlyOnceWith(
+      { name: "pod", namespace: "orkbot-sandboxes" },
+      expect.anything(),
+    );
+  });
+
+  it.each([false, true])(
+    "keeps the HTTP 404 exec error if the pod is live or cannot be checked (%s)",
+    async (podReadFails) => {
+      const error = new Error("Unexpected server response: 404");
+      const read = podReadFails
+        ? vi.fn().mockRejectedValue(new Error("API unavailable"))
+        : vi.fn().mockResolvedValue(readyPod);
+      const provider = providerFor({ readNamespacedPod: read }, vi.fn().mockRejectedValue(error));
+      const events = provider.execute(computer, { argv: ["true"], timeoutMs: 1000 }, context);
+
+      await expect(events[Symbol.asyncIterator]().next()).rejects.toBe(error);
+      expect(read).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("preserves the message of a WebSocket error after exec connects", async () => {
+    const socket = {
+      close: vi.fn(),
+      set onerror(handle: (event: object) => void) {
+        queueMicrotask(() =>
+          handle(Object.defineProperty({}, "message", { get: () => "exec connection reset" })),
+        );
+      },
+    };
+    const read = vi.fn().mockResolvedValue(readyPod);
+    const provider = providerFor({ readNamespacedPod: read }, vi.fn().mockResolvedValue(socket));
+    const events = provider.execute(computer, { argv: ["true"], timeoutMs: 1000 }, context);
+
+    await expect(events[Symbol.asyncIterator]().next()).rejects.toThrow("exec connection reset");
+    expect(read).not.toHaveBeenCalled();
+    expect(socket.close).toHaveBeenCalledOnce();
+  });
+
   it.each(["abort", "timeout"])(
     "finishes %s while exec is connecting and closes a late socket",
     async (mode) => {

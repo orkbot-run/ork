@@ -601,6 +601,7 @@ export class KubernetesSandboxProvider implements SandboxProvider {
     let wake: (() => void) | undefined;
     let done = false;
     let failure: unknown;
+    let execNotFound: Error | undefined;
     let socket: Awaited<ReturnType<KubernetesSandboxSdk["exec"]["exec"]>> | undefined;
     let settled!: () => void;
     const completed = new Promise<void>((resolve) => {
@@ -627,6 +628,15 @@ export class KubernetesSandboxProvider implements SandboxProvider {
       settled();
       wake?.();
       wake = undefined;
+    };
+    const failExec = (cause: unknown) => {
+      if (done) return;
+      const error = execSocketError(cause);
+      // The WebSocket SDK reports a failed HTTP upgrade as a message, without a status field.
+      if (isApiStatus(error, 404) || error.message === "Unexpected server response: 404") {
+        execNotFound = error;
+      }
+      fail(error);
     };
     const stdout = new PassThrough();
     const stderr = tty ? undefined : new PassThrough();
@@ -674,14 +684,22 @@ export class KubernetesSandboxProvider implements SandboxProvider {
               return;
             }
             connected.onclose = () => finish(1);
-            connected.onerror = (event) => fail(event.error ?? new Error("Kubernetes exec failed"));
-          }, fail),
+            connected.onerror = failExec;
+          }, failExec),
           completed,
         ]);
       }
       while (!done || queue.length) {
         if (!queue.length) await new Promise<void>((resolve) => (wake = resolve));
         while (queue.length) yield queue.shift()!;
+      }
+      if (execNotFound) {
+        const name = this.podId(computer);
+        const gone = await this.readPod(name, signal).then(
+          (pod) => !pod || isTerminalPod(pod) || Boolean(pod.metadata?.deletionTimestamp),
+          () => false,
+        );
+        if (gone) throw sandboxGone(name, execNotFound);
       }
       if (failure) throw failure;
     } finally {
@@ -743,6 +761,17 @@ function sandboxGone(name: string, cause?: unknown): Error {
   const error = new Error(`Kubernetes computer ${name} no longer exists`, { cause });
   error.name = "SandboxNotFoundError";
   return error;
+}
+
+function execSocketError(cause: unknown): Error {
+  if (cause instanceof Error) return cause;
+  if (typeof cause === "object" && cause !== null) {
+    if ("error" in cause && cause.error instanceof Error) return cause.error;
+    if ("message" in cause && typeof cause.message === "string" && cause.message) {
+      return new Error(cause.message, { cause });
+    }
+  }
+  return new Error("Kubernetes exec failed", { cause });
 }
 
 function isTerminalPod(pod: V1Pod): boolean {
