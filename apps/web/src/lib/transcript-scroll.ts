@@ -32,11 +32,12 @@ export function longReplyScrollTop(
  * on the row keeps the adjustment free of that growth.
  */
 export function firstVisibleTranscriptRow(
-  element: Pick<HTMLElement, "querySelectorAll" | "scrollTop"> | null,
+  element: Pick<HTMLElement, "querySelectorAll" | "getBoundingClientRect"> | null,
 ): HTMLElement | null {
   if (!element) return null;
+  const top = element.getBoundingClientRect().top;
   for (const row of element.querySelectorAll<HTMLElement>("[data-message-id]")) {
-    if (row.offsetTop + row.offsetHeight > element.scrollTop) return row;
+    if (row.getBoundingClientRect().bottom > top) return row;
   }
   return null;
 }

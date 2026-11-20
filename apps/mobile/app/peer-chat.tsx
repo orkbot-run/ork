@@ -3,12 +3,12 @@ import type { PeerConversation } from "@orkbot/core";
 import { displayName, loadPeerHistory, peerConversations } from "@orkbot/core";
 import { typeScale } from "@orkbot/ui-tokens";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -50,13 +50,14 @@ export default function PeerChat() {
   >({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<FlatList<PeerConversation["messages"][number]>>(null);
   const userScrolled = useRef(false);
 
   useEffect(() => {
     if (!botId || !peerBotId) return;
     const abort = new AbortController();
     setState({ kind: "loading" });
+    userScrolled.current = false;
     void loadPeerHistory({
       signal: abort.signal,
       loadPage: (before, signal) =>
@@ -78,6 +79,7 @@ export default function PeerChat() {
   }, [botId, peerBotId, attempt]);
 
   const chat = state.kind === "ready" ? state.chat : null;
+  const messages = useMemo(() => [...(chat?.messages ?? [])].reverse(), [chat]);
   const peerName = displayName(chat?.peerBotName ?? params.peerBotName, t("Bot"));
   return (
     <View style={[styles.screen, sideInsets]}>
@@ -106,115 +108,120 @@ export default function PeerChat() {
           ),
         }}
       />
-      <ScrollView
+      <FlatList
+        data={messages}
+        inverted
+        keyExtractor={(item, index) => `${item.messageId}-${messages.length - index - 1}`}
         ref={scrollRef}
         // Opens at the latest message like a chat; older ones are above.
         onContentSizeChange={() => {
-          if (!userScrolled.current) scrollRef.current?.scrollToEnd({ animated: false });
+          if (!userScrolled.current)
+            scrollRef.current?.scrollToOffset({ offset: 0, animated: false });
         }}
         onScrollBeginDrag={() => {
           userScrolled.current = true;
         }}
+        onScroll={(event) => {
+          userScrolled.current = event.nativeEvent.contentOffset.y > 80;
+        }}
+        scrollEventThrottle={16}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 80 }}
         style={styles.screen}
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
-      >
-        {state.kind === "loading" ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={tokens.mutedForeground} />
-          </View>
-        ) : state.kind === "failed" ? (
-          <View style={styles.center}>
-            <Text style={styles.muted}>{t("Could not load this chat.")}</Text>
-            <Pressable accessibilityRole="button" onPress={retry} hitSlop={8}>
-              <Text style={styles.retry}>{t("Try again")}</Text>
-            </Pressable>
-          </View>
-        ) : !chat?.messages.length ? (
-          <View style={styles.center}>
-            <Text style={styles.muted}>{t("No messages yet")}</Text>
-          </View>
-        ) : (
-          chat.messages.map((item, index) => {
-            const sent = item.direction === "sent";
-            const hasInlineImages = item.blocks?.some(isInlineImageBlock);
-            const bubbleStyle = [styles.bubble, sent && styles.sentBubble];
-            return (
-              <View
-                key={`${item.messageId}-${index}`}
-                style={[
-                  styles.message,
-                  sent ? styles.sent : styles.received,
-                  hasInlineImages ? { gap: 8 } : bubbleStyle,
-                ]}
-              >
-                <View style={hasInlineImages ? bubbleStyle : undefined}>
-                  <Text
-                    style={[
-                      styles.speaker,
-                      {
-                        color: (sent ? params.botColor : params.peerBotColor) ?? tokens.foreground,
-                      },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {sent ? botName : peerName}
-                  </Text>
-                  <ChatMarkdown palette={tokens} colorScheme={colorScheme}>
-                    {item.text}
-                  </ChatMarkdown>
-                </View>
-                {item.blocks?.map((block, index) => {
-                  if (block.kind !== "file" && block.kind !== "image") return null;
-                  if (isInlineImageBlock(block))
-                    return (
-                      <InlineImageAttachment
-                        key={index}
-                        threadTarget={{ botId }}
-                        artifactId={block.artifactId}
-                        name={block.name}
-                        mimeType={block.mimeType}
-                        labelColor={tokens.foreground}
-                        onOpen={() =>
-                          router.push({
-                            pathname: "/image",
-                            params: {
-                              botId,
-                              artifactId: block.artifactId,
-                              name: block.name,
-                              mimeType: block.mimeType,
-                            },
-                          })
-                        }
-                      />
-                    );
-                  return (
-                    <View key={index} style={hasInlineImages ? bubbleStyle : undefined}>
-                      <NativeActionButton
-                        label={block.name}
-                        prominence="plain"
-                        onPress={() =>
-                          void openMobileArtifact(
-                            { botId },
-                            block.artifactId,
-                            block.name,
-                            block.mimeType,
-                          ).catch((error) =>
-                            Alert.alert(
-                              t("Could not open file"),
-                              errorText(error, t("Try again.")),
-                            ),
-                          )
-                        }
-                      />
-                    </View>
-                  );
-                })}
+        ListEmptyComponent={
+          state.kind === "loading" ? (
+            <View style={styles.center}>
+              <ActivityIndicator color={tokens.mutedForeground} />
+            </View>
+          ) : state.kind === "failed" ? (
+            <View style={styles.center}>
+              <Text style={styles.muted}>{t("Could not load this chat.")}</Text>
+              <Pressable accessibilityRole="button" onPress={retry} hitSlop={8}>
+                <Text style={styles.retry}>{t("Try again")}</Text>
+              </Pressable>
+            </View>
+          ) : !chat?.messages.length ? (
+            <View style={styles.center}>
+              <Text style={styles.muted}>{t("No messages yet")}</Text>
+            </View>
+          ) : null
+        }
+        renderItem={({ item }) => {
+          const sent = item.direction === "sent";
+          const hasInlineImages = item.blocks?.some(isInlineImageBlock);
+          const bubbleStyle = [styles.bubble, sent && styles.sentBubble];
+          return (
+            <View
+              style={[
+                styles.message,
+                sent ? styles.sent : styles.received,
+                hasInlineImages ? { gap: 8 } : bubbleStyle,
+              ]}
+            >
+              <View style={hasInlineImages ? bubbleStyle : undefined}>
+                <Text
+                  style={[
+                    styles.speaker,
+                    {
+                      color: (sent ? params.botColor : params.peerBotColor) ?? tokens.foreground,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {sent ? botName : peerName}
+                </Text>
+                <ChatMarkdown palette={tokens} colorScheme={colorScheme}>
+                  {item.text}
+                </ChatMarkdown>
               </View>
-            );
-          })
-        )}
-      </ScrollView>
+              {item.blocks?.map((block, index) => {
+                if (block.kind !== "file" && block.kind !== "image") return null;
+                if (isInlineImageBlock(block))
+                  return (
+                    <InlineImageAttachment
+                      key={index}
+                      threadTarget={{ botId }}
+                      artifactId={block.artifactId}
+                      name={block.name}
+                      mimeType={block.mimeType}
+                      labelColor={tokens.foreground}
+                      onOpen={() =>
+                        router.push({
+                          pathname: "/image",
+                          params: {
+                            botId,
+                            artifactId: block.artifactId,
+                            name: block.name,
+                            mimeType: block.mimeType,
+                          },
+                        })
+                      }
+                    />
+                  );
+                return (
+                  <View key={index} style={hasInlineImages ? bubbleStyle : undefined}>
+                    <NativeActionButton
+                      label={block.name}
+                      prominence="plain"
+                      onPress={() =>
+                        void openMobileArtifact(
+                          { botId },
+                          block.artifactId,
+                          block.name,
+                          block.mimeType,
+                        ).catch((error) =>
+                          Alert.alert(t("Could not open file"), errorText(error, t("Try again."))),
+                        )
+                      }
+                    />
+                  </View>
+                );
+              })}
+            </View>
+          );
+        }}
+      />
     </View>
   );
 }
@@ -234,11 +241,11 @@ function createStyles() {
     },
     name: { ...typeScale.footnote, fontWeight: "600", flexShrink: 1 },
     screen: { flex: 1, backgroundColor: native.page },
-    content: { flexGrow: 1, paddingHorizontal: 16, paddingVertical: 16, gap: 10 },
+    content: { flexGrow: 1, paddingHorizontal: 16, paddingVertical: 16 },
     center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
     muted: { color: tokens.mutedForeground, ...typeScale.body, textAlign: "center" },
     retry: { color: tokens.link, ...typeScale.body },
-    message: { maxWidth: "85%" },
+    message: { maxWidth: "85%", marginVertical: 5 },
     bubble: {
       borderRadius: 20,
       paddingHorizontal: 14,

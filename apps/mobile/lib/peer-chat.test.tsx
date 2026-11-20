@@ -7,12 +7,16 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import PeerChat from "../app/peer-chat";
 
-const { rpc, back, scrollToEnd, scrollProps } = vi.hoisted(() => ({
+const { rpc, back, scrollToOffset, scrollProps } = vi.hoisted(() => ({
   rpc: vi.fn(),
   back: vi.fn(),
-  scrollToEnd: vi.fn(),
+  scrollToOffset: vi.fn(),
   scrollProps: {
-    current: {} as { onContentSizeChange?: () => void; onScrollBeginDrag?: () => void },
+    current: {} as {
+      onContentSizeChange?: () => void;
+      onScrollBeginDrag?: () => void;
+      onScroll?: (event: { nativeEvent: { contentOffset: { y: number } } }) => void;
+    },
   },
 }));
 
@@ -85,19 +89,34 @@ vi.mock("react-native", () => {
       ),
     Text: view,
     View: view,
-    ScrollView: ({
+    FlatList: ({
       ref,
-      children,
+      data,
+      renderItem,
+      ListEmptyComponent,
       ...props
     }: {
       ref?: Ref<unknown>;
+      data: Array<{ messageId: string; text: string }>;
+      renderItem: (row: { item: { messageId: string; text: string }; index: number }) => ReactNode;
+      ListEmptyComponent?: ReactNode;
       children?: ReactNode;
       onContentSizeChange?: () => void;
       onScrollBeginDrag?: () => void;
     }) => {
-      useImperativeHandle(ref, () => ({ scrollToEnd }));
+      useImperativeHandle(ref, () => ({ scrollToOffset }));
       scrollProps.current = props;
-      return createElement("div", null, children);
+      return createElement(
+        "div",
+        null,
+        data.length
+          ? data
+              .slice(0, 10)
+              .map((item, index) =>
+                createElement("div", { key: index }, renderItem({ item, index })),
+              )
+          : ListEmptyComponent,
+      );
     },
   };
 });
@@ -109,7 +128,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   rpc.mockReset();
   back.mockReset();
-  scrollToEnd.mockReset();
+  scrollToOffset.mockReset();
 });
 
 async function open() {
@@ -140,10 +159,11 @@ async function open() {
 it("opens the exchange at its latest message", async () => {
   const screen = await open();
   expect(screen.textContent).toContain("note 39");
+  expect(screen.textContent).not.toContain("note 0");
 
   act(() => scrollProps.current.onContentSizeChange?.());
 
-  expect(scrollToEnd).toHaveBeenCalledWith({ animated: false });
+  expect(scrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: false });
 });
 
 it("leaves the position alone once the reader scrolls", async () => {
@@ -154,7 +174,7 @@ it("leaves the position alone once the reader scrolls", async () => {
     scrollProps.current.onContentSizeChange?.();
   });
 
-  expect(scrollToEnd).not.toHaveBeenCalled();
+  expect(scrollToOffset).not.toHaveBeenCalled();
 });
 
 it("names both bots in the header and closes the read-only chat", async () => {
@@ -167,4 +187,14 @@ it("names both bots in the header and closes the read-only chat", async () => {
   expect(close?.textContent).toBe("");
   act(() => close?.click());
   expect(back).toHaveBeenCalledOnce();
+});
+
+it("resumes following when the reader returns to the latest message", async () => {
+  await open();
+  act(() => {
+    scrollProps.current.onScrollBeginDrag?.();
+    scrollProps.current.onScroll?.({ nativeEvent: { contentOffset: { y: 0 } } });
+    scrollProps.current.onContentSizeChange?.();
+  });
+  expect(scrollToOffset).toHaveBeenCalledWith({ offset: 0, animated: false });
 });
