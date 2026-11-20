@@ -200,11 +200,22 @@ export async function provisionComputer(
   const started = performance.now();
   const log = getLogger().child({ "computer.id": computerId, "run.id": context.runId });
   let existing = await deps.prisma.computer.findUniqueOrThrow({ where: { id: computerId } });
+  let loggedBusy: ComputerBusyError | undefined;
+  const busy = (reason: string) => {
+    log.warn("computer.busy", {
+      reason,
+      lastObservedState: existing.state,
+      "bot.id": context.botId,
+      durationMs: Math.round(performance.now() - started),
+    });
+    loggedBusy = new ComputerBusyError();
+    return loggedBusy;
+  };
   if (existing.state === "quarantined")
     throw new Error("Computer requires recovery after an unconfirmed stop");
   await deps.prisma.$transaction((tx) => lockSpaceForWork(tx, existing.spaceId));
   if (existing.maintenanceId && existing.maintenanceId !== context.operationId)
-    throw new ComputerBusyError();
+    throw busy("maintenance");
   if (existing.controlLeaseId && !hasActiveComputerControl(existing)) {
     await expireComputerControl(deps, existing.id, existing.controlLeaseId);
     existing = await deps.prisma.computer.findUniqueOrThrow({ where: { id: computerId } });
@@ -239,7 +250,7 @@ export async function provisionComputer(
         // A row activated by an older release has no clock yet; start it now.
         data: { updatedAt: new Date(), runningSince },
       });
-      if (retained.count !== 1) throw new ComputerBusyError();
+      if (retained.count !== 1) throw busy("running_claim_lost");
       await recordComputerRunStart(deps.prisma, existing, runningSince);
       const damaged = await deps.sandbox.prepare(ref, context).then(
         () => false,
@@ -297,13 +308,13 @@ export async function provisionComputer(
   // A fresh booting claim (or one whose run lease is still live) cannot be reclaimed after
   // the wait either, so do not block workers for the full boot-wait window.
   if (existing.state === "booting" && reclaimStamp !== null && !bootClaimIsStale) {
-    throw new ComputerBusyError();
+    throw busy("boot_in_progress");
   }
   if (
     existing.state === "booting" &&
     (await hasLiveForeignRunLease(deps.prisma, computerId, context.runId))
   ) {
-    throw new ComputerBusyError();
+    throw busy("boot_by_live_run");
   }
   if (existing.state === "booting" || existing.state === "suspending") {
     existing = await waitForComputerReady(deps.prisma, computerId, context);
@@ -319,17 +330,17 @@ export async function provisionComputer(
     !staleSuspending &&
     !["running", "stopped", "suspended", "error", "booting"].includes(existing.state)
   ) {
-    throw new ComputerBusyError();
+    throw busy("not_ready");
   }
   // Waited for suspending (or similar) and landed on booting we never stamped: another
   // caller owns that boot. Do not adopt its updatedAt / previousRef and double-provision.
   if (existing.state === "booting" && reclaimStamp === null) {
-    throw new ComputerBusyError();
+    throw busy("boot_started_during_wait");
   }
   // We came to reclaim abandoned booting; if another caller already activated, do not fall
   // through into reconnect (that would provision again under their providerRef).
   if (reclaimStamp !== null && existing.state === "running") {
-    throw new ComputerBusyError();
+    throw busy("boot_completed_during_wait");
   }
   // Stamp age is only a lower bound. Dedicated / lease-less boots can provision longer than
   // BOOT_CLAIM_STALE_MS; a heartbeating foreign run lease means the holder is still alive.
@@ -338,7 +349,7 @@ export async function provisionComputer(
     reclaimStamp !== null &&
     (await hasLiveForeignRunLease(deps.prisma, computerId, context.runId))
   ) {
-    throw new ComputerBusyError();
+    throw busy("boot_by_live_run");
   }
 
   const reconnecting =
@@ -398,11 +409,11 @@ export async function provisionComputer(
       },
     });
     if (result.count === 1 && trackAllocations && (await orphanCleanupInProgress(tx, computerId))) {
-      throw new ComputerBusyError();
+      throw busy("orphan_cleanup_in_progress");
     }
     return result;
   });
-  if (claimed.count !== 1) throw new ComputerBusyError();
+  if (claimed.count !== 1) throw busy("claim_lost");
   const bootHeartbeat = trackAllocations
     ? setInterval(() => {
         void deps.prisma.computer
@@ -509,7 +520,7 @@ export async function provisionComputer(
         },
         data: { restorePending: true, updatedAt: claimStamp },
       });
-      if (claim.count !== 1) throw new ComputerBusyError();
+      if (claim.count !== 1) throw busy("replacement_claim_lost");
     };
     let ref = await provision();
     provisioned = ref;
@@ -610,13 +621,13 @@ export async function provisionComputer(
         ? await deps.prisma.$transaction(async (tx) => {
             const result = await tx.computer.updateMany(activation);
             if (result.count === 1 && !(await finishOrphanRegistration(tx, computerId, ref))) {
-              throw new ComputerBusyError();
+              throw busy("orphan_cleanup_in_progress");
             }
             return result;
           })
         : await deps.prisma.computer.updateMany(activation);
     if (activated.count !== 1) {
-      throw new ComputerBusyError();
+      throw busy("activation_claim_lost");
     }
     active = true;
     // A computer we believed running that the provider had to resume or replace was stopped
@@ -634,11 +645,13 @@ export async function provisionComputer(
     });
     return ref;
   } catch (error) {
-    log.warn("computer.provision_failed", {
-      provider: existing.kind,
-      durationMs: Math.round(performance.now() - started),
-      error,
-    });
+    if (!loggedBusy || error !== loggedBusy) {
+      log.warn("computer.provision_failed", {
+        provider: existing.kind,
+        durationMs: Math.round(performance.now() - started),
+        error,
+      });
+    }
     if (active) throw error;
     const tracked = provisioned ? registered.has(machineKey(provisioned)) : false;
     // A failed reconnect never owns an existing workspace, even if setup failed.
