@@ -2202,6 +2202,7 @@ msgstr "לא ניתן להתחבר למסך המחשב"
 #: src/lib/user-error.ts
 #: src/pages/Auth.tsx
 #: src/pages/shell/computer-card.tsx
+#: src/pages/shell/shell-dialogs.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Could not continue"
 msgstr "לא ניתן להמשיך"
