@@ -579,8 +579,10 @@ export class McpConnector implements ConnectorProvider {
               },
             );
           // Cleanup must not turn one server's failure into losing every server's tools.
-          if (!context.signal.aborted) await this.evict(key).catch(() => undefined);
-          this.unavailable.set(key, reason);
+          if (!context.signal.aborted) {
+            await this.evict(key).catch(() => undefined);
+            this.unavailable.set(key, reason);
+          }
           // A cancelled run says nothing about the server, and an install that outlived the
           // deadline is still on its way.
           if (!context.signal.aborted && !this.installing.has(key)) {

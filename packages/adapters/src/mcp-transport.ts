@@ -357,6 +357,14 @@ function stdioParams(options: McpStdioOptions): StdioServerParameters {
   };
 }
 
+type CatalogRead = { result: McpDiscoveryResult<Tool>; expiresAt?: number };
+type PendingCatalogRead = {
+  controller: AbortController;
+  callers: number;
+  settled: boolean;
+  promise: Promise<CatalogRead>;
+};
+
 /** A narrow seam around the official SDK, suitable for the agent tool layer. */
 export class McpSession {
   client: Client;
@@ -369,7 +377,8 @@ export class McpSession {
   private readonly formControllers = new Set<AbortController>();
   private connecting?: Promise<void>;
   private catalogGeneration = 0;
-  private catalog?: { limitsKey: string; result: McpDiscoveryResult<Tool> };
+  private readonly catalogReads = new Map<string, PendingCatalogRead>();
+  private catalog?: { limitsKey: string; result: McpDiscoveryResult<Tool>; expiresAt?: number };
 
   constructor(options: McpClientOptions = {}) {
     this.clientOptions = options;
@@ -537,23 +546,103 @@ export class McpSession {
     const limits = mcpDiscoveryLimits(options?.discoveryLimits);
     const limitsKey = JSON.stringify(limits);
     if (options?.fresh) this.invalidateToolCatalog();
-    for (;;) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
       this.assertConnected();
       options?.signal?.throwIfAborted();
-      if (this.catalog?.limitsKey === limitsKey) return structuredClone(this.catalog.result);
+      if (
+        this.catalog?.limitsKey === limitsKey &&
+        (this.catalog.expiresAt === undefined || Date.now() < this.catalog.expiresAt)
+      )
+        return structuredClone(this.catalog.result);
       const generation = this.catalogGeneration;
-      // Each discovery owns its signal. Cancelling one run cannot cancel another
-      // caller's listing, or poison the catalog for later runs.
-      const result = await listMcpTools(this.client, { signal: options?.signal }, limits);
+      const { result, expiresAt } = await this.sharedCatalogRead(
+        `${generation}:${limitsKey}`,
+        limits,
+        options?.signal,
+      );
       options?.signal?.throwIfAborted();
       this.assertConnected();
-      // A notification or fresh probe may overtake an in-flight listing. Neither
-      // publish nor serve that obsolete result; repeat only the read operation.
+      // Repeat an overtaken read once; a continuously changing catalog is retryable.
       if (generation !== this.catalogGeneration) continue;
-      // Truncation is a diagnostic, never an authoritative catalog.
-      if (!result.diagnostic) this.catalog = { limitsKey, result: structuredClone(result) };
-      return result;
+      if (!result.diagnostic)
+        this.catalog = { limitsKey, result: structuredClone(result), expiresAt };
+      return structuredClone(result);
     }
+    throw new Error("MCP tool catalog changed repeatedly during discovery; retry discovery");
+  }
+
+  private sharedCatalogRead(
+    key: string,
+    limits: McpDiscoveryLimits,
+    signal?: AbortSignal,
+  ): Promise<CatalogRead> {
+    let pending = this.catalogReads.get(key);
+    if (!pending) {
+      const controller = new AbortController();
+      const read: PendingCatalogRead = {
+        controller,
+        callers: 0,
+        settled: false,
+        promise: this.readCatalog(limits, controller.signal),
+      };
+      pending = read;
+      this.catalogReads.set(key, read);
+      const settled = () => {
+        read.settled = true;
+        if (this.catalogReads.get(key) === read) this.catalogReads.delete(key);
+      };
+      void read.promise.then(settled, settled);
+    }
+    const read = pending;
+    read.callers += 1;
+    // Each caller stops waiting independently. Only the final caller may cancel
+    // the SDK request, and a later caller then starts its own fresh read.
+    return new Promise((resolve, reject) => {
+      let finished = false;
+      const finish = (settle: () => void) => {
+        if (finished) return;
+        finished = true;
+        signal?.removeEventListener("abort", aborted);
+        read.callers -= 1;
+        if (read.callers === 0 && !read.settled) {
+          if (this.catalogReads.get(key) === read) this.catalogReads.delete(key);
+          read.controller.abort();
+        }
+        settle();
+      };
+      const aborted = () =>
+        finish(() => reject(signal?.reason ?? new Error("MCP discovery cancelled")));
+      signal?.addEventListener("abort", aborted, { once: true });
+      void read.promise.then(
+        (value) => finish(() => resolve(value)),
+        (error) => finish(() => reject(error)),
+      );
+      if (signal?.aborted) aborted();
+    });
+  }
+
+  private async readCatalog(limits: McpDiscoveryLimits, signal: AbortSignal): Promise<CatalogRead> {
+    const client = this.client;
+    let expiresAt: number | undefined;
+    const result = await listMcpTools(
+      {
+        listTools: async (params, requestOptions) => {
+          const startedAt = Date.now();
+          const page = await client.listTools(params, requestOptions);
+          // ttlMs is an optional compatibility extension preserved by the SDK.
+          // Use the earliest expiry across pages, including network delay.
+          for (const ttl of [page.ttlMs, page._meta?.ttlMs]) {
+            if (typeof ttl === "number" && Number.isFinite(ttl) && ttl >= 0)
+              expiresAt = Math.min(expiresAt ?? Infinity, startedAt + ttl);
+          }
+          return page;
+        },
+      },
+      { signal },
+      limits,
+    );
+    signal.throwIfAborted();
+    return { result, expiresAt };
   }
 
   async callTool(
@@ -573,13 +662,16 @@ export class McpSession {
         }
       : this.client;
     try {
-      return (await callMcpToolWithDeadline(
+      const result = (await callMcpToolWithDeadline(
         callClient,
         name,
         args,
         options?.signal,
         options?.form,
       )) as CallToolResult;
+      // Some servers report missing tools as an ordinary error result.
+      if (result.isError) this.invalidateToolCatalog();
+      return result;
     } catch (error) {
       // This includes unknown-tool protocol errors. Invalidate conservatively:
       // error messages are server-defined, and tool calls must never be replayed

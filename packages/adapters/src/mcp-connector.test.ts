@@ -1293,10 +1293,6 @@ describe("MCP connector session cache", () => {
     const firstRequest = new Promise<void>((resolve) => {
       firstStarted = resolve;
     });
-    let secondStarted!: () => void;
-    const secondRequest = new Promise<void>((resolve) => {
-      secondStarted = resolve;
-    });
     let release!: () => void;
     const released = new Promise<void>((resolve) => {
       release = resolve;
@@ -1308,11 +1304,7 @@ describe("MCP connector session cache", () => {
         const message = await request.clone().json();
         if (message.method === "tools/list") {
           lists += 1;
-          if (lists === 1) {
-            firstStarted();
-            return new Response(null, { status: 202 });
-          }
-          secondStarted();
+          firstStarted();
           await released;
         }
       }
@@ -1326,6 +1318,7 @@ describe("MCP connector session cache", () => {
       {} as never,
       { network: TEST_NETWORK },
     );
+    const discoveries = vi.spyOn(McpSession.prototype, "listTools");
     const controller = new AbortController();
     const context = { spaceId: "w1", userId: "u1", botId: "bot-1", signal: controller.signal };
     try {
@@ -1335,13 +1328,13 @@ describe("MCP connector session cache", () => {
         ...context,
         signal: new AbortController().signal,
       } as never);
-      await secondRequest;
+      await vi.waitFor(() => expect(discoveries).toHaveBeenCalledTimes(2));
       controller.abort(new Error("cancelled run"));
       await first;
       release();
       expect((await second).map((entry) => entry.name)).toEqual(["mcp__demo__echo"]);
       expect(state.initializations).toBe(1);
-      expect(lists).toBe(2);
+      expect(lists).toBe(1);
     } finally {
       release();
       await connector.close();
