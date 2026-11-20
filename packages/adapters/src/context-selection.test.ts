@@ -5,6 +5,7 @@ import {
   ContextCacheTracker,
   estimateContextTokens,
   estimateTextTokens,
+  historySuffixStart,
   providerContextPrefix,
   selectContext,
   shortenToolResultText,
@@ -18,6 +19,45 @@ const budget = {
 };
 const user = (content: string) => ({ role: "user", content, timestamp: 1 });
 describe("bounded context selection", () => {
+  it("bounds a contiguous suffix by estimated tokens, including exact and empty allowances", () => {
+    const messages = [user("old"), user("newest")];
+    const newestTokens = estimateContextTokens(providerContextPrefix("", [], messages).messages[1]);
+    expect(historySuffixStart([], 100)).toBe(0);
+    expect(historySuffixStart(messages, 0)).toBe(2);
+    expect(historySuffixStart(messages, newestTokens - 1)).toBe(2);
+    expect(historySuffixStart(messages, newestTokens)).toBe(1);
+    expect(historySuffixStart(messages, 1000)).toBe(0);
+  });
+  it("keeps tool groups intact and never skips an oversized group to fill a history hole", () => {
+    const call = {
+      role: "assistant",
+      content: [{ type: "toolCall", id: "history-call", name: "read", arguments: {} }],
+    };
+    const result = {
+      role: "toolResult",
+      toolCallId: "history-call",
+      content: "result ".repeat(30),
+    };
+    const newest = user("newest");
+    const messages = [user("small older message"), call, result, newest];
+    const groupTokens = [call, result, newest].reduce(
+      (total, message) =>
+        total + estimateContextTokens(providerContextPrefix("", [], [message]).messages[0]),
+      0,
+    );
+    expect(historySuffixStart(messages, groupTokens)).toBe(1);
+    expect(historySuffixStart(messages, groupTokens - 1)).toBe(3);
+    const system = { role: "system", content: "instructions ".repeat(1000) };
+    expect(historySuffixStart([system, newest], groupTokens)).toBe(0);
+  });
+  it("uses the configured image estimate for historical suffixes", () => {
+    const image = {
+      role: "user",
+      content: [{ type: "image", data: "fixture", mimeType: "image/png" }],
+    };
+    expect(historySuffixStart([image], 500, 1000)).toBe(1);
+    expect(historySuffixStart([image], 1500, 1000)).toBe(0);
+  });
   it("tells a model too small for the instructions and tools apart from a long conversation", () => {
     const tools = [{ name: "search", description: "Search ".repeat(1200), parameters: {} }];
     expect(() =>
@@ -193,6 +233,13 @@ describe("bounded context selection", () => {
     expect(JSON.stringify(selected.messages.at(-1)!.content)).toContain(image.data);
     expect(selected.truncatedToolResults).toBe(1);
   });
+  it.each(["retrieval", "snapshots"] as const)(
+    "uses the full token budget without a default exchange cutoff for %s",
+    (strategy) => {
+      const messages = Array.from({ length: 20 }, (_, index) => user(`exchange ${index}`));
+      expect(selectContext(messages, { budget, strategy }).messages).toEqual(messages);
+    },
+  );
   it("drops older exchanges while retaining current input and durable protected constraints", () => {
     const history = Array.from({ length: 20 }, (_, index) => user(`exchange ${index}`));
     const selected = selectContext(history, {

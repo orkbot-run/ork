@@ -570,6 +570,27 @@ function messageGroups(
   }
   return groups;
 }
+/** Start of the newest contiguous history suffix that fits, keeping tool groups intact.
+ * System instructions are protected separately and do not consume the history allowance.
+ */
+export function historySuffixStart(
+  messages: readonly ContextMessage[],
+  allowance: number,
+  imageTokens?: ContextBudget["imageTokens"],
+): number {
+  let start = messages.length;
+  let used = 0;
+  const groups = messageGroups(messages, imageTokens);
+  for (let index = groups.length - 1; index >= 0; index--) {
+    const group = groups[index]!;
+    if (messages[group.indexes[0]!]!.role !== "system") {
+      if (used + group.tokens > allowance) break;
+      used += group.tokens;
+    }
+    start = group.indexes[0]!;
+  }
+  return start;
+}
 /** Cheap selection only. No clock event or strategy calls a model or creates a summary. */
 export function selectContext<T extends ContextMessage>(
   messages: readonly T[],
@@ -703,7 +724,7 @@ export function selectContext<T extends ContextMessage>(
     (options.strategy === "cache-aware" && options.cacheWarmth === "likely-warm");
   const exchangeLimit = keepPrefix
     ? Number.POSITIVE_INFINITY
-    : Math.max(1, options.recentExchanges ?? 8);
+    : Math.max(1, options.recentExchanges ?? Number.POSITIVE_INFINITY);
   let exchanges = 0;
   // Retain a contiguous recent suffix. Skip no holes inside a retained tool group.
   for (let index = groups.length - 1; index >= 0; index--) {

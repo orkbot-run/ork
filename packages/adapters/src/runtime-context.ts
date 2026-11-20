@@ -9,6 +9,7 @@ import {
   ContextBudgetError,
   ContextCacheTracker,
   estimateContextTokens,
+  historySuffixStart,
   providerContextPrefix,
   selectContext,
   shortenToolResultText,
@@ -342,17 +343,14 @@ export function createRuntimeContextPolicy(
     );
     let currentIndex = messages.findIndex(
       (message) =>
-        message.role === "user" && message !== projected?.navigation && !original(message),
+        message.role === "user" &&
+        message !== projected?.navigation &&
+        !(message as Message & OriginalMetadata).orkbotHistory &&
+        !original(message),
     );
     if (currentIndex < 0)
       currentIndex = messages.findLastIndex((message) => message.role === "user");
     if (currentIndex < 0) currentIndex = 0;
-    // Steering, follow-ups and finished shells arrive as user messages during the
-    // run. Give each its own exchange so it does not push older history out:
-    // a moved first message rewrites the provider's whole cached prefix.
-    const laterUserMessages = messages
-      .slice(currentIndex + 1)
-      .filter((message) => message.role === "user").length;
     let protectedIndexes = messages.flatMap((message, index) =>
       message.role === "system" || (index >= currentIndex && message.role === "user")
         ? [index]
@@ -376,28 +374,23 @@ export function createRuntimeContextPolicy(
     const useSnapshots =
       strategy === "snapshots" || (strategy === "cache-aware" && predictedCache !== "likely-warm");
     const historical = messages.slice(0, currentIndex);
-    const historicalContent = historical.filter((message) => message.role !== "system");
     const shortHistoryAllowance = Math.min(
       16384,
       Math.max(0, Math.floor((contextWindow - reserve - fixed) / 4)),
     );
-    // Short originals can cost less than another lookup. Retain them when their
-    // complete estimated payload fits a bounded share of the resolved window.
-    const retainShortHistory =
-      useSnapshots &&
-      estimateContextTokens(
-        providerContextPrefix("", [], historicalContent),
-        options.imageTokens,
-      ) <= shortHistoryAllowance;
-    if (useSnapshots && !retainShortHistory) {
-      const old = historical.slice(0, Math.max(0, historical.length - 8));
+    const boundedHistory = !standaloneHistoryFallback && (useSnapshots || strategy === "retrieval");
+    const recentStart = boundedHistory
+      ? historySuffixStart(historical, shortHistoryAllowance, options.imageTokens)
+      : 0;
+    if (recentStart > 0) {
+      const old = historical.slice(0, recentStart);
       let catalog = "";
       const maximum = Math.min(
         8192,
         Math.max(0, Math.floor((contextWindow - reserve - fixed) / 4)),
       );
       catalogIds = [];
-      for (const message of old.slice(-64).reverse()) {
+      for (const message of useSnapshots ? old.slice(-64).reverse() : []) {
         const stored = original(message);
         if (!stored?.id) continue;
         const entry = `[message ${stored.id}${stored.createdAt ? ` at ${stored.createdAt}` : ""}; ${stored.speaker ?? stored.role}] ${snapshot(stored.content)}\n`;
@@ -405,7 +398,6 @@ export function createRuntimeContextPolicy(
         catalog = entry + catalog;
         catalogIds.unshift(stored.id);
       }
-      const recentStart = Math.max(0, historical.length - 8);
       const earlierSystem = historical
         .slice(0, recentStart)
         .filter((message) => message.role === "system");
@@ -416,7 +408,7 @@ export function createRuntimeContextPolicy(
       ];
       protectedIndexes = messages.flatMap((message, index) =>
         message.role === "system" ||
-        (index >= earlierSystem.length + Math.min(8, historical.length) && message.role === "user")
+        (index >= earlierSystem.length + historical.length - recentStart && message.role === "user")
           ? [index]
           : [],
       );
@@ -548,14 +540,14 @@ export function createRuntimeContextPolicy(
       fixed,
     );
     messages = retainedTokens <= contextWindow - reserve ? retained : shortenOlderResults(false);
+    // History already has a token-bounded suffix; current progress uses the
+    // remaining full model budget rather than spending the history allowance.
     const selected = selectContext(messages, {
       budget,
       strategy,
       protectedIndexes,
       verbatimMcpServers: request.verbatimMcpServers,
       cacheWarmth: predictedCache,
-      recentExchanges:
-        retainShortHistory || standaloneHistoryFallback ? messages.length : 8 + laterUserMessages,
     });
     const shortenedStructuredResults = selected.messages.filter((message) => {
       if (message.role !== "toolResult") return false;

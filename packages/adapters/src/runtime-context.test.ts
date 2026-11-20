@@ -598,6 +598,89 @@ describe("runtime context policy", () => {
       expect(JSON.stringify(prepared)).not.toContain("Historical navigation snapshots");
     },
   );
+  it.each(
+    (["retrieval", "snapshots", "cache-aware"] as const).flatMap((strategy) =>
+      [false, true].map((withSummary) => ({ strategy, withSummary })),
+    ),
+  )(
+    "keeps a decision more than eight exchanges back in a token-bounded $strategy suffix (summary=$withSummary)",
+    ({ strategy, withSummary }) => {
+      const { request, context } = fixture(100);
+      for (let index = 76; index < request.history.length; index++) {
+        const content =
+          index === 76
+            ? "Decision: use the existing queue and require approval before publishing."
+            : `Follow-up ${index}: acknowledged.`;
+        request.history[index]!.content = content;
+        (context.messages[index] as { content: string }).content = content;
+      }
+      const decisionMessage = context.messages[76]!;
+      const system = {
+        role: "system",
+        content: "Keep approval constraints",
+        timestamp: 0,
+      } as Message;
+      const summary = {
+        role: "user",
+        content:
+          "Ork-owned compacted context through message sequence 75: approval still required.",
+        orkbotHistory: true,
+        timestamp: 0,
+      } as Message;
+      context.messages.unshift(system, ...(withSummary ? [summary] : []));
+      const policy = createRuntimeContextPolicy({ ...request, contextStrategy: strategy });
+      const prepared = policy.prepareContext(context, model);
+      expect(prepared.messages).toContain(decisionMessage);
+      expect(prepared.messages).toContain(system);
+      if (withSummary) expect(prepared.messages).toContain(summary);
+      expect(prepared.messages.at(-1)).toBe(context.messages.at(-1));
+      const keptHistory = prepared.messages.filter(
+        (message) =>
+          context.messages.includes(message) && message !== system && message !== summary,
+      );
+      expect(keptHistory).toEqual(
+        context.messages.slice(context.messages.indexOf(keptHistory[0]!)),
+      );
+      expect(prepared.messages.length).toBeLessThan(context.messages.length);
+      expect(policy.getDecision()!.estimatedInputTokens).toBeLessThanOrEqual(
+        model.contextWindow - model.maxTokens,
+      );
+    },
+  );
+  it.each(["retrieval", "snapshots"] as const)(
+    "does not charge current tool progress or steering to the %s history allowance",
+    (strategy) => {
+      const { request, context } = fixture(50);
+      const current = context.messages.at(-1)!;
+      const evidence = "evidence ".repeat(1100);
+      const call = {
+        role: "assistant",
+        content: [{ type: "toolCall", id: "current-call", name: "read", arguments: {} }],
+        timestamp: 101,
+      } as Message;
+      const result = {
+        role: "toolResult",
+        toolCallId: "current-call",
+        toolName: "read",
+        content: [{ type: "text", text: evidence }],
+        isError: false,
+        timestamp: 102,
+      } as Message;
+      const steering = {
+        role: "user",
+        content: "Keep the earlier approval constraint",
+        timestamp: 103,
+      } as Message;
+      context.messages.push(call, result, steering);
+      const policy = createRuntimeContextPolicy({ ...request, contextStrategy: strategy });
+      const prepared = policy.prepareContext(context, { ...model, contextWindow: 12000 });
+      for (const message of [current, call, result, steering])
+        expect(prepared.messages).toContain(message);
+      expect(policy.getDecision()!.estimatedInputTokens).toBeLessThanOrEqual(
+        12000 - model.maxTokens,
+      );
+    },
+  );
   it("measures short original history separately from Pi's system transcript", () => {
     const { request, context } = fixture(100);
     for (const [index, item] of request.history.entries()) {
@@ -631,7 +714,7 @@ describe("runtime context policy", () => {
     expect(prepared.messages.at(-1)).toEqual(context.messages.at(-1));
   });
   it("creates navigation snapshots from originals with IDs and dates without inference", () => {
-    const { request, context } = fixture();
+    const { request, context } = fixture(40);
     const policy = createRuntimeContextPolicy({ ...request, contextStrategy: "snapshots" });
     const prepared = policy.prepareContext(context, model);
     const first = prepared.messages[0]!.content;
@@ -642,7 +725,7 @@ describe("runtime context policy", () => {
     expect(policy.getDecision()!.estimatedInputTokens).toBeLessThan(32768);
   });
   it("shows who spoke in navigation snapshots of a group thread", () => {
-    const { request, context } = fixture();
+    const { request, context } = fixture(40);
     // Replayed as the new history shapes: another bot as a labelled user turn, own reply as assistant.
     request.history[10] = { ...request.history[10]!, role: "assistant", speaker: "Anya" };
     request.history[11] = { ...request.history[11]!, role: "assistant" };
@@ -666,10 +749,10 @@ describe("runtime context policy", () => {
   });
   it("still matches a legacy checkpoint's replayed own reply to its stored message", () => {
     const { request, context } = fixture(12);
-    request.history[3] = { ...request.history[3]!, role: "assistant" };
-    context.messages[3] = {
+    request.history[9] = { ...request.history[9]!, role: "assistant" };
+    context.messages[9] = {
       role: "user",
-      content: `Assistant: ${request.history[3]!.content}`,
+      content: `Assistant: ${request.history[9]!.content}`,
       timestamp: 0,
       orkbotHistory: true,
     } as Message;
@@ -677,7 +760,7 @@ describe("runtime context policy", () => {
       ...request,
       contextStrategy: "snapshots",
     }).prepareContext(context, { ...model, contextWindow: 8000 });
-    expect(String(prepared.messages[0]!.content)).toContain("message message-3 at");
+    expect(String(prepared.messages[0]!.content)).toContain("message message-9 at");
     expect(String(prepared.messages[0]!.content)).toContain("; assistant]");
   });
   it("uses fake-clock warmth from matching model requests, expiry only selects existing snapshots", () => {
