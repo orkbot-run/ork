@@ -336,7 +336,7 @@ describe
       });
       const other = { ...actor, spaceId: otherSpace };
       try {
-        const args = { ...(await input()), pluginParts: ["connector" as const] };
+        const args = { ...(await input()), pluginParts: ["connector" as const, "skills" as const] };
         const first = await runAsTenant(actor, () =>
           client().capabilities.install({ kind: "plugin", ...args }),
         );
@@ -347,6 +347,10 @@ describe
             data: { allSpaces: true },
           });
           await prisma.mcpServer.updateMany({
+            where: { installId: first.id },
+            data: { allSpaces: true },
+          });
+          await prisma.agentSkill.updateMany({
             where: { installId: first.id },
             data: { allSpaces: true },
           });
