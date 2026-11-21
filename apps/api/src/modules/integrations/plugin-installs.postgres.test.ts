@@ -341,12 +341,16 @@ describe
           client().capabilities.install({ kind: "plugin", ...args }),
         );
         // Existing installations could have been marked available in every workspace.
-        await runAsSystem("simulate a legacy shared plugin", () =>
-          prisma.capabilityInstall.update({
+        await runAsSystem("simulate a legacy shared plugin", async () => {
+          await prisma.capabilityInstall.update({
             where: { id: first.id },
             data: { allSpaces: true },
-          }),
-        );
+          });
+          await prisma.mcpServer.updateMany({
+            where: { installId: first.id },
+            data: { allSpaces: true },
+          });
+        });
         expect(await runAsTenant(other, () => client(other).capabilities.list())).toEqual([]);
         const second = await runAsTenant(other, () =>
           client(other).capabilities.install({ kind: "plugin", ...args }),

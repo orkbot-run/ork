@@ -53,7 +53,7 @@ const CONFLICT_MESSAGE = {
 export async function assertNameFreeWhereAvailable(
   tx: Prisma.TransactionClient,
   kind: "skill" | "mcpServer",
-  actor: Pick<Actor, "userId">,
+  actor: Pick<Actor, "userId" | "spaceId">,
   name: string,
   availability: SpaceAvailability,
   excludeId?: string,
@@ -78,8 +78,15 @@ export async function assertNameFreeWhereAvailable(
           },
           select: { spaceId: true, allSpaces: true, availableIn: AVAILABILITY_SELECT },
         });
+  const isolated = (await itemSecretSpace(tx, actor.spaceId, true)) !== null;
   const rows = await runAsSystemInTransaction(tx, "owner's names across their spaces", read);
-  if (rows.some((row) => overlaps(spaceAvailability(row), availability)))
+  if (
+    rows.some(
+      (row) =>
+        (!isolated || row.spaceId === actor.spaceId) &&
+        overlaps(spaceAvailability(row), availability),
+    )
+  )
     throw new ORPCError("CONFLICT", { message: CONFLICT_MESSAGE[kind] });
 }
 
