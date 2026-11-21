@@ -61,6 +61,10 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
+// Tauri's global freezePrototype also affects unprivileged OAuth pages. Apply the
+// same protection only to the product and setup documents instead.
+const PROTOTYPE_GUARD: &str = include_str!("../../tauri-ui/prototype-guard.js");
+
 struct DesktopState {
     directory: PathBuf,
     setup: Mutex<Option<settings::Setup>>,
@@ -2976,6 +2980,7 @@ async fn open_server(
         .min_inner_size(640.0, 480.0)
         .visible(false)
         .disable_drag_drop_handler()
+        .initialization_script(PROTOTYPE_GUARD)
         // An explicit legacy workspace link opens its verified entry instead of the last Space.
         .initialization_script(
             r##"if (window.top === window && location.hash === "#ork-workspace-entry") {
@@ -3490,6 +3495,7 @@ fn setup_window(app: &tauri::AppHandle, visible: bool) -> tauri::Result<WebviewW
             .inner_size(580.0, 640.0)
             .resizable(false)
             .visible(false)
+            .initialization_script(PROTOTYPE_GUARD)
             .on_navigation(|url| is_setup_document("setup", url))
             .on_page_load(move |window, payload| {
                 if payload.event() == tauri::webview::PageLoadEvent::Finished
