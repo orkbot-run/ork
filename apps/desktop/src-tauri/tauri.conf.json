@@ -13,7 +13,7 @@
     "security": {
       "csp": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src ipc: http://ipc.localhost; form-action 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'",
       "capabilities": ["setup"],
-      "freezePrototype": true
+      "freezePrototype": false
     }
   },
   "plugins": {
