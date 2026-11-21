@@ -2957,6 +2957,7 @@ describe("private API connectors", () => {
     }));
     const prisma = {
       capabilityInstall: { create },
+      $queryRaw: vi.fn(async () => [{ managed: false, currentSpace: "workspace-1" }]),
       $transaction: vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run(prisma)),
     } as unknown as PrismaClient;
     const deps = {

@@ -63,6 +63,7 @@ import type { RouterContext } from "#modules/platform/routes/context";
 import { computerContext, meDto } from "#modules/platform/routes/shared";
 import {
   assertNameFreeWhereAvailable,
+  installVisibility,
   lockOwner,
   serverAvailability,
   serverSecretSpace,
@@ -106,9 +107,8 @@ export function mcpRoutes(ctx: RouterContext) {
       // Parts changes hold this lock while adding children; reading them without it could
       // miss a connector committed meanwhile and leave its secret behind.
       await lockPluginInstalls(tx, actor);
-      const existing = await tx.capabilityInstall.findFirst({
-        where: { id, ...availableInSpace(actor) },
-      });
+      const scope = await installVisibility(tx, actor);
+      const existing = await tx.capabilityInstall.findFirst({ where: { id, ...scope.where } });
       if (!existing) return;
       if (existing.kind === "plugin") {
         const servers = await tx.mcpServer.findMany({
@@ -163,9 +163,15 @@ export function mcpRoutes(ctx: RouterContext) {
     capabilities: {
       sourcePresets: authed.capabilities.sourcePresets.handler(() => sourcePresets()),
       list: authed.capabilities.list.handler(async ({ context }) => {
-        const rows = await deps.prisma.capabilityInstall.findMany({
-          where: availableInSpace(context.actor),
-          include: { availableIn: AVAILABILITY_SELECT },
+        const { rows, isolated } = await deps.prisma.$transaction(async (tx) => {
+          const scope = await installVisibility(tx, context.actor);
+          return {
+            isolated: scope.isolated,
+            rows: await tx.capabilityInstall.findMany({
+              where: scope.where,
+              include: { availableIn: AVAILABILITY_SELECT },
+            }),
+          };
         });
         return rows.map((row) => ({
           id: row.id,
@@ -176,7 +182,7 @@ export function mcpRoutes(ctx: RouterContext) {
           digest: row.digest,
           secretConfigured: Boolean(row.secretId),
           config: row.config as Record<string, unknown>,
-          availability: spaceAvailability(row),
+          availability: isolated ? undefined : spaceAvailability(row),
           createdAt: row.createdAt.toISOString(),
         }));
       }),
@@ -303,6 +309,7 @@ export function mcpRoutes(ctx: RouterContext) {
           .update(JSON.stringify({ kind: input.kind, source, config }))
           .digest("hex")}`;
         const row = await deps.prisma.$transaction(async (tx) => {
+          const scope = await installVisibility(tx, context.actor);
           if (stored) {
             // A source the user adds reaches all their spaces, so its secret is the account's.
             await tx.secret.create({
@@ -319,7 +326,7 @@ export function mcpRoutes(ctx: RouterContext) {
             data: {
               spaceId: context.actor.spaceId,
               userId: context.actor.userId,
-              allSpaces: true,
+              allSpaces: !scope.isolated,
               kind: input.kind,
               name: input.name.trim(),
               source,

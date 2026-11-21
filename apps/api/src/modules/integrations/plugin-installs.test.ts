@@ -116,6 +116,23 @@ describe("confirmed plugin installation", () => {
     });
   });
 
+  it("installs a separate connector in a managed workspace even when another workspace has it", async () => {
+    const { deps, prisma } = setup();
+    prisma.$queryRaw.mockResolvedValue([
+      { bypass: null, managed: true, currentSpace: actor.spaceId },
+    ]);
+    await installPlugin(deps, actor, { ...(await input()), pluginParts: ["connector"] });
+    expect(prisma.capabilityInstall.findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({ spaceId: actor.spaceId }),
+    });
+    expect(prisma.capabilityInstall.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ spaceId: actor.spaceId, allSpaces: false }),
+    });
+    expect(prisma.mcpServer.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ spaceId: actor.spaceId, allSpaces: false }),
+    });
+  });
+
   it("persists read-only skills and native MCP rows atomically, not credentials in config", async () => {
     const { deps, prisma, secrets } = setup();
     const result = await installPlugin(deps, actor, await input());
@@ -407,6 +424,6 @@ describe("plugin RPC boundary", () => {
         parts: ["skills", "connector"],
       }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.capabilityInstall.update).not.toHaveBeenCalled();
   });
 });

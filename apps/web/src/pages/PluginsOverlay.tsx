@@ -1834,6 +1834,9 @@ export function PluginsOverlay({
               assigned={assigned}
               activeBotId={activeBotId}
               managed={managedLink(plugin)}
+              serversLoading={mcpQuery.isFetching}
+              serversError={mcpError}
+              onRetryServers={() => void mcpQuery.refetch()}
               onBack={() => setPlugin(null)}
               onChanged={refresh}
             />
