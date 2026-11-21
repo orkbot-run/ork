@@ -158,6 +158,9 @@ export function PluginDetail({
   assigned,
   activeBotId,
   managed: managedApp,
+  serversLoading = false,
+  serversError,
+  onRetryServers,
   skillsOnly = false,
   onBack,
   onChanged,
@@ -168,6 +171,9 @@ export function PluginDetail({
   assigned: Set<string>;
   activeBotId?: string;
   managed?: ManagedAppLink;
+  serversLoading?: boolean;
+  serversError?: string | null;
+  onRetryServers?: () => void;
   /** Opened from Skills: only the plugin's skills are added here; its connector belongs to Integrations. */
   skillsOnly?: boolean;
   onBack: () => void;
@@ -558,6 +564,27 @@ export function PluginDetail({
               ))
             )}
           </ul>
+          {installed && parts.includes("connector") && !managed && servers.length === 0 ? (
+            <div
+              className="mt-3 flex items-center gap-3 text-sm text-muted-foreground"
+              role="status"
+            >
+              {serversLoading ? (
+                <Trans>Loading connection…</Trans>
+              ) : (
+                <>
+                  <span>
+                    {serversError ?? t`This connection is unavailable in this workspace.`}
+                  </span>
+                  {onRetryServers ? (
+                    <Button size="sm" variant="secondary" onClick={onRetryServers}>
+                      <Trans>Retry</Trans>
+                    </Button>
+                  ) : null}
+                </>
+              )}
+            </div>
+          ) : null}
         </section>
       ) : null}
 

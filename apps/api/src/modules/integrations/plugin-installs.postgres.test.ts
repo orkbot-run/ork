@@ -299,4 +299,86 @@ describe
         expect(await prisma.secret.findUnique({ where: { id: server.secretId! } })).toBeNull();
       }),
     );
+
+    it("keeps legacy plugin installs in their managed workspace and permits a separate connector in another", async () => {
+      const otherSpace = `plugin-other-space-${suffix}`;
+      const bindings = [randomUUID(), randomUUID()];
+      await runAsSystem("set up separate managed workspaces", async () => {
+        await prisma.space.create({ data: { id: otherSpace, organizationId, name: "Other" } });
+        for (const [index, spaceId] of [actor.spaceId, otherSpace].entries()) {
+          await prisma.centralWorkspaceBinding.create({
+            data: {
+              id: bindings[index]!,
+              serverId: "server",
+              centralOrganizationId: "central",
+              localOrganizationId: organizationId,
+              spaceId,
+              operationId: randomUUID(),
+              bindingVersion: 1,
+              permissionVersion: 1,
+              state: "ready",
+              members: [],
+              verifiedAt: new Date(),
+              validUntil: new Date(Date.now() + 60_000),
+            },
+          });
+          await prisma.centralWorkspaceAccess.create({
+            data: {
+              workspaceId: bindings[index]!,
+              userId: actor.userId,
+              centralSubject: actor.userId,
+              role: "admin",
+              membershipVersion: "revision",
+              active: true,
+            },
+          });
+        }
+      });
+      const other = { ...actor, spaceId: otherSpace };
+      try {
+        const args = { ...(await input()), pluginParts: ["connector" as const, "skills" as const] };
+        const first = await runAsTenant(actor, () =>
+          client().capabilities.install({ kind: "plugin", ...args }),
+        );
+        // Existing installations could have been marked available in every workspace.
+        await runAsSystem("simulate a legacy shared plugin", async () => {
+          await prisma.capabilityInstall.update({
+            where: { id: first.id },
+            data: { allSpaces: true },
+          });
+          await prisma.mcpServer.updateMany({
+            where: { installId: first.id },
+            data: { allSpaces: true },
+          });
+          await prisma.agentSkill.updateMany({
+            where: { installId: first.id },
+            data: { allSpaces: true },
+          });
+        });
+        expect(await runAsTenant(other, () => client(other).capabilities.list())).toEqual([]);
+        const second = await runAsTenant(other, () =>
+          client(other).capabilities.install({ kind: "plugin", ...args }),
+        );
+        expect(second.id).not.toBe(first.id);
+        expect(await runAsTenant(other, () => client(other).mcp.servers.list())).toContainEqual(
+          expect.objectContaining({ installId: second.id, oauthStatus: "none" }),
+        );
+        await expect(
+          runAsTenant(other, () =>
+            client(other).capabilities.pluginParts({ id: first.id, parts: ["connector"] }),
+          ),
+        ).rejects.toMatchObject({ code: "NOT_FOUND" });
+        await runAsTenant(other, () => client(other).capabilities.remove({ id: first.id }));
+        expect(await runAsTenant(actor, () => client().capabilities.list())).toContainEqual(
+          expect.objectContaining({ id: first.id }),
+        );
+        await runAsTenant(actor, () => client().capabilities.remove({ id: first.id }));
+        await runAsTenant(other, () => client(other).capabilities.remove({ id: second.id }));
+      } finally {
+        await runAsSystem("remove managed workspace fixture", async () => {
+          await prisma.centralWorkspaceBinding.deleteMany({ where: { id: { in: bindings } } });
+          await prisma.space.deleteMany({ where: { id: otherSpace } });
+        });
+      }
+    });
   });

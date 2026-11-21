@@ -150,6 +150,33 @@ const remoteMcp = JSON.stringify({
 });
 
 describe("marketplace service", () => {
+  it("fetches plugin manifests while the repository tree is loading", async () => {
+    const base = registryReader({
+      cursor: [{ name: "Notes", source: "notes" }],
+      tree: ["notes/skills/plan/SKILL.md"],
+      text: { "/notes/.cursor-plugin/plugin.json": JSON.stringify({ displayName: "Notes" }) },
+    });
+    let releaseTree!: () => void;
+    const treePending = new Promise<void>((resolve) => {
+      releaseTree = resolve;
+    });
+    const read = vi.fn(async (url: string) => {
+      if (url.includes("api.github.com/repos/cursor/plugins/git/trees/")) await treePending;
+      return base(url);
+    });
+    const request = createPluginMarketplace(read).catalog("");
+    try {
+      await vi.waitFor(() =>
+        expect(
+          read.mock.calls.some(([url]) => url.endsWith("/notes/.cursor-plugin/plugin.json")),
+        ).toBe(true),
+      );
+    } finally {
+      releaseTree();
+    }
+    expect((await request).entries.map((entry) => entry.name)).toContain("Notes");
+  });
+
   it("filters metadata, caches success, and does not cache provider failures", async () => {
     const files: Parameters<typeof registryReader>[0] = {
       cursor: [{ name: "Notes", description: "Daily planning", source: "notes" }],

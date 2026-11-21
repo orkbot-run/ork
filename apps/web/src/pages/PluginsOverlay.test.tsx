@@ -155,6 +155,21 @@ async function credential(value: string) {
   });
 }
 
+it("shows integrations while the optional catalog feed is still loading", async () => {
+  const original = state.call.getMockImplementation()!;
+  let finish!: (value: unknown) => void;
+  const slowFeed = new Promise((resolve) => {
+    finish = resolve;
+  });
+  state.call.mockImplementation((path: string, input: unknown) =>
+    path === "capabilities/catalogSearch" ? slowFeed : original(path, input),
+  );
+  await render();
+  expect(container.textContent).toContain("Fixture app");
+  expect(container.querySelector('[aria-label="Loading integrations…"]')).toBeNull();
+  await act(async () => finish({ enabled: false, results: [] }));
+});
+
 it("submits fetched fixed preset intent without endpoint or protocol overrides", async () => {
   await render();
   await click("Fixture source");
