@@ -314,4 +314,25 @@ describe("plugin detail", () => {
     expect(container.querySelector('[aria-label="Connected"]')).not.toBeNull();
     expect(() => button("Sign in")).toThrow();
   });
+
+  it("offers a retry when an installed connector cannot be loaded", async () => {
+    const retry = vi.fn();
+    await act(async () =>
+      root.render(
+        <PluginDetail
+          selection={{ source, installedSource: source, name: "Notes" }}
+          installs={[install]}
+          servers={[]}
+          serversError="Could not load connections"
+          onRetryServers={retry}
+          assigned={new Set()}
+          onBack={onBack}
+          onChanged={onChanged}
+        />,
+      ),
+    );
+    expect(container.textContent).toContain("Could not load connections");
+    await click("Retry");
+    expect(retry).toHaveBeenCalledOnce();
+  });
 });

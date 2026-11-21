@@ -27,6 +27,15 @@ export function userAddedAvailability(actor: Pick<Actor, "spaceId">): SpaceAvail
   return { allSpaces: true, spaceIds: [actor.spaceId] };
 }
 
+/** Managed workspaces do not share integrations or their credentials with other workspaces. */
+export async function installVisibility(tx: Prisma.TransactionClient, actor: Actor) {
+  const isolated = (await itemSecretSpace(tx, actor.spaceId, true)) !== null;
+  return {
+    isolated,
+    where: { ...availableInSpace(actor), ...(isolated ? { spaceId: actor.spaceId } : {}) },
+  };
+}
+
 function overlaps(a: SpaceAvailability, b: SpaceAvailability): boolean {
   return a.allSpaces || b.allSpaces || a.spaceIds.some((id) => b.spaceIds.includes(id));
 }
@@ -235,7 +244,10 @@ export async function setAvailability(
     // Plugin parts changes hold this lock while adding parts where the install is placed.
     if (input.kind === "install") await lockOwner(tx, actor.userId, "plugin");
     await assertOwnSpaces(tx, actor, input.spaceIds);
-    const visible = { id: input.id, ...availableInSpace(actor) };
+    const scope = input.kind === "install" ? await installVisibility(tx, actor) : null;
+    if (scope?.isolated && (input.allSpaces || input.spaceIds.some((id) => id !== actor.spaceId)))
+      throw new ORPCError("FORBIDDEN", { message: "Integrations are private to this workspace" });
+    const visible = { id: input.id, ...(scope?.where ?? availableInSpace(actor)) };
     // A plugin's own skills and connectors are placed through the plugin.
     const item: (Joined & { id: string }) | null =
       input.kind === "skill"

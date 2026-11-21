@@ -17,14 +17,17 @@ import { installedPluginParts } from "@orkbot/core";
 import type { Prisma, PrismaClient } from "@orkbot/db";
 import {
   AVAILABILITY_SELECT,
-  availableInSpace,
   isUniqueViolation,
   itemSecretSpace,
   runAsSystemInTransaction,
   spaceAvailability,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import { assertNameFreeWhereAvailable, lockOwner } from "#modules/spaces/availability";
+import {
+  assertNameFreeWhereAvailable,
+  installVisibility,
+  lockOwner,
+} from "#modules/spaces/availability";
 
 export type PluginInstallDeps = {
   prisma: PrismaClient;
@@ -295,28 +298,34 @@ export async function installPlugin(
   const servers = parts.includes("connector") ? plugin.mcpServers : [];
   return withPreparedServers(deps, actor, servers, signal, async (prepared) => {
     const source = plugin.source.gitUrl + (plugin.source.subdir ? `#${plugin.source.subdir}` : "");
-    const scope = { spaceId: actor.spaceId, userId: actor.userId };
+    const placement = { spaceId: actor.spaceId, userId: actor.userId };
     try {
       const row = await deps.prisma.$transaction(async (tx) => {
         await lockPluginInstalls(tx, actor);
-        // One install per plugin and account, since it is available in all the user's spaces.
+        const scope = await installVisibility(tx, actor);
+        // Managed workspaces keep separate installs; unmanaged spaces retain account sharing.
         const installed = await runAsSystemInTransaction(
           tx,
           "owner's plugin installs across their spaces",
           () =>
             tx.capabilityInstall.findFirst({
-              where: { userId: actor.userId, kind: "plugin", source },
+              where: {
+                userId: actor.userId,
+                kind: "plugin",
+                source,
+                ...(scope.isolated ? { spaceId: actor.spaceId } : {}),
+              },
             }),
         );
         if (installed) {
           throw new ORPCError("CONFLICT", { message: "This plugin is already installed" });
         }
-        const everywhere = { spaceId: actor.spaceId, allSpaces: true, availableIn: [] };
+        const everywhere = { spaceId: actor.spaceId, allSpaces: !scope.isolated, availableIn: [] };
         if (parts.includes("skills")) await assertSkillNamesFree(tx, actor, plugin, everywhere);
         const install = await tx.capabilityInstall.create({
           data: {
-            ...scope,
-            allSpaces: true,
+            ...placement,
+            allSpaces: !scope.isolated,
             kind: "plugin",
             name: input.name.trim() || plugin.name,
             source,
@@ -367,8 +376,11 @@ export async function setPluginParts(
   input: { id: string; parts: PluginPart[] },
   signal?: AbortSignal,
 ): Promise<CapabilityInstall | null> {
-  const existing = await deps.prisma.capabilityInstall.findFirst({
-    where: { ...availableInSpace(actor), id: input.id, kind: "plugin" },
+  const existing = await deps.prisma.$transaction(async (tx) => {
+    const scope = await installVisibility(tx, actor);
+    return tx.capabilityInstall.findFirst({
+      where: { ...scope.where, id: input.id, kind: "plugin" },
+    });
   });
   if (!existing?.version || !existing.digest)
     throw new ORPCError("NOT_FOUND", { message: "Plugin is not installed" });
@@ -387,8 +399,9 @@ export async function setPluginParts(
     try {
       const row = await deps.prisma.$transaction(async (tx) => {
         await lockPluginInstalls(tx, actor);
+        const scope = await installVisibility(tx, actor);
         const install = await tx.capabilityInstall.findFirst({
-          where: { ...availableInSpace(actor), id: existing.id },
+          where: { ...scope.where, id: existing.id },
           include: { availableIn: AVAILABILITY_SELECT },
         });
         if (!install) throw new ORPCError("NOT_FOUND", { message: "Plugin is not installed" });
