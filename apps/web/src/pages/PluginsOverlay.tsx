@@ -248,11 +248,10 @@ export function PluginsOverlay({
   async function loadIntegrations(client: RpcClient = captureRpcContext().client) {
     // The catalog call reconciles connection rows, so list them after it settles.
     const catalog = client.connections.catalogSnapshot({});
-    const [items, installs, rows, catalogFeed] = await Promise.all([
+    const [items, installs, rows] = await Promise.all([
       catalog,
       client.capabilities.list(),
       catalog.catch(() => undefined).then(() => client.connections.list()),
-      optionalCatalogFeedProbe(client.capabilities.catalogSearch({ query: "" })),
     ]);
     return {
       catalog: mergeConnectionCatalog(
@@ -266,7 +265,6 @@ export function PluginsOverlay({
         (install) => install.kind === "mcp" || install.kind === "api" || install.kind === "graphql",
       ),
       plugins: installs.filter((install) => install.kind === "plugin"),
-      catalogFeedEnabled: catalogFeed.enabled,
     };
   }
   const integrationsOptions = queryOptions({
@@ -283,6 +281,13 @@ export function PluginsOverlay({
   const pluginCatalog = useQuery(
     queries.marketplace.catalog.queryOptions({ input: { query: "" }, staleTime: 60_000 }),
   );
+  const catalogFeed = useQuery({
+    ...queries.capabilities.catalogSearch.queryOptions({ input: { query: "" } }),
+    queryFn: () =>
+      optionalCatalogFeedProbe(
+        captureRpcContext().client.capabilities.catalogSearch({ query: "" }),
+      ),
+  });
   const assignmentsQuery = useQuery(
     queries.mcp.assignments.list.queryOptions({
       input: activeBotId ? { botId: activeBotId } : skipToken,
@@ -292,7 +297,7 @@ export function PluginsOverlay({
     () => new Set((assignmentsQuery.data ?? []).map((row) => row.serverId)),
     [assignmentsQuery.data],
   );
-  const catalogFeedEnabled = integrations.data?.catalogFeedEnabled ?? false;
+  const catalogFeedEnabled = catalogFeed.data?.enabled ?? false;
   // A failed refresh is shown even over what was cached, so stale apps never pass as current.
   const loadError = integrations.error
     ? errorText(integrations.error, t`Could not load integrations`)
@@ -321,7 +326,6 @@ export function PluginsOverlay({
           connections: NO_CONNECTIONS,
           sources: NO_SOURCES,
           plugins: NO_SOURCES,
-          catalogFeedEnabled: false,
         },
       ),
     );
