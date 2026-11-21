@@ -236,7 +236,8 @@ export function createPluginMarketplace(read: PluginTextReader = publicRead) {
     const raw = `https://raw.githubusercontent.com${new URL(registry.repository).pathname}/HEAD/`;
     const prefix = `${registry.repository}#`;
     const signal = AbortSignal.timeout(15_000);
-    const [{ paths, sizes }, index] = await Promise.all([
+    // Fetch manifests while the shared repository listing or component index loads.
+    const registryDetails = Promise.all([
       registry.componentIndex
         ? Promise.resolve({ paths: [] as string[], sizes: new Map<string, number>() })
         : repoTree(registry),
@@ -256,9 +257,10 @@ export function createPluginMarketplace(read: PluginTextReader = publicRead) {
         const dir = entry.installedSource.startsWith(prefix)
           ? entry.installedSource.slice(prefix.length)
           : null;
-        const manifestText = dir
-          ? await cachedText(`${raw}${dir}/${registry.manifest}`, 64_000, signal)
-          : undefined;
+        const [manifestText, [{ paths, sizes }, index]] = await Promise.all([
+          dir ? cachedText(`${raw}${dir}/${registry.manifest}`, 64_000, signal) : undefined,
+          registryDetails,
+        ]);
         const manifest = manifestText ? parseManifest(manifestText) : undefined;
         let parts: PluginCompleteness | null = null;
         if (index) {
@@ -283,7 +285,7 @@ export function createPluginMarketplace(read: PluginTextReader = publicRead) {
         details.set(entry.id, { manifest, parts });
       }
     });
-    await Promise.all(workers);
+    await Promise.all([registryDetails, ...workers]);
     return entries.flatMap((entry) => {
       const detail = details.get(entry.id);
       if (!detail?.parts) return [];
