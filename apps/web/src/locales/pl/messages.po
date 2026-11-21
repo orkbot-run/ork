@@ -4281,6 +4281,10 @@ msgstr "Wczytywanie dziennika aktywności…"
 msgid "Loading activity…"
 msgstr "Wczytywanie aktywności…"
 
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Loading connection…"
+msgstr "Ładowanie połączenia…"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading integrations…"
 msgstr "Wczytywanie integracji…"
@@ -7397,6 +7401,10 @@ msgstr "ten komputer"
 #: src/pages/shell/computer-card.tsx
 msgid "This computer request is no longer waiting"
 msgstr "Ta prośba już nie czeka na odpowiedź"
+
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "This connection is unavailable in this workspace."
+msgstr "To połączenie nie jest dostępne w tym workspace."
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts

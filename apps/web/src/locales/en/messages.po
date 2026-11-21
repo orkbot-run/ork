@@ -4281,6 +4281,10 @@ msgstr "Loading activity log…"
 msgid "Loading activity…"
 msgstr "Loading activity…"
 
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "Loading connection…"
+msgstr "Loading connection…"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading integrations…"
 msgstr "Loading integrations…"
@@ -7397,6 +7401,10 @@ msgstr "this computer"
 #: src/pages/shell/computer-card.tsx
 msgid "This computer request is no longer waiting"
 msgstr "This computer request is no longer waiting"
+
+#: src/components/integrations/plugin-marketplace.tsx
+msgid "This connection is unavailable in this workspace."
+msgstr "This connection is unavailable in this workspace."
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts

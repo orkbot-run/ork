@@ -177,7 +177,7 @@ describe("confirmed plugin installation", () => {
     await expect(
       installPlugin(deps, actor, { ...args, pluginDigest: `sha256:${"0".repeat(64)}` }),
     ).rejects.toMatchObject({ code: "CONFLICT" });
-    expect(prisma.capabilityInstall.update).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
   it("refuses variables and pasted credentials rather than saving plaintext config", async () => {
     const { deps, prisma, secrets } = setup();
@@ -288,7 +288,7 @@ describe("confirmed plugin installation", () => {
     const { deps, prisma } = setup();
     deps.assertEndpoint.mockRejectedValueOnce(new Error("private endpoint"));
     await expect(installPlugin(deps, actor, await input())).rejects.toThrow("private endpoint");
-    expect(prisma.capabilityInstall.update).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 
