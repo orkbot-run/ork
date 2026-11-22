@@ -8379,3 +8379,11 @@ msgstr "Zero data retention"
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "ZIP or postal code"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "Organization integrations"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "Organization administrators manage integrations in Ork Accounts."

@@ -828,6 +828,58 @@ export class InstallationClient {
     return { response, nonce: proof.nonce, startedAt };
   }
 
+  /** Calls the optional managed integration service using the installation key, never an account token. */
+  async managedIntegrationRequest(
+    path: "/api/integrations/catalog" | "/api/integrations/invoke",
+    body: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    if (!["/api/integrations/catalog", "/api/integrations/invoke"].includes(path))
+      throw failure("Invalid integration request");
+    const row = await this.load();
+    if (!row.serverId || row.state !== "ready") throw failure("Installation is not ready");
+    const rawBody = JSON.stringify(body);
+    if (Buffer.byteLength(rawBody) > 16_384) throw failure("Integration request is too large");
+    const proof = {
+      serverId: row.serverId,
+      bindingVersion: row.bindingVersion,
+      timestamp: Math.floor(Date.now() / 1000),
+      nonce: randomBytes(32).toString("base64url"),
+    };
+    const signature = sign(
+      "sha256",
+      Buffer.from(installationRequestMessage(proof, "POST", path, sha256(rawBody))),
+      await this.privateKey(row),
+    ).toString("base64url");
+    const response = await this.request(`${this.options.issuer}${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-ork-server-id": row.serverId,
+        "x-ork-binding-version": String(row.bindingVersion),
+        "x-ork-proof-time": String(proof.timestamp),
+        "x-ork-proof-nonce": proof.nonce,
+        "x-ork-proof-signature": signature,
+      },
+      body: rawBody,
+      credentials: "omit",
+      redirect: "error",
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(path.endsWith("/catalog") ? 3_000 : 45_000)])
+        : AbortSignal.timeout(path.endsWith("/catalog") ? 3_000 : 45_000),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new InstallationRequestError(response.status);
+    }
+    const payload = await readBoundedJsonResponse<Record<string, unknown>>(
+      response,
+      4 * 1024 * 1024,
+    );
+    if (!Object.hasOwn(payload, "result")) throw failure("Invalid integration response");
+    return payload.result;
+  }
+
   async pollEnrollment() {
     let row = await this.load();
     if (row.state === "ready") return this.configuration();

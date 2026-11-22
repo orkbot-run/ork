@@ -1,10 +1,64 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { createHash, generateKeyPairSync, verify } from "node:crypto";
+import { installationRequestMessage } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { generateKeyPair, SignJWT } from "jose";
 import { expect, it, vi } from "vitest";
 import { InstallationClient, InstallationRequestError } from "./installation-client.js";
+
+it("signs managed integration requests with the installation identity without an account bearer", async () => {
+  const key = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+  const serverId = "10000000-0000-4000-8000-000000000001";
+  const row = {
+    issuer: "https://accounts.example.test",
+    serverId,
+    state: "ready",
+    bindingVersion: 2,
+  };
+  const request = vi.fn(async () => Response.json({ result: { ok: true } }));
+  const client = new InstallationClient(
+    { installationIdentity: { findUnique: vi.fn(async () => row) } } as unknown as PrismaClient,
+    {
+      issuer: row.issuer,
+      encryptionKey: "fixture-encryption-key-32-characters",
+      request: request as unknown as typeof fetch,
+    },
+  );
+  vi.spyOn(
+    client as unknown as { privateKey: () => Promise<unknown> },
+    "privateKey",
+  ).mockResolvedValue(key.privateKey);
+  const body = { workspaceId: "workspace", botId: "bot" };
+  expect(await client.managedIntegrationRequest("/api/integrations/catalog", body)).toEqual({
+    ok: true,
+  });
+  const [url, init] = request.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toBe("https://accounts.example.test/api/integrations/catalog");
+  const headers = new Headers(init.headers);
+  expect(headers.has("authorization")).toBe(false);
+  expect(init.redirect).toBe("error");
+  const proof = {
+    serverId,
+    bindingVersion: 2,
+    timestamp: Number(headers.get("x-ork-proof-time")),
+    nonce: headers.get("x-ork-proof-nonce")!,
+  };
+  const hash = createHash("sha256")
+    .update(init.body as string)
+    .digest("hex");
+  expect(
+    verify(
+      "sha256",
+      Buffer.from(installationRequestMessage(proof, "POST", "/api/integrations/catalog", hash)),
+      key.publicKey,
+      Buffer.from(headers.get("x-ork-proof-signature")!, "base64url"),
+    ),
+  ).toBe(true);
+  await expect(client.managedIntegrationRequest("/unexpected" as never, {})).rejects.toThrow();
+  expect(request).toHaveBeenCalledOnce();
+});
 
 it("accepts lifecycle instructions only for the current request and installation", async () => {
   const keys = await generateKeyPair("RS256");

@@ -71,6 +71,7 @@ import {
   isComposioEnabled,
   isMessagingSurfaceEnabled,
   isPipedreamEnabled,
+  ManagedIntegrationConnector,
   McpConnector,
   McpOAuthBroker,
   mcpDiscoveryLimitsFromEnv,
@@ -314,6 +315,7 @@ async function main() {
     installedConnectors,
     ...integrationSettings.providers(),
     mcp,
+    ...(installation ? [new ManagedIntegrationConnector(prisma, installation)] : []),
   ]);
   integrationSettings.warmDirectories();
   void home.removeStaleStaging().catch((error) => logger.error("home staging cleanup", error));

@@ -8380,3 +8380,11 @@ msgstr ""
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "組織整合"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "組織管理員在 Ork Accounts 中管理整合。"

@@ -111,6 +111,7 @@ export * from "./key-provider-factory.js";
 export * from "./keyless-http-web.js";
 export type * from "./kubernetes-sandbox.js";
 export * from "./macos-voice.js";
+export { ManagedIntegrationConnector } from "./managed-integration-connector.js";
 export * from "./mcp-connector.js";
 export * from "./mcp-discovery.js";
 export * from "./mcp-emulator.js";

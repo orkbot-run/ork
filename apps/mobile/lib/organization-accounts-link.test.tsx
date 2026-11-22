@@ -67,6 +67,13 @@ it("opens the selected central organization's dashboard in the browser", async (
     expect(fixture.open).toHaveBeenCalledWith(
       `https://app.ork.run/workspace/${fixture.organizationId}/overview`,
     );
+    const integrations = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "Organization integrations",
+    )!;
+    await act(async () => integrations.click());
+    expect(fixture.open).toHaveBeenCalledWith(
+      `https://app.ork.run/workspace/${fixture.organizationId}/integrations`,
+    );
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
