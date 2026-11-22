@@ -5344,6 +5344,10 @@ msgstr "Or paste an API key"
 msgid "Organization"
 msgstr "Organization"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "Organization administrators manage integrations in Ork Accounts."
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Organization API key"
 msgstr "Organization API key"
@@ -5351,6 +5355,10 @@ msgstr "Organization API key"
 #: src/pages/ServerAISettings.tsx
 msgid "Organization connections"
 msgstr "Organization connections"
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "Organization integrations"
 
 #: src/pages/settings-nav.ts
 #: src/pages/SettingsOverlay.tsx
@@ -8379,11 +8387,3 @@ msgstr "Zero data retention"
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "ZIP or postal code"
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Organization integrations"
-msgstr "Organization integrations"
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Organization administrators manage integrations in Ork Accounts."
-msgstr "Organization administrators manage integrations in Ork Accounts."

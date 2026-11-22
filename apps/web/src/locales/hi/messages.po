@@ -5344,6 +5344,10 @@ msgstr "या एक API कुंजी पेस्ट करें"
 msgid "Organization"
 msgstr "संगठन"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "संगठन के एडमिन Ork Accounts में इंटीग्रेशन प्रबंधित करते हैं।"
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Organization API key"
 msgstr "संगठन API कुंजी"
@@ -5351,6 +5355,10 @@ msgstr "संगठन API कुंजी"
 #: src/pages/ServerAISettings.tsx
 msgid "Organization connections"
 msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "संगठन इंटीग्रेशन"
 
 #: src/pages/settings-nav.ts
 #: src/pages/SettingsOverlay.tsx
@@ -8379,11 +8387,3 @@ msgstr ""
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Organization integrations"
-msgstr "संगठन इंटीग्रेशन"
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Organization administrators manage integrations in Ork Accounts."
-msgstr "संगठन के एडमिन Ork Accounts में इंटीग्रेशन प्रबंधित करते हैं।"

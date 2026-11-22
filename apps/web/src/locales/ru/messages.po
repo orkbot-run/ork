@@ -5344,6 +5344,10 @@ msgstr "Или вставьте ключ API"
 msgid "Organization"
 msgstr "Организация"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "Администраторы организации управляют интеграциями в Ork Accounts."
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Organization API key"
 msgstr "Ключ API организации"
@@ -5351,6 +5355,10 @@ msgstr "Ключ API организации"
 #: src/pages/ServerAISettings.tsx
 msgid "Organization connections"
 msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "Интеграции организации"
 
 #: src/pages/settings-nav.ts
 #: src/pages/SettingsOverlay.tsx
@@ -8379,11 +8387,3 @@ msgstr ""
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Organization integrations"
-msgstr "Интеграции организации"
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Organization administrators manage integrations in Ork Accounts."
-msgstr "Администраторы организации управляют интеграциями в Ork Accounts."

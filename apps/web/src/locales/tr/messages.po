@@ -5344,6 +5344,10 @@ msgstr "Veya bir API anahtarı yapıştır"
 msgid "Organization"
 msgstr "Kuruluş"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "Organizasyon yöneticileri entegrasyonları Ork Accounts üzerinden yönetir."
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Organization API key"
 msgstr "Kuruluş API anahtarı"
@@ -5351,6 +5355,10 @@ msgstr "Kuruluş API anahtarı"
 #: src/pages/ServerAISettings.tsx
 msgid "Organization connections"
 msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "Organizasyon entegrasyonları"
 
 #: src/pages/settings-nav.ts
 #: src/pages/SettingsOverlay.tsx
@@ -8379,11 +8387,3 @@ msgstr ""
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "Posta kodu"
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Organization integrations"
-msgstr "Organizasyon entegrasyonları"
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Organization administrators manage integrations in Ork Accounts."
-msgstr "Organizasyon yöneticileri entegrasyonları Ork Accounts üzerinden yönetir."

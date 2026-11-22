@@ -5345,6 +5345,10 @@ msgstr "或貼上 API 金鑰"
 msgid "Organization"
 msgstr "組織"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "組織管理員在 Ork Accounts 中管理整合。"
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Organization API key"
 msgstr "組織 API 金鑰"
@@ -5352,6 +5356,10 @@ msgstr "組織 API 金鑰"
 #: src/pages/ServerAISettings.tsx
 msgid "Organization connections"
 msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "組織整合"
 
 #: src/pages/settings-nav.ts
 #: src/pages/SettingsOverlay.tsx
@@ -8380,11 +8388,3 @@ msgstr ""
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Organization integrations"
-msgstr "組織整合"
-
-#: src/pages/SettingsOverlay.tsx
-msgid "Organization administrators manage integrations in Ork Accounts."
-msgstr "組織管理員在 Ork Accounts 中管理整合。"
