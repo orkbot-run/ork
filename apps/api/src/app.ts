@@ -79,6 +79,7 @@ import {
   isComposioEnabled,
   isMessagingSurfaceEnabled,
   isPipedreamEnabled,
+  ManagedIntegrationConnector,
   McpConnector,
   McpOAuthBroker,
   messagingPlatformsFromEnv,
@@ -653,6 +654,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       .providers()
       .filter((provider) => !composioOverride || provider.describe().id !== "composio"),
     mcp,
+    ...(installation ? [new ManagedIntegrationConnector(prisma, installation)] : []),
     ...connectorOverrides,
   ]);
   integrationSettings.warmDirectories();

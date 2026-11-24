@@ -5344,6 +5344,10 @@ msgstr "またはAPIキーを貼り付け"
 msgid "Organization"
 msgstr "組織"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "組織の管理者は Ork Accounts で連携を管理します。"
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Organization API key"
 msgstr "組織のAPIキー"
@@ -5351,6 +5355,10 @@ msgstr "組織のAPIキー"
 #: src/pages/ServerAISettings.tsx
 msgid "Organization connections"
 msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "組織の連携"
 
 #: src/pages/settings-nav.ts
 #: src/pages/SettingsOverlay.tsx

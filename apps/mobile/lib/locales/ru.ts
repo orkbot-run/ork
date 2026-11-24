@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const RU_MESSAGES: Record<string, string> = {
+  "Organization integrations": "Интеграции организации",
+  "Organization administrators manage integrations in Ork Accounts.":
+    "Администраторы организации управляют интеграциями в Ork Accounts.",
   "Choose which workspaces can use this secret.":
     "Выберите рабочие пространства, которые могут использовать этот секрет.",
   "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":

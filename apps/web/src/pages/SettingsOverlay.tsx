@@ -4,7 +4,7 @@
 
 import { useLingui } from "@lingui/react/macro";
 import type { ComputerCapabilities, Me, SpaceMemoryConfig } from "@orkbot/contracts";
-import { organizationDashboardUrl } from "@orkbot/contracts";
+import { organizationDashboardUrl, organizationIntegrationsUrl } from "@orkbot/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web";
 import { ORPCError } from "@orpc/client";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
@@ -107,17 +107,25 @@ export function SettingsOverlay({
   const auditSpaceId = selectedSpaceId();
   const modelPolicy = useQuery(queries.models.workspacePolicy.queryOptions());
   const [accountsUrl, setAccountsUrl] = useState<string | null>(null);
+  const [integrationsUrl, setIntegrationsUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!modelPolicy.data?.managed) return;
     let current = true;
     setAccountsUrl(null);
+    setIntegrationsUrl(null);
     void Promise.resolve()
       .then(() => desktopBridge()?.accounts?.workspaceTarget?.())
       .then((target) => {
-        if (current) setAccountsUrl(organizationDashboardUrl(target?.organizationId));
+        if (current) {
+          setAccountsUrl(organizationDashboardUrl(target?.organizationId));
+          setIntegrationsUrl(organizationIntegrationsUrl(target?.organizationId));
+        }
       })
       .catch(() => {
-        if (current) setAccountsUrl(organizationDashboardUrl());
+        if (current) {
+          setAccountsUrl(organizationDashboardUrl());
+          setIntegrationsUrl(organizationIntegrationsUrl());
+        }
       });
     return () => {
       current = false;
@@ -536,6 +544,16 @@ export function SettingsOverlay({
                               window.open(accountsUrl, "_blank", "noopener,noreferrer");
                           }}
                         >{t`Open Ork Accounts`}</Button>
+                        <Button
+                          variant="outline"
+                          className="w-fit"
+                          disabled={!integrationsUrl}
+                          onClick={() => {
+                            if (integrationsUrl)
+                              window.open(integrationsUrl, "_blank", "noopener,noreferrer");
+                          }}
+                        >{t`Organization integrations`}</Button>
+                        <p className="text-sm text-muted-foreground">{t`Organization administrators manage integrations in Ork Accounts.`}</p>
                         <Button
                           variant="outline"
                           className="w-fit"

@@ -246,6 +246,15 @@ it("opens the current central organization's dashboard", async () => {
       "_blank",
       "noopener,noreferrer",
     );
+    const integrations = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Organization integrations",
+    )!;
+    await act(async () => integrations.click());
+    expect(open).toHaveBeenCalledWith(
+      `https://app.ork.run/workspace/${organizationId}/integrations`,
+      "_blank",
+      "noopener,noreferrer",
+    );
   } finally {
     open.mockRestore();
     Reflect.deleteProperty(window, "orkbotDesktop");

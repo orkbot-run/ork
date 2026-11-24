@@ -5344,6 +5344,10 @@ msgstr "Of plak een API-sleutel"
 msgid "Organization"
 msgstr "Organisatie"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "Organisatiebeheerders beheren integraties in Ork Accounts."
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Organization API key"
 msgstr "Organisatie-API-sleutel"
@@ -5351,6 +5355,10 @@ msgstr "Organisatie-API-sleutel"
 #: src/pages/ServerAISettings.tsx
 msgid "Organization connections"
 msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "Organisatie-integraties"
 
 #: src/pages/settings-nav.ts
 #: src/pages/SettingsOverlay.tsx

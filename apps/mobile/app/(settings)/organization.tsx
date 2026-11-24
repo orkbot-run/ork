@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited settings are preserved; the Accounts dashboard link is an Ork addition.
 
-import { organizationDashboardUrl } from "@orkbot/contracts";
+import { organizationDashboardUrl, organizationIntegrationsUrl } from "@orkbot/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
@@ -66,6 +66,9 @@ export default function OrganizationSettings() {
           <Text style={{ color: native.secondaryLabel }}>
             {t("Manage your organization, servers and people in Ork Accounts.")}
           </Text>
+          <Text style={{ color: native.secondaryLabel }}>
+            {t("Organization administrators manage integrations in Ork Accounts.")}
+          </Text>
           {error ? (
             <Text accessibilityRole="alert" style={{ color: native.secondaryLabel }}>
               {error}
@@ -79,6 +82,16 @@ export default function OrganizationSettings() {
                 setError(null);
                 void Linking.openURL(organizationDashboardUrl(target?.organizationId)).catch(() =>
                   setError(t("Could not open Ork Accounts. Try again.")),
+                );
+              }}
+            />
+            <SettingsRow
+              title={t("Organization integrations")}
+              chevron="right"
+              onPress={() => {
+                setError(null);
+                void Linking.openURL(organizationIntegrationsUrl(target?.organizationId)).catch(
+                  () => setError(t("Could not open Ork Accounts. Try again.")),
                 );
               }}
             />

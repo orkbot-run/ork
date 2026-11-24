@@ -8,6 +8,7 @@ import {
   initialCatalogOrganization,
   initialCatalogWorkspace,
   organizationDashboardUrl,
+  organizationIntegrationsUrl,
   parseWorkspaceLink,
 } from "./workspace-selection.js";
 
@@ -18,6 +19,10 @@ it("opens the central organization dashboard and falls back safely for an invali
   expect(organizationDashboardUrl(id(1))).toBe(`https://app.ork.run/workspace/${id(1)}/overview`);
   expect(organizationDashboardUrl("../other")).toBe("https://app.ork.run/");
   expect(organizationDashboardUrl(null)).toBe("https://app.ork.run/");
+  expect(organizationIntegrationsUrl(id(1))).toBe(
+    `https://app.ork.run/workspace/${id(1)}/integrations`,
+  );
+  expect(organizationIntegrationsUrl("../other")).toBe("https://app.ork.run/");
 });
 const fixture = (): IdentityCatalog => ({
   version: 2,

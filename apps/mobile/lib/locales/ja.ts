@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Organization integrations": "組織の連携",
+  "Organization administrators manage integrations in Ork Accounts.":
+    "組織の管理者は Ork Accounts で連携を管理します。",
   "Choose which workspaces can use this secret.":
     "このシークレットを使用できるワークスペースを選択してください。",
   "Choose which workspaces on this server can use these secrets. New workspaces do not have access until you allow it.":

@@ -21,6 +21,14 @@ export function organizationDashboardUrl(organizationId?: string | null): string
   return id.success ? `https://app.ork.run/workspace/${id.data}/overview` : "https://app.ork.run/";
 }
 
+/** Managed integrations are configured by administrators in the Accounts dashboard. */
+export function organizationIntegrationsUrl(organizationId?: string | null): string {
+  const id = z.uuid().safeParse(organizationId);
+  return id.success
+    ? `https://app.ork.run/workspace/${id.data}/integrations`
+    : "https://app.ork.run/";
+}
+
 /** Explicit links never fall back to another organization or an unrelated workspace. */
 export function catalogWorkspace(
   catalog: IdentityCatalog,

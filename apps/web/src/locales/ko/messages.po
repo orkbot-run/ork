@@ -5344,6 +5344,10 @@ msgstr "또는 API 키 붙여넣기"
 msgid "Organization"
 msgstr "조직"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "조직 관리자는 Ork Accounts에서 통합을 관리합니다."
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Organization API key"
 msgstr "조직 API 키"
@@ -5351,6 +5355,10 @@ msgstr "조직 API 키"
 #: src/pages/ServerAISettings.tsx
 msgid "Organization connections"
 msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "조직 통합"
 
 #: src/pages/settings-nav.ts
 #: src/pages/SettingsOverlay.tsx

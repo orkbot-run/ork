@@ -5344,6 +5344,10 @@ msgstr "Oder einen API-Schlüssel einfügen"
 msgid "Organization"
 msgstr "Organisation"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "Organisationsadministratoren verwalten Integrationen in Ork Accounts."
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Organization API key"
 msgstr "Organisations-API-Schlüssel"
@@ -5351,6 +5355,10 @@ msgstr "Organisations-API-Schlüssel"
 #: src/pages/ServerAISettings.tsx
 msgid "Organization connections"
 msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "Organisationsintegrationen"
 
 #: src/pages/settings-nav.ts
 #: src/pages/SettingsOverlay.tsx

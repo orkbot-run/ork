@@ -5344,6 +5344,10 @@ msgstr "או הדבקת מפתח API"
 msgid "Organization"
 msgstr "ארגון"
 
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization administrators manage integrations in Ork Accounts."
+msgstr "מנהלי הארגון מנהלים שילובים ב-Ork Accounts."
+
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Organization API key"
 msgstr "מפתח API של הארגון"
@@ -5351,6 +5355,10 @@ msgstr "מפתח API של הארגון"
 #: src/pages/ServerAISettings.tsx
 msgid "Organization connections"
 msgstr ""
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Organization integrations"
+msgstr "שילובי הארגון"
 
 #: src/pages/settings-nav.ts
 #: src/pages/SettingsOverlay.tsx
